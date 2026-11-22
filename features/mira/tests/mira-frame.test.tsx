@@ -29,6 +29,10 @@ vi.mock("@features/mira/server/nudges", async (original) => ({
   ...(await original<typeof import("@features/mira/server/nudges")>()),
   hadCrisis: (id: string, since: Date) => server.hadCrisis(id, since),
 }));
+const stop = vi.hoisted(() => ({ isMinor: async (_id: string | null): Promise<boolean> => false }));
+vi.mock("@features/mira/server/minor", () => ({
+  isMinor: (id: string | null) => stop.isMinor(id),
+}));
 
 import MiraError from "@/app/mira/error";
 import HomePage from "@/app/mira/home/page";
@@ -489,6 +493,67 @@ describe("Home", () => {
     expect(earlier).toHaveTextContent("1 Nov");
   });
 
+  // R3-UXA-8: every card said "Mira is only for adults.", seven times down the page, under a card
+  // that still offered "Start with Mira".
+  describe("for an account stopped as under 18", () => {
+    /** /api/mira/me with `minor`, every habit's read refused as the routes refuse it. */
+    function stopped(meMinor: boolean) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.split("?")[0] === "/api/mira/me") {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                profile: { name: "Kim", email: "kim@example.com" },
+                chats: [],
+                minor: meMinor,
+              }),
+            } as Response;
+          }
+          return {
+            ok: false,
+            status: 403,
+            json: async () => ({ error: ADULTS_ONLY, minor: true }),
+          } as Response;
+        })
+      );
+    }
+    const quietPage = () => {
+      expect(screen.getAllByText(ADULTS_ONLY)).toHaveLength(1);
+      expect(screen.queryByRole("heading", { name: /with Mira$/ })).toBeNull();
+      expect(screen.queryByRole("link", { name: "New chat" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Daily journal" })).toBeNull();
+      expect(screen.queryByRole("searchbox")).toBeNull();
+      expect(screen.queryByRole("combobox")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      expect(screen.queryByText(/Wonderful to see you/)).toBeNull();
+    };
+
+    it("says it once, from the first paint, and shows nothing it can't use", async () => {
+      stopped(true);
+      render(<MiraHome minor hour={8} name="Kim" />);
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Good morning, Kim");
+      quietPage();
+      await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+      quietPage();
+    });
+
+    it("says it once too when only the account's read finds the stop", async () => {
+      stopped(true);
+      render(<MiraHome hour={8} name="Kim" />);
+      await waitFor(quietPage);
+    });
+
+    it("keeps the support lines at hand during the quiet after them", () => {
+      stopped(true);
+      render(<MiraHome minor quiet hour={8} name="Kim" />);
+      expect(screen.getAllByText(ADULTS_ONLY)).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "See support lines" })).toBeInTheDocument();
+    });
+  });
+
   it("is neutral while the 14 days after the support lines run, with the lines at hand (CHAT-17)", async () => {
     account();
     render(<MiraHome quiet hour={8} name="Kim" />);
@@ -510,7 +575,7 @@ describe("Home's page (server)", () => {
       return true;
     };
     const el = (await HomePage()) as { props: Record<string, unknown> };
-    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true });
+    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true, minor: false });
     // The same 14 days as the nudges and the journal reminders.
     expect(asked).toEqual([["u1", new Date("2026-11-08T07:30:00Z")]]);
   });
@@ -523,6 +588,25 @@ describe("Home's page (server)", () => {
     };
     const el = (await HomePage()) as { props: Record<string, unknown> };
     expect(el.props).toMatchObject({ name: null, hour: null, quiet: true });
+  });
+
+  it("knows before the first paint that the account was stopped as under 18 (R3-UXA-8)", async () => {
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = { name: "Kim", time_zone: "Europe/Berlin", country: "DE" };
+    server.hadCrisis = async () => false;
+    const asked: Array<string | null> = [];
+    stop.isMinor = async (id) => {
+      asked.push(id);
+      return true;
+    };
+    expect(((await HomePage()) as { props: Record<string, unknown> }).props.minor).toBe(true);
+    expect(asked).toEqual(["u1"]);
+    // Unsure is not stopped (as /api/mira/me answers): the cards then each refuse on their own.
+    stop.isMinor = async () => {
+      throw new Error("down");
+    };
+    expect(((await HomePage()) as { props: Record<string, unknown> }).props.minor).toBe(false);
+    stop.isMinor = async () => false;
   });
 
   it("is quiet only after support lines", async () => {
