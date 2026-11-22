@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi, signInHref } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
+import { shortDate } from "../kit/dates";
 import { canRecognizeSpeech } from "../voice/speech";
 
 /**
@@ -172,7 +173,8 @@ export function SessionRowLink({ r }: { r: SessionRow }) {
           {at.getDate()}
         </span>
         <span className="mt-0.5 whitespace-nowrap text-[11px] text-ap-muted">
-          {at.toLocaleDateString(LOCALE, { month: "short" })}
+          {/* The kit's month ("Sep", never "Sept": round-3 R3-ACCT-9). */}
+          {shortDate(r.startedAt).split(" ")[1]}
         </span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">

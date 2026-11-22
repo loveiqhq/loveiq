@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { NEW_CODE, miraApi } from "../api";
+import { shortDate } from "../kit/dates";
 import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
@@ -71,8 +72,8 @@ const METHOD: Record<Device["method"], string> = {
   passkey: "a passkey",
 };
 
-const day = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** Mira's one short date ("22 Sep", never "Sept"; round-3 R3-ACCT-9). */
+const day = (iso: string) => shortDate(iso);
 /** "09:14", in this browser's zone: two devices signed in the same day look the same without it. */
 const time = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });

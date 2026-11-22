@@ -950,5 +950,9 @@ describe("Settings › Sign-in & security", () => {
     expect(lastActive(new Date(2026, 10, 21, 23).toISOString(), now)).toBe("Active yesterday");
     expect(lastActive(new Date(2026, 10, 18, 9).toISOString(), now)).toBe("Active 4 days ago");
     expect(lastActive(new Date(2026, 10, 2, 9).toISOString(), now)).toBe("Active on 2 Nov");
+    // Round-3 R3-ACCT-9 (SET-12): the kit's date, "Sep" in every browser (en-GB says "Sept" in
+    // Chromium, Firefox and Node), with the year outside this one.
+    expect(lastActive(new Date(2026, 8, 22, 9).toISOString(), now)).toBe("Active on 22 Sep");
+    expect(lastActive(new Date(2025, 8, 22, 9).toISOString(), now)).toBe("Active on 22 Sep 2025");
   });
 });
