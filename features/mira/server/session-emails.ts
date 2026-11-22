@@ -2,11 +2,18 @@ import { Resend } from "resend";
 import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isUndeliverable } from "@shared/emails/suppression";
-import { escapeHtml } from "@shared/format/html-escape";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
-import { reminderDue, sessionIcs, slotLabel, zoneLabel, type WeeklySlot } from "./calendar";
-import { COMPANY_LINE, CRISIS_QUIET_DAYS, from, hadCrisis, makeToken } from "./nudges";
+import {
+  nextOccurrence,
+  reminderDue,
+  sessionIcs,
+  slotLabel,
+  zoneLabel,
+  type WeeklySlot,
+} from "./calendar";
+import { miraEmail, type EmailCard } from "./email-shell";
+import { CRISIS_QUIET_DAYS, from, hadCrisis, makeToken } from "./nudges";
 import { logMiraEvent } from "./store";
 import {
   calendarText,
@@ -51,32 +58,64 @@ export function sessionLinks(userId: string) {
     oneClick: `${site}/api/mira/weekly-session/stop?t=${t}`,
     manage: `${site}/mira/settings#weekly`,
     book: `${site}/mira/home`,
+    privacy: `${site}/mira/privacy`,
   };
 }
 
-const css = (rules: Record<string, string>) =>
-  Object.entries(rules)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join("; ");
+/** The date tile of a start, read in the session's own zone: "Nov", "25", "Tue". */
+function dateTile(at: Date, timeZone: string): EmailCard["date"] {
+  const part = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone, ...o }).format(at);
+  return {
+    month: part({ month: "short" }),
+    day: part({ day: "numeric" }),
+    weekday: part({ weekday: "short" }),
+  };
+}
 
-/** The email's words, and its HTML in the nudge email's shell. */
+/** "Tuesday 25 November", in the session's own zone. */
+const longDate = (at: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(at);
+
+/** The email's words and its HTML, in the shell all of Mira's emails share (email-shell.ts). */
 export function sessionEmail(
   kind: SessionEmailKind,
-  input: { slot: WeeklySlot; links: ReturnType<typeof sessionLinks>; googleUrl: string }
+  input: {
+    slot: WeeklySlot;
+    links: ReturnType<typeof sessionLinks>;
+    googleUrl: string;
+    now?: Date;
+  }
 ): { subject: string; html: string; text: string } {
   const { slot, links } = input;
   const day = slotLabel(slot).replace(/s at .*/, ""); // "Tuesday"
-  const when = `every ${day} at ${slot.time} (${zoneLabel(slot.timeZone)})`;
+  const series = slotLabel(slot); // "Tuesdays at 19:00"
+  const zone = zoneLabel(slot.timeZone);
+  const next = nextOccurrence(slot, input.now ?? new Date());
+  const upcoming = (lead: string): EmailCard => ({
+    date: dateTile(next, slot.timeZone),
+    title: series,
+    lines: [`${zone} · 15 minutes`, `${lead} ${longDate(next, slot.timeZone)}`],
+  });
+  const gone: EmailCard = { title: series, lines: [`${zone} · cancelled`], struck: true };
   const copy = (() => {
     switch (kind) {
       case "booked":
         return {
           subject: "Your weekly session is booked",
           preheader: "Your calendar invite is attached.",
+          heading: "You’re booked in",
           paragraphs: [
-            `You’re booked in: ${when}, 15 minutes with me.`,
-            "Your calendar invite is attached, so the time stays yours. I’ll send a short reminder 30 to 60 minutes before each session.",
-            "When it’s time, open the session from your calendar or the reminder, and we’ll take it from there.",
+            "15 minutes with me, every week. Your calendar invite is attached, so the time stays yours.",
+          ],
+          card: upcoming("Starts"),
+          after: [
+            "I’ll send a short reminder 30 to 60 minutes before each session. When it’s time, open the session from your calendar or the reminder, and we’ll take it from there.",
           ],
           button: { label: "Add to Google Calendar", url: input.googleUrl },
           note: "Apple Calendar or Outlook: open the attached invite.",
@@ -85,10 +124,12 @@ export function sessionEmail(
         return {
           subject: "Your weekly session has a new time",
           preheader: "Your updated invite is attached.",
+          heading: "Your new time",
           paragraphs: [
-            `Done: from now on we meet ${when}.`,
+            `Done: from now on we meet every ${day} at ${slot.time}.`,
             "The updated invite is attached; opening it moves the session in your calendar.",
           ],
+          card: upcoming("Next one"),
           button: { label: "Add the new time to Google Calendar", url: input.googleUrl },
           note: "Added the old time with a Google Calendar link? Delete that one.",
         };
@@ -96,10 +137,15 @@ export function sessionEmail(
         return {
           subject: `See you at ${slot.time}`,
           preheader: "Your weekly 15 minutes.",
+          heading: `See you at ${slot.time}`,
           paragraphs: [
-            `Your weekly session starts at ${slot.time} (${zoneLabel(slot.timeZone)}).`,
             "Find a quiet spot if you can. When you’re ready, open the session and I’ll be there.",
           ],
+          card: {
+            date: dateTile(next, slot.timeZone),
+            title: `${day} at ${slot.time}`,
+            lines: [`${zone} · 15 minutes`],
+          },
           button: { label: "Open my session", url: links.open },
           note: null,
         };
@@ -107,10 +153,11 @@ export function sessionEmail(
         return {
           subject: "Your weekly session is cancelled",
           preheader: "This update takes it out of your calendar.",
+          heading: "Your weekly session is cancelled",
           paragraphs: [
-            `Your weekly session on ${day}s at ${slot.time} is cancelled.`,
             "The attached update takes it out of your calendar. Whenever you’d like a regular time again, you can book one in a minute.",
           ],
+          card: gone,
           button: { label: "Book a new time", url: links.book },
           note: GOOGLE_COPY,
           footer: "That’s the last session email, unless you book again.",
@@ -119,10 +166,11 @@ export function sessionEmail(
         return {
           subject: "Your weekly session is cancelled",
           preheader: "This update takes it out of your calendar.",
+          heading: "Your weekly session is cancelled",
           paragraphs: [
-            `Your weekly session on ${day}s at ${slot.time} is cancelled, as your account was deleted.`,
-            "The attached update takes it out of your calendar.",
+            "Your weekly session is cancelled, as your account was deleted. The attached update takes it out of your calendar.",
           ],
+          card: gone,
           button: null,
           note: GOOGLE_COPY,
           footer: "That’s the last session email.",
@@ -131,10 +179,12 @@ export function sessionEmail(
         return {
           subject: "Your weekly session moved to another address",
           preheader: "This update takes it out of this calendar.",
+          heading: "Your session moved to your new address",
           paragraphs: [
             `Your weekly session on ${day}s at ${slot.time} now goes to the new email address on your account, with its reminders.`,
             "The attached update takes it out of the calendar for this address. To add it to your new calendar, open Home in Mira and choose “Add to calendar”.",
           ],
+          card: { title: series, lines: [`${zone} · now at your new address`] },
           button: { label: "Open Mira", url: links.book },
           note: GOOGLE_COPY,
           footer: "That’s the last session email to this address.",
@@ -142,60 +192,25 @@ export function sessionEmail(
     }
   })();
 
-  const footer = copy.footer ?? SERVICE_FOOTER;
-  const ink = { color: "#3f3a4d", "font-size": "15px", "line-height": "1.6" };
-  const link = (href: string, label: string) =>
-    `<a href="${href}" style="${css({ color: "#c4b5fd", "font-weight": "700", "margin-right": "18px" })}">${label}</a>`;
-  const hidden = css({
-    display: "none",
-    "max-height": "0",
-    "max-width": "0",
-    overflow: "hidden",
-    opacity: "0",
-    "mso-hide": "all",
-    "font-size": "1px",
-    "line-height": "1px",
-    color: "#ffffff",
+  const { html, text } = miraEmail({
+    preheader: copy.preheader,
+    heading: copy.heading,
+    paragraphs: copy.paragraphs,
+    card: copy.card,
+    after: "after" in copy ? copy.after : undefined,
+    button: copy.button,
+    note: copy.note,
+    footer: {
+      why: ("footer" in copy && copy.footer) || SERVICE_FOOTER,
+      links: isCancellation(kind)
+        ? [{ label: "Privacy", url: links.privacy }]
+        : [
+            { label: "Stop reminders", url: links.stop },
+            { label: "Change or cancel", url: links.manage },
+            { label: "Privacy", url: links.privacy },
+          ],
+    },
   });
-  const html = [
-    `<!doctype html><html><body style="${css({ margin: "0", background: "#ffffff" })}">`,
-    `<div style="${hidden}">${escapeHtml(copy.preheader)}${"&#8199;&#65279;&#847; ".repeat(60)}</div>`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="${css({ "max-width": "560px", margin: "0 auto", "font-family": "Arial, sans-serif" })}">`,
-    `<tr><td style="${css({ padding: "24px 20px 8px", "font-weight": "700" })}">Mira</td></tr>`,
-    `<tr><td style="${css({ padding: "8px 20px 24px" })}">`,
-    ...copy.paragraphs.map(
-      (p) => `<p style="${css({ margin: "0 0 16px", ...ink })}">${escapeHtml(p)}</p>`
-    ),
-    copy.button
-      ? `<a href="${copy.button.url}" style="${css({ display: "inline-block", padding: "14px 24px", "border-radius": "9999px", background: "#000000", color: "#ffffff", "font-weight": "700", "text-decoration": "none" })}">${escapeHtml(copy.button.label)}</a>`
-      : "",
-    copy.note
-      ? `<p style="${css({ margin: "16px 0 0", color: "#6b6678", "font-size": "13px" })}">${escapeHtml(copy.note)}</p>`
-      : "",
-    `</td></tr>`,
-    `<tr><td style="${css({ background: "#161021", color: "#e2dafb", padding: "24px", "font-size": "13px" })}">`,
-    `<p style="${css({ margin: "0 0 12px", "font-size": "18px", "font-weight": "700" })}">Applied Psychometrics</p>`,
-    `<p style="${css({ margin: "0 0 12px" })}">${escapeHtml(footer)}</p>`,
-    isCancellation(kind)
-      ? ""
-      : `<p style="${css({ margin: "0 0 12px" })}">${link(links.stop, "Stop reminders")}${link(links.manage, "Change or cancel")}</p>`,
-    `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">${COMPANY_LINE}</p>`,
-    `</td></tr></table></body></html>`,
-  ].join("\n");
-  const text = [
-    copy.preheader,
-    "",
-    ...copy.paragraphs.flatMap((p) => [p, ""]),
-    ...(copy.button ? [`${copy.button.label}: ${copy.button.url}`] : []),
-    ...(copy.note ? [copy.note] : []),
-    "",
-    footer,
-    ...(isCancellation(kind)
-      ? []
-      : [`Stop reminders: ${links.stop}`, `Change or cancel: ${links.manage}`]),
-    "",
-    COMPANY_LINE,
-  ].join("\n");
   return { subject: copy.subject, html, text };
 }
 
@@ -242,7 +257,7 @@ function message(
   ics?: { method: "REQUEST" | "CANCEL"; sequence: number }
 ) {
   const links = sessionLinks(userId);
-  const email = sessionEmail(kind, { slot, links, googleUrl: slotView(slot, now).googleUrl });
+  const email = sessionEmail(kind, { slot, links, googleUrl: slotView(slot, now).googleUrl, now });
   return {
     from: from(),
     to,

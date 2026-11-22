@@ -247,7 +247,10 @@ describe("booking a weekly session (PUT)", () => {
     expect(mail.from).toBe("Mira <hello@send.loveiq.org>");
     // Neutral: nothing about bodies, sex or what was said, in the subject or anywhere else.
     expect(mail.subject).toBe("Your weekly session is booked");
-    const visible = String(mail.html).replace(/<[^>]+>/g, " ") + String(mail.text);
+    const visible =
+      String(mail.html)
+        .replace(/<head>[\s\S]*?<\/head>/, "") // the shell's fonts and colours, never shown
+        .replace(/<[^>]+>/g, " ") + String(mail.text);
     expect(visible).not.toMatch(/body|sex|confiden|intima/i);
     expect(attachment).toMatchObject({
       filename: "invite.ics",
@@ -465,7 +468,9 @@ describe("the email's stop link (no sign-in)", () => {
         expect(readToken("open", t)).toBeNull();
       }
       for (const u of links.filter((x) => !x.searchParams.has("t"))) {
-        expect(["/mira/session", "/mira/settings", "/mira/home"]).toContain(u.pathname);
+        expect(["/mira/session", "/mira/settings", "/mira/home", "/mira/privacy"]).toContain(
+          u.pathname
+        );
       }
     }
     // The calendar entry's link carries nothing either.

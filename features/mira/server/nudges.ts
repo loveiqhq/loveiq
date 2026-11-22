@@ -3,10 +3,10 @@ import { Resend } from "resend";
 import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
-import { escapeHtml } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import nudgeConfig from "../content/nudges.json";
 import { supportSince } from "./checks";
+import { miraEmail } from "./email-shell";
 import { askModel, isModelConfigured } from "./model";
 import { addMessages, logMiraEvent } from "./store";
 
@@ -253,10 +253,6 @@ export function from(): string {
   return `${nudgeConfig.senderName} <${address}>`;
 }
 
-/** The legal entity under every nudge, as in the imprint (the sign-in code email has the same). */
-export const COMPANY_LINE =
-  "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
-
 export function nudgeEmail(input: {
   type: NudgeType;
   body: string;
@@ -266,64 +262,24 @@ export function nudgeEmail(input: {
   const kind = kindOf(input.type);
   // The teaser alone: nothing about the chats or what they are about (Eman, 20 Nov 2026).
   const subject = kind.teaser;
-  const css = (rules: Record<string, string>) =>
-    Object.entries(rules)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("; ");
-  const ink = { color: "#3f3a4d", "font-size": "15px", "line-height": "1.6" };
-  const paragraphs = input.body
-    .split(/\n\s*\n/)
-    .map((p) => `<p style="${css({ margin: "0 0 16px", ...ink })}">${escapeHtml(p.trim())}</p>`)
-    .join("");
-  const footerLink = (label: string) =>
-    `<a href="${input.prefsUrl}" style="${css({ color: "#c4b5fd", "font-weight": "700", "margin-right": "18px" })}">${label}</a>`;
-  const button = css({
-    display: "inline-block",
-    padding: "14px 24px",
-    "border-radius": "9999px",
-    background: "#000000",
-    color: "#ffffff",
-    "font-weight": "700",
-    "text-decoration": "none",
+  // The neutral preheader comes first in the shell, so an inbox preview shows it and not the body.
+  const { html, text } = miraEmail({
+    preheader: nudgeConfig.preheader,
+    paragraphs: input.body
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean),
+    button: { label: kind.button, url: input.openUrl },
+    footer: {
+      why: "Daily nudges from Mira come with your free account. One email a day at most.",
+      links: [
+        { label: "Fewer nudges", url: input.prefsUrl },
+        { label: "Pause", url: input.prefsUrl },
+        { label: "Unsubscribe", url: input.prefsUrl },
+        { label: "Privacy", url: `${getEmailSiteUrl()}/mira/privacy` },
+      ],
+    },
   });
-  const footer = css({
-    background: "#161021",
-    color: "#e2dafb",
-    padding: "24px",
-    "font-size": "13px",
-  });
-  // First in the email, so an inbox preview shows this neutral line and not the body; the
-  // padding keeps the body's first words from trailing into the preview.
-  const preview = css({
-    display: "none",
-    "max-height": "0",
-    "max-width": "0",
-    overflow: "hidden",
-    opacity: "0",
-    "mso-hide": "all",
-    "font-size": "1px",
-    "line-height": "1px",
-    color: "#ffffff",
-  });
-  const html = [
-    `<!doctype html><html><body style="${css({ margin: "0", background: "#ffffff" })}">`,
-    `<div style="${preview}">${escapeHtml(nudgeConfig.preheader)}${"&#8199;&#65279;&#847; ".repeat(60)}</div>`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="${css({ "max-width": "560px", margin: "0 auto", "font-family": "Arial, sans-serif" })}">`,
-    `<tr><td style="${css({ padding: "24px 20px 8px", "font-weight": "700" })}">Mira</td></tr>`,
-    `<tr><td style="${css({ padding: "8px 20px 24px" })}">${paragraphs}`,
-    `<a href="${input.openUrl}" style="${button}">${escapeHtml(kind.button)}</a></td></tr>`,
-    `<tr><td style="${footer}">`,
-    `<p style="${css({ margin: "0 0 12px", "font-size": "18px", "font-weight": "700" })}">Applied Psychometrics</p>`,
-    `<p style="${css({ margin: "0 0 12px" })}"><b>Daily nudges from Mira</b> come with your free account. One email a day at most.</p>`,
-    `<p style="${css({ margin: "0 0 12px" })}">${footerLink("Fewer nudges")}${footerLink("Pause")}${footerLink("Unsubscribe")}</p>`,
-    `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">${COMPANY_LINE}</p>`,
-    `</td></tr></table></body></html>`,
-  ].join("\n");
-  // The neutral line first here too: a mail app that previews the text part shows that.
-  const text =
-    `${nudgeConfig.preheader}\n\n${input.body}\n\n${kind.button}: ${input.openUrl}\n\n` +
-    `Daily nudges from Mira come with your free account. One email a day at most.\n` +
-    `Fewer nudges, pause or unsubscribe: ${input.prefsUrl}\n\n${COMPANY_LINE}`;
   return { subject, html, text };
 }
 
