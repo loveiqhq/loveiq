@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { CHECKS, CHECK_IDS } from "@features/mira/content/checks";
 import { AdultsOnly, SectionLink } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { CheckIcon, LoveIqTile } from "./icons";
 import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from "./data";
 
@@ -32,12 +33,7 @@ export default function ChecksHomeCard() {
       {minor ? (
         <AdultsOnly className="mt-2" />
       ) : error ? (
-        <p role="alert" className="mt-2 text-[14px] text-ap-bad-ink">
-          {error}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+        <LoadFailed what="Your assessments" onRetry={retry} className="mt-2" />
       ) : null}
       {data ? (
         <ul className="mt-1 flex flex-col divide-y divide-ap-line">

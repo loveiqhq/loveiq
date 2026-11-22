@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
@@ -69,12 +70,7 @@ export function NextSessionCard() {
         <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
           Your weekly session
         </h2>
-        <p role="alert" className="mt-1 text-[14px] text-ap-body">
-          {state.message}{" "}
-          <button type="button" onClick={() => void load()} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+        <LoadFailed what="Your weekly session" onRetry={() => void load()} className="mt-2" />
       </section>
     );
   }

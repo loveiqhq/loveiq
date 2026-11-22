@@ -260,7 +260,8 @@ describe("Home's weekly session card", () => {
   it("offers a retry when it can't load, and shows nothing signed out", async () => {
     replies["GET /api/mira/weekly-session"] = () => ({ status: 500, body: { error: "Nope." } });
     const { unmount } = render(<NextSessionCard />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Nope.");
+    // One wording for a failed read on Home (round-3 SET-11), whatever the server said.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your weekly session didn't load.");
     replies["GET /api/mira/weekly-session"] = has(null);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("button", { name: "Choose a time" })).toBeInTheDocument();

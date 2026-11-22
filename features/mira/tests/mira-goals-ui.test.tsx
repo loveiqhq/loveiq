@@ -193,7 +193,8 @@ describe("Home's goals card", () => {
       body: { error: "Unable to load your goals." },
     });
     render(<GoalsCard />);
-    expect(await screen.findByText("Unable to load your goals.")).toBeTruthy();
+    // One wording for a failed read on Home (round-3 SET-11), whatever the server said.
+    expect(await screen.findByText("Your goals didn't load.")).toBeTruthy();
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText(LIGHT.text)).toBeTruthy();
