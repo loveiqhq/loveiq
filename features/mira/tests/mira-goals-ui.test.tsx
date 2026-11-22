@@ -262,6 +262,24 @@ describe("the goals page", () => {
     expect(tick.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("names a goal's aim once, and shows its 8 weeks as labelled slots, not a hairline", async () => {
+    const fresh = goal("g5", { text: "Two quiet minutes", weekly_target: 2 });
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [fresh] } });
+    render(<GoalsPage />);
+    const entry = (await screen.findByRole("heading", { name: "Two quiet minutes" })).closest(
+      "li"
+    )!;
+    expect(within(entry).getAllByText(/2 days a week/)).toHaveLength(1);
+    expect(within(entry).getByText("Tick the days you do it")).toBeTruthy();
+    const weeks = within(entry).getByRole("list", { name: "Days ticked, last 8 weeks" });
+    expect(within(weeks).getAllByRole("listitem")).toHaveLength(8);
+    // Every week is a visible slot (a track), filled as days are ticked.
+    for (const li of within(weeks).getAllByRole("listitem")) {
+      expect(li.className).toMatch(/bg-ap-track/);
+    }
+    expect(within(entry).getByText("Last 8 weeks")).toBeTruthy();
+  });
+
   it("keeps the days stepper focused at its ends, ignoring a press past them", async () => {
     render(<GoalsPage />);
     const more = await screen.findByRole("button", { name: "More days" });

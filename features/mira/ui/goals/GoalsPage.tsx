@@ -277,7 +277,7 @@ function GoalEntry({
           </p>
         </div>
         <div className="sm:col-start-1">
-          <WeekLine p={p} target={goal.weekly_target} pop={pop} />
+          <WeekLine p={p} target={goal.weekly_target} pop={pop} aimShown />
         </div>
         <TickButton
           goal={goal}
