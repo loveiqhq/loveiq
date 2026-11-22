@@ -14,7 +14,7 @@ const OUTLINE_PILL =
  * as under 18. Its id is the anchor the session emails' "Change or cancel" link opens.
  */
 export function WeeklySessionSettings() {
-  const { state, load, book, setPaused, cancel } = useWeeklySession();
+  const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
   const [sheet, setSheet] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);

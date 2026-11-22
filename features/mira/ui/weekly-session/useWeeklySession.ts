@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { nextOccurrence } from "@features/mira/server/calendar";
@@ -20,7 +21,8 @@ export type SlotView = {
   next: string;
   googleUrl: string;
 };
-type View = { slot: SlotView | null; timeZone: string };
+/** `minor`: the under-18 stop's 403, the only one that hides sessions (a CSRF refusal is a 403 too). */
+type View = { slot: SlotView | null; timeZone: string; minor?: boolean };
 
 export type WeeklyState =
   | { status: "loading" }
@@ -53,25 +55,34 @@ export function browserZone(): string | null {
   }
 }
 
-export function useWeeklySession() {
+/** What a refused change says: the server's words, except a 403's "Invalid request." */
+const RETRY = "That didn’t go through. Please try again.";
+const failed = (r: { status: number; data: { error?: string } }, fallback = RETRY) =>
+  r.status === 403 ? fallback : (r.data.error ?? fallback);
+
+/**
+ * `signIn`: on a signed-in page (Home, Settings), a sign-in that ran out goes to sign-in and back
+ * to the page; the chat's picker invites a signed-out person to an account instead.
+ */
+export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) {
+  const router = useRouter();
   const [state, setState] = useState<WeeklyState>({ status: "loading" });
 
+  /** Signed out, stopped as under 18, or the slot as saved; anything else changes nothing (false). */
   const apply = useCallback((r: { ok: boolean; status: number; data: Partial<View> }) => {
     if (r.status === 401) setState({ status: "signed-out" });
-    else if (r.status === 403) setState({ status: "unavailable" });
+    else if (r.status === 403 && r.data.minor === true) setState({ status: "unavailable" });
     else if (r.ok)
       setState({ status: "ready", slot: r.data.slot ?? null, timeZone: r.data.timeZone ?? "" });
-    return r.ok;
+    else return false;
+    return true;
   }, []);
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
     const r = await miraApi<View>("/api/mira/weekly-session");
-    if (!apply(r) && r.status !== 401 && r.status !== 403) {
-      setState({
-        status: "error",
-        message: r.data.error ?? "Your weekly session didn't load.",
-      });
+    if (!apply(r)) {
+      setState({ status: "error", message: failed(r, "Your weekly session didn't load.") });
     }
   }, [apply]);
 
@@ -80,6 +91,12 @@ export function useWeeklySession() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (signIn && state.status === "signed-out") {
+      router.replace(`/mira/start?next=${encodeURIComponent(window.location.pathname)}`);
+    }
+  }, [signIn, state.status, router]);
 
   /** Book or move it. The state follows only what the server saved. */
   const book = useCallback(
@@ -92,9 +109,7 @@ export function useWeeklySession() {
         { method: "PUT", body: { ...slot, source } }
       );
       apply(r);
-      if (!r.ok || !r.data.slot) {
-        return { ok: false, error: r.data.error ?? "That didn't go through. Please try again." };
-      }
+      if (!r.ok || !r.data.slot) return { ok: false, error: failed(r) };
       return {
         ok: true,
         emailed: Boolean(r.data.emailed),
@@ -112,7 +127,7 @@ export function useWeeklySession() {
         body: { paused },
       });
       apply(r);
-      return r.ok ? null : (r.data.error ?? "That didn't save. Please try again.");
+      return r.ok ? null : failed(r);
     },
     [apply]
   );
@@ -120,7 +135,7 @@ export function useWeeklySession() {
   const cancel = useCallback(async (): Promise<string | null> => {
     const r = await miraApi<View>("/api/mira/weekly-session", { method: "DELETE" });
     apply(r);
-    return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
+    return r.ok ? null : failed(r);
   }, [apply]);
 
   return { state, load, book, setPaused, cancel };

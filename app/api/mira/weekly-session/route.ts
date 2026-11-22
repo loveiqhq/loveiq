@@ -9,7 +9,8 @@
  *   PATCH { paused }   → reminder emails off or back on (the slot and calendar entry stay)
  *   DELETE             → cancels it; emails the cancellation that clears it from the calendar
  *
- * Someone Mira stopped as under 18 is refused (403) on every call, before anything is read.
+ * Someone Mira stopped as under 18 is refused (403, `minor: true`) on every call, before anything
+ * is read; the pages hide sessions only then (a failed CSRF check is a 403 too, to retry).
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -71,7 +72,9 @@ async function guard(request: Request, write: boolean) {
   const account = await getMiraAccount();
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
   if (await isMinor(account.id)) {
-    return { error: NextResponse.json({ error: "Not available." }, { status: 403 }) };
+    return {
+      error: NextResponse.json({ error: "Not available.", minor: true }, { status: 403 }),
+    };
   }
   return { account };
 }
