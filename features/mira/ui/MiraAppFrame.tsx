@@ -190,7 +190,8 @@ export function MiraAppFrame({
   const [more, setMore] = useState(false);
   const country = useSupportCountry();
   useReloadWhenRestored();
-  const inMore = PAGES.some((p) => !p.short && p.key === active);
+  // The page shown when it is one of More's: the bar marks More, and says which (R3-UXA-12).
+  const inMore = PAGES.find((p) => !p.short && p.key === active);
   return (
     <div className="flex min-h-screen flex-col bg-white pb-[var(--mira-dock)] font-sans text-ap-ink selection:bg-ap-lilac [--mira-dock:calc(var(--mira-bar)+env(safe-area-inset-bottom)+var(--liq-consent-h,0px))] lg:flex-row lg:[--mira-dock:0px]">
       <header className="lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-ap-line lg:px-5 lg:py-6">
@@ -227,12 +228,13 @@ export function MiraAppFrame({
                 aria-haspopup="dialog"
                 aria-expanded={more}
                 onClick={() => setMore(true)}
-                className={`${placeClass(inMore)} w-full`}
+                className={`${placeClass(Boolean(inMore))} w-full`}
               >
-                <span aria-hidden="true" className={pill(inMore)}>
+                <span aria-hidden="true" className={pill(Boolean(inMore))}>
                   <Icon>{MORE_ICON}</Icon>
                 </span>
                 More
+                {inMore ? <span className="sr-only">, current: {inMore.label}</span> : null}
               </button>
             </li>
           </ul>

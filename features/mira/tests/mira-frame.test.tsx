@@ -233,7 +233,7 @@ describe("the signed-in frame", () => {
 
   it("opens More as a sheet with the other pages, the current one marked, and closes it", () => {
     frame("settings");
-    fireEvent.click(within(menu()).getByRole("button", { name: "More" }));
+    fireEvent.click(within(menu()).getByRole("button", { name: /^More/ }));
     const sheet = screen.getByRole("dialog", { name: "More" });
     expect(
       within(sheet)
@@ -264,6 +264,20 @@ describe("the signed-in frame", () => {
       within(screen.getByRole("dialog", { name: "More" })).getByRole("link", { name: "Coaches" })
     );
     expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
+  });
+
+  // R3-UXA-12: on a page in More the bar marked More only by its pill and weight.
+  it("says on the bar which of More's pages is open, and nothing more elsewhere", () => {
+    frame("settings");
+    expect(within(menu()).getByRole("button", { name: "More, current: Settings" })).toBeVisible();
+    cleanup();
+    frame("recordings");
+    expect(
+      within(menu()).getByRole("button", { name: "More, current: Voice sessions" })
+    ).toBeVisible();
+    cleanup();
+    frame("journal");
+    expect(within(menu()).getByRole("button", { name: "More" })).toBeVisible();
   });
 
   it("marks the bar for the page's focus room below it (R3-UXA-1: global CSS keys on data-mira-bar)", () => {
