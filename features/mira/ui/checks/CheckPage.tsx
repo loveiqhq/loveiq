@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
+  SUPPORT_HEADLINE,
   bandOf,
   checkById,
   nextTakeAt,
   type Check,
   type CheckId,
 } from "@features/mira/content/checks";
-import { BodyCheck } from "../BodyCheck";
+import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
 import { miraApi } from "../api";
@@ -45,9 +46,6 @@ type Saved = {
   previous: { at: string; score: number } | null;
 };
 
-/** Under a result whose question 9 (the last) opened the support lines: the total is not the story. */
-const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
-
 const EYEBROW = "font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
 const PLUM_LINK =
   "inline-flex min-h-[44px] items-center gap-1 font-semibold text-ap-purple underline-offset-4 hover:text-ap-violet hover:underline";
@@ -60,7 +58,7 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, setData, retry } = useChecks();
+  const { data, error, minor, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -178,7 +176,9 @@ export default function CheckPage({
         </Link>{" "}
         <span aria-hidden="true">/</span> {check.title}
       </nav>
-      {error ? (
+      {minor ? (
+        <AdultsOnly className="mt-6" />
+      ) : error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
           {error}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">
@@ -488,20 +488,17 @@ function Result({
           tabIndex={-1}
           className={`mt-3 font-serif text-[27px] font-medium leading-snug text-ap-ink outline-none [text-wrap:balance] sm:text-[32px] ${saved ? "motion-safe:animate-mira-in" : ""}`}
         >
-          {band.headline}
+          {support ? SUPPORT_HEADLINE : band.headline}
         </h1>
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[14px] text-ap-body">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 font-semibold text-ap-ink ring-1 ring-ap-line">
-            {band.label}
+            {bandText(check, last)}
           </span>
           <span className="tabular-nums">
             {last.score} of {check.max}
           </span>
           {change ? <span>{change[0]!.toUpperCase() + change.slice(1)}</span> : null}
         </p>
-        {support ? (
-          <p className="mt-3 text-[15px] font-semibold leading-snug text-ap-ink">{NOT_THE_SCORE}</p>
-        ) : null}
       </header>
 
       {/* A low band's words are reassurance ("holding up"), which that answer outweighs. */}
@@ -579,7 +576,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
       </h2>
       <p className="mt-2 text-[14px] leading-relaxed text-ap-body">
         {trendSummary(check, results)}
-        {results.at(-1)?.support ? ` ${NOT_THE_SCORE}` : ""}
+        {results.at(-1)?.support ? ` ${SUPPORT_HEADLINE}` : ""}
       </p>
       <div className="mt-4 rounded-2xl border border-ap-line p-3">
         <TrendChart check={check} results={results} />
@@ -616,14 +613,44 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
 }
 
 /**
- * /mira/assessments/body: the body check (Body Appreciation Scale-2) outside the chat, through
- * the chat's own card (ui/BodyCheck.tsx) and route, so its storage and AP numbers don't change.
- * No score is shown: it measures, it doesn't judge.
+ * /mira/assessments/body: the body check (Body Appreciation Scale-2) as a page like the other
+ * checks (the same runner: one statement per screen, radios, "n of N", Back), saved through the
+ * chat card's route, so its storage and AP numbers don't change. No score is shown: it measures,
+ * it doesn't judge. It ends on a thank-you that takes focus and stays until the person moves on.
  */
 export function BodyCheckPage() {
-  const router = useRouter();
-  const { data, error, retry } = useChecks();
+  const { data, error, minor, retry } = useChecks();
   const body = data?.bodyCheck;
+  const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Which check was taken, kept for the thank-you once the data says nothing is due.
+  const [took, setTook] = useState<"baseline" | "week4">("baseline");
+  const doneRef = useRef<HTMLHeadingElement | null>(null);
+
+  useEffect(() => {
+    if (mode === "done") doneRef.current?.focus();
+  }, [mode]);
+
+  function start(due: "baseline" | "week4") {
+    void miraApi("/api/mira/event", { body: { type: "track", name: "body_check_started" } });
+    setTook(due);
+    setAnswers([]);
+    setSaveError(null);
+    setMode("run");
+  }
+
+  async function save(all: number[]) {
+    setAnswers(all);
+    setSaving(true);
+    setSaveError(null);
+    const r = await miraApi("/api/mira/body-check", { body: { answers: all } });
+    setSaving(false);
+    if (r.ok) setMode("done");
+    else setSaveError(r.data.error ?? "Your answers didn’t save. Please try again.");
+  }
+
   return (
     <MiraAppFrame active={FRAME_TAB} email={data?.email} name={data?.name}>
       <nav aria-label="Breadcrumb" className="text-[13px] text-ap-muted">
@@ -635,7 +662,9 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {error || (data && !body) ? (
+      {minor ? (
+        <AdultsOnly className="mt-4" />
+      ) : error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">
           {error ?? "Your body checks couldn’t be loaded."}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">
@@ -644,12 +673,54 @@ export function BodyCheckPage() {
         </p>
       ) : null}
       <div className="mt-6 max-w-[600px]">
-        {body?.due ? (
-          <BodyCheck
-            due={body.due}
-            onStart={() => undefined}
-            onClose={() => router.push("/mira/assessments")}
-          />
+        {mode === "done" ? (
+          <section aria-labelledby="body-thanks-h" className="motion-safe:animate-mira-in">
+            <h2
+              id="body-thanks-h"
+              ref={doneRef}
+              tabIndex={-1}
+              className="font-serif text-[24px] font-medium leading-snug outline-none"
+            >
+              {THANKS[took]}
+            </h2>
+            <Link
+              href="/mira/assessments"
+              className="mt-5 inline-flex min-h-[48px] items-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white"
+            >
+              Back to assessments
+            </Link>
+          </section>
+        ) : mode === "run" ? (
+          <>
+            <CheckRunner
+              check={BODY_CHECK}
+              initial={answers}
+              saving={saving}
+              finishLabel="Save my answers"
+              onAnswer={() => undefined}
+              onFinish={(all) => void save(all)}
+              onStop={() => setMode("intro")}
+            />
+            {saveError ? (
+              <p role="alert" className="mt-4 text-[14px] text-ap-bad-ink">
+                {saveError}{" "}
+                <button
+                  type="button"
+                  onClick={() => void save(answers)}
+                  className="font-semibold underline"
+                >
+                  Try again
+                </button>
+              </p>
+            ) : null}
+          </>
+        ) : body?.due ? (
+          <>
+            <p className="text-[16px] leading-relaxed text-ap-body">{OFFER[body.due].text}</p>
+            <div className="mt-6">
+              <PrimaryButton onClick={() => start(body.due!)}>Start</PrimaryButton>
+            </div>
+          </>
         ) : body ? (
           <p className="text-[16px] leading-relaxed text-ap-body">
             {body.nextAt

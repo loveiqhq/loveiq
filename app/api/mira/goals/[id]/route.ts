@@ -12,7 +12,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  ADULTS_ONLY,
+  MINOR_REFUSAL,
   MAX_ACTIVE_GOALS,
   deleteGoal,
   goalText,
@@ -58,7 +58,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   try {
     if (await isMinor(account.id)) {
-      return NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+      return NextResponse.json(MINOR_REFUSAL, { status: 403 });
     }
     const goal = await updateGoal(account.id, id, parsed.data);
     if (goal === "missing") return NOT_FOUND();

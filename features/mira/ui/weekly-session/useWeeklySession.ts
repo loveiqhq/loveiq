@@ -6,7 +6,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { JOIN_AFTER_MS, joinedOccurrence, nextOccurrence } from "@features/mira/server/calendar";
 
 export { slotLabel, zoneLabel } from "@features/mira/server/calendar";
-import { miraApi } from "../api";
+import { miraApi, signInHref, type ApiResult } from "../api";
 
 /**
  * The person's weekly session, as /api/mira/weekly-session gives it, for the chat's time picker,
@@ -20,6 +20,8 @@ export type SlotView = {
   paused: boolean;
   next: string;
   googleUrl: string;
+  /** No reminder emails for now: support lines were shown in the last 14 days. */
+  remindersOnHold?: boolean;
 };
 /** `minor`: the under-18 stop's 403, the only one that hides sessions (a CSRF refusal is a 403 too). */
 type View = { slot: SlotView | null; timeZone: string; minor?: boolean };
@@ -72,9 +74,9 @@ export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) 
   const [state, setState] = useState<WeeklyState>({ status: "loading" });
 
   /** Signed out, stopped as under 18, or the slot as saved; anything else changes nothing (false). */
-  const apply = useCallback((r: { ok: boolean; status: number; data: Partial<View> }) => {
-    if (r.status === 401) setState({ status: "signed-out" });
-    else if (r.status === 403 && r.data.minor === true) setState({ status: "unavailable" });
+  const apply = useCallback((r: ApiResult<Partial<View>>) => {
+    if (r.signedOut) setState({ status: "signed-out" });
+    else if (r.minor) setState({ status: "unavailable" });
     else if (r.ok)
       setState({ status: "ready", slot: r.data.slot ?? null, timeZone: r.data.timeZone ?? "" });
     else return false;
@@ -97,7 +99,7 @@ export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) 
 
   useEffect(() => {
     if (signIn && state.status === "signed-out") {
-      router.replace(`/mira/start?next=${encodeURIComponent(window.location.pathname)}`);
+      router.replace(signInHref());
     }
   }, [signIn, state.status, router]);
 

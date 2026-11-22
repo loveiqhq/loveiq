@@ -194,6 +194,19 @@ describe("GET /api/mira/weekly-session", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ slot: null, timeZone: "Europe/Berlin" });
   });
+
+  it("says when reminder emails are on hold: for 14 days after support lines, as the job skips them", async () => {
+    const onHold = async () => ((await (await GET(call("GET"))).json()) as { slot: Row }).slot;
+    expect(((await (await book()).json()) as { slot: Row }).slot.remindersOnHold).toBe(false);
+    expect((await onHold()).remindersOnHold).toBe(false);
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    db.tables.mira_event = [
+      { id: 1, user_id: LEA.id, name: "crisis_shown", created_at: daysAgo(3) },
+    ];
+    expect((await onHold()).remindersOnHold).toBe(true);
+    db.tables.mira_event[0]!.created_at = daysAgo(15);
+    expect((await onHold()).remindersOnHold).toBe(false);
+  });
 });
 
 describe("booking a weekly session (PUT)", () => {

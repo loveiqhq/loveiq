@@ -41,18 +41,21 @@ async function ok(res: Response, what: string): Promise<Response> {
   return res;
 }
 
-/** The account's entries (newest first) and settings; null when the account has no profile. */
+/**
+ * The account's entries (newest first), each with its version (`updated_at`, which an edit names
+ * as its base), and settings; null when the account has no profile.
+ */
 export async function readJournal(
   userId: string,
   now = new Date()
-): Promise<{ entries: JournalEntry[]; settings: JournalSettings } | null> {
+): Promise<{ entries: StoredEntry[]; settings: JournalSettings } | null> {
   const since = addDays(now.toISOString().slice(0, 10), -DAYS_READ);
   const [user, entries] = await Promise.all([
     supabaseFetch(
       `/rest/v1/mira_user?id=eq.${enc(userId)}&select=journal_share,journal_reminder_time,time_zone&limit=1`
     ).then((r) => ok(r, "read")),
     supabaseFetch(
-      `/rest/v1/mira_journal_entry?user_id=eq.${enc(userId)}&day=gte.${since}&select=${COLS}&order=day.desc&limit=${DAYS_READ + 2}`
+      `/rest/v1/mira_journal_entry?user_id=eq.${enc(userId)}&day=gte.${since}&select=${COLS},updated_at&order=day.desc&limit=${DAYS_READ + 2}`
     ).then((r) => ok(r, "read")),
   ]);
   const [u] = (await user.json()) as Array<{
@@ -62,7 +65,7 @@ export async function readJournal(
   }>;
   if (!u) return null;
   return {
-    entries: (await entries.json()) as JournalEntry[],
+    entries: (await entries.json()) as StoredEntry[],
     settings: {
       share: u.journal_share,
       reminderTime: u.journal_reminder_time,
@@ -71,35 +74,64 @@ export async function readJournal(
   };
 }
 
+/** A check-in as stored, with the time it last changed: the version a later edit names. */
+export type StoredEntry = JournalEntry & { updated_at: string };
+
+/** One day's entry as it is now, or null. */
+async function readEntry(userId: string, day: string): Promise<StoredEntry | null> {
+  const res = await supabaseFetch(
+    `/rest/v1/mira_journal_entry?user_id=eq.${enc(userId)}&day=eq.${day}&select=${COLS},updated_at&limit=1`
+  ).then((r) => ok(r, "read"));
+  return ((await res.json()) as StoredEntry[])[0] ?? null;
+}
+
+export type SaveOutcome =
+  | { updatedAt: string }
+  /** No entry on an older day, which can't be started any more. */
+  | "missing"
+  /** The tab was out of date: the day as it is now (null: deleted meanwhile). */
+  | { conflict: StoredEntry | null };
+
 /**
- * Saves a check-in. `start`: a new one may be made for this day (it is today somewhere), so it is
- * written whether or not one exists; otherwise only an existing entry changes, and false says
- * there was none.
+ * Saves a check-in, never over one the browser hasn't seen. `base` is what it started from: null
+ * for a new check-in, or the `updated_at` of the entry it edited. A new one is written only for a
+ * day with none that can be started (`start`: it is today somewhere); an edit only while the entry
+ * is still that version. Otherwise nothing is written and the day comes back as it is now (null:
+ * deleted meanwhile), because another tab or device saved or deleted it; "missing" is an older day
+ * with no entry, which can't be started any more.
  */
 export async function saveEntry(
   userId: string,
   entry: JournalEntry,
-  start: boolean
-): Promise<boolean> {
+  start: boolean,
+  base: string | null
+): Promise<SaveOutcome> {
   const { day, ...fields } = entry;
   const updated_at = new Date().toISOString();
-  if (start) {
-    await supabaseFetch("/rest/v1/mira_journal_entry?on_conflict=user_id,day", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify({ user_id: userId, day, ...fields, updated_at }),
-    }).then((r) => ok(r, "save"));
-    return true;
+  const wrote = async (res: Response) => ((await res.json()) as unknown[]).length > 0;
+  if (base !== null) {
+    const res = await supabaseFetch(
+      `/rest/v1/mira_journal_entry?user_id=eq.${enc(userId)}&day=eq.${day}&updated_at=eq.${enc(base)}&select=day`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ ...fields, updated_at }),
+      }
+    ).then((r) => ok(r, "save"));
+    if (await wrote(res)) return { updatedAt: updated_at };
+  } else if (start) {
+    const res = await supabaseFetch(
+      "/rest/v1/mira_journal_entry?on_conflict=user_id,day&select=day",
+      {
+        method: "POST",
+        headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+        body: JSON.stringify({ user_id: userId, day, ...fields, updated_at }),
+      }
+    ).then((r) => ok(r, "save"));
+    if (await wrote(res)) return { updatedAt: updated_at };
   }
-  const res = await supabaseFetch(
-    `/rest/v1/mira_journal_entry?user_id=eq.${enc(userId)}&day=eq.${day}&select=day`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ ...fields, updated_at }),
-    }
-  ).then((r) => ok(r, "save"));
-  return ((await res.json()) as unknown[]).length > 0;
+  const now = await readEntry(userId, day);
+  return !now && base === null && !start ? "missing" : { conflict: now };
 }
 
 /** One day's entry, or (no day) the whole journal. Settings stay as they are. */

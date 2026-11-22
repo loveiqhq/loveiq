@@ -332,6 +332,14 @@ export const SUPPORT_STARTER =
 export const SUPPORT_NOTE = "support for you";
 
 /**
+ * The headline of a result whose question 9 opened the support lines, in place of its band's: a
+ * total can read "minimal" while that answer is what matters, and Mira herself may never call
+ * such a check minimal (server/prompt.ts). The band stays beside the score, with SUPPORT_NOTE.
+ * Pending Sanjin's review, like all of this file's copy.
+ */
+export const SUPPORT_HEADLINE = "Your answer to the last question matters more than this score.";
+
+/**
  * The chat's message box for `/mira?say=<id>`: a check's starter or the support one, put there
  * for the person to send or change; anything else puts nothing there.
  */

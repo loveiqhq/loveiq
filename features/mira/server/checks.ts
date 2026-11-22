@@ -70,13 +70,15 @@ export async function addCheck(
 }
 
 /**
- * "Delete my check results", and an under-18 stop (server/minor.ts): every result goes, and the
+ * "Delete my check results", and an under-18 stop (server/minor.ts): every result goes, the body
+ * checks too (health answers, which no other control deletes short of the account), and the
  * account's own records of question 9's support panel, logged with the account before 22 Nov 2026
  * (since then they name nobody).
  */
 export async function deleteChecks(userId: string): Promise<void> {
   for (const path of [
     `/rest/v1/mira_check?user_id=eq.${enc(userId)}`,
+    `/rest/v1/mira_body_check?user_id=eq.${enc(userId)}`,
     `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=eq.check_support_shown`,
   ]) {
     const res = await supabaseFetch(path, { method: "DELETE" });

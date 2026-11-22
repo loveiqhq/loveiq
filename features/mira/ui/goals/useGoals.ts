@@ -7,7 +7,8 @@ import { useToday } from "../useToday";
 
 export type { Goal };
 
-type Load = "loading" | "ready" | "error" | "signed-out";
+/** minor: an account Mira stopped as under 18 (403 `minor`): the kit's AdultsOnly, no retry. */
+type Load = "loading" | "ready" | "error" | "signed-out" | "minor";
 
 const getGoals = () => miraApi<{ goals: Goal[] }>("/api/mira/goals");
 
@@ -27,7 +28,8 @@ export function useGoals() {
   const saving = useRef(new Set<string>());
 
   const show = useCallback((r: ApiResult<{ goals: Goal[] }>) => {
-    if (r.status === 401) return setLoad("signed-out");
+    if (r.signedOut) return setLoad("signed-out");
+    if (r.minor) return setLoad("minor");
     if (!r.ok || !Array.isArray(r.data.goals)) {
       setLoadError(r.data.error ?? "Your goals didn't load.");
       return setLoad("error");
@@ -85,7 +87,9 @@ export function useGoals() {
       body: { text, weeklyTarget, via },
     });
     if (!r.ok || !r.data.goal) return r.data.error ?? "Your goal didn't save. Please try again.";
-    setGoals((all) => [...all, r.data.goal]);
+    // The same words as a goal on the go answer that goal: never listed twice.
+    const made = r.data.goal;
+    setGoals((all) => (all.some((g) => g.id === made.id) ? all : [...all, made]));
     return null;
   }
 

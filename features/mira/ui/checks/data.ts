@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
+import { shortDate } from "../kit/dates";
 
 /** The menu tab these pages mark (MiraAppFrame). */
 export const FRAME_TAB = "assessments" as const;
@@ -33,27 +34,31 @@ export type ChecksData = {
 
 /**
  * The person's checks, loaded once per page; signed out goes to sign-in and back here. Someone
- * Mira stopped as under 18 gets the server's message (403) and nothing else. After a failed load,
- * `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
+ * Mira stopped as under 18 (403 `minor`) gets `minor`: each screen shows the kit's AdultsOnly and
+ * nothing to retry (decision 9; `error` is set too, so every placeholder stops). After a failed
+ * load, `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
  */
 export function useChecks() {
   const router = useRouter();
   const [data, setData] = useState<ChecksData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [minor, setMinor] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<ChecksData>("/api/mira/checks").then((r) => {
-      if (r.status === 401) {
-        router.replace(`/mira/start?next=${encodeURIComponent(window.location.pathname)}`);
-      } else if (r.ok) setData(r.data);
-      else setError(r.data.error ?? "Unable to load your checks.");
+      if (r.signedOut) router.replace(signInHref());
+      else if (r.ok) setData(r.data);
+      else {
+        setMinor(r.minor === true);
+        setError(r.data.error ?? "Unable to load your checks.");
+      }
     });
   }, [router, attempt]);
   const retry = () => {
     setError(null);
     setAttempt((n) => n + 1);
   };
-  return { data, error, setData, retry };
+  return { data, error, minor, setData, retry };
 }
 
 /**
@@ -110,15 +115,8 @@ export function sinceLastTime(before: number, after: number): string {
   return `${n} ${n === 1 ? "point" : "points"} ${diff < 0 ? "lower" : "higher"} than last time`;
 }
 
-/** "21 Nov", or "21 Nov 2025" outside this year. */
-export function shortDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
-  });
-}
+/** "21 Nov", or "21 Nov 2025" outside this year: Mira's one short date (kit/dates.ts, SET-12). */
+export { shortDate };
 
 /** A result's band as a card or the history shows it, never without the support question 9 opened. */
 export const bandText = (check: Check, r: CheckResult): string =>

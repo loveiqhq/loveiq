@@ -65,14 +65,17 @@ describe("listGoals", () => {
 describe("createGoal", () => {
   it("adds the goal to the person's account", async () => {
     answers = [["POST /rest/v1/mira_goal", 201, [row()]]];
-    const goal = await createGoal(LEA, { text: "Walk", weeklyTarget: 3, via: "hand" });
-    expect(goal).toMatchObject({ id: GOAL, days: [] });
+    const made = await createGoal(LEA, { text: "Walk", weeklyTarget: 3, via: "hand" });
+    expect(made).toMatchObject({ goal: { id: GOAL, days: [] }, existing: false });
     const insert = calls().find((c) => c.call.startsWith("POST"))!;
     expect(insert.body).toEqual({ user_id: LEA, text: "Walk", weekly_target: 3, via: "hand" });
   });
 
   it("keeps a few goals on the go, not a list: none past the cap", async () => {
-    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({ id: `g${i}` }));
+    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({
+      ...row({ id: `g${i}`, text: `Goal ${i}` }),
+      log: [],
+    }));
     answers = [["GET /rest/v1/mira_goal?", 200, active]];
     expect(await createGoal(LEA, { text: "One more", weeklyTarget: null, via: "hand" })).toBe(
       "full"
@@ -80,6 +83,20 @@ describe("createGoal", () => {
     expect(calls().some((c) => c.call.startsWith("POST"))).toBe(false);
     expect(calls()[0]!.call).toContain(`user_id=eq.${LEA}`);
     expect(calls()[0]!.call).toContain("archived_at=is.null&completed_at=is.null");
+  });
+
+  it("gives back the goal on the go with the same words, any case, instead of a second", async () => {
+    answers = [
+      [
+        "GET /rest/v1/mira_goal?",
+        200,
+        [{ ...row({ text: "Walk ten minutes" }), log: [{ day: "2026-11-21" }] }],
+      ],
+    ];
+    // "Add as a goal" tapped twice, or on two devices.
+    const made = await createGoal(LEA, { text: "walk TEN minutes", weeklyTarget: 2, via: "mira" });
+    expect(made).toMatchObject({ goal: { id: GOAL, days: ["2026-11-21"] }, existing: true });
+    expect(calls().some((c) => c.call.startsWith("POST"))).toBe(false);
   });
 });
 
@@ -112,7 +129,10 @@ describe("updateGoal", () => {
   });
 
   it("brings a goal back only within the cap", async () => {
-    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({ id: `g${i}` }));
+    const active = Array.from({ length: MAX_ACTIVE_GOALS }, (_, i) => ({
+      ...row({ id: `g${i}`, text: `Goal ${i}` }),
+      log: [],
+    }));
     answers = [
       ["GET /rest/v1/mira_goal?id=eq.", 200, [row({ completed_at: "2026-11-20T10:00:00Z" })]],
       ["GET /rest/v1/mira_goal?user_id=eq.", 200, active],
@@ -140,23 +160,49 @@ describe("deleting goals", () => {
 });
 
 describe("setTick", () => {
+  const mine = ["GET /rest/v1/mira_goal?", 200, [row()]] as [string, number, unknown];
+  const writes = () => calls().filter((c) => !c.call.startsWith("GET "));
+
   it("ticks a day once, however often it is tapped, in the person's name", async () => {
-    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe(true);
-    const [tick] = calls();
+    answers = [mine];
+    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("ticked");
+    expect(calls()[0]!.call).toContain(`/rest/v1/mira_goal?id=eq.${GOAL}&user_id=eq.${LEA}&`);
+    const [tick] = writes();
     expect(tick!.call).toBe("POST /rest/v1/mira_goal_log?on_conflict=goal_id,day");
     expect(tick!.body).toEqual({ goal_id: GOAL, user_id: LEA, day: "2026-11-21" });
-    const init = vi.mocked(supabaseFetch).mock.calls[0]![1]!;
+    const init = vi.mocked(supabaseFetch).mock.calls[1]![1]!;
     expect(init.headers).toMatchObject({ Prefer: "resolution=ignore-duplicates" });
   });
 
-  it("refuses a tick on someone else's goal (the database's composite key)", async () => {
-    answers = [["POST /rest/v1/mira_goal_log", 409, { code: "23503" }]];
-    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe(false);
+  it("finds no goal of someone else's, even one its owner ticked that day, and writes nothing", async () => {
+    // The person's scope has no such goal: their answer is a random id's (round-2 audit DATA-2).
+    for (const done of [true, false]) {
+      expect(await setTick(LEA, GOAL, "2026-11-21", done)).toBe("missing");
+    }
+    expect(writes()).toEqual([]);
+  });
+
+  it("ticks no goal that was put away or done, as a tab opened before may still offer it", async () => {
+    for (const over of [
+      { archived_at: "2026-11-21T08:00:00Z" },
+      { completed_at: "2026-11-21T08:00:00Z" },
+    ]) {
+      answers = [["GET /rest/v1/mira_goal?", 200, [row(over)]]];
+      expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("inactive");
+      expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe("inactive");
+    }
+    expect(writes()).toEqual([]);
+  });
+
+  it("refuses a tick whose goal went between the read and the write (the composite key)", async () => {
+    answers = [mine, ["POST /rest/v1/mira_goal_log", 409, { code: "23503" }]];
+    expect(await setTick(LEA, GOAL, "2026-11-21", true)).toBe("missing");
   });
 
   it("takes a tick back only from the person's own goal and day", async () => {
-    expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe(true);
-    expect(calls()[0]!.call).toBe(
+    answers = [mine];
+    expect(await setTick(LEA, GOAL, "2026-11-21", false)).toBe("ticked");
+    expect(writes()[0]!.call).toBe(
       `DELETE /rest/v1/mira_goal_log?goal_id=eq.${GOAL}&user_id=eq.${LEA}&day=eq.2026-11-21`
     );
   });

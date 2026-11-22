@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { shortDate } from "@features/admin/server/ap/days";
 import { addDays, weekStart, type Day, type Progress } from "../../server/goal-progress";
 import type { Goal } from "./useGoals";
 
@@ -22,28 +22,27 @@ const days = (n: number) => (n === 1 ? "1 day" : `${n} days`);
 export const aimLabel = (target: number | null) =>
   target === null ? "No set days" : target === 7 ? "Every day" : `${days(target)} a week`;
 
-/** This week in words: the aim before anything is ticked, never a count of what is missing. */
-export function weekCaption(p: Progress, target: number | null): string {
+/**
+ * This week in words: the aim before anything is ticked (unless `aimShown`: the goals page names
+ * it under the goal already), never a count of what is missing.
+ */
+export function weekCaption(p: Progress, target: number | null, aimShown = false): string {
   if (target) {
     if (p.thisWeek >= target) return "Done for this week";
-    return p.thisWeek === 0 ? `${aimLabel(target)}` : `${p.thisWeek} of ${target} this week`;
+    if (p.thisWeek > 0) return `${p.thisWeek} of ${target} this week`;
+    if (!aimShown) return aimLabel(target);
   }
   if (p.thisWeek > 0) return `${days(p.thisWeek)} this week`;
   return p.total > 0 ? "Not yet this week" : "Tick the days you do it";
 }
 
-/** "16 Nov", for a day as the person lives it. */
-const short = (day: Day) =>
-  new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-
 export const FOCUS =
-  "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
-/** Mira's challenge, any a goal names, and the way to more (the coaches page). */
+/**
+ * Mira's challenge and any a goal names. No "Add a challenge" until a person can pick a second
+ * one: it led to the coaches page, where none can be added yet (round-2 audit HAB-2).
+ */
 export function ChallengePills({ goals }: { goals: Goal[] }) {
   const ids = [...new Set(["body-confidence", ...goals.map((g) => g.challenge)])];
   return (
@@ -56,15 +55,6 @@ export function ChallengePills({ goals }: { goals: Goal[] }) {
           {CHALLENGES[id] ?? id}
         </li>
       ))}
-      <li>
-        <Link
-          href="/mira/coaches"
-          className={`relative inline-flex min-h-[32px] items-center gap-1.5 rounded-full border border-dashed border-ap-mist px-3 text-[13px] font-semibold text-ap-ink transition-colors after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[''] hover:border-ap-lavender hover:bg-ap-ground ${FOCUS}`}
-        >
-          <PlusIcon size={14} />
-          Add a challenge
-        </Link>
-      </li>
     </ul>
   );
 }
@@ -136,7 +126,17 @@ export function CheckDot({ done, pop = false }: { done: boolean; pop?: boolean }
  * This week: one segment per day aimed for (the board's bar), filled as the days are ticked,
  * and the week in words. Without an aim, the words alone.
  */
-export function WeekLine({ p, target, pop }: { p: Progress; target: number | null; pop: boolean }) {
+export function WeekLine({
+  p,
+  target,
+  pop,
+  aimShown = false,
+}: {
+  p: Progress;
+  target: number | null;
+  pop: boolean;
+  aimShown?: boolean;
+}) {
   const met = target !== null && p.thisWeek >= target;
   return (
     <div className="flex min-w-0 items-center gap-2.5">
@@ -157,55 +157,58 @@ export function WeekLine({ p, target, pop }: { p: Progress; target: number | nul
         className={`text-[13px] ${met ? `inline-flex items-center gap-1 font-semibold text-ap-plum ${pop ? "motion-safe:animate-mira-in" : ""}` : "text-ap-muted"}`}
       >
         {met ? <SparkIcon /> : null}
-        {weekCaption(p, target)}
+        {weekCaption(p, target, aimShown)}
       </span>
     </div>
   );
 }
 
 /**
- * The last 8 weeks as tiny bars, oldest first: plum where the week's aim was met (any tick
- * without one), a softer lilac for part of it, a dot for a week without ticks, nothing before the
- * goal. Each week is also written out for screen readers.
+ * The last 8 weeks as tiny bars, oldest first: each week a slot (a soft track, fainter before the
+ * goal), filled plum where the week's aim was met (any tick without one) and a softer lilac for
+ * part of it. Labelled on screen, so it reads as weeks, never as a stray line; each week is also
+ * written out for screen readers.
  */
 export function WeekBars({ p, target, today }: { p: Progress; target: number | null; today: Day }) {
   const scale = target ?? Math.max(1, ...p.weeks.map((n) => n ?? 0));
   const thisWeek = weekStart(today);
   return (
-    <ol
-      aria-label="Days ticked, last 8 weeks"
-      className="flex h-8 items-end gap-[5px] border-b border-ap-line pb-[3px]"
-    >
-      {p.weeks.map((n, i) => {
-        const week = addDays(thisWeek, -7 * (p.weeks.length - 1 - i));
-        const met = n !== null && n >= (target ?? 1);
-        const height =
-          n === null ? 0 : n === 0 ? 4 : Math.max(8, Math.round((Math.min(n, scale) / scale) * 28));
-        return (
-          <li key={week} className="flex w-[7px] items-end">
-            <span className="sr-only">
-              {`Week of ${short(week)}: ${n === null ? "before this goal" : days(n)}`}
-            </span>
-            <span
-              aria-hidden="true"
-              style={{ height }}
-              className={`block w-full rounded-full ${
-                n === null ? "" : met ? "bg-ap-purple" : n === 0 ? "bg-ap-track" : "bg-ap-mist"
-              } ${i === p.weeks.length - 1 && !met && n ? "opacity-70" : ""}`}
-            />
-          </li>
-        );
-      })}
-    </ol>
+    <div className="flex flex-col gap-1">
+      <ol aria-label="Days ticked, last 8 weeks" className="flex h-8 items-end gap-[5px]">
+        {p.weeks.map((n, i) => {
+          const week = addDays(thisWeek, -7 * (p.weeks.length - 1 - i));
+          const met = n !== null && n >= (target ?? 1);
+          const height = n ? Math.max(8, Math.round((Math.min(n, scale) / scale) * 32)) : 0;
+          return (
+            <li
+              key={week}
+              className={`flex h-full w-[7px] items-end overflow-hidden rounded-full bg-ap-track ${n === null ? "opacity-50" : ""}`}
+            >
+              <span className="sr-only">
+                {`Week of ${shortDate(week)}: ${n === null ? "before this goal" : days(n)}`}
+              </span>
+              <span
+                aria-hidden="true"
+                style={{ height }}
+                className={`block w-full rounded-full ${met ? "bg-ap-purple" : "bg-ap-mist"}`}
+              />
+            </li>
+          );
+        })}
+      </ol>
+      <span aria-hidden="true" className="text-[11px] text-ap-muted">
+        Last 8 weeks
+      </span>
+    </div>
   );
 }
 
-export function PlusIcon({ size = 16 }: { size?: number }) {
+export function PlusIcon() {
   return (
     <svg
       aria-hidden="true"
-      width={size}
-      height={size}
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

@@ -75,7 +75,15 @@ describe("Home's journal card left open past midnight", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await screen.findByText("Saved to your journal.");
     expect(sent("PUT", "/api/mira/journal")).toEqual([
-      { day: "2026-11-24", mood: 4, body: null, closeness: null, energy: null, note: null },
+      {
+        day: "2026-11-24",
+        mood: 4,
+        body: null,
+        closeness: null,
+        energy: null,
+        note: null,
+        base: null,
+      },
     ]);
   });
 
@@ -117,6 +125,25 @@ describe("Home's journal card left open past midnight", () => {
     backInView();
     expect(screen.getByText(/You haven’t checked in yet today/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Do today’s check-in/ })).toBeInTheDocument();
+  });
+
+  it("moves on to the new day by itself, in a tab nobody touches past midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date(2026, 10, 23, 23, 58));
+    replies["GET /api/mira/journal"] = () => ({
+      body: {
+        entries: [
+          { day: "2026-11-23", mood: 3, body: null, closeness: null, energy: null, note: null },
+        ],
+        settings: SETTINGS,
+      },
+    });
+    render(<JournalCard />);
+    await act(async () => {}); // the journal's answer
+    expect(screen.getByText(/Checked in for today/)).toBeInTheDocument();
+    vi.setSystemTime(new Date(2026, 10, 24, 0, 2));
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(screen.getByText(/You haven’t checked in yet today/)).toBeInTheDocument();
   });
 });
 

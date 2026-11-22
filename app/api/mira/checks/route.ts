@@ -37,6 +37,7 @@ import {
 import { FOLLOW_UP_DAYS, bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
 import { addCheck, deleteChecks, lastCheck, readChecks } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
+import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { findAssessment, logMiraEvent } from "@features/mira/server/store";
@@ -70,7 +71,7 @@ async function guard(request: Request, write: boolean) {
   const account = await getMiraAccount();
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
   if (await isMinor(account.id)) {
-    return { error: NextResponse.json({ error: "Mira is only for adults." }, { status: 403 }) };
+    return { error: NextResponse.json(MINOR_REFUSAL, { status: 403 }) };
   }
   return { account };
 }
