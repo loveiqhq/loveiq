@@ -1131,6 +1131,18 @@ describe("How Mira coaches you", () => {
     expect(ring.className).toContain("border-ap-muted");
     expect(ring.className).not.toContain("border-ap-mist");
   });
+
+  // Round-3 R3-CHAT-8: a fieldset's legend is drawn in its top border, so each scale's heading
+  // broke the divider above it ("Depth ————"). Floated, it is an ordinary first line inside.
+  it("keeps each scale's heading off the divider line", () => {
+    render(<StyleScales value={{}} onChange={() => {}} />);
+    for (const name of ["Guidance", "Depth"]) {
+      const legend = within(screen.getByRole("group", { name })).getByText(name);
+      expect(legend.tagName).toBe("LEGEND");
+      expect(legend).toHaveClass("float-left", "w-full");
+      expect(legend.nextElementSibling).toHaveClass("clear-left");
+    }
+  });
 });
 
 // From the voice stream's audit (round 2): when a voice session ended, its panel went with the
