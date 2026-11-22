@@ -57,7 +57,8 @@ export type SavedSession = {
 export type VoiceEnded = { chatId: string | null } & (
   | { status: "saving" }
   | { status: "saved"; recording: SavedSession }
-  | { status: "not-kept" }
+  /** `memoryOff`: "Remember our conversations" is why, not words missing from the chat. */
+  | { status: "not-kept"; memoryOff: boolean }
   | { status: "failed" }
 );
 
@@ -492,7 +493,7 @@ export function useVoice(options: {
     if (!body) return;
     const chatId = body.chatId;
     if (!keepalive) setEnded({ chatId, status: "saving" });
-    const res = await miraApi<{ kept?: boolean; recording?: SavedSession }>(
+    const res = await miraApi<{ kept?: boolean; recording?: SavedSession; reason?: string }>(
       "/api/mira/recordings",
       { body, keepalive }
     );
@@ -502,7 +503,7 @@ export function useVoice(options: {
       res.ok && res.data.kept && res.data.recording
         ? { chatId, status: "saved", recording: res.data.recording }
         : res.ok
-          ? { chatId, status: "not-kept" }
+          ? { chatId, status: "not-kept", memoryOff: res.data.reason === "memory_off" }
           : { chatId, status: "failed" }
     );
   }

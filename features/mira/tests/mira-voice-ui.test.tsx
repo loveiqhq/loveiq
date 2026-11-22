@@ -721,6 +721,29 @@ describe("the end card", () => {
     await screen.findAllByText(REPLY);
   }
 
+  // VOI-V6b: the setting is named only when it is the reason.
+  it("says a session wasn't kept because of the memory setting only when that was why", async () => {
+    for (const [answer, why] of [
+      [{ kept: false, reason: "memory_off" }, /kept while “Remember our conversations” is on/],
+      [{ kept: false }, /wasn.t kept: its words aren.t in your chats\.$/],
+    ] as const) {
+      notKept();
+      replies["POST /api/mira/recordings"] = () => ({ body: answer });
+      render(<MiraChat signedIn initialChatId={null} />);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything())
+      );
+      talk();
+      await sayToMira("It's the lights");
+      fireEvent.click(screen.getByRole("button", { name: "End" }));
+      const card = await screen.findByText(/wasn.t kept/);
+      expect(card.textContent).toMatch(why);
+      expect(Boolean(screen.queryByRole("link", { name: "Settings" }))).toBe("reason" in answer);
+      cleanup();
+      fetchMock.mockClear();
+    }
+  });
+
   it("stays with its own chat: 'wasn't kept' doesn't follow into a new chat", async () => {
     notKept();
     render(<MiraChat signedIn initialChatId={null} />);

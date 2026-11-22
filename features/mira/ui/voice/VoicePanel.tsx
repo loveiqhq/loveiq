@@ -334,7 +334,7 @@ function EndCard({ voice }: { voice: Voice }) {
     );
   }
   if (ended.status === "not-kept") {
-    return (
+    return ended.memoryOff ? (
       <p role="status" className={CARD}>
         This voice session wasn&apos;t kept: sessions are kept while &ldquo;Remember our
         conversations&rdquo; is on in{" "}
@@ -342,6 +342,12 @@ function EndCard({ voice }: { voice: Voice }) {
           Settings
         </Link>
         .
+      </p>
+    ) : (
+      // The setting is on, but the words never reached the chat (its first answer failed, or
+      // the chat couldn't store them).
+      <p role="status" className={CARD}>
+        This voice session wasn&apos;t kept: its words aren&apos;t in your chats.
       </p>
     );
   }

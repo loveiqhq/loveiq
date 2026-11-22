@@ -284,18 +284,30 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     expect(body).toMatchObject({ kept: true, recording: { keyPoints: null } });
   });
 
-  it("keeps nothing from a chat that isn't the person's, or with memory off", async () => {
-    for (const setup of [
-      () => vi.mocked(ownsChat).mockResolvedValueOnce(false),
-      () => vi.mocked(getProfile).mockResolvedValueOnce({ remember_chats: false } as never),
-    ]) {
+  it("keeps nothing from a chat that isn't the person's, or with memory off, and says which", async () => {
+    for (const [setup, answer] of [
+      [() => vi.mocked(ownsChat).mockResolvedValueOnce(false), { kept: false }],
+      [
+        () => vi.mocked(getProfile).mockResolvedValueOnce({ remember_chats: false } as never),
+        { kept: false, reason: "memory_off" },
+      ],
+    ] as const) {
       vi.mocked(supabaseFetch).mockClear();
       setup();
       tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
       const body = await (await ended(request("/api/mira/recordings", "POST", END))).json();
-      expect(body).toEqual({ kept: false });
+      expect(body).toEqual(answer);
       expect(called("POST /rest/v1/mira_voice_session")).toEqual([]);
       expect(called("GET /rest/v1/mira_message")).toEqual([]);
+    }
+  });
+
+  // VOI-V6b: memory on, but the first answer failed (no chat) or no turn was stored.
+  it("doesn't blame the memory setting when the session's words simply aren't in the chat", async () => {
+    for (const end of [{ ...END, chatId: null }, END]) {
+      tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = [];
+      const body = await (await ended(request("/api/mira/recordings", "POST", end))).json();
+      expect(body).toEqual({ kept: false });
     }
   });
 

@@ -88,14 +88,15 @@ export async function POST(request: Request) {
 
   try {
     const account = await getMiraAccount();
-    const counted = (who: { anonId?: string; userId?: string }) => {
+    /** Not kept, only counted; `memory_off` when the setting is why (the end card names it). */
+    const counted = (who: { anonId?: string; userId?: string }, reason?: "memory_off") => {
       logMiraEvent("voice_session_ended", who, {
         seconds: secondsFrom(new Date(startedAt)),
         mode,
         turns,
         kept: false,
       });
-      return NextResponse.json({ kept: false });
+      return NextResponse.json(reason ? { kept: false, reason } : { kept: false });
     };
     if (await isMinor(account?.id ?? null)) return ADULTS_ONLY();
     if (!account) return counted({ anonId: await anonId() });
@@ -103,9 +104,8 @@ export async function POST(request: Request) {
     const profile = await getProfile(account.id);
     if (!profile) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     // Kept like the chat it happened in: only while "Remember our conversations" is on.
-    if (!profile.remember_chats || !chatId || !(await ownsChat(account.id, chatId))) {
-      return counted(who);
-    }
+    if (!profile.remember_chats) return counted(who, "memory_off");
+    if (!chatId || !(await ownsChat(account.id, chatId))) return counted(who);
     const known = await getRecording(account.id, session);
     if (known) return NextResponse.json({ kept: true, recording: summary(known) });
     const spoken = await sessionTurns(chatId, session);
