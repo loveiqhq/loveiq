@@ -62,10 +62,14 @@ export function BodyCheck({
   const [picked, setPicked] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const statementRef = useRef<HTMLParagraphElement | null>(null);
+  const thanksRef = useRef<HTMLParagraphElement | null>(null);
 
-  // Keyboard and screen reader users land on each new statement.
+  // Keyboard and screen reader users land on each new statement, then on the thank-you: after
+  // the commit, when the dialog is gone (a focus moved while it was open went nowhere, the page
+  // behind it being inert: round-3 R3-HAB-10).
   useEffect(() => {
     if (typeof step === "number") statementRef.current?.focus();
+    else if (step === "done") thanksRef.current?.focus();
   }, [step]);
 
   /** Not now, Stop for now, Escape or the thank-you's Close: the card goes, the composer has focus. */
@@ -83,9 +87,8 @@ export function BodyCheck({
       setStep(items.length - 1);
       return;
     }
-    // The dialog goes; the thank-you stays until its own Close (no timer takes it away).
+    // The dialog goes; the thank-you takes the focus and stays until its own Close (no timer).
     setStep("done");
-    toComposer();
   }
 
   function answer(value: number) {
@@ -105,7 +108,12 @@ export function BodyCheck({
       {/* There from the start, so the thank-you is read out when it comes (a region mounted with
           its text already in it is not); the visible card once the check is saved. */}
       <div className={step === "done" ? `${card} flex flex-wrap items-center gap-x-3` : undefined}>
-        <p role="status" className={step === "done" ? "text-[14px] text-ap-body" : "sr-only"}>
+        <p
+          ref={thanksRef}
+          role="status"
+          tabIndex={-1}
+          className={step === "done" ? "text-[14px] text-ap-body outline-none" : "sr-only"}
+        >
           {step === "done" ? THANKS[due] : ""}
         </p>
         {step === "done" ? (

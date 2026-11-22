@@ -740,7 +740,9 @@ describe("Body check", () => {
   });
 
   // The card closed itself 4 s after its thank-you, and every way out left the focus on the page.
-  it("ends in the composer, and its thank-you stays until its own Close", async () => {
+  // Round-3 R3-HAB-10: after the last answer the focus still fell to the page (moved while the
+  // dialog made it inert); it goes to the thank-you, then to the composer on Close.
+  it("lands on its thank-you, which stays until its own Close, then in the composer", async () => {
     signedInDue("baseline");
     reply();
     render(<MiraChat signedIn initialChatId={null} />);
@@ -760,7 +762,7 @@ describe("Body check", () => {
       expect(screen.getByText(thanks)).toBeVisible();
       await act(async () => vi.advanceTimersByTime(10_000));
       expect(screen.getByText(thanks)).toBeVisible(); // no timer takes it away
-      expect(screen.getByLabelText("Message Mira")).toHaveFocus();
+      expect(screen.getByText(thanks)).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }
