@@ -176,14 +176,33 @@ export async function listDevices(userId: string): Promise<Device[]> {
 
 /**
  * Signs out one of the account's devices (`id`) or all of them (`id` omitted): their rows go, so
- * Mira refuses those sessions from their next request on. How many went.
+ * Mira refuses those sessions from their next request on. The ids of the sessions that went.
  */
-export async function signOutDevices(userId: string, id?: string): Promise<number> {
-  if (id !== undefined && !UUID.test(id)) return 0;
+export async function signOutDevices(userId: string, id?: string): Promise<string[]> {
+  if (id !== undefined && !UUID.test(id)) return [];
   const res = await supabaseFetch(
     `/rest/v1/mira_session?user_id=eq.${enc(userId)}${id === undefined ? "" : `&id=eq.${enc(id)}`}&select=id`,
     { method: "DELETE", headers: { Prefer: "return=representation" } }
   );
   if (!res.ok) throw new Error(`mira sign-out failed (${res.status})`);
-  return ((await res.json()) as unknown[]).length;
+  return ((await res.json()) as Array<{ id: string }>).map((r) => r.id);
+}
+
+/**
+ * Ends these sessions of the account at Supabase too (their refresh tokens go), so a device
+ * signed out in Settings can't go on using its login until it next calls Mira, nor (a staff or
+ * Jarvis login) in the admin panel (round-2 SEC-L1 / COR-9; supabase/migrations/
+ * 20261122130000_mira_end_auth_sessions.sql). Only ids of sessions Mira's sign-in recorded, and
+ * just signed out. Best effort: Mira refuses them already, so a failure is logged, not thrown.
+ */
+export async function endAuthSessions(userId: string, ids: string[]): Promise<void> {
+  const sessions = ids.filter((id) => UUID.test(id));
+  if (sessions.length === 0) return;
+  const res = await supabaseFetch("/rest/v1/rpc/mira_end_auth_sessions", {
+    method: "POST",
+    body: JSON.stringify({ p_user: userId, p_sessions: sessions }),
+  }).catch(() => null);
+  if (!res?.ok) {
+    logger.warn({ status: res?.status }, "mira: signed-out devices' logins were not ended");
+  }
 }

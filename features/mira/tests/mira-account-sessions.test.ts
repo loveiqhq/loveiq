@@ -75,7 +75,7 @@ describe("getMiraAccount: only a session Mira recorded, and nobody signed out", 
   });
 
   it("refuses every device after Sign out everywhere", async () => {
-    expect(await signOutDevices(LEA)).toBe(2);
+    expect((await signOutDevices(LEA)).sort()).toEqual([PHONE, LAPTOP].sort());
     for (const sid of [PHONE, LAPTOP]) {
       signedInAs(LEA, sid);
       expect(await getMiraAccount()).toBeNull();
@@ -126,10 +126,10 @@ describe("getMiraAccount: only a session Mira recorded, and nobody signed out", 
 describe("signing out devices", () => {
   it("only ever touches the account's own devices", async () => {
     db.tables.mira_session!.push(session("3e4f5061-7283-494a-8b5c-6d7e8f90a1b2", KAI));
-    expect(await signOutDevices(LEA, "3e4f5061-7283-494a-8b5c-6d7e8f90a1b2")).toBe(0);
-    expect(await signOutDevices(LEA)).toBe(2);
+    expect(await signOutDevices(LEA, "3e4f5061-7283-494a-8b5c-6d7e8f90a1b2")).toEqual([]);
+    expect((await signOutDevices(LEA)).sort()).toEqual([PHONE, LAPTOP].sort());
     expect(db.tables.mira_session!.map((s) => s.user_id)).toEqual([KAI]);
-    expect(await signOutDevices(LEA, "not-a-uuid")).toBe(0);
+    expect(await signOutDevices(LEA, "not-a-uuid")).toEqual([]);
   });
 });
 
