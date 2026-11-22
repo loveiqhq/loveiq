@@ -733,6 +733,41 @@ describe("the end card", () => {
     expect(screen.queryByText(/wasn.t kept/)).toBeNull();
   });
 
+  // It sits at the chat's foot: unscrolled, the saved card ended under the composer's edge (UX-5).
+  it("comes into view as it lands, and again as it grows into the saved card", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled; // jsdom lays nothing out, so it has none
+    try {
+      replies["POST /api/mira/chat"] = () => ({
+        body: { reply: REPLY, sources: [], chatId: "6f2c4a1e-1111-4222-8333-944455556666" },
+      });
+      render(<MiraChat signedIn initialChatId={null} />);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything())
+      );
+      talk();
+      await sayToMira("It's the lights");
+      const saved = holdAnswers("/api/mira/recordings");
+      fireEvent.click(screen.getByRole("button", { name: "End" }));
+      const saving = screen.getByText("Saving your voice session…");
+      expect(scrolled.mock.contexts.some((el) => (el as Element).contains(saving))).toBe(true);
+      scrolled.mockClear();
+      await act(async () =>
+        saved.current({
+          body: {
+            kept: true,
+            recording: { id: "1c2d3e4f-3333-4444-8555-a66677778888", seconds: 90, you: 50 },
+          },
+        })
+      );
+      const card = screen.getByText(/Voice session saved/);
+      expect(scrolled.mock.contexts.some((el) => (el as Element).contains(card))).toBe(true);
+      expect(scrolled).toHaveBeenLastCalledWith(expect.objectContaining({ block: "nearest" }));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it("doesn't come back when the save answers after the new chat began", async () => {
     notKept();
     render(<MiraChat signedIn initialChatId={null} />);

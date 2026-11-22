@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { INSTALL_WAIT_MS } from "./speech";
 import type { Voice, VoiceTrouble } from "./useVoice";
 
@@ -298,6 +298,22 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
 
 /** After End, in the chat: where the session went (signed in), with a way back to it. */
 export function VoiceEnded({ voice }: { voice: Voice }) {
+  const card = useRef<HTMLDivElement>(null);
+  const status = voice.ended?.status;
+  // It lands at the chat's foot, under the composer's edge unless brought into view: as it
+  // lands, and as "saving" grows into the saved card (UX-5).
+  useEffect(() => {
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
+    card.current?.scrollIntoView?.({ block: "nearest", behavior: calm ? "auto" : "smooth" });
+  }, [status]);
+  return voice.ended ? (
+    <div ref={card}>
+      <EndCard voice={voice} />
+    </div>
+  ) : null;
+}
+
+function EndCard({ voice }: { voice: Voice }) {
   const ended = voice.ended;
   if (!ended) return null;
   if (ended.status === "saving") {
