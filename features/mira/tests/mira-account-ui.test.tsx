@@ -397,18 +397,46 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("PATCH /api/mira/passkeys")).toEqual([
       expect.objectContaining({ id: "k2", label: "Office PC" }),
     ]);
+    // The server answers with what is left, a passkey added on another device meanwhile too.
+    const phone = {
+      id: "k3",
+      label: "Pixel · Chrome",
+      backed_up: true,
+      created_at: "2026-11-22T09:30:00Z",
+      last_used_at: null,
+    };
+    replies["DELETE /api/mira/passkeys"] = () => ({
+      body: {
+        success: true,
+        passkeys: [{ ...SECURITY.passkeys.list[1], label: "Office PC" }, phone],
+      },
+    });
     fireEvent.click(within(how).getByRole("button", { name: "Remove iPhone · Safari" }));
     fireEvent.click(within(how).getByRole("button", { name: "Remove" }));
     await waitFor(() =>
       expect(within(how).queryByText("iPhone · Safari", { selector: "p" })).toBeNull()
     );
     expect(calls("DELETE /api/mira/passkeys")[0]!.url).toBe("/api/mira/passkeys?id=k1");
+    expect(within(how).getByText("Pixel · Chrome", { selector: "p" })).toBeInTheDocument();
+    // Never the page's own (stale) list: the new passkey would be hidden in the manager.
     expect(webauthn.sendSignal).toHaveBeenCalledWith({
       signalName: "allAcceptedCredentials",
       rpID: "loveiq.org",
       userID: "dXNlcg",
-      allAcceptedCredentialIDs: ["k2"],
+      allAcceptedCredentialIDs: ["k2", "k3"],
     });
+  });
+
+  it("tells the passkey manager nothing it can't be sure of", async () => {
+    await show();
+    const how = screen.getByRole("region", { name: "How you sign in" });
+    replies["DELETE /api/mira/passkeys"] = () => ({ status: 404, body: { error: "Not found." } });
+    fireEvent.click(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    fireEvent.click(within(how).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(within(how).queryByText("Work laptop", { selector: "p" })).toBeNull()
+    );
+    expect(webauthn.sendSignal).not.toHaveBeenCalled();
   });
 
   it("changes the email with a code to the new address", async () => {

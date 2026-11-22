@@ -531,6 +531,16 @@ describe("renaming and removing", () => {
     expect(await signInWith(key)).toMatchObject({ status: 400, body: { unknown: true } });
   });
 
+  it("answers a removal with the passkeys left, one added elsewhere meanwhile included", async () => {
+    const first = await addPasskey();
+    const second = await addPasskey(); // another device, after this page loaded its list
+    const res = await read(await call("DELETE", undefined, `?id=${first.id}`));
+    expect(res.status).toBe(200);
+    // The page tells the passkey manager which still work: the server's list, never its own.
+    expect(res.body.passkeys.map((p: { id: string }) => p.id)).toEqual([second.id]);
+    expect(JSON.stringify(res.body)).not.toContain("public_key");
+  });
+
   it("needs a signed-in account", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue(null);
     expect((await post({ action: "register-options" })).status).toBe(401);

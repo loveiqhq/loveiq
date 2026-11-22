@@ -548,15 +548,21 @@ function Passkeys({
               onRenamed={(label) =>
                 onChange(list.map((x) => (x.id === p.id ? { ...x, label } : x)))
               }
-              onRemoved={() => {
-                const rest = list.filter((x) => x.id !== p.id);
-                if (rpID)
+              onRemoved={(left) => {
+                // The server's list, so a passkey added on another device since this page loaded
+                // isn't hidden in the passkey manager; without it the manager hears nothing (a
+                // removed passkey it still offers is forgotten at its next use).
+                if (left && rpID) {
                   syncPasskeyList(
                     rpID,
                     userHandle,
-                    rest.map((x) => x.id)
+                    left.map((x) => x.id)
                   );
-                onChange(rest, `Removed “${p.label}”. You can still sign in with a code.`);
+                }
+                onChange(
+                  left ?? list.filter((x) => x.id !== p.id),
+                  `Removed “${p.label}”. You can still sign in with a code.`
+                );
               }}
             />
           ))}
@@ -593,7 +599,8 @@ function PasskeyItem({
   passkey: Passkey;
   fresh: boolean;
   onRenamed: (label: string) => void;
-  onRemoved: () => void;
+  /** With the passkeys the server has left, when it said. */
+  onRemoved: (left: Passkey[] | null) => void;
 }) {
   const [mode, setMode] = useState<"view" | "rename" | "remove">("view");
   const [label, setLabel] = useState(passkey.label);
@@ -624,13 +631,14 @@ function PasskeyItem({
 
   async function remove() {
     setBusy(true);
-    const r = await miraApi(`/api/mira/passkeys?id=${encodeURIComponent(passkey.id)}`, {
-      method: "DELETE",
-    });
+    const r = await miraApi<{ passkeys?: Passkey[] }>(
+      `/api/mira/passkeys?id=${encodeURIComponent(passkey.id)}`,
+      { method: "DELETE" }
+    );
     setBusy(false);
     if (!r.ok && r.status !== 404)
       return setError(r.data.error ?? "Unable to remove it right now.");
-    onRemoved();
+    onRemoved(r.data.passkeys ?? null);
   }
 
   const meta = [

@@ -7,7 +7,7 @@
  *   POST { action: "sign-in-options" }           options for signing in (the button, or autofill)
  *   POST { action: "sign-in", response, ticks? } a passkey's signature → Mira's own session
  *   PATCH { id, label }                          renames one of the account's passkeys
- *   DELETE ?id=                                  removes one of them
+ *   DELETE ?id=                                  removes one of them; answers the passkeys left
  *
  * Every ceremony's challenge is single use, lives 5 minutes, and is bound to the browser that asked
  * (an httpOnly cookie holding its row id, SameSite=Strict, this path only) and, for a new passkey,
@@ -50,6 +50,7 @@ import {
   saveChallenge,
   takeChallenge,
   markPasskeyUsed,
+  summarise,
   userHandleOf,
   type ChallengePurpose,
 } from "@features/mira/server/passkeys";
@@ -408,7 +409,13 @@ export async function DELETE(request: Request) {
   try {
     if ((await removePasskeys(account.id, id.data)) === 0) return fail("Not found.", 404);
     logMiraEvent("passkey_removed", { userId: account.id });
-    return NextResponse.json({ success: true });
+    // The passkeys left, for the page to tell the passkey manager which still work (one added on
+    // another device since the page loaded included); none when they can't be read.
+    const left = await listPasskeys(account.id).catch(() => null);
+    return NextResponse.json({
+      success: true,
+      ...(left ? { passkeys: left.map(summarise) } : {}),
+    });
   } catch (err) {
     logger.error({ err }, "mira: a passkey was not removed");
     return fail("Unable to remove it right now. Please try again.", 500);
