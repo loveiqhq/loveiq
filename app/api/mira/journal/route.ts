@@ -2,11 +2,14 @@
  * /api/mira/journal — the signed-in account's daily journal (features/mira/server/journal.ts).
  *
  *   GET     → the entries of about the last year (newest first) and the journal's settings
- *   PUT     → saves one day's check-in { day, mood?, body?, closeness?, energy?, note? }: each
- *             area 1 to 5 or null, at least one rated, a one-line note. A new entry only for
- *             yesterday or today in the person's zone (the browser sends their today); an older
- *             day only where an entry exists. A note with crisis words gets the chat's support lines
- *             (crisisLines), and is kept.
+ *   PUT     → saves one day's check-in { day, mood?, body?, closeness?, energy?, note?, base }:
+ *             each area 1 to 5 or null, at least one rated, a one-line note. `base` is the version
+ *             the browser started from: null for a new check-in, or the entry's `updated_at` (GET
+ *             gives it, a save answers it as `updatedAt`). A new entry only for yesterday or today
+ *             in the person's zone (the browser sends their today); an older day only where an
+ *             entry exists (404). Never over a day another tab or device changed meanwhile: 409
+ *             { conflict, current } with the day as it is now (null: deleted). A note with crisis
+ *             words gets the chat's support lines (crisisLines), and is kept.
  *   PATCH   → the settings: { share: "off" | "scores" | "notes" } (what Mira may read) and/or
  *             { reminderTime: "HH:00" | "HH:30" | null } (the daily reminder email)
  *   DELETE ?day=YYYY-MM-DD → one entry;  DELETE ?all=1 → every entry
@@ -22,6 +25,7 @@ import {
   readJournal,
   saveEntry,
   saveJournalSettings,
+  type SaveOutcome,
 } from "@features/mira/server/journal";
 import { isMinor } from "@features/mira/server/minor";
 import { isCrisisMessage } from "@features/mira/server/safety";
@@ -49,6 +53,7 @@ const putSchema = z
       .pipe(z.string().max(NOTE_MAX))
       .nullable()
       .optional(),
+    base: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict()
   .refine((b) => AREAS.some((a) => typeof b[a.id] === "number"), "Rate at least one area");
@@ -121,12 +126,35 @@ const MAX_BODY_CHARS = 20_000;
  * The chat's support lines for a note with crisis words, with this person's country first; logged
  * as the chat logs them (nudges and reminders then wait 14 days), never with the words.
  */
-async function supportLines(request: Request, userId: string | null, saved: boolean) {
+async function supportLines(
+  request: Request,
+  userId: string | null,
+  outcome: SaveOutcome | null = null
+) {
   const profile = userId ? await getProfile(userId).catch(() => null) : null;
   const country =
     profile?.country && profile.country !== "OTHER" ? profile.country : requestCountry(request);
   if (userId) logMiraEvent("crisis_shown", { userId }, { country, from: "journal" });
-  return NextResponse.json({ success: saved, crisis: true, crisisLines: crisisFor(country) });
+  return NextResponse.json({
+    success: false,
+    ...answer(outcome),
+    crisis: true,
+    crisisLines: crisisFor(country),
+  });
+}
+
+/** What a save answers besides its status: the new version, or the day as another tab left it. */
+function answer(outcome: SaveOutcome | null) {
+  if (outcome === null || outcome === "missing") return {};
+  return "updatedAt" in outcome
+    ? { success: true, updatedAt: outcome.updatedAt }
+    : {
+        conflict: true,
+        current: outcome.conflict,
+        error: outcome.conflict
+          ? "This day's check-in changed in another tab or on another device."
+          : "This check-in was deleted in another tab or on another device.",
+      };
 }
 
 export async function PUT(request: Request) {
@@ -149,12 +177,12 @@ export async function PUT(request: Request) {
   const crisis = typeof raw.note === "string" && isCrisisMessage(raw.note);
   const g = await guard(request, false);
   if ("error" in g) {
-    return crisis ? supportLines(request, g.refused?.id ?? null, false) : g.error;
+    return crisis ? supportLines(request, g.refused?.id ?? null) : g.error;
   }
   const parsed = putSchema.safeParse(body);
   if (!parsed.success) {
     return crisis
-      ? supportLines(request, g.account.id, false)
+      ? supportLines(request, g.account.id)
       : NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
   const b = parsed.data;
@@ -166,28 +194,28 @@ export async function PUT(request: Request) {
     energy: b.energy ?? null,
     note: b.note || null,
   };
-  let saved: boolean | null = null;
+  let saved: SaveOutcome | null = null;
   try {
     const zone = (await getProfile(g.account.id))?.time_zone ?? "UTC";
-    saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date(), zone));
+    saved = await saveEntry(g.account.id, entry, canStart(entry.day, new Date(), zone), b.base);
   } catch (err) {
     logger.error({ err }, "mira: a journal entry was not saved");
   }
-  if (saved) {
+  if (saved !== null && typeof saved === "object" && "updatedAt" in saved) {
     const areas = AREAS.filter((a) => entry[a.id] !== null).length;
     logMiraEvent("journal_saved", { userId: g.account.id }, { areas, note: entry.note !== null });
   }
-  if (crisis) return supportLines(request, g.account.id, saved === true);
+  if (crisis) return supportLines(request, g.account.id, saved);
   if (saved === null) {
     return NextResponse.json(
       { error: "Your check-in didn't save. Please try again." },
       { status: 500 }
     );
   }
-  if (!saved) {
+  if (saved === "missing") {
     return NextResponse.json({ error: "There's no check-in on that day." }, { status: 404 });
   }
-  return NextResponse.json({ success: true });
+  return NextResponse.json(answer(saved), { status: "conflict" in saved ? 409 : 200 });
 }
 
 export async function PATCH(request: Request) {

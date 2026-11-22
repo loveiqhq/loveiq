@@ -90,7 +90,15 @@ describe("the Home card", () => {
     expect(sent("PUT")).toEqual([
       {
         url: "/api/mira/journal",
-        body: { day: TODAY, mood: 4, body: null, closeness: null, energy: 2, note: "A long walk" },
+        body: {
+          day: TODAY,
+          mood: 4,
+          body: null,
+          closeness: null,
+          energy: 2,
+          note: "A long walk",
+          base: null,
+        },
       },
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -111,6 +119,33 @@ describe("the Home card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
     expect(sent("PUT")).toEqual([]);
+  });
+
+  it("never overwrites a check-in another tab saved: the typing stays, a second Save replaces it", async () => {
+    const other = entry(TODAY, { mood: 5, note: "Tab one", updated_at: "2026-11-22T09:00:00Z" });
+    let puts = 0;
+    replies["PUT /api/mira/journal"] = () =>
+      ++puts === 1
+        ? { status: 409, body: { conflict: true, current: other, error: "x" } }
+        : { body: { success: true, updatedAt: "2026-11-22T09:05:00Z" } };
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const dialog = screen.getByRole("dialog", { name: "Today’s check-in" });
+    const low = within(within(dialog).getByRole("radiogroup", { name: "Mood" })).getByRole(
+      "radio",
+      { name: "1, Very low" }
+    );
+    fireEvent.click(low);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /saved in another tab or on another device.*Save again to replace it/
+    );
+    expect(low).toBeChecked();
+    expect(screen.queryByText("Saved to your journal.")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    // The first save claimed an empty day; the second names the version it now knows about.
+    expect(sent("PUT").map((p) => p.body.base)).toEqual([null, "2026-11-22T09:00:00Z"]);
   });
 
   it("opens the chat's support lines for a note with crisis words", async () => {

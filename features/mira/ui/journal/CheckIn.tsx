@@ -23,6 +23,12 @@ const empty = (): Ratings => ({ mood: null, body: null, closeness: null, energy:
 
 const UNRATED = "Tap one circle in any row to save.";
 
+/** Another tab or device changed the day while this sheet was open: nothing was overwritten. */
+const CHANGED_ELSEWHERE =
+  "This day’s check-in was saved in another tab or on another device while this was open. Save again to replace it with what’s here, or choose Not now to keep that one.";
+const DELETED_ELSEWHERE =
+  "This check-in was deleted in another tab or on another device. Save again to keep what’s here.";
+
 const NOTE_HINT = {
   off: "Mira reads your journal only if you allow it in Settings.",
   scores: "Mira sees your ratings, not this line.",
@@ -61,6 +67,8 @@ export function CheckIn({
       : empty()
   );
   const [note, setNote] = useState(existing?.note ?? "");
+  // The version this sheet started from: a save never lands on one it hasn't seen (HAB-13).
+  const [base, setBase] = useState<string | null>(existing?.updated_at ?? null);
   const [phase, setPhase] = useState<"edit" | "saving" | "done">("edit");
   const [error, setError] = useState<string | null>(null);
   // A note with crisis words: the support lines (this country first), open until closed.
@@ -89,11 +97,18 @@ export function CheckIn({
     setError(null);
     setPhase("saving");
     const entry: JournalEntry = { day, ...ratings, note: line };
-    const result = await journal.save(entry);
+    const result = await journal.save(entry, base);
     // The support lines come first, whatever happened to the save.
     if (result.crisisLines) {
       setCrisis(result.crisisLines);
       setSupportOpen(true);
+    }
+    if (result.conflict) {
+      // What is typed here stays; a second Save replaces the other one, knowingly.
+      setBase(result.conflict.current?.updated_at ?? null);
+      setPhase("edit");
+      setError(result.conflict.current ? CHANGED_ELSEWHERE : DELETED_ELSEWHERE);
+      return;
     }
     if (!result.ok) {
       setPhase("edit");
