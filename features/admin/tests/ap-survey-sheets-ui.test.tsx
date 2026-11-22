@@ -343,6 +343,10 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
     expect(halfway[1]!.textContent).toBe("40");
     expect(halfway[0]!.textContent).toBe("—");
     expect(document.getElementById("sheets")!.textContent).not.toContain("it never opens");
+    // It names the order, but no "as picked" with no order toggle on the funnel.
+    const said = document.getElementById("sheets")!.textContent!;
+    expect(said).toContain("Runs in the new order (C13).");
+    expect(said).not.toContain("as picked in the Question funnel");
   });
 });
 

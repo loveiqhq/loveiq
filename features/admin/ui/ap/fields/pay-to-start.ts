@@ -9,12 +9,15 @@ import { ADS_LANDING, FC_FREE, REPORTS, USERS } from "./focus";
 import { STARTS_CTES } from "./survey";
 import type { FieldRegistry, FieldTable } from "./types";
 
-/**
- * Said on every card: the page doesn't take the filter bar's narrowing, and which of the
- * queries' funnels it shows (they still give all four, as the page did before the rename).
- */
+/** Said on the cards that read the filters: the page doesn't take the filter bar's narrowing. */
 const WHOLE =
-  "Each funnel is read whole: the Funnel filter, source, device, country tier and visitor type don't narrow this page. Before the paywall is the queries' Pay after the report, read over 1–22 Oct 2026 whatever the range; €1.99 after the survey is the gate's, over the range. The queries' pay-to-start rows are the paused funnels, no longer shown.";
+  "Each funnel is read whole: the Funnel filter, source, device, country tier and visitor type don't narrow this page.";
+/**
+ * Said on every card (added at the export below): the queries still give the four funnels the
+ * page had before Marcus's rename of 19 Nov 2026, so each card maps them to the two it shows.
+ */
+const NAMES =
+  "Where the query names Pay after the report, that is Before the paywall here, read over 1–22 Oct 2026 whatever the range; €1.99 after the survey is the gate's, over the range; pay to start's rows are the paused funnels, no longer shown.";
 /** The table's second view, said once. */
 const PAID_VIEW =
   "With Paid traffic only, it counts those whose survey came through a Google Ads click.";
@@ -386,7 +389,7 @@ const SQL = (text: string) => ({ lang: "SQL" as const, text });
 
 const MONEY_TABLES = [T_SUBS, T_PAYMENTS, REPORTS, USERS, T_PREPAID];
 
-export const fields: FieldRegistry = {
+const cards: FieldRegistry = {
   // ---- Ads
   "pts.spend": {
     label: "Ad spend",
@@ -764,3 +767,11 @@ export const fields: FieldRegistry = {
     related: ["pts.cpp", "pts.cvr", "pts.roas"],
   },
 };
+
+/** Every card, with the funnels' names mapped (review, 23 Nov 2026: three of 26 had it). */
+export const fields: FieldRegistry = Object.fromEntries(
+  Object.entries(cards).map(([k, f]) => [
+    k,
+    { ...f, caveat: f.caveat ? `${f.caveat} ${NAMES}` : NAMES },
+  ])
+);
