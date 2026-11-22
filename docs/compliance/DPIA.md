@@ -488,7 +488,10 @@ Microsoft is an independent controller in the USA with no per-person deletion.
 
 - **Measures**: the open image is on for the whole sending domain (owner decision 2026-10-14, §6);
   our record keeps the nudge id and times only; disclosed in the privacy policy §7.3 and Mira's
-  notice; images off stop it.
+  notice; images off stop it. Since 22 Nov 2026 Mira's emails (nudges, session emails, the journal
+  reminder) also load Mira's portrait, and in mail apps that read web fonts the site's own fonts,
+  from loveiq.org: no third party, nothing recorded beyond the server's request log, and images off
+  stop these too.
 - **Residual**: low to medium. Whether the open image needs consent under §25 TDDDG has not been
   reviewed by a lawyer.
 

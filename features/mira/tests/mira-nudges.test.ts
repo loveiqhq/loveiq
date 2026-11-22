@@ -214,6 +214,7 @@ describe("the email", () => {
 
   it("shows an inbox preview only a neutral, hidden line, never the body", () => {
     const firstText = e.html
+      .replace(/<head>[\s\S]*?<\/head>/, "") // the shell's fonts and colours, never shown
       .replace(/<[^>]+>/g, "\n")
       .split("\n")
       .map((s) => s.trim())
@@ -223,7 +224,7 @@ describe("the email", () => {
   });
 
   it("is signed by Applied Psychometrics, not LoveIQ", () => {
-    expect(e.html).toContain(">Applied Psychometrics</p>");
+    expect(e.html).toContain(">Applied Psychometrics</div>"); // under Mira's name, at the top
     expect(e.html).not.toContain("LoveIQ");
   });
 

@@ -3,12 +3,11 @@ import { addDays } from "@features/admin/server/ap/days";
 import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isEmailSuppressed } from "@shared/emails/suppression";
-import { escapeHtml } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import nudgeConfig from "../content/nudges.json";
 import { forMira, type JournalEntry, type JournalShare } from "../journal";
+import { miraEmail } from "./email-shell";
 import {
-  COMPANY_LINE,
   CRISIS_QUIET_DAYS,
   hadCrisis,
   inWindow,
@@ -192,27 +191,20 @@ export function reminderEmail(input: { checkInUrl: string; stopUrl: string }): {
   html: string;
   text: string;
 } {
-  const check = escapeHtml(input.checkInUrl);
-  const stop = escapeHtml(input.stopUrl);
-  // The nudge email's look (server/nudges.ts nudgeEmail): the same neutral hidden first line,
-  // so an inbox preview shows only that, the ink button and the company's footer.
-  const html = [
-    `<!doctype html><html><body style="margin: 0; background: #ffffff">`,
-    `<div style="display: none; max-height: 0; max-width: 0; overflow: hidden; opacity: 0; mso-hide: all; font-size: 1px; line-height: 1px; color: #ffffff">${escapeHtml(nudgeConfig.preheader)}${"&#8199;&#65279;&#847; ".repeat(60)}</div>`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif">`,
-    `<tr><td style="padding: 24px 20px 8px; font-weight: 700">Mira</td></tr>`,
-    `<tr><td style="padding: 8px 20px 24px"><p style="margin: 0 0 16px; color: #3f3a4d; font-size: 15px; line-height: 1.6">${escapeHtml(REMINDER.body)}</p>`,
-    `<a href="${check}" style="display: inline-block; padding: 14px 24px; border-radius: 9999px; background: #000000; color: #ffffff; font-weight: 700; text-decoration: none">${escapeHtml(REMINDER.button)}</a></td></tr>`,
-    `<tr><td style="background: #161021; color: #e2dafb; padding: 24px; font-size: 13px">`,
-    `<p style="margin: 0 0 12px; font-size: 18px; font-weight: 700">Applied Psychometrics</p>`,
-    `<p style="margin: 0 0 12px">${escapeHtml(REMINDER.why)}</p>`,
-    `<p style="margin: 0 0 12px"><a href="${stop}" style="color: #c4b5fd; font-weight: 700">${escapeHtml(REMINDER.stop)}</a></p>`,
-    `<p style="margin: 0; color: #b6aecb; font-size: 12px">${escapeHtml(COMPANY_LINE)}</p>`,
-    `</td></tr></table></body></html>`,
-  ].join("\n");
-  const text =
-    `${nudgeConfig.preheader}\n\n${REMINDER.body}\n\n${REMINDER.button}: ${input.checkInUrl}\n\n` +
-    `${REMINDER.why}\n${REMINDER.stop}: ${input.stopUrl}\n\n${COMPANY_LINE}`;
+  // The shell all of Mira's emails share (email-shell.ts), with the nudges' neutral preview line.
+  const { html, text } = miraEmail({
+    preheader: nudgeConfig.preheader,
+    heading: REMINDER.subject,
+    paragraphs: [REMINDER.body],
+    button: { label: REMINDER.button, url: input.checkInUrl },
+    footer: {
+      why: REMINDER.why,
+      links: [
+        { label: REMINDER.stop, url: input.stopUrl },
+        { label: "Privacy", url: `${getEmailSiteUrl()}/mira/privacy` },
+      ],
+    },
+  });
   return { subject: REMINDER.subject, html, text };
 }
 
