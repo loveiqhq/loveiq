@@ -12,10 +12,12 @@ import {
 } from "@features/mira/content/checks";
 import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { SignedOutNotice } from "../account/SignedOut";
+import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
 import { CheckRunner } from "./CheckRunner";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { TrendChart, trendSummary } from "./TrendChart";
@@ -58,16 +60,21 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, minor, setData, retry } = useChecks();
+  const { data, error, minor, signedOut, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<{ text: string; retry: boolean } | null>(null);
+  const [saveError, setSaveError] = useState<{
+    text: string;
+    retry: boolean;
+    signIn?: boolean;
+  } | null>(null);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [panel, setPanel] = useState<"q9" | "help" | null>(null);
   const supportShown = useRef(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const runRef = useRef<HTMLDivElement | null>(null);
   const summary = data?.checks.find((c) => c.id === checkId);
 
   // Once the account is loaded: its draft in this tab, then the result or the introduction.
@@ -147,6 +154,13 @@ export default function CheckPage({
         text: `You’ve taken this check recently, so it can’t be saved again yet. It opens again on ${shortDate(r.data.nextAt)}.`,
         retry: false,
       });
+    } else if (r.signedOut) {
+      // Nothing to try again: the way back in, and the draft keeps every answer (R3-HAB-7).
+      setSaveError({
+        text: "You were signed out. Your answers are kept in this tab, to finish once you’re back.",
+        retry: false,
+        signIn: true,
+      });
     } else {
       setSaveError({
         text: r.data.error ?? "Your answers didn’t save. Please try again.",
@@ -160,8 +174,12 @@ export default function CheckPage({
       highlight={data ? { code: data.support } : null}
       onClose={() => {
         setPanel(null);
-        // The result may have arrived behind the panel: land on it, not on the page's top.
-        window.requestAnimationFrame(() => headingRef.current?.focus());
+        // When the panel's opener was the page itself (a tap focuses no radio on iPhone's WebKit),
+        // back to the result if it arrived behind the panel, else to the answer just chosen
+        // (round-3 R3-HAB-9). An opener that took the focus back keeps it.
+        refocus(
+          () => headingRef.current ?? runRef.current?.querySelector<HTMLElement>("input:checked")
+        );
       }}
     >
       {panel === "q9" ? <QuestionNineWords /> : null}
@@ -176,7 +194,15 @@ export default function CheckPage({
         </Link>{" "}
         <span aria-hidden="true">/</span> {check.title}
       </nav>
-      {minor ? (
+      {signedOut ? (
+        // A lost sign-in: said here, with the way back, never a move of the page's own.
+        <>
+          <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+            {check.title}
+          </h1>
+          <SignedOutNotice />
+        </>
+      ) : minor ? (
         <>
           {/* The page keeps its heading in this state too (round-3 R3-ACCT-8). */}
           <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
@@ -192,7 +218,7 @@ export default function CheckPage({
           </button>
         </p>
       ) : null}
-      {!data && !error ? <Skeleton /> : null}
+      {!data && !error && !signedOut ? <Skeleton /> : null}
 
       {data && mode === "intro" ? (
         <Intro
@@ -204,7 +230,7 @@ export default function CheckPage({
       ) : null}
 
       {data && mode === "run" ? (
-        <div className="mt-6">
+        <div ref={runRef} className="mt-6">
           <CheckRunner
             check={check}
             initial={answers}
@@ -216,7 +242,11 @@ export default function CheckPage({
           {saveError ? (
             <p role="alert" className="mt-4 max-w-[600px] text-[14px] text-ap-bad-ink">
               {saveError.text}{" "}
-              {saveError.retry ? (
+              {saveError.signIn ? (
+                <a href={signInHref()} className="font-semibold underline">
+                  Sign in again
+                </a>
+              ) : saveError.retry ? (
                 <button
                   type="button"
                   onClick={() => void save(answers)}
@@ -625,12 +655,12 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  * it doesn't judge. It ends on a thank-you that takes focus and stays until the person moves on.
  */
 export function BodyCheckPage() {
-  const { data, error, minor, retry } = useChecks();
+  const { data, error, minor, signedOut, retry } = useChecks();
   const body = data?.bodyCheck;
   const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
   const [answers, setAnswers] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<{ text: string; signIn?: boolean } | null>(null);
   // Which check was taken, kept for the thank-you once the data says nothing is due.
   const [took, setTook] = useState<"baseline" | "week4">("baseline");
   const doneRef = useRef<HTMLHeadingElement | null>(null);
@@ -654,7 +684,10 @@ export function BodyCheckPage() {
     const r = await miraApi("/api/mira/body-check", { body: { answers: all } });
     setSaving(false);
     if (r.ok) setMode("done");
-    else setSaveError(r.data.error ?? "Your answers didn’t save. Please try again.");
+    // A lost sign-in: the way back in, never Try again (R3-HAB-7).
+    else if (r.signedOut) {
+      setSaveError({ text: "You were signed out, so your answers weren’t saved.", signIn: true });
+    } else setSaveError({ text: r.data.error ?? "Your answers didn’t save. Please try again." });
   }
 
   return (
@@ -668,7 +701,9 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {minor ? (
+      {signedOut ? (
+        <SignedOutNotice />
+      ) : minor ? (
         <AdultsOnly className="mt-4" />
       ) : error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">
@@ -709,14 +744,20 @@ export function BodyCheckPage() {
             />
             {saveError ? (
               <p role="alert" className="mt-4 text-[14px] text-ap-bad-ink">
-                {saveError}{" "}
-                <button
-                  type="button"
-                  onClick={() => void save(answers)}
-                  className="font-semibold underline"
-                >
-                  Try again
-                </button>
+                {saveError.text}{" "}
+                {saveError.signIn ? (
+                  <a href={signInHref()} className="font-semibold underline">
+                    Sign in again
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void save(answers)}
+                    className="font-semibold underline"
+                  >
+                    Try again
+                  </button>
+                )}
               </p>
             ) : null}
           </>

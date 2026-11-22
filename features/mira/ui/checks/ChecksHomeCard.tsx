@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { CHECKS, CHECK_IDS } from "@features/mira/content/checks";
 import { AdultsOnly, SectionLink } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { CheckIcon, LoveIqTile } from "./icons";
 import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from "./data";
 
@@ -14,9 +15,11 @@ import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from ".
  * lead mounts it in MiraHome in place of the Assessments section.
  */
 export default function ChecksHomeCard() {
-  const { data, error, minor, retry } = useChecks();
+  const { data, error, minor, signedOut, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const body = bodyLine(data?.bodyCheck ?? null);
+  // Home says a lost sign-in once, above its cards (HAB-16): the card steps aside.
+  if (signedOut) return null;
   return (
     <section
       id="assessments"
@@ -32,12 +35,7 @@ export default function ChecksHomeCard() {
       {minor ? (
         <AdultsOnly className="mt-2" />
       ) : error ? (
-        <p role="alert" className="mt-2 text-[14px] text-ap-bad-ink">
-          {error}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+        <LoadFailed what="Your assessments" onRetry={retry} className="mt-2" />
       ) : null}
       {data ? (
         <ul className="mt-1 flex flex-col divide-y divide-ap-line">

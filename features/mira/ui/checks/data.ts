@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
-import { miraApi, signInHref } from "../api";
+import { miraApi } from "../api";
 import { shortDate } from "../kit/dates";
 
 /** The menu tab these pages mark (MiraAppFrame). */
@@ -33,32 +32,35 @@ export type ChecksData = {
 };
 
 /**
- * The person's checks, loaded once per page; signed out goes to sign-in and back here. Someone
- * Mira stopped as under 18 (403 `minor`) gets `minor`: each screen shows the kit's AdultsOnly and
+ * The person's checks, loaded once per page. A lost sign-in (401) is `signedOut`: each page says
+ * so in place with the way back (SignedOutNotice), Home's card and Settings' section step aside
+ * for their page's own notice, and nothing moves to sign-in on its own, as the sign-in page may
+ * still see the session and send the person straight back (round 3's 401 loop). Someone Mira
+ * stopped as under 18 (403 `minor`) gets `minor`: each screen shows the kit's AdultsOnly and
  * nothing to retry (decision 9; `error` is set too, so every placeholder stops). After a failed
  * load, `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
  */
 export function useChecks() {
-  const router = useRouter();
   const [data, setData] = useState<ChecksData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [minor, setMinor] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<ChecksData>("/api/mira/checks").then((r) => {
-      if (r.signedOut) router.replace(signInHref());
+      if (r.signedOut) setSignedOut(true);
       else if (r.ok) setData(r.data);
       else {
         setMinor(r.minor === true);
         setError(r.data.error ?? "Unable to load your checks.");
       }
     });
-  }, [router, attempt]);
+  }, [attempt]);
   const retry = () => {
     setError(null);
     setAttempt((n) => n + 1);
   };
-  return { data, error, minor, setData, retry };
+  return { data, error, minor, signedOut, setData, retry };
 }
 
 /**

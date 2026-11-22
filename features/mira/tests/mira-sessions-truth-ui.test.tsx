@@ -98,17 +98,18 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     expect(screen.queryByRole("button", { name: /Try again|Choose a time/ })).toBeNull();
   });
 
-  it("a lapsed sign-in on a change goes to sign-in and back to the page", async () => {
+  // Round 3's 401 loop: never a move to sign-in of its own (the sign-in page may still see the
+  // session and send the person straight back); the section steps aside for Settings' notice.
+  it("a lapsed sign-in on a change never navigates: the section steps aside", async () => {
     replies["PATCH /api/mira/weekly-session"] = () => ({
       status: 401,
       body: { error: "Please sign in." },
     });
     window.history.replaceState(null, "", "/mira/settings");
-    render(<WeeklySessionSettings />);
+    const { container } = render(<WeeklySessionSettings />);
     fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
-    );
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -220,6 +221,24 @@ describe("a new time zone alone is a change", () => {
     expect(
       screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
     ).not.toHaveAttribute("aria-disabled");
+  });
+
+  // R3-HAB-2: the button stays where focus is, as the way back, and the new zone is announced.
+  it("keeps focus on the zone button, which then offers the way back, and says the new zone", async () => {
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
+    const zone = screen.getByRole("button", { name: "Use New York time" });
+    zone.focus();
+    fireEvent.click(zone);
+    expect(zone).toHaveFocus();
+    expect(zone).toHaveAccessibleName("Use Berlin time");
+    const said = screen.getByText("Times are New York time.");
+    expect(said.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+    expect(said.closest("[aria-live]")).not.toContainElement(zone);
+    fireEvent.click(zone);
+    expect(zone).toHaveFocus();
+    expect(screen.getByText("Times are Berlin time.")).toBeInTheDocument();
+    expect(zone).toHaveAccessibleName("Use New York time");
   });
 });
 

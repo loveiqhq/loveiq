@@ -1,9 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { miraApi } from "../api";
 import { SignInAgain } from "../account/SignedOut";
-import { AskFirst, Switch } from "../journal/parts";
+import { AskFirst, Switch, refocus } from "../journal/parts";
 import { SettingsSection } from "../MiraSettings";
 import { AdultsOnly } from "../kit";
 import { useChecks } from "./data";
@@ -107,6 +107,7 @@ export default function ChecksSettings() {
   const { data, error, minor, setData, retry } = useChecks();
   // Beside the heading, as Settings says it for every section: "Saved", or what was deleted.
   const [status, setStatus] = useState<{ kind: "saved"; text?: string } | undefined>();
+  const none = useRef<HTMLButtonElement | null>(null);
   if (!data) {
     return error ? (
       <SettingsSection id="checks-settings" title="Assessments">
@@ -140,6 +141,8 @@ export default function ChecksSettings() {
         }
     );
     setStatus({ kind: "saved", text: "Your check results are deleted." });
+    // The question goes with the results: focus goes to what took its place (R3-HAB-4).
+    refocus(() => none.current);
     return null;
   }
 
@@ -155,10 +158,12 @@ export default function ChecksSettings() {
           onSaved={() => setStatus({ kind: "saved" })}
         />
         {count === 0 ? (
+          // Never `disabled` (decision 7): focus lands here after a delete.
           <button
+            ref={none}
             type="button"
-            disabled
-            className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-muted"
+            aria-disabled="true"
+            className="min-h-[44px] w-fit cursor-default rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-muted"
           >
             No check results to delete
           </button>

@@ -18,7 +18,7 @@ const OUTLINE_PILL =
  * opens (#weekly).
  */
 export function WeeklySessionSettings() {
-  const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
+  const { state, load, book, setPaused, cancel } = useWeeklySession();
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -64,6 +64,8 @@ export function WeeklySessionSettings() {
         ? "Your weekly session is cancelled."
         : "Your weekly session is cancelled, but we couldn’t email the update, so it may still be in your calendar. Delete it there, or open this file with Apple Calendar or Outlook."
     );
+    // The question goes with the session: focus goes to "Choose a time", which took its place.
+    refocus(() => opener.current);
     return null;
   }
 

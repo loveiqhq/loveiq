@@ -23,6 +23,7 @@ import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
 import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
 import type { ChecksData } from "@features/mira/ui/checks/data";
+import { Switch as SettingsSwitch } from "@features/mira/ui/MiraSettings";
 
 /** The self-check screens (features/mira/ui/checks): runner, result, Home card, chat starter. */
 
@@ -236,6 +237,34 @@ describe("taking a check", () => {
     expect(screen.getByText(/One result so far: moderate \(12 of 21\)/)).toBeTruthy();
     expect(sessionStorage.getItem("mira.check.v1:u1:anxiety")).toBeNull();
   });
+
+  // R3-HAB-7: Try again could only fail again. The answers wait in this tab's draft.
+  it("offers the way back in, never Try again, when the sign-in is gone at the save", async () => {
+    window.history.replaceState(null, "", "/mira/assessments/anxiety");
+    replies["POST /api/mira/checks"] = () => ({ status: 401, body: { error: "x" } });
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "You were signed out. Your answers are kept in this tab, to finish once you’re back."
+    );
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fassessments%2Fanxiety"
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    // True: the draft holds every answer for this account.
+    expect(JSON.parse(sessionStorage.getItem("mira.check.v1:u1:anxiety")!).answers).toEqual([
+      2, 2, 2, 2, 2, 1, 1,
+    ]);
+    window.history.replaceState(null, "", "/");
+  });
 });
 
 // EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
@@ -286,6 +315,24 @@ describe("the body check's own page", () => {
       expect(region.textContent).toBe("Thank you. That’s your four-week check done.")
     );
     expect(screen.getByRole("status")).toBe(region);
+  });
+
+  // R3-HAB-7: a lost sign-in has nothing to try again: the way back in instead.
+  it("offers the way back in, never Try again, when the sign-in is gone at the save", async () => {
+    window.history.replaceState(null, "", "/mira/assessments/body");
+    replies["POST /api/mira/body-check"] = () => ({ status: 401, body: { error: "x" } });
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 1; i < 10; i++) keyboard("Seldom", "Next");
+    keyboard("Never", "Save my answers");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out, so your answers weren’t saved.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fassessments%2Fbody"
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    window.history.replaceState(null, "", "/");
   });
 
   it("keeps the answers and offers Try again when the save fails", async () => {
@@ -389,6 +436,22 @@ describe("the mood check's question 9", () => {
     expect(within(headline.closest("header")!).getByText("Minimal · support for you")).toBeTruthy();
   });
 
+  // R3-HAB-9: on iPhone (WebKit) a tap focuses no radio, so the panel's opener is the page.
+  it("hands focus back to the chosen answer when the panel closes, though the tap focused nothing", async () => {
+    sessionStorage.setItem(
+      "mira.check.v1:u1:mood",
+      JSON.stringify({ answers: [0, 0, 0, 0, 0, 0, 0, 0], at: Date.now() })
+    );
+    render(<CheckPage checkId="mood" practice={null} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 9" }));
+    (document.activeElement as HTMLElement | null)?.blur();
+    tap("Several days");
+    const panel = screen.getByRole("dialog", { name: "Support right now" });
+    fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Several days" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "See my result" })).toBeInTheDocument();
+  });
+
   it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
     account.checks[1] = {
       id: "mood",
@@ -413,9 +476,13 @@ describe("the mood check's question 9", () => {
     const rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows[1]!.textContent).toMatch(/Minimal · support for you/);
     expect(rows[2]!.textContent).not.toMatch(/support/);
-    expect(screen.getByRole("region", { name: "Over time" }).textContent).toMatch(
-      /minimal \(3 of 27\).*Your answer to the last question/
+    // HAB-9's remainder: the summary names the score, never the band's reassuring word.
+    const overTime = within(screen.getByRole("region", { name: "Over time" }));
+    const sentence = overTime.getByText(/^2 results\./);
+    expect(sentence.textContent).toMatch(
+      /^2 results\. Your latest is 3 of 27 on \d+ \w+, 1 point higher than last time\. Your answer to the last question matters more than this score\.$/
     );
+    expect(sentence.textContent).not.toMatch(/minimal/i);
     // Its panel is question 9's, with the warm words and the way to Mira.
     fireEvent.click(steps.getByRole("button", { name: /See support lines/ }));
     expect(screen.getByRole("dialog", { name: "Support right now" }).textContent).toMatch(
@@ -567,12 +634,57 @@ describe("Settings › Self-checks", () => {
       screen.getByText(/Delete all 2 of your check results, your body check included\?/)
     ).toBeTruthy();
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    confirm.focus();
+    fireEvent.click(confirm);
     expect(await screen.findByText("Your check results are deleted.")).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(([u, i]) => u === "/api/mira/checks" && i?.method === "DELETE")
     ).toBe(true);
-    expect(screen.getByRole("button", { name: "No check results to delete" })).toBeDisabled();
+    // R3-HAB-4: what took the button's place keeps the focus (aria-disabled, never `disabled`).
+    const none = screen.getByRole("button", { name: "No check results to delete" });
+    expect(none).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(none).toHaveFocus());
+  });
+});
+
+// Round 3 (the 401 loop): after a 401 nothing moves to sign-in on its own, as the sign-in page may
+// still see the session and send the person straight back. The pages say it in place, with the
+// way back; Home's card and Settings' section step aside for their page's own notice.
+describe("a sign-in lost before the checks load", () => {
+  beforeEach(() => {
+    replies["GET /api/mira/checks"] = () => ({ status: 401, body: { error: "Please sign in." } });
+  });
+
+  it("is said in place on each check page, with the way back to it, and never navigates", async () => {
+    for (const [path, page] of [
+      ["/mira/assessments", <AssessmentsPage key="a" />],
+      ["/mira/assessments/mood", <CheckPage key="m" checkId="mood" practice={null} />],
+      ["/mira/assessments/body", <BodyCheckPage key="b" />],
+    ] as const) {
+      window.history.replaceState(null, "", path);
+      const view = render(page);
+      expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+        "href",
+        `/mira/start?next=${encodeURIComponent(path)}`
+      );
+      expect(screen.queryByRole("button", { name: /Try again|Start/ })).toBeNull();
+      view.unmount();
+    }
+    expect(router.replace).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("leaves Home's card and Settings' section to their page's notice", async () => {
+    for (const card of [<ChecksHomeCard key="h" />, <ChecksSettings key="s" />]) {
+      const view = render(card);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await waitFor(() => expect(view.container).toBeEmptyDOMElement());
+      view.unmount();
+      fetchMock.mockClear();
+    }
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -717,6 +829,25 @@ describe("Assessments' 'Mira may use my LoveIQ result'", () => {
     fireEvent.click(sw);
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
     expect(sw).toBeChecked();
+  });
+
+  // R3-HAB-8 (decision 6): one name, one description and one switch, here and in Settings.
+  it("says what Settings says, on a switch drawn at Settings' size", async () => {
+    render(<AssessmentsPage />);
+    const sw = await screen.findByRole("switch", { name: "Mira may use my LoveIQ result" });
+    expect(sw).toHaveAccessibleDescription(
+      "Your LoveIQ Sexual Personality result tailors the coaching."
+    );
+    const settings = render(
+      <SettingsSwitch label="Mira may use my LoveIQ result" checked onChange={() => undefined} />
+    );
+    // The track's and the knob's sizes (h-7 w-12, h-5 w-5), whatever else either one draws.
+    const sizes = (root: Element) =>
+      [...root.querySelectorAll("span")]
+        .map((el) => [...el.classList].filter((c) => /^[hw]-\d/.test(c)).join(" "))
+        .filter(Boolean);
+    expect(sizes(sw)).toEqual(sizes(settings.container));
+    expect(sizes(sw)).toEqual(["h-7 w-12", "h-5 w-5"]);
   });
 });
 

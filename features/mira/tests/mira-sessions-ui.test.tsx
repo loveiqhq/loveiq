@@ -260,7 +260,8 @@ describe("Home's weekly session card", () => {
   it("offers a retry when it can't load, and shows nothing signed out", async () => {
     replies["GET /api/mira/weekly-session"] = () => ({ status: 500, body: { error: "Nope." } });
     const { unmount } = render(<NextSessionCard />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Nope.");
+    // One wording for a failed read on Home (round-3 SET-11), whatever the server said.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your weekly session didn’t load.");
     replies["GET /api/mira/weekly-session"] = has(null);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("button", { name: "Choose a time" })).toBeInTheDocument();
@@ -268,6 +269,8 @@ describe("Home's weekly session card", () => {
     replies["GET /api/mira/weekly-session"] = () => ({ status: 401, body: {} });
     const { container } = render(<NextSessionCard />);
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+    // Home says it once, above its cards; nothing moves to sign-in on its own (round 3).
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -319,9 +322,14 @@ describe("Settings' weekly session section", () => {
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel session" }));
+    const cancel = screen.getByRole("button", { name: "Cancel session" });
+    cancel.focus();
+    fireEvent.click(cancel);
     expect(await screen.findByText("Your weekly session is cancelled.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Choose a time" })).toBeInTheDocument();
+    // R3-HAB-4: focus goes to what took the cancelled session's place, never to the page.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Choose a time" })).toHaveFocus()
+    );
   });
 });
 

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { picksFor } from "@features/mira/content/coaches";
 import { AdultsOnly } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { track, useCoachData } from "./data";
 import { ChevronIcon, CoachPortrait } from "./parts";
-import { FOCUS, QUIET_PILL } from "./styles";
+import { FOCUS } from "./styles";
 
 /**
  * Home's "Picked for you" (board Home): two or three picks from the person's own chat topics,
@@ -46,14 +47,7 @@ export default function PicksCard() {
           ))}
         </div>
       ) : state.status === "error" ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p role="alert" className="text-[14px] text-ap-body">
-            Your picks didn’t load.
-          </p>
-          <button type="button" onClick={retry} className={QUIET_PILL}>
-            Try again
-          </button>
-        </div>
+        <LoadFailed what="Your picks" onRetry={retry} className="mt-3" />
       ) : result ? (
         <>
           <ul className="mt-2 flex flex-col">

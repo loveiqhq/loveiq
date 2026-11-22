@@ -5,7 +5,7 @@ import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import logger from "@shared/observability/logger";
 import nudgeConfig from "../content/nudges.json";
-import { forMira, type JournalEntry, type JournalShare } from "../journal";
+import { DAYS_READ, forMira, type JournalEntry, type JournalShare } from "../journal";
 import { miraEmail } from "./email-shell";
 import {
   CRISIS_QUIET_DAYS,
@@ -26,8 +26,6 @@ import { logMiraEvent } from "./store";
 
 const enc = encodeURIComponent;
 const COLS = "day,mood,body,closeness,energy,note";
-/** What one read brings back: a year and a bit, enough for every streak the beta can have. */
-const DAYS_READ = 400;
 
 export type JournalSettings = {
   share: JournalShare;

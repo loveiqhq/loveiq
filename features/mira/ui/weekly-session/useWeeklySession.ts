@@ -1,12 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { JOIN_AFTER_MS, joinedOccurrence, nextOccurrence } from "@features/mira/server/calendar";
 
 export { slotLabel, zoneLabel } from "@features/mira/server/calendar";
-import { miraApi, signInHref, type ApiResult } from "../api";
+import { miraApi, type ApiResult } from "../api";
 
 /**
  * The person's weekly session, as /api/mira/weekly-session gives it, for the chat's time picker,
@@ -66,11 +65,12 @@ const failed = (r: { status: number; data: { error?: string } }, fallback = RETR
   r.status === 403 ? fallback : (r.data.error ?? fallback);
 
 /**
- * `signIn`: on a signed-in page (Home, Settings), a sign-in that ran out goes to sign-in and back
- * to the page; the chat's picker invites a signed-out person to an account instead.
+ * A sign-in that ran out is `signed-out`: Home's card and Settings' section step aside for their
+ * page's own notice (SignedOutNotice), and the chat's picker invites a signed-out person to an
+ * account. Nothing moves to sign-in on its own: the sign-in page may still see the session and
+ * send the person straight back (round 3's 401 loop).
  */
-export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) {
-  const router = useRouter();
+export function useWeeklySession() {
   const [state, setState] = useState<WeeklyState>({ status: "loading" });
 
   /** Signed out, stopped as under 18, or the slot as saved; anything else changes nothing (false). */
@@ -96,12 +96,6 @@ export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (signIn && state.status === "signed-out") {
-      router.replace(signInHref());
-    }
-  }, [signIn, state.status, router]);
 
   /** Book or move it. The state follows only what the server saved. */
   const book = useCallback(

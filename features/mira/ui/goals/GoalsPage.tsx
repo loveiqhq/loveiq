@@ -15,7 +15,7 @@ import { useSignedOut } from "../api";
 import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly } from "../kit";
 import { shortDate } from "../kit/dates";
-import { AskFirst } from "../journal/parts";
+import { AskFirst, byId, refocus, refocusRow } from "../journal/parts";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import {
   ChallengePills,
@@ -43,7 +43,7 @@ type Actions = ReturnType<typeof useGoals>;
 const QUIET = `inline-flex min-h-[44px] items-center rounded-full px-3 text-[14px] font-semibold transition-colors hover:bg-ap-ground ${FOCUS}`;
 const TEXT_BUTTON = `${QUIET} text-ap-body hover:text-ap-ink`;
 const DANGER_BUTTON = `${QUIET} text-ap-bad-ink`;
-const H2 = "font-serif text-[22px] font-medium";
+const H2 = "font-serif text-[22px] font-medium outline-none";
 
 export default function GoalsPage() {
   const g = useGoals();
@@ -55,6 +55,7 @@ export default function GoalsPage() {
   const active = g.goals.filter(onTheGo);
   const done = g.goals.filter((x) => x.completed_at);
   const away = g.goals.filter((x) => x.archived_at && !x.completed_at);
+  const activeList = useRef<HTMLUListElement | null>(null);
 
   // "Write your own" on Home's card lands on the form.
   useEffect(() => {
@@ -114,7 +115,7 @@ export default function GoalsPage() {
         ) : (
           <>
             <section aria-labelledby="on-the-go-h" className="mt-9">
-              <h2 id="on-the-go-h" className={H2}>
+              <h2 id="on-the-go-h" tabIndex={-1} className={H2}>
                 On the go
               </h2>
               {active.length === 0 ? (
@@ -124,8 +125,11 @@ export default function GoalsPage() {
                     : "No goals on the go right now. Bring one back below, or set a new one."}
                 </p>
               ) : (
-                <ul className="mt-3 flex flex-col divide-y divide-ap-line rounded-3xl border border-ap-line px-5">
-                  {active.map((goal) => (
+                <ul
+                  ref={activeList}
+                  className="mt-3 flex flex-col divide-y divide-ap-line rounded-3xl border border-ap-line px-5"
+                >
+                  {active.map((goal, i) => (
                     <GoalEntry
                       key={goal.id}
                       goal={goal}
@@ -134,6 +138,7 @@ export default function GoalsPage() {
                       pop={popped === goal.id}
                       onTicked={(on) => setPopped(on ? goal.id : null)}
                       say={setSaid}
+                      leave={() => refocusRow(activeList, i, () => byId("on-the-go-h"))}
                     />
                   ))}
                 </ul>
@@ -212,6 +217,7 @@ function GoalEntry({
   pop,
   onTicked,
   say,
+  leave,
 }: {
   goal: Goal;
   today: Day;
@@ -219,6 +225,8 @@ function GoalEntry({
   pop: boolean;
   onTicked: (on: boolean) => void;
   say: (s: string) => void;
+  /** Done, put away or deleted: focus goes to the row now in its place. */
+  leave: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,11 +237,12 @@ function GoalEntry({
   );
   const headingId = useId();
 
-  async function act(run: () => Promise<string | null>, done: string) {
+  async function act(run: () => Promise<string | null>, done: string, then?: () => void) {
     setError(null);
     const err = await run();
-    if (err) setError(err);
-    else say(done);
+    if (err) return setError(err);
+    say(done);
+    then?.();
   }
 
   if (editing) {
@@ -256,7 +265,7 @@ function GoalEntry({
             return err;
           }}
         >
-          <DeleteGoal goal={goal} g={g} say={say} />
+          <DeleteGoal goal={goal} g={g} say={say} leave={leave} />
         </GoalForm>
       </li>
     );
@@ -327,7 +336,7 @@ function GoalEntry({
           aria-label={`Mark done: ${goal.text}`}
           className={TEXT_BUTTON}
           onClick={() =>
-            void act(() => g.update(goal, { completed: true }), "Marked done. Well done.")
+            void act(() => g.update(goal, { completed: true }), "Marked done. Well done.", leave)
           }
         >
           Mark done
@@ -336,7 +345,7 @@ function GoalEntry({
           type="button"
           aria-label={`Put away: ${goal.text}`}
           className={TEXT_BUTTON}
-          onClick={() => void act(() => g.update(goal, { archived: true }), "Put away.")}
+          onClick={() => void act(() => g.update(goal, { archived: true }), "Put away.", leave)}
         >
           Put away
         </button>
@@ -473,7 +482,17 @@ function DaysStepper({
 }
 
 /** Deleting one goal, with a word of warning first. */
-function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string) => void }) {
+function DeleteGoal({
+  goal,
+  g,
+  say,
+  leave,
+}: {
+  goal: Goal;
+  g: Actions;
+  say: (s: string) => void;
+  leave: () => void;
+}) {
   return (
     <AskFirst
       label="Delete goal"
@@ -481,7 +500,10 @@ function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string)
       className={`${DANGER_BUTTON} sm:ml-auto`}
       run={async () => {
         const err = await g.remove(goal);
-        if (!err) say("Goal deleted.");
+        if (!err) {
+          say("Goal deleted.");
+          leave();
+        }
         return err;
       }}
     />
@@ -505,23 +527,27 @@ function PastGoals({
   say: (s: string) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-  async function back(goal: Goal) {
+  const list = useRef<HTMLUListElement | null>(null);
+  // Gone from here: to the row now in its place, else (the section went too) to the goals on the go.
+  const leave = (i: number) => refocusRow(list, i, () => byId(`${id}-h`) ?? byId("on-the-go-h"));
+  async function back(goal: Goal, i: number) {
     setError(null);
     const err = await g.update(
       goal,
       goal.completed_at ? { completed: false } : { archived: false }
     );
-    if (err) setError(err);
-    else say("Back on the go.");
+    if (err) return setError(err);
+    say("Back on the go.");
+    leave(i);
   }
   return (
     <section aria-labelledby={`${id}-h`} className="mt-9">
-      <h2 id={`${id}-h`} className={`${H2} flex items-center gap-2`}>
+      <h2 id={`${id}-h`} tabIndex={-1} className={`${H2} flex items-center gap-2`}>
         {title}
         {id === "done" ? <SparkIcon /> : null}
       </h2>
-      <ul className="mt-2 flex flex-col divide-y divide-ap-line">
-        {goals.map((goal) => (
+      <ul ref={list} className="mt-2 flex flex-col divide-y divide-ap-line">
+        {goals.map((goal, i) => (
           <li
             key={goal.id}
             className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
@@ -534,12 +560,14 @@ function PastGoals({
               <button
                 type="button"
                 aria-label={`Bring back: ${goal.text}`}
-                onClick={() => void back(goal)}
+                onClick={() => void back(goal, i)}
                 className={TEXT_BUTTON}
               >
                 Bring back
               </button>
-              {id === "away" ? <DeleteGoal goal={goal} g={g} say={say} /> : null}
+              {id === "away" ? (
+                <DeleteGoal goal={goal} g={g} say={say} leave={() => leave(i)} />
+              ) : null}
             </div>
           </li>
         ))}
@@ -557,7 +585,7 @@ function PastGoals({
 function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
   return (
     <section aria-labelledby="your-goals-data-h" className="mt-12 border-t border-ap-line pt-6">
-      <h2 id="your-goals-data-h" className="text-[14px] font-semibold">
+      <h2 id="your-goals-data-h" tabIndex={-1} className="text-[14px] font-semibold outline-none">
         Who sees your goals
       </h2>
       <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-ap-body">
@@ -578,7 +606,10 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
             className={`${DANGER_BUTTON} -ml-3`}
             run={async () => {
               const err = await g.removeAll();
-              if (!err) say("All your goals are deleted.");
+              if (!err) {
+                say("All your goals are deleted.");
+                refocus(() => byId("your-goals-data-h"));
+              }
               return err;
             }}
           />

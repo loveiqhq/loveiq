@@ -6,7 +6,7 @@ import { CHECKS, CHECK_IDS, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { AdultsOnly } from "../kit";
 import { miraApi } from "../api";
-import { SignInAgain } from "../account/SignedOut";
+import { SignInAgain, SignedOutNotice } from "../account/SignedOut";
 import { SwitchRow, UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
 import {
@@ -29,7 +29,7 @@ import {
  * switches. The Assessments tab should point here (today: /mira/home#assessments).
  */
 export default function AssessmentsPage() {
-  const { data, error, minor, setData, retry } = useChecks();
+  const { data, error, minor, signedOut, setData, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
@@ -48,17 +48,30 @@ export default function AssessmentsPage() {
     }
   }
 
+  const header = (
+    <header className="max-w-[640px] motion-safe:animate-mira-in">
+      <h1 className="font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+        Assessments
+      </h1>
+      <p className="mt-2 text-[16px] leading-relaxed text-ap-body">
+        Short questionnaires that help you understand yourself, and help Mira tailor her coaching if
+        you allow it.
+      </p>
+    </header>
+  );
+  // A lost sign-in: said here, with the way back, never a move to sign-in of the page's own.
+  if (signedOut) {
+    return (
+      <MiraAppFrame active={FRAME_TAB}>
+        {header}
+        <SignedOutNotice />
+      </MiraAppFrame>
+    );
+  }
+
   return (
     <MiraAppFrame active={FRAME_TAB} email={data?.email} name={data?.name}>
-      <header className="max-w-[640px] motion-safe:animate-mira-in">
-        <h1 className="font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
-          Assessments
-        </h1>
-        <p className="mt-2 text-[16px] leading-relaxed text-ap-body">
-          Short questionnaires that help you understand yourself, and help Mira tailor her coaching
-          if you allow it.
-        </p>
-      </header>
+      {header}
       {minor ? (
         <AdultsOnly className="mt-6" />
       ) : error ? (
@@ -182,7 +195,7 @@ export default function AssessmentsPage() {
           <SwitchRow
             id={switchId}
             label="Mira may use my LoveIQ result"
-            description="Your Sexual Personality result tailors her coaching."
+            description="Your LoveIQ Sexual Personality result tailors the coaching."
             checked={data.useAssessment}
             busy={useBusy}
             onChange={(on) => void toggleAssessment(on)}

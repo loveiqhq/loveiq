@@ -109,7 +109,7 @@ describe("POST /api/mira/goals", () => {
       via: "mira",
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ goal: { ...row, days: [] } });
+    expect(await res.json()).toEqual({ goal: { ...row, days: [] }, existing: false });
     expect(createGoal).toHaveBeenCalledWith(LEA.id, { text: WORDS, weeklyTarget: 3, via: "mira" });
     expect(logMiraEvent).toHaveBeenCalledWith(
       "goal_set",
@@ -123,7 +123,8 @@ describe("POST /api/mira/goals", () => {
     vi.mocked(createGoal).mockResolvedValueOnce({ goal: { ...row, days: [] }, existing: true });
     const res = await create({ text: WORDS, via: "mira" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ goal: { ...row, days: [] } });
+    // Said as it is (R3-HAB-3): the page tells the person, never "Goal added."
+    expect(await res.json()).toEqual({ goal: { ...row, days: [] }, existing: true });
     expect(logMiraEvent).not.toHaveBeenCalled();
   });
 

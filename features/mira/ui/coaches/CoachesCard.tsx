@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { coachById, suggestedCoaches, type CoachId } from "@features/mira/content/coaches";
 import { AdultsOnly, SectionLink } from "../kit";
+import { LoadFailed } from "../kit/load-failed";
 import { useCoachData } from "./data";
 import { CoachPortrait, NotifyButton } from "./parts";
-import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
+import { FOCUS, INK_PILL } from "./styles";
 
 const MIRA = coachById("mira");
 
@@ -95,14 +96,7 @@ export default function CoachesCard() {
                 ))}
               </div>
             ) : state.status === "error" ? (
-              <div className="flex flex-wrap items-center gap-3 py-3">
-                <p role="alert" className="text-[14px] text-ap-body">
-                  Your coaches didn’t load.
-                </p>
-                <button type="button" onClick={retry} className={QUIET_PILL}>
-                  Try again
-                </button>
-              </div>
+              <LoadFailed what="Your coaches" onRetry={retry} className="py-3" />
             ) : (
               <ul className="flex flex-col">
                 {suggested.map((s, i) => (

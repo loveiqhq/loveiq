@@ -83,6 +83,37 @@ describe("focus rings in the habits' screens", () => {
     );
     expect(bare).toEqual([]);
   });
+
+  // Round 3: Mira's one focus ring (tailwind.config.js) hugs every bordered text field; a field's
+  // own ring or outline offset beside it drew a second edge (the session picker's time field).
+  it("leave text fields to Mira's one ring, with no ring or outline offset of their own", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const dirs = ["goals", "journal", "checks", "coaches", "weekly-session"];
+    // Each field's own tag up to its className: never past the tag's end or into another tag
+    // (an onChange's "=>" is inside the tag, so ">" alone can't end it).
+    const tag = /<(input|select|textarea)\b((?:(?!\/>|<)[\s\S])*?)className="([^"]*)"/g;
+    const fields = dirs.flatMap((d) =>
+      readdirSync(`features/mira/ui/${d}`)
+        .filter((f) => /\.tsx$/.test(f))
+        .flatMap((f) =>
+          [...readFileSync(`features/mira/ui/${d}/${f}`, "utf8").matchAll(tag)]
+            .filter((m) => /(^|\s)border(\s|$)/.test(m[3]!))
+            .map((m) => ({ where: `${d}/${f} <${m[1]}>`, classes: m[3]! }))
+        )
+    );
+    // The time field, the reminder's select, both searches, the goal and the check-in's line.
+    expect(fields.length).toBeGreaterThanOrEqual(6);
+    expect(fields.map((x) => x.where)).toEqual(
+      expect.arrayContaining([
+        "weekly-session/SlotPicker.tsx <input>",
+        "journal/JournalSettings.tsx <select>",
+      ])
+    );
+    const own = fields.filter((x) =>
+      /(focus|focus-visible):(ring|outline-offset-[1-9])/.test(x.classes)
+    );
+    expect(own.map((x) => x.where)).toEqual([]);
+  });
 });
 
 describe("Home's goals card", () => {
@@ -193,7 +224,8 @@ describe("Home's goals card", () => {
       body: { error: "Unable to load your goals." },
     });
     render(<GoalsCard />);
-    expect(await screen.findByText("Unable to load your goals.")).toBeTruthy();
+    // One wording for a failed read on Home (round-3 SET-11), whatever the server said.
+    expect(await screen.findByText("Your goals didn’t load.")).toBeTruthy();
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText(LIGHT.text)).toBeTruthy();
@@ -379,15 +411,23 @@ describe("the goals page", () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   });
 
-  it("lists a goal once when the same words come back as the goal already on the go", async () => {
+  // R3-HAB-3: the same words answer the goal on the go. Say so, and drop nothing typed.
+  it("says a goal is already on the go, keeping the words and the new aim in the form", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
-    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT } });
+    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT, existing: true } });
     render(<GoalsPage />);
     const input = await screen.findByLabelText("Your goal, in your own words");
-    fireEvent.change(input, { target: { value: LIGHT.text } });
+    const typed = `  ${LIGHT.text.toUpperCase()} `;
+    fireEvent.change(input, { target: { value: typed } });
+    for (let i = 0; i < 7; i++) fireEvent.click(screen.getByRole("button", { name: "More days" }));
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
-    await waitFor(() => expect(calls("POST /api/mira/goals")).toHaveLength(1));
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You already have this goal on the go. To change its days a week, use Edit on it above."
+    );
+    expect(calls("POST /api/mira/goals")).toHaveLength(1);
+    expect((input as HTMLInputElement).value).toBe(typed);
+    expect(screen.getByText("Every day")).toBeTruthy();
+    expect(screen.queryByText("Goal added.")).toBeNull();
     expect(screen.getAllByRole("heading", { name: LIGHT.text })).toHaveLength(1);
   });
 
@@ -418,6 +458,76 @@ describe("the goals page", () => {
     expect(within(done).getByText("Done 21 Nov · 6 days ticked")).toBeTruthy();
     expect(calls("PATCH /api/mira/goals/g3")).toEqual([{ completed: true }]);
     expect(within(done).getByRole("button", { name: `Bring back: ${OLD.text}` })).toBeTruthy();
+  });
+
+  // R3-HAB-4: a row that leaves its list takes focus with it: to the row now in its place, else
+  // to the list's heading, never to the page.
+  it("keeps focus in place when a goal is done, put away, brought back or deleted", async () => {
+    const [one, two, three] = ["g1", "g2", "g3"].map((id) => goal(id));
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [one, two, three] } });
+    for (const g of [one, two, three]) {
+      replies[`PATCH /api/mira/goals/${g!.id}`] = (b) => ({
+        body: {
+          goal: {
+            ...g,
+            days: undefined,
+            completed_at: b.completed ? "2026-11-21T12:00:00Z" : null,
+            archived_at: b.archived ? "2026-11-21T12:00:00Z" : null,
+          },
+        },
+      });
+    }
+    render(<GoalsPage />);
+    const press = async (name: string) => {
+      const button = await screen.findByRole("button", { name });
+      button.focus();
+      fireEvent.click(button);
+    };
+    const focused = () => document.activeElement;
+    await press("Mark done: Goal g1");
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Did it today: Goal g2" }))
+    );
+    await press("Put away: Goal g3");
+    // The last row went: the one before it takes its place.
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Did it today: Goal g2" }))
+    );
+    await press("Put away: Goal g2");
+    await waitFor(() => expect(focused()).toBe(screen.getByRole("heading", { name: "On the go" })));
+    // Put away now holds g3 and g2: bringing one back lands on the other's.
+    await press("Bring back: Goal g3");
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Bring back: Goal g2" }))
+    );
+    // Its section goes with its last goal: focus goes to where the goals on the go are.
+    await press("Bring back: Goal g2");
+    await waitFor(() => expect(focused()).toBe(screen.getByRole("heading", { name: "On the go" })));
+    expect(screen.queryByRole("region", { name: "Put away" })).toBeNull();
+  });
+
+  it("keeps focus in place after a goal, or all of them, are deleted", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [goal("g1"), goal("g2")] } });
+    render(<GoalsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit: Goal g1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete goal" }));
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    confirm.focus();
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Did it today: Goal g2" })
+      )
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete all goals" }));
+    const all = screen.getByRole("button", { name: "Delete all" });
+    all.focus();
+    fireEvent.click(all);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Who sees your goals" })
+      )
+    );
   });
 
   it("keeps a few goals on the go: no new one past five", async () => {
