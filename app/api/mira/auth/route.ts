@@ -20,7 +20,7 @@ import { z } from "zod";
 import { CONSENT_VERSION, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
 import { recordSession, signOutDevices } from "@features/mira/server/devices";
 import { isStaffEmail } from "@features/mira/server/google";
-import { isMinor } from "@features/mira/server/minor";
+import { carryMinorStop, isMinor } from "@features/mira/server/minor";
 import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
 import {
@@ -315,9 +315,12 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+  // A browser Mira stopped as under 18 brings the stop to the account, and its chat isn't kept.
+  const minor = await carryMinorStop(account.id);
   try {
     const carry = body.carry?.filter((t) => t.content.trim()) ?? [];
-    const chatId = await carryChat(account.id, profile?.remember_chats !== false, carry);
+    const remember = !minor && profile?.remember_chats !== false;
+    const chatId = await carryChat(account.id, remember, carry);
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },

@@ -88,9 +88,10 @@ describe("what Mira reads of the journal in a chat", () => {
 });
 
 describe("signing in from the reminder email", () => {
-  it("comes back to the journal, spelt exactly", () => {
+  it("comes back to the journal or its check-in, spelt exactly", () => {
     expect(safeNext("/mira/journal")).toBe("/mira/journal");
-    expect(safeNext("/mira/journal?checkin=1")).toBeNull();
+    expect(safeNext("/mira/journal?checkin=1")).toBe("/mira/journal?checkin=1");
+    expect(safeNext("/mira/journal?checkin=1&x=//evil.example")).toBeNull();
     expect(safeNext("/mira/journal/../../admin")).toBeNull();
   });
 });

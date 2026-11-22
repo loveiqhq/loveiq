@@ -1,12 +1,14 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import logger from "@shared/observability/logger";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { cancelSessionInvite } from "./session-emails";
 
 /**
  * Changing a Mira account's email (Settings › Sign-in & security, 22 Nov 2026): an 8-digit code
  * to the NEW address proves it is the person's, then the login's address changes (Supabase Auth,
- * admin API) and the profile's with it. The old address gets a neutral note (sign-in.ts).
+ * admin API) and the profile's with it, or neither does. The old address gets a neutral note
+ * (sign-in.ts).
  *
  * Supabase's own email change can't do this: it sends its own template from its own mailer, and
  * with "secure email change" on it needs a code from both inboxes. So the code is Mira's own,
@@ -92,21 +94,36 @@ export async function confirmPendingChange(userId: string, code: string): Promis
   return a.length === b.length && timingSafeEqual(a, b) ? pending.new_email : null;
 }
 
+/** The login's own address (Supabase Auth's record), or null when it can't be read. */
+export async function loginEmail(userId: string): Promise<string | null> {
+  const res = await supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`).catch(() => null);
+  if (!res?.ok) return null;
+  const user = (await res.json().catch(() => null)) as { email?: string } | null;
+  return user?.email?.toLowerCase() ?? null;
+}
+
+const setLoginEmail = (userId: string, email: string) =>
+  supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ email, email_confirm: true }),
+  });
+
 /**
  * Moves the account to the new address: the login first (Supabase refuses an address another
- * login has: "taken"), then the profile's copy, which a later sign-in would also bring up to date.
- * A booked weekly session's emails follow the account; after the response, a cancellation takes
+ * login has: "taken"), then the profile's copy, which the emails and the nudges read. When the copy
+ * can't follow, the login goes back, so a failure leaves both on the old address. Only if that
+ * fails too is it "changed": the login has moved, so the person and the old address must hear of
+ * it, and the copy catches up at the next sign-in. ponytail: an answer lost after Auth applied it
+ * reads as not applied; read the login back (loginEmail) if that ever shows up. Once the copy has
+ * moved, a booked weekly session's emails follow it, and after the response a cancellation takes
  * the session out of the old address's calendar (best effort).
  */
 export async function changeAccountEmail(
   userId: string,
-  newEmail: string,
-  oldEmail: string
+  oldEmail: string,
+  newEmail: string
 ): Promise<"changed" | "taken"> {
-  const auth = await supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ email: newEmail, email_confirm: true }),
-  });
+  const auth = await setLoginEmail(userId, newEmail);
   if (auth.status === 422) return "taken";
   if (!auth.ok) throw new Error(`mira login email change failed (${auth.status})`);
   const profile = await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(userId)}`, {
@@ -116,11 +133,20 @@ export async function changeAccountEmail(
       google_connected_at: null,
       updated_at: new Date().toISOString(),
     }),
-  });
-  if (!profile.ok) throw new Error(`mira profile email change failed (${profile.status})`);
-  scheduleAfterResponse("mira-session-old-address", async () => {
-    await cancelSessionInvite({ id: userId, email: oldEmail }, "address-changed");
-  });
+  }).catch(() => null);
+  if (profile?.ok) {
+    scheduleAfterResponse("mira-session-old-address", async () => {
+      await cancelSessionInvite({ id: userId, email: oldEmail }, "address-changed");
+    });
+    return "changed";
+  }
+  if ((await setLoginEmail(userId, oldEmail).catch(() => null))?.ok) {
+    throw new Error(`mira profile email change failed (${profile?.status}); the login went back`);
+  }
+  logger.error(
+    { status: profile?.status },
+    "mira: an email change moved the login, but its profile kept the old address"
+  );
   return "changed";
 }
 

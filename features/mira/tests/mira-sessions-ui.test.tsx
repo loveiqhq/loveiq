@@ -273,7 +273,7 @@ describe("the email's stop page", () => {
     expect(screen.getByRole("heading", { name: "This link doesn’t work" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/mira/settings#weekly-session"
+      "/mira/settings#weekly"
     );
   });
 

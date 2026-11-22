@@ -70,6 +70,8 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         email: account.email,
+        // Stopped as under 18: Settings says so, never that the address is a team login.
+        minor,
         recent: Boolean(account.session && isRecentSignIn(account.session.signedInAt)),
         emailChange: { allowed: !shared && !minor },
         google: { allowed: !staff && !minor, connected },

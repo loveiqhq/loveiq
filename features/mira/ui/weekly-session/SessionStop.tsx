@@ -5,7 +5,7 @@ import { useState } from "react";
 import { miraApi } from "../api";
 import { PrimaryButton } from "../MiraShell";
 
-const SETTINGS = "/mira/settings#weekly-session";
+const SETTINGS = "/mira/settings#weekly";
 const LINK = "font-semibold text-ap-plum underline underline-offset-2";
 
 /**

@@ -200,6 +200,47 @@ describe("a Google sign-in", () => {
   });
 });
 
+describe("a sign-in from a browser Mira stopped as under 18", () => {
+  it("brings the stop to the account the code signs in to, and keeps nothing of its chat", async () => {
+    browser.set("mira_minor", "1");
+    const res = await auth(
+      new Request("https://www.loveiq.org/api/mira/auth", {
+        method: "POST",
+        headers: { "user-agent": MAC, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify",
+          email: "lea@gmail.com",
+          code: "12345678",
+          carry: [{ role: "user", content: "hi" }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ offerPasskey: false, chatId: null });
+    expect(db.tables.mira_user![0]).toMatchObject({
+      minor_at: expect.any(String),
+      nudges_on: false,
+      remember_chats: false,
+    });
+    expect(db.tables.mira_chat ?? []).toEqual([]);
+  });
+
+  it("brings the stop to the account Google signs in to", async () => {
+    browser.set("mira_minor", "1");
+    browser.set("mira-google", packStart(S, { useAssessment: false, next: null }));
+    googleSays("lea@gmail.com");
+    await googleCallback(
+      new Request(`https://www.loveiq.org/api/mira/auth/google/callback?code=c&state=${S.state}`)
+    );
+    expect(db.tables.mira_user![0]!.minor_at).toEqual(expect.any(String));
+  });
+
+  it("leaves an account alone when the browser carries no such mark", async () => {
+    expect((await verify()).status).toBe(200);
+    expect(db.tables.mira_user![0]!.minor_at).toBeNull();
+  });
+});
+
 describe("Connect Google, from Settings", () => {
   const own = (url: string) => new Request(url, { headers: { "sec-fetch-site": "same-origin" } });
   const connected = async (email: string) => {

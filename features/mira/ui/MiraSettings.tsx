@@ -1,7 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
@@ -22,8 +30,12 @@ import tokens from "./theme-tokens.js";
  * `journal` (JournalSettings) and `weeklySession` (WeeklySessionSettings). Each brings its own
  * heading, styled like SettingsSection's, and gets an index entry and an anchor (`Slot`). `Switch`,
  * `Select`, `SettingsGroup` and `SettingsSection` are
- * exported for them, so every row looks the same.
+ * exported for them, so every row looks the same, and `EmailChanged`, so a new address shows
+ * all over the page at once.
  */
+
+/** Tells the page the account's address changed (Sign-in & security). */
+export const EmailChanged = createContext<(email: string) => void>(() => undefined);
 
 type Profile = {
   email: string;
@@ -138,8 +150,11 @@ export default function MiraSettings({
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
   // The account's typed details changed since they were loaded or saved.
   const [accountDirty, setAccountDirty] = useState(false);
-  // Saves go out one after another, so the last change made is the one kept.
+  // Saves go out one after another, so the last change made is the one kept; each field
+  // remembers its latest change, so an earlier save's answer never undoes or reports over it.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const saves = useRef(0);
+  const latest = useRef(new Map<string, number>());
   const { look, change } = useMiraLook();
 
   const sections: Array<[SectionId, string]> = [
@@ -156,10 +171,21 @@ export default function MiraSettings({
     ["appearance", "Appearance"],
     ["data", "Your data"],
   ];
+  const ready = p !== null;
   const active = useActiveSection(
     sections.map(([id]) => id),
-    Boolean(p)
+    ready
   );
+
+  // A link into a section (#weekly from the session emails, #security back from Google) lands
+  // on it once it exists: the sections come after the profile, so the browser's own jump on
+  // arrival found nothing to go to.
+  useEffect(() => {
+    if (!ready) return;
+    const section = document.getElementById(window.location.hash.slice(1));
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  }, [ready]);
 
   function load() {
     void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {
@@ -183,22 +209,33 @@ export default function MiraSettings({
   const setStatus = (id: SectionId, s: Status | null) =>
     setStatusMap((cur) => ({ ...cur, [id]: s ?? undefined }));
 
+  /**
+   * Saves `body` once the saves before it are answered. With the answer come the fields no later
+   * change has taken over since: only those may be put back or reported.
+   */
+  async function save(body: Record<string, unknown>) {
+    const n = ++saves.current;
+    for (const k of Object.keys(body)) latest.current.set(k, n);
+    const send = () => miraApi("/api/mira/me", { method: "PATCH", body });
+    const next = queue.current.then(send, send);
+    queue.current = next;
+    const r = await next;
+    return { r, current: Object.keys(body).filter((k) => latest.current.get(k) === n) };
+  }
+
   /** Shows `fields` at once and saves them; a refused save puts the stored values back. */
   async function autosave(section: SectionId, fields: Partial<Profile>) {
     setP((cur) => (cur ? { ...cur, ...fields } : cur));
     setStatus(section, { kind: "saving" });
-    const send = () => miraApi("/api/mira/me", { method: "PATCH", body: fields });
-    const next = queue.current.then(send, send);
-    queue.current = next;
-    const r = await next;
-    if (r.ok) {
-      if (stored.current) stored.current = { ...stored.current, ...fields };
-      return setStatus(section, { kind: "saved" });
-    }
+    const { r, current } = await save(fields);
+    if (r.ok && stored.current) stored.current = { ...stored.current, ...fields };
+    // A later change of these fields is on its way: its answer decides.
+    if (current.length === 0) return;
+    if (r.ok) return setStatus(section, { kind: "saved" });
     const was = stored.current;
     if (was) {
       const back = Object.fromEntries(
-        Object.keys(fields).map((k) => [k, was[k as keyof Profile]])
+        current.map((k) => [k, was[k as keyof Profile]])
       ) as Partial<Profile>;
       setP((cur) => (cur ? { ...cur, ...back } : cur));
     }
@@ -229,12 +266,18 @@ export default function MiraSettings({
     setStatus("account", { kind: "error", text: r.data.error ?? "Unable to save." });
   }
 
+  /** Shows the look at once and keeps it in this browser, then saves it on the account. */
   async function changeLook(patch: { theme?: Theme; text?: TextSize }) {
+    change(patch);
     setStatus("appearance", { kind: "saving" });
-    const ok = await change(patch);
+    const { r, current } = await save({
+      ...(patch.theme ? { theme: patch.theme } : {}),
+      ...(patch.text ? { text_size: patch.text } : {}),
+    });
+    if (current.length === 0) return;
     setStatus(
       "appearance",
-      ok
+      r.ok
         ? { kind: "saved" }
         : {
             kind: "error",
@@ -277,6 +320,11 @@ export default function MiraSettings({
     router.replace("/mira");
     router.refresh();
   }
+
+  const emailChanged = useCallback(
+    (email: string) => setP((cur) => (cur ? { ...cur, email } : cur)),
+    []
+  );
 
   const typed = (patch: Partial<Profile>) => {
     setStatus("account", null);
@@ -420,7 +468,11 @@ export default function MiraSettings({
                 </p>
               </SettingsSection>
 
-              {security ? <Slot id="security-slot">{security}</Slot> : null}
+              {security ? (
+                <Slot id="security-slot">
+                  <EmailChanged.Provider value={emailChanged}>{security}</EmailChanged.Provider>
+                </Slot>
+              ) : null}
 
               <SettingsSection
                 id="coaching"

@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { miraApi } from "../api";
+import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
 /**
@@ -35,6 +36,8 @@ type Device = {
 };
 type Security = {
   email: string;
+  /** Mira stopped the account as under 18. */
+  minor?: boolean;
   recent: boolean;
   emailChange: { allowed: boolean };
   google: { allowed: boolean; connected: boolean };
@@ -95,6 +98,7 @@ export default function SecuritySettings() {
   const [failed, setFailed] = useState(false);
   const canPasskey = usePasskeysWork();
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const emailChanged = useContext(EmailChanged);
 
   const load = useCallback(async () => {
     const r = await miraApi<Security>("/api/mira/security");
@@ -162,6 +166,7 @@ export default function SecuritySettings() {
               data={data}
               onChanged={(email) => {
                 setData({ ...data, email, google: { ...data.google, connected: false } });
+                emailChanged(email); // the page's Account section and menu too
                 setNotice({
                   ok: true,
                   text: `Your email is now ${email}. We let your old address know.`,
@@ -278,7 +283,9 @@ function EmailRow({
     >
       {!data.emailChange.allowed ? (
         <p className="text-[13px] text-ap-muted">
-          This address is also a LoveIQ team login, so it can&apos;t be changed here.
+          {data.minor
+            ? "Mira is only for adults."
+            : "This address is also a LoveIQ team login, so it can't be changed here."}
         </p>
       ) : null}
       {open ? (

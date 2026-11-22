@@ -126,7 +126,7 @@ describe("deleting the account", () => {
 
 describe("changing the account's email", () => {
   it("takes the session out of the old address's calendar, and says where it went", async () => {
-    expect(await changeAccountEmail(LEA.id, "lea.new@example.com", LEA.email)).toBe("changed");
+    expect(await changeAccountEmail(LEA.id, LEA.email, "lea.new@example.com")).toBe("changed");
     await flushAfterResponse();
     const { mail, ics } = sent();
     expect(mail.to).toBe(LEA.email);

@@ -28,6 +28,8 @@ export default function HomeSearch() {
   const id = useId();
   const optionId = (i: number) => `${id}-option-${i}`;
   useEmptySearchCount("home", typed && hits.length === 0);
+  // As the coaches' route answers (403 for someone Mira stopped as under 18): no coach is offered.
+  if (state.status === "out" || state.status === "closed") return null;
 
   function go(hit: SearchHit) {
     setOpen(false);

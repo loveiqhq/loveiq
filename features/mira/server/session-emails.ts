@@ -49,7 +49,7 @@ export function sessionLinks(userId: string) {
     open: `${site}/mira/session`,
     stop: `${site}/mira/session/stop?t=${t}`,
     oneClick: `${site}/api/mira/weekly-session/stop?t=${t}`,
-    manage: `${site}/mira/settings#weekly-session`,
+    manage: `${site}/mira/settings#weekly`,
     book: `${site}/mira/home`,
   };
 }

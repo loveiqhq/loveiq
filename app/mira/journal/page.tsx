@@ -12,14 +12,19 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-/** The daily journal. Signed out, sign-in comes first and returns here (session.ts safeNext). */
+/**
+ * The daily journal. Signed out, sign-in comes first and returns here (session.ts safeNext), to the
+ * check-in when the reminder's button asked for it.
+ */
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ checkin?: string | string[] }>;
 }) {
-  if (!(await getMiraAccount()))
-    redirect(`/mira/start?next=${encodeURIComponent("/mira/journal")}`);
-  const { checkin } = await searchParams;
-  return <JournalPage startCheckIn={checkin === "1"} />;
+  const checkIn = (await searchParams).checkin === "1";
+  if (!(await getMiraAccount())) {
+    const back = checkIn ? "/mira/journal?checkin=1" : "/mira/journal";
+    redirect(`/mira/start?next=${encodeURIComponent(back)}`);
+  }
+  return <JournalPage startCheckIn={checkIn} />;
 }

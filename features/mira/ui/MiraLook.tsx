@@ -9,24 +9,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { miraApi } from "./api";
 import { DEFAULT_LOOK, lookCookie, type MiraLook, type Theme } from "./prefs";
 
 /**
  * How every Mira page looks (Settings › Appearance, 21 Nov 2026): app/mira/layout.tsx renders
  * this root with the browser's cookie, so the first HTML already has the right theme and text
  * size. The colours and sizes themselves are CSS (tailwind.config.js, theme-tokens.js): this only
- * sets `data-mira-theme` and `data-mira-text`, keeps the choice in the cookie and, signed in,
- * saves it on the account too.
+ * sets `data-mira-theme` and `data-mira-text` and keeps the choice in the cookie. The look is
+ * chosen in Settings (System until then), which also saves it on the account, in turn with its
+ * other changes.
  */
 type LookApi = {
   look: MiraLook;
-  /**
-   * Shows `patch` at once and keeps it in this browser; signed in, also saves it on the account.
-   * Resolves false when the account could not save it (this browser keeps it all the same).
-   */
-  change: (patch: Partial<MiraLook>) => Promise<boolean>;
-  /** The look an account saved, after a sign-in: shown and kept here, not saved again. */
+  /** Shows `patch` at once and keeps it in this browser. */
+  change: (patch: Partial<MiraLook>) => void;
+  /** The look an account saved, after a sign-in: shown and kept here. */
   adopt: (look: MiraLook) => void;
 };
 
@@ -40,24 +37,15 @@ function remember(look: MiraLook): void {
 
 const LookContext = createContext<LookApi>({
   look: DEFAULT_LOOK,
-  change: async () => true,
+  change: () => undefined,
   adopt: () => undefined,
 });
 
 export const useMiraLook = () => useContext(LookContext);
 
-export function MiraLookRoot({
-  initial,
-  signedIn,
-  children,
-}: {
-  initial: MiraLook;
-  /** The session cookie is there (it may have expired: a refused save just stays local). */
-  signedIn: boolean;
-  children: ReactNode;
-}) {
+export function MiraLookRoot({ initial, children }: { initial: MiraLook; children: ReactNode }) {
   const [look, setLook] = useState(initial);
-  // The latest look, for a change made while an earlier one is still saving.
+  // The latest look, for a change made before the last one has rendered.
   const latest = useRef(initial);
 
   const adopt = useCallback((next: MiraLook) => {
@@ -67,25 +55,8 @@ export function MiraLookRoot({
   }, []);
 
   const change = useCallback(
-    async (patch: Partial<MiraLook>) => {
-      adopt({ ...latest.current, ...patch });
-      if (!signedIn) {
-        // Signed out, only the theme can change (the footer's switch): counted, never saved.
-        if (patch.theme) {
-          void miraApi("/api/mira/event", { body: { type: "track", name: "theme_changed" } });
-        }
-        return true;
-      }
-      const res = await miraApi("/api/mira/me", {
-        method: "PATCH",
-        body: {
-          ...(patch.theme ? { theme: patch.theme } : {}),
-          ...(patch.text ? { text_size: patch.text } : {}),
-        },
-      });
-      return res.ok;
-    },
-    [adopt, signedIn]
+    (patch: Partial<MiraLook>) => adopt({ ...latest.current, ...patch }),
+    [adopt]
   );
 
   const api = useMemo(() => ({ look, change, adopt }), [look, change, adopt]);

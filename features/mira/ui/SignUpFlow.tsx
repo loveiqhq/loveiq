@@ -107,7 +107,10 @@ export default function SignUpFlow({
   const passkeys = usePasskeysWork();
   const afterOffer = useRef<"about" | "home">("home");
   const ticks = useRef({ adult, terms, consent, useAssessment });
-  ticks.current = { adult, terms, consent, useAssessment };
+  // A passkey's answer reads the boxes as they are then (ticked while it waited).
+  useEffect(() => {
+    ticks.current = { adult, terms, consent, useAssessment };
+  });
   useReloadWhenRestored();
 
   // A new step moves focus to its heading, so keyboard and screen reader users start there.
@@ -205,23 +208,10 @@ export default function SignUpFlow({
   }
 
   /**
-   * Signs in with a passkey, from the button or (autofill) the email field's suggestions. Then as
-   * after Google: the chat in this browser comes along, "About you" if they're new, else on.
+   * Signed in with a passkey, from the button or the email field's suggestions. Then as after
+   * Google: the chat in this browser comes along, "About you" if they're new, else on.
    */
-  async function passkeySignIn(autofill: boolean): Promise<void> {
-    if (!autofill) {
-      setBusy(true);
-      setError(null);
-      setNotice(null);
-    }
-    const res = await signInWithPasskey({ autofill, ticks: () => ticks.current });
-    if (!res.ok) {
-      setBusy(false);
-      if (res.error) setError(res.error);
-      // The suggestions stay on offer: a challenge that ran out, or a person who closed the sheet.
-      if (autofill && (res.retry || !res.error)) void passkeySignIn(true);
-      return;
-    }
+  async function passkeySignedIn(needsProfile: boolean): Promise<void> {
     setBusy(true);
     setError(null);
     const carry = carriedChat();
@@ -229,7 +219,7 @@ export default function SignUpFlow({
       const moved = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
       if (moved.ok) local.saveChat(null);
     }
-    if (res.needsProfile) {
+    if (needsProfile) {
       setBusy(false);
       return setStep("about");
     }
@@ -237,20 +227,48 @@ export default function SignUpFlow({
     goHome();
   }
 
-  // The email field offers the browser's passkeys while the form shows (conditional mediation).
+  // The email field offers the browser's passkeys while the form shows (conditional mediation),
+  // one run at a time: leaving the form ends the run, and so does the button's own sheet. Only a
+  // sheet the person closed, or a challenge that ran out, asks again, three times at most, so a
+  // refused or failing request can never spin.
+  const suggesting = useRef(0);
+  /** Ends the current run (its next step stops) and numbers the next. */
+  const endSuggestions = () => ++suggesting.current;
+  async function suggestPasskeys(run: number): Promise<void> {
+    const live = () => run === suggesting.current;
+    if (!(await autofillWorks())) return;
+    for (let tries = 0; tries < 3 && live(); tries++) {
+      const res = await signInWithPasskey({ autofill: true, live, ticks: () => ticks.current });
+      if (!live()) return;
+      if (res.ok) return passkeySignedIn(res.needsProfile);
+      if (res.error) setError(res.error);
+      if (!res.again) return;
+    }
+  }
   useEffect(() => {
     if (step !== "account" || backFromGoogle || !passkeys) return;
-    let live = true;
-    void autofillWorks().then((works) => {
-      if (works && live) void passkeySignIn(true);
-    });
+    void suggestPasskeys(endSuggestions());
     return () => {
-      live = false;
+      endSuggestions();
       stopPasskeyPrompt();
     };
-    // passkeySignIn reads state through refs; once per showing of the form.
+    // suggestPasskeys reads state through refs; once per showing of the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, backFromGoogle, passkeys]);
+
+  /** "Sign in with a passkey": the device's own sheet, open until the person answers it. */
+  async function passkeyButton(): Promise<void> {
+    const run = endSuggestions(); // the sheet replaces the suggestions
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await signInWithPasskey({ ticks: () => ticks.current });
+    if (res.ok) return passkeySignedIn(res.needsProfile);
+    setBusy(false);
+    if (res.error) setError(res.error);
+    // Still on the form: its suggestions come back.
+    if (run === suggesting.current) void suggestPasskeys(run);
+  }
 
   async function saveAbout() {
     setBusy(true);
@@ -458,7 +476,7 @@ export default function SignUpFlow({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void passkeySignIn(false)}
+                  onClick={() => void passkeyButton()}
                   className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50"
                 >
                   <PasskeyIcon />
