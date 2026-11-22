@@ -184,3 +184,37 @@ describe("the under-18 stop is told apart from any other refusal", () => {
     expect(await book()).toMatchObject({ status: 403 });
   });
 });
+
+describe("cancelling says whether the calendar update went out", () => {
+  it("past the day's session emails: the slot goes, nothing is sent, the update comes back", async () => {
+    await book();
+    const slotId = db.tables.mira_session_slot![0]!.id;
+    send.mockClear();
+    capReached();
+    const res = await DELETE(call("DELETE"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { slot: null; emailed: boolean; ics?: string };
+    expect(body).toMatchObject({ slot: null, emailed: false });
+    const ics = body.ics!.replace(/\r\n /g, "").split("\r\n");
+    expect(ics).toContain("METHOD:CANCEL");
+    expect(ics).toContain(`UID:${slotId}@loveiq.org`);
+    expect(ics).toContain("SEQUENCE:1"); // one more change to the series than the invite (0)
+    expect(ics).toContain("STATUS:CANCELLED");
+    expect(send).not.toHaveBeenCalled();
+    expect(db.tables.mira_session_slot).toEqual([]);
+  });
+
+  it("the cancellation email says a copy added with Google Calendar's link goes by hand", async () => {
+    await book();
+    const res = await DELETE(call("DELETE"));
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ slot: null, emailed: true });
+    expect(body.ics).toBeUndefined();
+    const { mail, ics } = lastEmail();
+    expect(ics).toContain("METHOD:CANCEL");
+    for (const words of [String(mail.text), String(mail.html)]) {
+      expect(words).toContain("Add to Google Calendar");
+      expect(words).toMatch(/can.t reach that copy: delete it in Google Calendar yourself/);
+    }
+  });
+});

@@ -20,6 +20,8 @@ export function WeeklySessionSettings() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A cancellation that couldn't be emailed: its calendar update, to open in a calendar instead.
+  const [file, setFile] = useState<string | null>(null);
 
   if (state.status === "signed-out" || state.status === "unavailable") return null;
   const slot = state.status === "ready" ? state.slot : null;
@@ -32,6 +34,22 @@ export function WeeklySessionSettings() {
     setBusy(false);
     if (failed) setError(failed);
     else setStatus(done);
+  }
+
+  async function cancelSession() {
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    const r = await cancel();
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    setConfirm(false);
+    setFile(r.emailed ? null : r.ics);
+    setStatus(
+      r.emailed
+        ? "Your weekly session is cancelled."
+        : "Your weekly session is cancelled, but we couldn’t email the update, so it may still be in your calendar. Delete it there, or open this file with Apple Calendar or Outlook."
+    );
   }
 
   return (
@@ -99,20 +117,14 @@ export function WeeklySessionSettings() {
           {confirm ? (
             <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
               <p>
-                Cancel your weekly session? We’ll email an update that takes it out of your
-                calendar.
+                Cancel your weekly session? An update that takes it out of your calendar comes by
+                email, or here if the email can’t go.
               </p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const failed = await cancel();
-                      if (!failed) setConfirm(false);
-                      return failed;
-                    }, "Your weekly session is cancelled.")
-                  }
+                  onClick={() => void cancelSession()}
                   className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
                 >
                   Cancel session
@@ -151,9 +163,21 @@ export function WeeklySessionSettings() {
         </div>
       )}
 
-      <p role="status" className="min-h-[20px] text-[14px] text-ap-good-ink">
+      <p
+        role="status"
+        className={`min-h-[20px] text-[14px] ${file ? "text-ap-body" : "text-ap-good-ink"}`}
+      >
         {status}
       </p>
+      {file && !slot ? (
+        <a
+          href={`data:text/calendar;charset=utf-8,${encodeURIComponent(file)}`}
+          download="mira-weekly-session-cancelled.ics"
+          className={`${OUTLINE_PILL} w-fit`}
+        >
+          Download the cancellation
+        </a>
+      ) : null}
       {error ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           {error}

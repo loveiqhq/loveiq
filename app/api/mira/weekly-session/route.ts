@@ -8,6 +8,8 @@
  *   PUT { weekday, time, timeZone, source }  → books it, or moves it; emails the invite
  *   PATCH { paused }   → reminder emails off or back on (the slot and calendar entry stay)
  *   DELETE             → cancels it; emails the cancellation that clears it from the calendar
+ *                        ({ emailed }), or, when that email can't go, answers with it (`ics`) to
+ *                        download
  *
  * Someone Mira stopped as under 18 is refused (403, `minor: true`) on every call, before anything
  * is read; the pages hide sessions only then (a failed CSRF check is a 403 too, to retry).
@@ -17,7 +19,7 @@ import { z } from "zod";
 import { sessionIcs } from "@features/mira/server/calendar";
 import { isMinor } from "@features/mira/server/minor";
 import { from, isValidTimeZone } from "@features/mira/server/nudges";
-import { sendSessionEmail } from "@features/mira/server/session-emails";
+import { cancellationIcs, sendSessionEmail } from "@features/mira/server/session-emails";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import {
@@ -34,7 +36,6 @@ import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
 
-const DAY_MS = 86_400_000;
 const putSchema = z
   .object({
     weekday: z.number().int().min(1).max(7),
@@ -77,16 +78,6 @@ async function guard(request: Request, write: boolean) {
     };
   }
   return { account };
-}
-
-/** At most 10 session emails a day per account: changing the time over and over can't flood an inbox. */
-async function mayEmail(userId: string): Promise<boolean> {
-  const r = await checkRateLimit(userId, {
-    bucket: "mira-session-mail",
-    limit: 10,
-    windowMs: DAY_MS,
-  });
-  return r.allowed;
 }
 
 const noStore = { headers: { "Cache-Control": "no-store" } };
@@ -145,13 +136,11 @@ export async function PUT(request: Request) {
         { userId: account.id },
         { source }
       );
-      if (await mayEmail(account.id)) {
-        emailed = await sendSessionEmail(saved.change, {
-          userId: account.id,
-          email: account.email,
-          slot: saved.slot,
-        });
-      }
+      emailed = await sendSessionEmail(saved.change, {
+        userId: account.id,
+        email: account.email,
+        slot: saved.slot,
+      });
     }
     return NextResponse.json(
       {
@@ -196,10 +185,21 @@ export async function DELETE(request: Request) {
     const slot = await deleteSlot(account.id);
     if (!slot) return NextResponse.json({ error: "No weekly session." }, { status: 404 });
     logMiraEvent("session_cancelled", { userId: account.id }, { source: "app" });
-    const emailed =
-      (await mayEmail(account.id)) &&
-      (await sendSessionEmail("cancelled", { userId: account.id, email: account.email, slot }));
-    return NextResponse.json({ slot: null, timeZone: slot.timeZone, emailed }, noStore);
+    const emailed = await sendSessionEmail("cancelled", {
+      userId: account.id,
+      email: account.email,
+      slot,
+    });
+    return NextResponse.json(
+      {
+        slot: null,
+        timeZone: slot.timeZone,
+        emailed,
+        // Not emailed: the same update, for the person to open in their calendar.
+        ...(emailed ? {} : { ics: cancellationIcs(slot, account.email) }),
+      },
+      noStore
+    );
   } catch (err) {
     logger.error({ err }, "mira: could not cancel the weekly session");
     return NextResponse.json(

@@ -1,5 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { cancelSessionInvite } from "./session-emails";
 
 /**
  * Changing a Mira account's email (Settings › Sign-in & security, 22 Nov 2026): an 8-digit code
@@ -93,10 +95,13 @@ export async function confirmPendingChange(userId: string, code: string): Promis
 /**
  * Moves the account to the new address: the login first (Supabase refuses an address another
  * login has: "taken"), then the profile's copy, which a later sign-in would also bring up to date.
+ * A booked weekly session's emails follow the account; after the response, a cancellation takes
+ * the session out of the old address's calendar (best effort).
  */
 export async function changeAccountEmail(
   userId: string,
-  newEmail: string
+  newEmail: string,
+  oldEmail: string
 ): Promise<"changed" | "taken"> {
   const auth = await supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`, {
     method: "PUT",
@@ -113,6 +118,9 @@ export async function changeAccountEmail(
     }),
   });
   if (!profile.ok) throw new Error(`mira profile email change failed (${profile.status})`);
+  scheduleAfterResponse("mira-session-old-address", async () => {
+    await cancelSessionInvite({ id: userId, email: oldEmail }, "address-changed");
+  });
   return "changed";
 }
 

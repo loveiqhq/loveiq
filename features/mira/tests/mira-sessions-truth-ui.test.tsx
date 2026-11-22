@@ -109,3 +109,42 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     );
   });
 });
+
+describe("cancelling in Settings says whether the calendar update went out", () => {
+  const ICS = "BEGIN:VCALENDAR\r\nMETHOD:CANCEL\r\nEND:VCALENDAR\r\n";
+  const cancelIt = async () => {
+    render(<WeeklySessionSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel weekly session" }));
+    // No promise the email may not keep.
+    expect(
+      screen.getByText(
+        /takes it out of your calendar comes by email, or here if the email can’t go/
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel session" }));
+  };
+
+  it("not emailed: says so, and offers the update to open in a calendar", async () => {
+    replies["DELETE /api/mira/weekly-session"] = () => ({
+      body: { slot: null, timeZone: "Europe/Berlin", emailed: false, ics: ICS },
+    });
+    await cancelIt();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /cancelled, but we couldn’t email the update, so it may still be in your calendar/
+    );
+    const file = screen.getByRole("link", { name: "Download the cancellation" });
+    expect(file).toHaveAttribute("download", "mira-weekly-session-cancelled.ics");
+    expect(file.getAttribute("href")).toBe(
+      `data:text/calendar;charset=utf-8,${encodeURIComponent(ICS)}`
+    );
+  });
+
+  it("emailed: says it is cancelled, with nothing to download", async () => {
+    replies["DELETE /api/mira/weekly-session"] = () => ({
+      body: { slot: null, timeZone: "Europe/Berlin", emailed: true },
+    });
+    await cancelIt();
+    expect(await screen.findByText("Your weekly session is cancelled.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Download the cancellation" })).toBeNull();
+  });
+});

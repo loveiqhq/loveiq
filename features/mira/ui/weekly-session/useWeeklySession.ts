@@ -34,6 +34,9 @@ export type WeeklyState =
 
 export type Booked =
   { ok: true; emailed: boolean; change: string; slot: SlotView } | { ok: false; error: string };
+/** Cancelled: whether the calendar update was emailed, and when it wasn't, the update itself. */
+export type Cancelled =
+  { ok: true; emailed: boolean; ics: string | null } | { ok: false; error: string };
 
 export const ICS_URL = "/api/mira/weekly-session?format=ics";
 
@@ -132,10 +135,15 @@ export function useWeeklySession({ signIn = false }: { signIn?: boolean } = {}) 
     [apply]
   );
 
-  const cancel = useCallback(async (): Promise<string | null> => {
-    const r = await miraApi<View>("/api/mira/weekly-session", { method: "DELETE" });
+  const cancel = useCallback(async (): Promise<Cancelled> => {
+    const r = await miraApi<View & { emailed?: boolean; ics?: string }>(
+      "/api/mira/weekly-session",
+      { method: "DELETE" }
+    );
     apply(r);
-    return r.ok ? null : failed(r);
+    return r.ok
+      ? { ok: true, emailed: Boolean(r.data.emailed), ics: r.data.ics ?? null }
+      : { ok: false, error: failed(r) };
   }, [apply]);
 
   return { state, load, book, setPaused, cancel };

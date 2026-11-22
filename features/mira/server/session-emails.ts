@@ -3,11 +3,19 @@ import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
 import { escapeHtml } from "@shared/format/html-escape";
+import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { reminderDue, sessionIcs, slotLabel, zoneLabel, type WeeklySlot } from "./calendar";
 import { COMPANY_LINE, from, makeToken } from "./nudges";
 import { logMiraEvent } from "./store";
-import { calendarText, SLOT_COLS, slotView, toSlot, type StoredSlot } from "./weekly-sessions";
+import {
+  calendarText,
+  getSlot,
+  SLOT_COLS,
+  slotView,
+  toSlot,
+  type StoredSlot,
+} from "./weekly-sessions";
 
 /**
  * The weekly session's emails, which the person asked for by booking: the invite when booked or
@@ -18,7 +26,20 @@ import { calendarText, SLOT_COLS, slotView, toSlot, type StoredSlot } from "./we
  * and a stop link that needs no sign-in; both pause the reminders.
  */
 
-export type SessionEmailKind = "booked" | "moved" | "reminder" | "cancelled";
+export type SessionEmailKind = "booked" | "moved" | "reminder" | Cancellation;
+/**
+ * The emails that take the session out of a calendar (an .ics CANCEL): the person cancelled it,
+ * deleted the account, or changed its email (the session goes on, its emails to the new address).
+ */
+type Cancellation = "cancelled" | "account-deleted" | "address-changed";
+const isCancellation = (kind: SessionEmailKind): kind is Cancellation =>
+  kind === "cancelled" || kind === "account-deleted" || kind === "address-changed";
+
+const SERVICE_FOOTER =
+  "Session emails from Mira come with the weekly session you booked: the invite, changes, and a reminder before each session.";
+/** An entry added with the email's Google Calendar button is the person's own copy. */
+const GOOGLE_COPY =
+  "Added it with “Add to Google Calendar”? This update can’t reach that copy: delete it in Google Calendar yourself.";
 
 /** The links in a session email. The stop links carry a signed token for the account. */
 export function sessionLinks(userId: string) {
@@ -91,15 +112,37 @@ export function sessionEmail(
             "The attached update takes it out of your calendar. Whenever you’d like a regular time again, you can book one in a minute.",
           ],
           button: { label: "Book a new time", url: links.book },
-          note: null,
+          note: GOOGLE_COPY,
+          footer: "That’s the last session email, unless you book again.",
+        };
+      case "account-deleted":
+        return {
+          subject: "Your weekly session is cancelled",
+          preheader: "This update takes it out of your calendar.",
+          paragraphs: [
+            `Your weekly session on ${day}s at ${slot.time} is cancelled, as your account was deleted.`,
+            "The attached update takes it out of your calendar.",
+          ],
+          button: null,
+          note: GOOGLE_COPY,
+          footer: "That’s the last session email.",
+        };
+      case "address-changed":
+        return {
+          subject: "Your weekly session moved to another address",
+          preheader: "This update takes it out of this calendar.",
+          paragraphs: [
+            `Your weekly session on ${day}s at ${slot.time} now goes to the new email address on your account, with its reminders.`,
+            "The attached update takes it out of the calendar for this address. To add it to your new calendar, open Home in Mira and choose “Add to calendar”.",
+          ],
+          button: { label: "Open Mira", url: links.book },
+          note: GOOGLE_COPY,
+          footer: "That’s the last session email to this address.",
         };
     }
   })();
 
-  const footer =
-    kind === "cancelled"
-      ? "That’s the last session email, unless you book again."
-      : "Session emails from Mira come with the weekly session you booked: the invite, changes, and a reminder before each session.";
+  const footer = copy.footer ?? SERVICE_FOOTER;
   const ink = { color: "#3f3a4d", "font-size": "15px", "line-height": "1.6" };
   const link = (href: string, label: string) =>
     `<a href="${href}" style="${css({ color: "#c4b5fd", "font-weight": "700", "margin-right": "18px" })}">${label}</a>`;
@@ -123,7 +166,9 @@ export function sessionEmail(
     ...copy.paragraphs.map(
       (p) => `<p style="${css({ margin: "0 0 16px", ...ink })}">${escapeHtml(p)}</p>`
     ),
-    `<a href="${copy.button.url}" style="${css({ display: "inline-block", padding: "14px 24px", "border-radius": "9999px", background: "#000000", color: "#ffffff", "font-weight": "700", "text-decoration": "none" })}">${escapeHtml(copy.button.label)}</a>`,
+    copy.button
+      ? `<a href="${copy.button.url}" style="${css({ display: "inline-block", padding: "14px 24px", "border-radius": "9999px", background: "#000000", color: "#ffffff", "font-weight": "700", "text-decoration": "none" })}">${escapeHtml(copy.button.label)}</a>`
+      : "",
     copy.note
       ? `<p style="${css({ margin: "16px 0 0", color: "#6b6678", "font-size": "13px" })}">${escapeHtml(copy.note)}</p>`
       : "",
@@ -131,7 +176,7 @@ export function sessionEmail(
     `<tr><td style="${css({ background: "#161021", color: "#e2dafb", padding: "24px", "font-size": "13px" })}">`,
     `<p style="${css({ margin: "0 0 12px", "font-size": "18px", "font-weight": "700" })}">Applied Psychometrics</p>`,
     `<p style="${css({ margin: "0 0 12px" })}">${escapeHtml(footer)}</p>`,
-    kind === "cancelled"
+    isCancellation(kind)
       ? ""
       : `<p style="${css({ margin: "0 0 12px" })}">${link(links.stop, "Stop reminders")}${link(links.manage, "Change or cancel")}</p>`,
     `<p style="${css({ margin: "0", color: "#b6aecb", "font-size": "12px" })}">${COMPANY_LINE}</p>`,
@@ -141,11 +186,11 @@ export function sessionEmail(
     copy.preheader,
     "",
     ...copy.paragraphs.flatMap((p) => [p, ""]),
-    `${copy.button.label}: ${copy.button.url}`,
+    ...(copy.button ? [`${copy.button.label}: ${copy.button.url}`] : []),
     ...(copy.note ? [copy.note] : []),
     "",
     footer,
-    ...(kind === "cancelled"
+    ...(isCancellation(kind)
       ? []
       : [`Stop reminders: ${links.stop}`, `Change or cancel: ${links.manage}`]),
     "",
@@ -159,6 +204,35 @@ const mailer = () => (resend ??= new Resend(process.env.RESEND_API_KEY));
 /** The sender's address alone: the invite's organizer. */
 const organizer = () => /<([^>]+)>/.exec(from())?.[1] ?? from();
 
+/** The invite as the person's calendar reads it: a REQUEST (booked, moved) or a CANCEL. */
+function inviteIcs(
+  slot: StoredSlot,
+  ics: { method: "REQUEST" | "CANCEL"; sequence: number },
+  attendee: string,
+  now: Date
+): string {
+  const text = calendarText();
+  return sessionIcs({
+    uid: slot.id,
+    sequence: ics.sequence,
+    method: ics.method,
+    slot,
+    organizer: organizer(),
+    attendee,
+    summary: text.summary,
+    description: text.details,
+    url: text.url,
+    now,
+  });
+}
+
+/**
+ * The cancellation's calendar update: one more change to the series than the stored invite
+ * (RFC 5546), so a calendar takes it over the invite. Emailed, or downloaded when it couldn't be.
+ */
+export const cancellationIcs = (slot: StoredSlot, attendee: string, now = new Date()) =>
+  inviteIcs(slot, { method: "CANCEL", sequence: slot.sequence + 1 }, attendee, now);
+
 function message(
   kind: SessionEmailKind,
   to: string,
@@ -169,7 +243,6 @@ function message(
 ) {
   const links = sessionLinks(userId);
   const email = sessionEmail(kind, { slot, links, googleUrl: slotView(slot, now).googleUrl });
-  const text = calendarText();
   return {
     from: from(),
     to,
@@ -186,20 +259,7 @@ function message(
             {
               filename: "invite.ics",
               // Resend reads a string as base64.
-              content: Buffer.from(
-                sessionIcs({
-                  uid: slot.id,
-                  sequence: ics.sequence,
-                  method: ics.method,
-                  slot,
-                  organizer: organizer(),
-                  attendee: to,
-                  summary: text.summary,
-                  description: text.details,
-                  url: text.url,
-                  now,
-                })
-              ).toString("base64"),
+              content: Buffer.from(inviteIcs(slot, ics, to, now)).toString("base64"),
               contentType: `text/calendar; charset=utf-8; method=${ics.method}`,
             },
           ],
@@ -208,21 +268,34 @@ function message(
   };
 }
 
+/** At most 10 session emails a day per account: changing the time over and over can't flood an inbox. */
+async function mayEmail(userId: string): Promise<boolean> {
+  const r = await checkRateLimit(userId, {
+    bucket: "mira-session-mail",
+    limit: 10,
+    windowMs: 86_400_000,
+  });
+  return r.allowed;
+}
+
 /**
- * The invite (booked, moved) or the cancellation, straight after the person's own action. Not to
- * an address that bounced or complained (an unsubscribe from marketing doesn't stop an invite the
- * person just asked for, as with sign-in codes). True when Resend took it.
+ * The invite (booked, moved) or a cancellation, straight after the person's own action, within
+ * the day's 10 session emails. Not to an address that bounced or complained (an unsubscribe from
+ * marketing doesn't stop an invite the person just asked for, as with sign-in codes). True when
+ * Resend took it.
  */
 export async function sendSessionEmail(
-  kind: "booked" | "moved" | "cancelled",
+  kind: "booked" | "moved" | Cancellation,
   input: { userId: string; email: string; slot: StoredSlot; now?: Date }
 ): Promise<boolean> {
   if (!process.env.RESEND_API_KEY || !makeToken("session-stop", input.userId)) return false;
+  if (!(await mayEmail(input.userId))) return false;
   if (await isUndeliverable(input.email)) return false;
   const now = input.now ?? new Date();
   // A cancellation is one more change to the series (RFC 5546): its sequence is one higher.
-  const sequence = input.slot.sequence + (kind === "cancelled" ? 1 : 0);
-  const method = kind === "cancelled" ? "CANCEL" : "REQUEST";
+  const cancel = isCancellation(kind);
+  const sequence = input.slot.sequence + (cancel ? 1 : 0);
+  const method = cancel ? "CANCEL" : "REQUEST";
   const sent = await mailer().emails.send(
     message(kind, input.email, input.userId, input.slot, now, { method, sequence }),
     // A retried request can't send it twice.
@@ -233,6 +306,26 @@ export async function sendSessionEmail(
     return false;
   }
   return true;
+}
+
+/**
+ * The address a weekly session's invite went to is going away: the account is being deleted (call
+ * it before the slot goes with the account), or its email changed (the session goes on, its emails
+ * to the new address). A cancellation takes the session out of that calendar. Best effort and
+ * never throws: nothing here may stop the deletion or the change. True when Resend took it.
+ */
+export async function cancelSessionInvite(
+  account: { id: string; email: string },
+  why: "account-deleted" | "address-changed"
+): Promise<boolean> {
+  try {
+    const slot = await getSlot(account.id);
+    if (!slot) return false;
+    return await sendSessionEmail(why, { userId: account.id, email: account.email, slot });
+  } catch (err) {
+    logger.error({ err, why }, "mira: a weekly session's cancellation was not sent");
+    return false;
+  }
 }
 
 // ── The reminders (the cron calls this every 15 minutes) ─────────────────────────────────────────
