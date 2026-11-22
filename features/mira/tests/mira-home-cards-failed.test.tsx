@@ -69,7 +69,10 @@ describe("Home's habit cards when their reads fail", () => {
       for (const [name, said] of CARDS) {
         await waitFor(() => within(screen.getByRole("region", { name })).getByText(said));
         const card = within(screen.getByRole("region", { name }));
-        buttons.push(card.getByRole("button", { name: "Try again" }).className);
+        const again = card.getByRole("button", { name: "Try again" });
+        // Six of them on Home: each says what it tries again.
+        expect(again).toHaveAccessibleDescription(said);
+        buttons.push(again.className);
       }
       expect(new Set(buttons).size).toBe(1);
       expect(document.body.innerHTML).not.toMatch(/text-ap-bad-ink/);
