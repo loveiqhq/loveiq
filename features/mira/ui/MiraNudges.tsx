@@ -77,8 +77,10 @@ export default function MiraNudges({
   useEffect(() => {
     if (invalid) return;
     void (async () => {
+      // The token in the body, never in an address (DATA-1).
       const res = await miraApi<{ prefs: Prefs; types: string[] | null }>(
-        `/api/mira/nudges/preferences?t=${encodeURIComponent(token)}`
+        "/api/mira/nudges/preferences",
+        { body: { action: "read", t: token } }
       );
       if (!res.ok) return setScreen("invalid");
       setPrefs(res.data.prefs);

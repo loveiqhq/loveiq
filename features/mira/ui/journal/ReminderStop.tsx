@@ -37,9 +37,8 @@ export function ReminderStop({
   async function stop() {
     setBusy(true);
     setError(null);
-    const res = await miraApi(`/api/mira/journal/unsubscribe?t=${encodeURIComponent(token)}`, {
-      method: "POST",
-    });
+    // The token in the body, never in an address (DATA-1).
+    const res = await miraApi("/api/mira/journal/unsubscribe", { body: { t: token } });
     setBusy(false);
     if (res.ok) setScreen("done");
     else if (res.status === 403) setScreen("invalid");

@@ -61,6 +61,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   fetchMock.mockClear();
 });
+/** The one call a page made: where it went, and the body it sent. */
+const sentTo = () => {
+  const [url, init] = fetchMock.mock.calls[0]!;
+  return [url, JSON.parse(String(init?.body))];
+};
 
 /** A page as Next renders it, with `t` in its address as an old link would put it there. */
 const open = async (
@@ -75,9 +80,8 @@ describe("a weekly session's stop page", () => {
     await open(SessionStopPage);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeVisible();
-    expect(fetchMock.mock.calls[0]![0]).toBe(
-      `/api/mira/weekly-session/stop?t=${encodeURIComponent(t)}`
-    );
+    // DATA-1: the token goes in the request's body, never in an address (logs, analytics).
+    expect(sentTo()).toEqual(["/api/mira/weekly-session/stop", { action: "pause", t }]);
   });
 
   it("says Mira is only for adults when the stop is refused as under 18, never 'try again'", async () => {
@@ -108,9 +112,7 @@ describe("the journal reminder's stop page", () => {
     await open(JournalReminderPage);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminders" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeVisible();
-    expect(fetchMock.mock.calls[0]![0]).toBe(
-      `/api/mira/journal/unsubscribe?t=${encodeURIComponent(t)}`
-    );
+    expect(sentTo()).toEqual(["/api/mira/journal/unsubscribe", { t }]);
   });
 
   it("ignores a token in the address: without the cookie the link doesn't work", async () => {

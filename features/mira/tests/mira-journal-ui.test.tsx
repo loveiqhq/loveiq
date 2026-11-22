@@ -464,7 +464,10 @@ describe("the reminder's stop page", () => {
     render(<ReminderStop token="abc.def" valid />);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminders" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeInTheDocument();
-    expect(sent("POST").map((p) => p.url)).toEqual(["/api/mira/journal/unsubscribe?t=abc.def"]);
+    // DATA-1: the token goes in the body, never in an address.
+    expect(sent("POST")).toEqual([
+      { url: "/api/mira/journal/unsubscribe", body: { t: "abc.def" } },
+    ]);
   });
 
   it("says plainly when the link doesn't work, and asks nothing of the server", () => {
