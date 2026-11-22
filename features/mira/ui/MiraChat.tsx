@@ -1118,44 +1118,23 @@ export default function MiraChat({
                     {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
                       it, centred, never more than two rows (Mark, 21 Nov). */}
                     {showChips ? (
-                      // Phones: the prompts glide in a loop, a transform animation run by the
-                      // compositor (smooth, never in steps); a touch or hover holds them, so a tap
-                      // lands where it was aimed. Reduced motion: still, and the row scrolls by hand.
-                      // Wider screens: the board's two still rows.
-                      <div className="group order-first -mx-3 overflow-hidden px-3 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] motion-reduce:overflow-x-auto sm:order-none sm:mx-0 sm:max-h-[66px] sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
-                        <div className="flex w-max group-hover:[animation-play-state:paused] group-active:[animation-play-state:paused] max-sm:will-change-transform max-sm:motion-safe:animate-mira-marquee sm:w-auto sm:flex-wrap sm:justify-center sm:gap-1.5">
-                          <span className="flex shrink-0 gap-1.5 pr-1.5 sm:contents">
-                            {miraConfig.starterChips.map((chip, i) => (
-                              <button
-                                key={chip}
-                                type="button"
-                                onClick={() => send(chip)}
-                                style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                                className={CHIP}
-                              >
-                                {chip}
-                              </button>
-                            ))}
-                          </span>
-                          {/* The second run that closes the loop: hidden from assistive tech and the
-                            tab order; never shown on wider screens or with reduced motion. */}
-                          <span
-                            aria-hidden="true"
-                            className="flex shrink-0 gap-1.5 pr-1.5 motion-reduce:hidden sm:hidden"
-                          >
-                            {miraConfig.starterChips.map((chip, i) => (
-                              <button
-                                key={chip}
-                                type="button"
-                                tabIndex={-1}
-                                onClick={() => send(chip)}
-                                style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                                className={CHIP}
-                              >
-                                {chip}
-                              </button>
-                            ))}
-                          </span>
+                      // Phones: a still row that scrolls sideways by hand, and a prompt that gets
+                      // the keyboard's focus is scrolled into view. It glided in an endless loop
+                      // until round-2 audit A11Y-6 (WCAG 2.2.2: nothing could stop it, and a
+                      // focused prompt slid off the screen). Wider screens: the board's two rows.
+                      <div className="order-first -mx-3 overflow-x-auto px-3 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] sm:order-none sm:mx-0 sm:max-h-[66px] sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="flex w-max gap-1.5 pr-1.5 sm:w-auto sm:flex-wrap sm:justify-center sm:pr-0">
+                          {miraConfig.starterChips.map((chip, i) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => send(chip)}
+                              style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                              className={CHIP}
+                            >
+                              {chip}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     ) : null}

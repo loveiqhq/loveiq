@@ -630,11 +630,15 @@ describe("Welcome", () => {
     expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
   });
 
-  it("lists each starter prompt once for assistive tech, though phones show a second run", async () => {
-    render(<MiraChat signedIn initialChatId={null} />);
+  // Round-2 audit A11Y-6 (WCAG 2.2.2, 2.4.7): on phones the prompts glided in an endless loop
+  // with no way to stop it, and a focused prompt slid off the screen. A still row instead, which
+  // scrolls by hand, as it already did with reduced motion.
+  it("lists each starter prompt once, in a still row", async () => {
+    const { container } = render(<MiraChat signedIn initialChatId={null} />);
     const chip = miraConfig.starterChips[0];
     expect(await screen.findAllByRole("button", { name: chip })).toHaveLength(1);
-    expect(screen.getAllByText(chip)).toHaveLength(2);
+    expect(screen.getAllByText(chip)).toHaveLength(1);
+    expect(container.innerHTML).not.toContain("mira-marquee");
   });
 
   it("hands the logo's link no function outside the chat, so server-rendered pages can use it", () => {
