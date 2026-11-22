@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { SESSION_OPENING } from "@features/mira/server/calendar";
-import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
+import { ANON_FREE_MESSAGES, CONSENT_VERSION, SKIP_ANSWER } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { track } from "./coaches/data";
@@ -74,7 +74,6 @@ const crisisIn = (turns: LocalTurn[]) =>
   turns.some(
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
-const SKIP_ANSWER = "I’d rather skip this one.";
 const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
 export { SESSION_OPENING };
 

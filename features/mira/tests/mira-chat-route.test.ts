@@ -914,7 +914,7 @@ describe("POST /api/mira/chat", () => {
   // Settings › "Mira replies in" (21 Nov 2026).
   it("replies in the account's chosen language, else in the person's own", async () => {
     await post({ message: "Hallo", consent: true });
-    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("the person's latest message");
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("the person's own latest words");
     vi.mocked(askModel).mockClear();
     vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
     vi.mocked(getProfile).mockResolvedValue({

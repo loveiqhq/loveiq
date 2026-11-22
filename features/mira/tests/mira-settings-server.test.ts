@@ -37,7 +37,8 @@ vi.mock("@features/mira/server/store", () => ({
 
 import { GET, PATCH } from "@/app/api/mira/me/route";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { MINOR_COOKIE } from "@features/mira/server/config";
+import { SESSION_OPENING } from "@features/mira/server/calendar";
+import { MINOR_COOKIE, SKIP_ANSWER } from "@features/mira/server/config";
 import { stopForMinor } from "@features/mira/server/minor";
 import {
   personalInstructions,
@@ -130,15 +131,31 @@ describe("Mira replies in", () => {
   });
 
   it("matches the person's messages unless a language is chosen, for anonymous chats too", () => {
-    expect(replyLanguageInstruction(null)).toContain("the language of the person's latest message");
+    expect(replyLanguageInstruction(null)).toContain(
+      "the language of the person's own latest words"
+    );
     expect(personalInstructions({}, { signedIn: false })).toContain(
-      "the language of the person's latest message"
+      "the language of the person's own latest words"
     );
     const german = personalInstructions({}, { signedIn: true, replyLanguage: "de" });
     expect(german).toContain("Reply in German, whatever language the person writes in");
-    expect(german).not.toContain("latest message");
+    expect(german).not.toContain("own latest words");
     // Serbian in the script the crisis patterns read.
     expect(replyLanguageInstruction("sr")).toContain("Latin script");
+  });
+
+  // SET-S4: the app sends some lines for the person, in English. Read as theirs, they switched
+  // "Match my messages" to English for someone who writes in German.
+  it("never lets the app's own lines for the person set the language", () => {
+    const rule = replyLanguageInstruction(null);
+    // The session's opener and the skip, word for word as the chat sends them.
+    expect(rule).toContain(`"${SESSION_OPENING}"`);
+    expect(rule).toContain(`"${SKIP_ANSWER}"`);
+    expect(rule).toContain("a tapped answer to an intake question");
+    expect(rule).toContain("never set the language");
+    expect(rule).toContain("keep to the language of their own words before it");
+    // A chosen language holds whatever is written, so it needs none of this.
+    expect(replyLanguageInstruction("de")).not.toContain(SESSION_OPENING);
   });
 
   it("keeps the Sources line and the markers in English, which the app reads", () => {
