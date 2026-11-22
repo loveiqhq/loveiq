@@ -303,7 +303,10 @@ describe("someone who said they are under 18 (rail 15)", () => {
 
   it("sees, sets, changes and ticks no goals", async () => {
     const today = new Date().toISOString().slice(0, 10);
-    expect((await GET(req("GET", "/api/mira/goals"))).status).toBe(403);
+    const refused = await GET(req("GET", "/api/mira/goals"));
+    expect(refused.status).toBe(403);
+    // Decision 9: one sentence, marked so the screens show the kit's AdultsOnly.
+    expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect((await POST(req("POST", "/api/mira/goals", { text: "Walk" }))).status).toBe(403);
     const change = req("PATCH", `/api/mira/goals/${GOAL}`, { completed: true });
     expect((await PATCH(change, params())).status).toBe(403);

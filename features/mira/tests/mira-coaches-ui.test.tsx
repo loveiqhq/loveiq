@@ -199,12 +199,18 @@ describe("The roster (/mira/coaches)", () => {
     );
   });
 
+  it("answers someone Mira stopped as under 18 on Home's cards with the one refusal", async () => {
+    serve({}, 403);
+    render(<CoachesCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
+  });
+
   it("offers no coach to someone Mira stopped as under 18", async () => {
     serve({}, 403);
     render(<CoachRoster />);
-    expect(
-      await screen.findByText("Mira’s coaches are for adults, so they aren’t available here.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Notify me/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
   });

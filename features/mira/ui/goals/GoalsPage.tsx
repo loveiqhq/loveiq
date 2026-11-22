@@ -11,6 +11,7 @@ import {
 } from "../../server/goal-progress";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
+import { AdultsOnly } from "../kit";
 import { shortDate } from "../kit/dates";
 import { AskFirst } from "../journal/parts";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
@@ -68,9 +69,11 @@ export default function GoalsPage() {
           Small, doable steps in your own words. Tick the days you do one, and watch it build over
           the weeks. Mira can check in on them in the chat.
         </p>
-        <div className="mt-4">
-          <ChallengePills goals={g.goals} />
-        </div>
+        {g.load === "minor" ? null : (
+          <div className="mt-4">
+            <ChallengePills goals={g.goals} />
+          </div>
+        )}
 
         <p role="status" className="sr-only">
           {said}
@@ -85,6 +88,8 @@ export default function GoalsPage() {
               />
             ))}
           </div>
+        ) : g.load === "minor" ? (
+          <AdultsOnly className="mt-8" />
         ) : g.load !== "ready" ? (
           <div className="mt-8 rounded-3xl border border-ap-line p-5">
             <p role="alert" className="text-[15px] text-ap-body">

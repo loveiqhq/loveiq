@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { SwitchRow } from "../checks/ChecksSettings";
 import { AskFirst, refocus } from "../journal/parts";
+import { AdultsOnly } from "../kit";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
@@ -28,7 +29,17 @@ export function WeeklySessionSettings() {
   const opener = useRef<HTMLButtonElement | null>(null);
   const id = useId();
 
-  if (state.status === "signed-out" || state.status === "unavailable") return null;
+  if (state.status === "signed-out") return null;
+  if (state.status === "unavailable") {
+    return (
+      <section aria-labelledby="weekly-session-h" className="flex flex-col gap-3">
+        <h2 id="weekly-session-h" className="font-serif text-[22px] font-medium">
+          Weekly session
+        </h2>
+        <AdultsOnly />
+      </section>
+    );
+  }
   const slot = state.status === "ready" ? state.slot : null;
 
   async function run(action: () => Promise<string | null>, done: string) {

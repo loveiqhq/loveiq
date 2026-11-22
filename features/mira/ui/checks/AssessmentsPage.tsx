@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { CHECKS, CHECK_IDS, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { AdultsOnly } from "../kit";
 import { miraApi } from "../api";
 import { SwitchRow, UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
@@ -27,7 +28,7 @@ import {
  * switches. The Assessments tab should point here (today: /mira/home#assessments).
  */
 export default function AssessmentsPage() {
-  const { data, error, setData, retry } = useChecks();
+  const { data, error, minor, setData, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
@@ -57,7 +58,9 @@ export default function AssessmentsPage() {
           if you allow it.
         </p>
       </header>
-      {error ? (
+      {minor ? (
+        <AdultsOnly className="mt-6" />
+      ) : error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
           {error}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">

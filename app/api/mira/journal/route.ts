@@ -27,6 +27,7 @@ import {
   saveJournalSettings,
   type SaveOutcome,
 } from "@features/mira/server/journal";
+import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { isCrisisMessage } from "@features/mira/server/safety";
 import { getMiraAccount } from "@features/mira/server/session";
@@ -100,7 +101,7 @@ async function guard(request: Request, write: boolean) {
       error:
         minor === null
           ? NextResponse.json({ error: "Unable to load your journal." }, { status: 500 })
-          : NextResponse.json({ error: "The journal isn't available." }, { status: 403 }),
+          : NextResponse.json(MINOR_REFUSAL, { status: 403 }),
     };
   }
   return { account };

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { refocus } from "../journal/parts";
+import { AdultsOnly } from "../kit";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
@@ -36,7 +37,17 @@ export function NextSessionCard() {
     return () => window.clearInterval(timer);
   }, []);
 
-  if (state.status === "signed-out" || state.status === "unavailable") return null;
+  if (state.status === "signed-out") return null;
+  if (state.status === "unavailable") {
+    return (
+      <section aria-labelledby="weekly-h" className={SECTION}>
+        <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
+          Your weekly session
+        </h2>
+        <AdultsOnly className="mt-1" />
+      </section>
+    );
+  }
 
   if (state.status === "loading" || now === null) {
     return (

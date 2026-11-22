@@ -20,6 +20,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sessionIcs } from "@features/mira/server/calendar";
+import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { CRISIS_QUIET_DAYS, from, hadCrisis, isValidTimeZone } from "@features/mira/server/nudges";
 import { cancellationIcs, sendSessionEmail } from "@features/mira/server/session-emails";
@@ -78,7 +79,7 @@ async function guard(request: Request, write: boolean) {
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
   if (await isMinor(account.id)) {
     return {
-      error: NextResponse.json({ error: "Not available.", minor: true }, { status: 403 }),
+      error: NextResponse.json(MINOR_REFUSAL, { status: 403 }),
     };
   }
   return { account };

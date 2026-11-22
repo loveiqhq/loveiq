@@ -134,6 +134,7 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 - `POST` routes use IP-based rate limiting and return `Retry-After` on `429`.
 - `POST /api/survey-partial` and `POST /api/survey-tracking` also accept `_csrf` in the request body for `sendBeacon` compatibility.
 - `POST /api/invite` returns success before downstream email delivery and tracking complete. The side effects run after the response.
+- Mira's habit routes (`/api/mira/goals*`, `journal`, `checks`, `body-check`, `coaches`, `weekly-session`) refuse an account stopped as under 18 with `403 { error: "Mira is only for adults.", minor: true }`, which their screens answer with the one refusal and nothing to retry; any other `403` (a CSRF check) stays an error to retry.
 
 ## POST /api/contact
 

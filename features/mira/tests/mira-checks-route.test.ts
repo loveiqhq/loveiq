@@ -156,7 +156,8 @@ describe("every method", () => {
     ] as const) {
       const res = await call(h, m, m === "POST" ? { check: "anxiety", answers: GAD } : undefined);
       expect(res.status, m).toBe(403);
-      expect(await res.json()).toEqual({ error: "Mira is only for adults." });
+      // Decision 9: one sentence, marked so the screens show the kit's AdultsOnly.
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     }
     expect(isMinor).toHaveBeenCalledWith("u1");
     expect(db.checks).toEqual([]);

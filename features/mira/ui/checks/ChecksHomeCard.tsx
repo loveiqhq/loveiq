@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CHECKS, CHECK_IDS } from "@features/mira/content/checks";
-import { SectionLink } from "../kit";
+import { AdultsOnly, SectionLink } from "../kit";
 import { CheckIcon, LoveIqTile } from "./icons";
 import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from "./data";
 
@@ -14,7 +14,7 @@ import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from ".
  * lead mounts it in MiraHome in place of the Assessments section.
  */
 export default function ChecksHomeCard() {
-  const { data, error, retry } = useChecks();
+  const { data, error, minor, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const body = bodyLine(data?.bodyCheck ?? null);
   return (
@@ -29,7 +29,9 @@ export default function ChecksHomeCard() {
         </h2>
         <SectionLink href="/mira/assessments" what="assessments" />
       </div>
-      {error ? (
+      {minor ? (
+        <AdultsOnly className="mt-2" />
+      ) : error ? (
         <p role="alert" className="mt-2 text-[14px] text-ap-bad-ink">
           {error}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">

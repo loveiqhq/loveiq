@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
-import { SectionLink } from "../kit";
+import { AdultsOnly, SectionLink } from "../kit";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
 import { useGoals, type Goal } from "./useGoals";
@@ -46,9 +46,11 @@ export default function GoalsCard() {
           <SectionLink href="/mira/goals" what="goals" />
         ) : null}
       </div>
-      <div className="mt-3">
-        <ChallengePills goals={g.goals} />
-      </div>
+      {g.load === "minor" ? null : (
+        <div className="mt-3">
+          <ChallengePills goals={g.goals} />
+        </div>
+      )}
 
       {g.load === "loading" ? (
         <div className="mt-5 flex flex-col gap-4" aria-hidden="true">
@@ -60,6 +62,8 @@ export default function GoalsCard() {
           ))}
           <span className="sr-only">Loading your goals</span>
         </div>
+      ) : g.load === "minor" ? (
+        <AdultsOnly className="mt-4" />
       ) : g.load === "error" || g.load === "signed-out" ? (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <p className="text-[14px] text-ap-body">

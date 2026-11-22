@@ -143,6 +143,17 @@ describe("Home's goals card", () => {
     expect(tick.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("tells someone Mira stopped as under 18 the one refusal, with nothing to retry", async () => {
+    replies["GET /api/mira/goals"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<GoalsCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ask Mira to help" })).toBeNull();
+  });
+
   it("offers a way out when the goals don't load", async () => {
     replies["GET /api/mira/goals"] = () => ({
       status: 500,

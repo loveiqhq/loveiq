@@ -15,6 +15,7 @@ import {
 import { MiraAppFrame } from "../MiraAppFrame";
 import { CoachFinder } from "./CoachFinder";
 import { track, useCoachData, useEmptySearchCount } from "./data";
+import { AdultsOnly } from "../kit";
 import { CoachPortrait, CompassIcon, NotifyButton, SearchIcon, SparkIcon } from "./parts";
 import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
 
@@ -73,9 +74,7 @@ export default function CoachRoster() {
     return (
       <MiraAppFrame active="coaches">
         <h1 className="font-serif text-[32px] font-medium leading-tight">Coaches</h1>
-        <p className="mt-3 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
-          Mira’s coaches are for adults, so they aren’t available here.
-        </p>
+        <AdultsOnly className="mt-3" />
       </MiraAppFrame>
     );
   }

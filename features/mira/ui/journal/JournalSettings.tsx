@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
 import { zoneLabel } from "@features/mira/server/calendar";
+import { AdultsOnly } from "../kit";
 import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
@@ -69,7 +70,9 @@ export function JournalSettings({
         </div>
       ) : !s ? (
         <div className="text-[14px] text-ap-body">
-          {j.status === "unavailable" ? (
+          {j.status === "minor" ? (
+            <AdultsOnly />
+          ) : j.status === "unavailable" ? (
             "The journal isn’t available here."
           ) : (
             <>

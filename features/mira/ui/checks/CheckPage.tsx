@@ -12,6 +12,7 @@ import {
 } from "@features/mira/content/checks";
 import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
 import { miraApi } from "../api";
@@ -57,7 +58,7 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, setData, retry } = useChecks();
+  const { data, error, minor, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -175,7 +176,9 @@ export default function CheckPage({
         </Link>{" "}
         <span aria-hidden="true">/</span> {check.title}
       </nav>
-      {error ? (
+      {minor ? (
+        <AdultsOnly className="mt-6" />
+      ) : error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
           {error}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">
@@ -616,7 +619,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  * it doesn't judge. It ends on a thank-you that takes focus and stays until the person moves on.
  */
 export function BodyCheckPage() {
-  const { data, error, retry } = useChecks();
+  const { data, error, minor, retry } = useChecks();
   const body = data?.bodyCheck;
   const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
   const [answers, setAnswers] = useState<number[]>([]);
@@ -659,7 +662,9 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {error || (data && !body) ? (
+      {minor ? (
+        <AdultsOnly className="mt-4" />
+      ) : error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">
           {error ?? "Your body checks couldn’t be loaded."}{" "}
           <button type="button" onClick={retry} className="font-semibold underline">

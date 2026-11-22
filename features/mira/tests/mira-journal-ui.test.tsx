@@ -267,6 +267,18 @@ describe("the Home card", () => {
     expect(await screen.findByText("How is life feeling today?")).toBeInTheDocument();
   });
 
+  it("tells someone Mira stopped as under 18 the one refusal, with nothing to retry", async () => {
+    replies = {
+      "GET /api/mira/journal": () => ({
+        status: 403,
+        body: { error: "Mira is only for adults.", minor: true },
+      }),
+    };
+    render(<JournalCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try again|check-in/ })).toBeNull();
+  });
+
   it("stays quiet for an account the journal is not for", async () => {
     replies = { "GET /api/mira/journal": () => ({ status: 403, body: { error: "x" } }) };
     render(<JournalCard />);

@@ -5,7 +5,7 @@
  * (409), so a double tap or an old tab can't add a third. Their score is computed by the table.
  */
 import { NextResponse } from "next/server";
-import { ADULTS_ONLY } from "@features/mira/server/goals";
+import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { z } from "zod";
 import { addBodyCheck, bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   // As every other self-check: an account stopped as under 18 gives no health answers (minor.ts).
   if (await isMinor(account.id)) {
-    return NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+    return NextResponse.json(MINOR_REFUSAL, { status: 403 });
   }
   const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

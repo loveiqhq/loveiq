@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTickableDay } from "@features/mira/server/goal-progress";
-import { ADULTS_ONLY, setTick } from "@features/mira/server/goals";
+import { MINOR_REFUSAL, setTick } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     if (await isMinor(account.id)) {
-      return NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+      return NextResponse.json(MINOR_REFUSAL, { status: 403 });
     }
     const ticked = await setTick(account.id, id, parsed.data.day, parsed.data.done);
     if (ticked === "missing") return NextResponse.json({ error: "Not found." }, { status: 404 });

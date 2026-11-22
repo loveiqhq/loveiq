@@ -634,6 +634,26 @@ describe("dates on the check screens", () => {
   });
 });
 
+describe("someone Mira stopped as under 18", () => {
+  it("sees the one refusal on the check screens, never a Try again", async () => {
+    replies["GET /api/mira/checks"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    for (const ui of [
+      <AssessmentsPage key="a" />,
+      <ChecksHomeCard key="h" />,
+      <ChecksSettings key="s" />,
+    ]) {
+      const view = render(ui);
+      expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      view.unmount();
+    }
+  });
+});
+
 describe("Assessments' 'Mira may use my LoveIQ result'", () => {
   it("is a switch, saved with the other choices and put back if the save fails", async () => {
     render(<AssessmentsPage />);

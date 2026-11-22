@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  ADULTS_ONLY,
+  MINOR_REFUSAL,
   MAX_ACTIVE_GOALS,
   createGoal,
   deleteGoals,
@@ -48,7 +48,7 @@ const slowDown = () =>
   NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
 const signIn = () => NextResponse.json({ error: "Please sign in." }, { status: 401 });
 const invalid = () => NextResponse.json({ error: "Invalid request." }, { status: 403 });
-const adultsOnly = () => NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+const adultsOnly = () => NextResponse.json(MINOR_REFUSAL, { status: 403 });
 
 export async function GET(request: Request) {
   if (!(await checkRateLimit(getClientIp(request), PER_MINUTE)).allowed) return slowDown();

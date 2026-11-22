@@ -87,14 +87,15 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     expect(screen.getByRole("switch", { name: "Reminder emails" })).toBeChecked();
   });
 
-  it("only the under-18 stop (403 with `minor`) hides the card", async () => {
+  it("only the under-18 stop (403 with `minor`) turns the card into the one refusal", async () => {
     replies["GET /api/mira/weekly-session"] = () => ({
       status: 403,
-      body: { error: "Not available.", minor: true },
+      body: { error: "Mira is only for adults.", minor: true },
     });
-    const { container } = render(<NextSessionCard />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    render(<NextSessionCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    // Decision 9: never a "didn't load" or a Try again, and nothing to book.
+    expect(screen.queryByRole("button", { name: /Try again|Choose a time/ })).toBeNull();
   });
 
   it("a lapsed sign-in on a change goes to sign-in and back to the page", async () => {

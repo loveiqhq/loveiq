@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { COACHES } from "@features/mira/content/coaches";
 import { readCoachState, stopNotify } from "@features/mira/server/coaches";
+import { MINOR_REFUSAL } from "@features/mira/server/goals";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, listChats } from "@features/mira/server/store";
@@ -61,7 +62,7 @@ export async function GET(request: Request) {
   if (!account) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   try {
     if (await isMinor(account.id)) {
-      return NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
+      return NextResponse.json(MINOR_REFUSAL, { status: 403 });
     }
     const [profile, chats, state] = await Promise.all([
       getProfile(account.id),

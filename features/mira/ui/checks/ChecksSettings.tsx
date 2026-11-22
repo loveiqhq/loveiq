@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { miraApi } from "../api";
 import { AskFirst, Switch } from "../journal/parts";
+import { AdultsOnly } from "../kit";
 import { useChecks } from "./data";
 
 /**
@@ -97,7 +98,7 @@ export function SwitchRow({
  * does it for an under-18 stop). Loads its own data.
  */
 export default function ChecksSettings() {
-  const { data, error, setData, retry } = useChecks();
+  const { data, error, minor, setData, retry } = useChecks();
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   if (!data) {
     return error ? (
@@ -105,12 +106,16 @@ export default function ChecksSettings() {
         <h2 id="checks-settings-h" className="font-serif text-[22px] font-medium">
           Self-checks
         </h2>
-        <p role="alert" className="text-[14px] text-ap-bad-ink">
-          {error}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+        {minor ? (
+          <AdultsOnly />
+        ) : (
+          <p role="alert" className="text-[14px] text-ap-bad-ink">
+            {error}{" "}
+            <button type="button" onClick={retry} className="font-semibold underline">
+              Try again
+            </button>
+          </p>
+        )}
       </section>
     ) : null;
   }

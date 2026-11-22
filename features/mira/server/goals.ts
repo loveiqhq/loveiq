@@ -20,9 +20,11 @@ import type { GoalForPrompt } from "./prompt";
 export { GOAL_TEXT_MAX, MAX_ACTIVE_GOALS };
 /**
  * Rail 15: an account or browser that said it is under 18 (server/minor.ts isMinor) sees, sets,
- * changes and ticks no goals; deleting them always works.
+ * changes and ticks no goals; deleting them always works. The habits' routes refuse it with this
+ * one sentence and `minor: true` (decision 9 of round 2: the screens show the kit's AdultsOnly).
  */
-export const ADULTS_ONLY = "Mira's coaching is only for adults.";
+export const ADULTS_ONLY = "Mira is only for adults.";
+export const MINOR_REFUSAL = { error: ADULTS_ONLY, minor: true } as const;
 
 /** A goal as the API takes it: spaces tidied, 1 to GOAL_TEXT_MAX characters. */
 export const goalText = z

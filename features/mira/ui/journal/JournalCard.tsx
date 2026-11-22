@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { streak } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
-import { SectionLink } from "../kit";
+import { AdultsOnly, SectionLink } from "../kit";
 import { CheckIn } from "./CheckIn";
 import {
   ARROW,
@@ -94,6 +94,8 @@ export function JournalCard() {
               Try again
             </button>
           </div>
+        ) : status === "minor" ? (
+          <AdultsOnly className="relative" />
         ) : status === "unavailable" ? (
           <p className="relative text-[15px] text-ap-body">The journal isn’t available here.</p>
         ) : (

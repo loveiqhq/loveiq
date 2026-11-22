@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { ConfirmDelete } from "../kit";
+import { AdultsOnly, ConfirmDelete } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
@@ -95,6 +95,8 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
             Try again
           </button>
         </div>
+      ) : status === "minor" ? (
+        <AdultsOnly className="mt-8" />
       ) : status === "unavailable" ? (
         <p className="mt-8 text-[15px] text-ap-body">The journal isn’t available here.</p>
       ) : (
