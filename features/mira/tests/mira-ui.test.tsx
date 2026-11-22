@@ -14,7 +14,7 @@ import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
-import { SupportPanel } from "@features/mira/ui/SupportPanel";
+import { Modal, SupportPanel } from "@features/mira/ui/SupportPanel";
 import { Wordmark } from "@features/mira/ui/MiraShell";
 
 /** The audit fixes of 20 Nov 2026 on Mira's screens (the API routes are tested on their own). */
@@ -128,6 +128,90 @@ describe("Support panel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(document.documentElement.style.overflow).toBe("");
+  });
+
+  it("stays open on a tap on the dimmed page: it carries the support lines", () => {
+    render(<Opener />);
+    fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
+    const dialog = screen.getByRole("dialog", { name: "Support right now" });
+    fireEvent.click(dialog, { clientX: 1, clientY: 1 }); // jsdom's box is 0 × 0: outside it
+    expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
+  });
+});
+
+describe("Mira's dialogs (Modal)", () => {
+  /** A card whose dialog, once saved, swaps its opener for another button (as a check-in does). */
+  function Card({ backdrop }: { backdrop?: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [done, setDone] = useState(false);
+    return (
+      <section aria-label="Card">
+        <button type="button">Open journal</button>
+        {done ? (
+          <span>
+            <button type="button">Edit it</button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setOpen(true)}>
+            Do it
+          </button>
+        )}
+        <button type="button">Later</button>
+        {open ? (
+          <Modal label="Do it" closeOnBackdrop={backdrop} onClose={() => setOpen(false)}>
+            <h2 data-autofocus tabIndex={-1}>
+              Do it
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setDone(true);
+                setOpen(false);
+              }}
+            >
+              Save
+            </button>
+          </Modal>
+        ) : null}
+      </section>
+    );
+  }
+  const open = () => {
+    const opener = screen.getByRole("button", { name: "Do it" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Do it" });
+    // Its box on the screen, as a phone's sheet: the backdrop is everything outside it.
+    vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 16, y: 300, width: 360, height: 400 })
+    );
+    return dialog;
+  };
+
+  it("closes on a tap on the dimmed page only when asked (the phone's More sheet)", () => {
+    render(<Card backdrop />);
+    let dialog = open();
+    fireEvent.click(dialog, { clientX: 30, clientY: 320 }); // its own padding: inside its box
+    fireEvent.click(within(dialog).getByRole("heading"), { clientX: 2, clientY: 2 });
+    expect(screen.getByRole("dialog", { name: "Do it" })).toBeInTheDocument();
+    fireEvent.click(dialog, { clientX: 200, clientY: 120 }); // above it: the backdrop
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Do it" })).toHaveFocus();
+    cleanup();
+    // By default (a delete, a consent, answers not saved yet) a stray tap closes nothing.
+    render(<Card />);
+    dialog = open();
+    fireEvent.click(dialog, { clientX: 200, clientY: 120 });
+    expect(screen.getByRole("dialog", { name: "Do it" })).toBeInTheDocument();
+  });
+
+  // A11Y-2: closing after a save that replaced the opener dropped the focus on the page.
+  it("gives the focus to what took its opener's place when closing removed the opener", async () => {
+    render(<Card />);
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit it" })).toHaveFocus());
   });
 });
 
