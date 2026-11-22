@@ -172,6 +172,21 @@ describe("POST /api/mira/chat", () => {
     expect(buckets).not.toContain("mira-anon-messages");
   });
 
+  // Round-2 audit CHAT-19: an expired or revoked sign-in made an open chat anonymous, spent the
+  // browser's free message and told an account holder to create an account.
+  it("asks a page that was signed in to sign in again when its sign-in is gone", async () => {
+    const res = await post({ message: "can we continue?", consent: true, signedIn: true });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Please sign in again.", signIn: true });
+    expect(askModel).not.toHaveBeenCalled();
+    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(buckets).not.toContain("mira-anon-messages");
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    // A crisis message is still answered first, whatever the sign-in.
+    const crisis = await post({ message: "I want to kill myself", consent: true, signedIn: true });
+    expect((await crisis.json()).crisis).toBe(true);
+  });
+
   it("records which starter chip opened a chat, as its index and never as text", async () => {
     const started = () =>
       vi.mocked(logMiraEvent).mock.calls.find(([name]) => name === "chat_started")?.[2];

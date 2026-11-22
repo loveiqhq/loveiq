@@ -331,7 +331,8 @@ export default function MiraChat({
         message,
         consent: true,
         ...(chatId ? { chatId } : { history }),
-        ...(signedIn ? {} : { style }),
+        // Signed in: a sign-in that ended meanwhile asks for a new one, never goes anonymous.
+        ...(signedIn ? { signedIn: true } : { style }),
         ...(answering ? { answering } : {}),
         ...(opts.voice ? { voice: { session: voice.sessionId() ?? undefined } } : {}),
         ...(opts.session ? { session: true } : {}),

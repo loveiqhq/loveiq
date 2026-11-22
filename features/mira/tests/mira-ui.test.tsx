@@ -173,6 +173,10 @@ describe("Chat", () => {
     typeAndSend("hello");
     const link = await screen.findByRole("link", { name: "Sign in again" });
     expect(link).toHaveAttribute("href", "/mira/start");
+    // Round-2 audit CHAT-19: the page says it was signed in, so a sign-in that ended meanwhile
+    // gets this 401 rather than an anonymous reply, and the words wait in the composer.
+    expect(calls("POST /api/mira/chat")[0]).toMatchObject({ message: "hello", signedIn: true });
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("hello");
     fireEvent.click(screen.getByRole("button", { name: "Need support" }));
     expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
   });
@@ -469,6 +473,7 @@ describe("First-message consent (wording of 21 Nov 2026)", () => {
     typeAndSend("hi");
     fireEvent.click(await screen.findByRole("button", { name: "Not helpful" }));
     await waitFor(() => expect(ratings()).toEqual([{ type: "rating", rating: -1 }]));
+    expect(calls("POST /api/mira/chat")[0]!.signedIn).toBeUndefined(); // anonymous
   });
 });
 

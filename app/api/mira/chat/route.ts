@@ -107,6 +107,8 @@ const schema = z.object({
   voice: z.object({ session: z.string().uuid().optional() }).strict().optional(),
   /** The first message of a weekly session opened from its link (signed in only). */
   session: z.literal(true).optional(),
+  /** Sent from a page rendered signed in: without the sign-in now, ask for it again. */
+  signedIn: z.literal(true).optional(),
 });
 
 /** A spoken crisis message's session, read leniently: the crisis reply never waits for the body. */
@@ -284,6 +286,12 @@ export async function POST(request: Request) {
   const { message, chatId: askedChatId, history, style: bodyStyle, answering, voice } = parsed.data;
 
   const account = await getMiraAccount();
+  // A page rendered signed in whose sign-in has since ended (expired, or signed out on another
+  // device) is never turned anonymous: no free message spent, no sign-up card for an account
+  // holder (round-2 audit CHAT-19). A crisis message was answered above, whatever the sign-in.
+  if (parsed.data.signedIn && !account) {
+    return NextResponse.json({ error: "Please sign in again.", signIn: true }, { status: 401 });
+  }
   const anon = account ? null : await anonId();
   const who = { anonId: anon, userId: account?.id ?? null };
   // Weekly sessions: the booked slot (undefined: unknown, so Mira is told nothing either way),
