@@ -396,7 +396,7 @@ function GoalForm({
           placeholder="For example: leave a soft light on"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
-          className="min-h-[48px] rounded-2xl border border-ap-line bg-white px-4 text-[16px] font-normal caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
+          className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
         />
       </label>
       <DaysStepper value={target} onChange={setTarget} />

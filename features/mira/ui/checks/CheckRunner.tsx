@@ -147,7 +147,7 @@ export function CheckRunner({
                 onPointerDown={() => {
                   tapped.current = true;
                 }}
-                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-line bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ap-purple has-[:focus-visible]:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-field bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ap-purple has-[:focus-visible]:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <input
                   type="radio"
@@ -169,7 +169,7 @@ export function CheckRunner({
                 />
                 <span
                   aria-hidden="true"
-                  className="h-5 w-5 shrink-0 rounded-full border-2 border-ap-quiet bg-white transition-[border-width,border-color] duration-200 peer-checked:border-[6px] peer-checked:border-ap-ink motion-reduce:transition-none"
+                  className="h-5 w-5 shrink-0 rounded-full border-2 border-ap-field bg-white transition-[border-width,border-color] duration-200 peer-checked:border-[6px] peer-checked:border-ap-ink motion-reduce:transition-none"
                 />
                 <span>{o.label}</span>
               </label>
