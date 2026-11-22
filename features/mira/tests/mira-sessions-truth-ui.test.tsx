@@ -221,6 +221,24 @@ describe("a new time zone alone is a change", () => {
       screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
     ).not.toHaveAttribute("aria-disabled");
   });
+
+  // R3-HAB-2: the button stays where focus is, as the way back, and the new zone is announced.
+  it("keeps focus on the zone button, which then offers the way back, and says the new zone", async () => {
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
+    const zone = screen.getByRole("button", { name: "Use New York time" });
+    zone.focus();
+    fireEvent.click(zone);
+    expect(zone).toHaveFocus();
+    expect(zone).toHaveAccessibleName("Use Berlin time");
+    const said = screen.getByText("Times are New York time.");
+    expect(said.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+    expect(said.closest("[aria-live]")).not.toContainElement(zone);
+    fireEvent.click(zone);
+    expect(zone).toHaveFocus();
+    expect(screen.getByText("Times are Berlin time.")).toBeInTheDocument();
+    expect(zone).toHaveAccessibleName("Use New York time");
+  });
 });
 
 describe("the session's link opens each session once in this browser", () => {

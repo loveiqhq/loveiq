@@ -94,6 +94,10 @@ export function SlotPicker({
   // This device's zone is only known in the browser.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setHere(browserZone()), []);
+  // The zone the picker opened on. Once this device's is chosen, the same button offers that one
+  // back, so it never vanishes from under the keyboard's focus (R3-HAB-2).
+  const [first] = useState(timeZone);
+  const swap = here === timeZone ? first : here;
 
   return (
     <div className="flex flex-col gap-4">
@@ -171,16 +175,17 @@ export function SlotPicker({
       </fieldset>
 
       <p className="text-[13px] leading-snug text-ap-muted">
-        Times are {zoneLabel(timeZone)}.
-        {here && here !== timeZone && clocksDiffer(here, timeZone) ? (
+        {/* Said when it changes: the button beside it keeps the focus. */}
+        <span aria-live="polite">Times are {zoneLabel(timeZone)}.</span>
+        {swap && swap !== timeZone && clocksDiffer(swap, timeZone) ? (
           <>
             {" "}
             <button
               type="button"
-              onClick={() => onTimeZone(here)}
+              onClick={() => onTimeZone(swap)}
               className="inline-flex min-h-[32px] items-center font-semibold text-ap-plum underline underline-offset-2"
             >
-              Use {zoneLabel(here)}
+              Use {zoneLabel(swap)}
             </button>
           </>
         ) : null}
