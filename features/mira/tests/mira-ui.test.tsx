@@ -1024,6 +1024,8 @@ describe("Free messages", () => {
     await screen.findByText("Please reach out now.");
     expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
     expect(screen.getByLabelText("Message Mira")).toBeInTheDocument();
+    // Nor its one-line version under the composer.
+    expect(screen.queryByText(/free message|free account/)).toBeNull();
   });
 
   it("counts the last three down in messages", async () => {

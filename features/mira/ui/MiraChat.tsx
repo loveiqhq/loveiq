@@ -656,7 +656,8 @@ export default function MiraChat({
   const last = messages.at(-1);
   // The sign-up card, never right under a reply that brought the support lines, nor after an
   // under-18 stop; a later message that needs the account brings it back.
-  const showGate = gate && !minor && !(last?.role === "assistant" && last.crisis);
+  const lastHadLines = last?.role === "assistant" && last.crisis === true;
+  const showGate = gate && !minor && !lastHadLines;
 
   // A tapped prompt (or the consent step it opened) goes away with the welcome: focus moves to
   // the conversation rather than being lost, without opening a phone's keyboard.
@@ -1214,8 +1215,14 @@ export default function MiraChat({
                   </div>
                 </>
               )}
-              {/* Never after an under-18 stop: nobody under 18 is pointed at an account. */}
-              {!gate && !minor && freeLeft !== null && freeLeft <= 3 && !signedIn ? (
+              {/* Never after an under-18 stop (nobody under 18 is pointed at an account), nor
+                  right under a reply that brought the support lines, like the card. */}
+              {!gate &&
+              !minor &&
+              !lastHadLines &&
+              freeLeft !== null &&
+              freeLeft <= 3 &&
+              !signedIn ? (
                 <p className="mt-2 text-center text-[12px] text-ap-muted">
                   {freeLeft === 0
                     ? "That was your last free message: the next one needs a free account."
