@@ -260,6 +260,25 @@ describe("Saving", () => {
     expect(await within(section("What Mira may use")).findByText("Saved")).toBeInTheDocument();
   });
 
+  // Decision 7: never native `disabled`, which drops keyboard focus mid-save. The switch says it
+  // is busy, keeps the focus and lets a second tap wait for the answer.
+  it("keeps a switch focusable while its section saves, and ignores a tap until then", async () => {
+    const held = holdSaves();
+    await openSettings();
+    const remember = screen.getByRole("switch", { name: "Remember our conversations" });
+    remember.focus();
+    fireEvent.click(remember);
+    await waitFor(() => expect(remember).toHaveAttribute("aria-disabled", "true"));
+    expect(remember).not.toBeDisabled();
+    expect(remember).toHaveFocus();
+    fireEvent.click(remember); // while it saves: nothing
+    expect(remember).not.toBeChecked();
+    await waitFor(() => expect(held).toHaveLength(1));
+    await act(async () => held[0]!.answer(200));
+    await waitFor(() => expect(remember).not.toHaveAttribute("aria-disabled"));
+    expect(held.map((h) => h.body)).toEqual([{ remember_chats: false }]);
+  });
+
   it("puts the stored value back, and says why, when a save is refused", async () => {
     replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
     await openSettings();

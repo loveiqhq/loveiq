@@ -565,12 +565,14 @@ export default function MiraSettings({
                         label="Remember our conversations"
                         description="Mira keeps your chats, so you can pick any of them up again."
                         checked={p.remember_chats}
+                        disabled={status.privacy?.kind === "saving"}
                         onChange={(v) => void autosave("privacy", { remember_chats: v })}
                       />
                       <Switch
                         label="Mira may use my LoveIQ result"
                         description="Your LoveIQ Sexual Personality result tailors the coaching."
                         checked={p.use_assessment}
+                        disabled={status.privacy?.kind === "saving"}
                         onChange={(v) => void autosave("privacy", { use_assessment: v })}
                       />
                     </SettingsGroup>
@@ -606,6 +608,7 @@ export default function MiraSettings({
                         label="Daily nudges by email"
                         description="A short thought from Mira that leads back into the chat. Neutral subject line."
                         checked={p.nudges_on}
+                        disabled={status.notifications?.kind === "saving"}
                         onChange={(v) => void autosave("notifications", { nudges_on: v })}
                       />
                       {p.nudges_on && !p.remember_chats ? (
@@ -1087,15 +1090,17 @@ export function Switch({
           type="checkbox"
           role="switch"
           checked={checked}
-          disabled={disabled}
+          // Never native `disabled` (decision 7): it would drop keyboard focus mid-save. Busy, the
+          // switch says so and ignores input until the answer.
+          aria-disabled={disabled || undefined}
           aria-labelledby={`${id}-l`}
           aria-describedby={description ? `${id}-d` : undefined}
-          onChange={(e) => onChange(e.target.checked)}
-          className="peer absolute inset-0 z-[1] h-full w-full cursor-pointer appearance-none rounded-full opacity-0 disabled:cursor-not-allowed"
+          onChange={(e) => (disabled ? undefined : onChange(e.target.checked))}
+          className="peer absolute inset-0 z-[1] h-full w-full cursor-pointer appearance-none rounded-full opacity-0 aria-disabled:cursor-wait"
         />
         <span
           aria-hidden="true"
-          className="block h-7 w-12 rounded-full bg-ap-muted/75 transition-colors duration-200 peer-checked:bg-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple peer-disabled:opacity-50"
+          className="block h-7 w-12 rounded-full bg-ap-muted/75 transition-colors duration-200 peer-checked:bg-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple peer-aria-disabled:opacity-50"
         />
         <span
           aria-hidden="true"
