@@ -40,6 +40,7 @@ import { checksForMira } from "@features/mira/server/checks";
 import { crisisFor, requestCountry } from "@features/mira/server/crisis";
 import { goalsForPrompt } from "@features/mira/server/goals";
 import { journalContext } from "@features/mira/server/journal";
+import { neutralTitle, shownTitle } from "@features/mira/server/chat-titles";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
 import { CRISIS_QUIET_DAYS, hadCrisis, lastChat } from "@features/mira/server/nudges";
@@ -194,6 +195,7 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
   let who: { anonId: string | null; userId: string | null } | null = null;
   let chatId: string | null = null;
   let messageId: number | null = null;
+  let title: string | undefined;
   try {
     const ip = getClientIp(request);
     const logged =
@@ -213,10 +215,13 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
       // Stored like any exchange while remembering is on, but not past the daily cap.
       if (profile?.remember_chats && (await checkRateLimit(profile.id, DAILY)).allowed) {
         const asked = typeof raw.chatId === "string" ? raw.chatId : null;
-        const id =
+        // A chat it opens is named by its date, never by these words (lead decision 5).
+        const opened =
           asked && (await ownsChat(profile.id, asked))
-            ? asked
-            : await createChat(profile.id, message.replace(/\s+/g, " ").trim().slice(0, 80));
+            ? null
+            : neutralTitle(new Date(), profile.time_zone);
+        const id = opened ? await createChat(profile.id, opened) : asked!;
+        title = opened ?? undefined;
         const voiceSession = spokenSession(raw);
         const ids = await addMessages(id, [
           { role: "user", content: message.trim().slice(0, MAX_MESSAGE_CHARS), voiceSession },
@@ -244,6 +249,7 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
     crisisLines: crisisFor(country),
     chatId,
     messageId,
+    ...(title ? { title } : {}),
   });
 }
 
@@ -307,6 +313,7 @@ export async function POST(request: Request) {
   let remember = false;
   let freeLeft: number | null = null;
   let country = requestCountry(request);
+  let timeZone: string | null = null;
 
   try {
     // Under 18 (rail 15): message G from then on, whatever the limits; crisis words came first.
@@ -328,6 +335,7 @@ export async function POST(request: Request) {
       if (!(await everyoneMayAsk())) return RESTING();
       style = profile.style;
       remember = profile.remember_chats;
+      timeZone = profile.time_zone ?? null;
       country = profile.country && profile.country !== "OTHER" ? profile.country : country;
       // Challenges & goals: their goals on the go, read beside the result, so Mira can check in.
       const goals = goalsForPrompt(account.id, profile.time_zone).catch((err) => {
@@ -471,14 +479,26 @@ export async function POST(request: Request) {
       ? miraConfig.intakeInvitation
       : null;
 
+  // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
+  const lines = crisis || refused;
   let messageId: number | null = null;
+  let title: string | undefined; // a new chat's, as it is shown (Home, the chat list)
   if (minor) {
     // An under-18 stop keeps nothing: stopForMinor deletes the account's chats, this one too.
     chatId = null;
     await stopForMinor(account?.id ?? null);
   } else if (account && remember) {
     try {
-      chatId ??= await createChat(account.id, message.replace(/\s+/g, " ").slice(0, 80));
+      if (!chatId) {
+        // Named after its first message, unless that brought the support lines: then by its
+        // date, never those words (round-2 audit CHAT-17, lead decision 5).
+        const now = new Date();
+        const stored = lines
+          ? neutralTitle(now, timeZone)
+          : message.replace(/\s+/g, " ").slice(0, 80);
+        chatId = await createChat(account.id, stored);
+        title = shownTitle(stored, now, timeZone);
+      }
       const voiceSession = voice?.session;
       const ids = await addMessages(chatId, [
         { role: "user", content: message, voiceSession },
@@ -508,8 +528,6 @@ export async function POST(request: Request) {
   }
   if (minor) logMiraEvent("minor_stop", who, { signedIn: Boolean(account) });
   if (goal) logMiraEvent("goal_suggested", who, { signedIn: Boolean(account) });
-  // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
-  const lines = crisis || refused;
   // The reply that used the last free message brings the sign-up card, never beside the support
   // lines or an under-18 stop.
   if (freeLeft === 0 && !lines && !minor) {
@@ -522,6 +540,7 @@ export async function POST(request: Request) {
     crisisLines: lines ? crisisFor(country) : undefined,
     chatId,
     messageId,
+    ...(title ? { title } : {}),
     ...(minor ? { minor: true } : {}),
     // A referral (the event's own rule): the chat asks for no rating after it (reviews/ReviewAsk).
     ...(out?.refer && !refused ? { refer: true } : {}),

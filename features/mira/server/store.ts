@@ -3,6 +3,7 @@ import { memberByEmail } from "@features/brain/server/sign-in";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { fromTeamBrowser, requestExtras } from "./attribution";
+import { shownTitle } from "./chat-titles";
 import { isStaffEmail } from "./google";
 import type { CoachEvent } from "@features/mira/content/coaches";
 import { refreshPublicReviews } from "./reviews";
@@ -134,9 +135,16 @@ export async function updateProfile(id: string, patch: ProfilePatch): Promise<vo
 }
 
 export async function listChats(userId: string): Promise<ChatSummary[]> {
-  return rows<ChatSummary>(
-    `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&select=id,title,updated_at&order=updated_at.desc&limit=50`
+  const found = await rows<
+    ChatSummary & { created_at?: string; mira_user?: { time_zone?: string | null } | null }
+  >(
+    `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&select=id,title,updated_at,created_at,mira_user(time_zone)&order=updated_at.desc&limit=50`
   );
+  return found.map((c) => ({
+    id: c.id,
+    title: shownTitle(c.title, new Date(c.created_at ?? c.updated_at), c.mira_user?.time_zone),
+    updated_at: c.updated_at,
+  }));
 }
 
 export async function ownsChat(userId: string, chatId: string): Promise<boolean> {

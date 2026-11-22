@@ -217,9 +217,10 @@ describe("Chat", () => {
     });
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn initialChatId={SAVED} />);
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    const said = await screen.findByText(
       "That chat isn't here any more. It may have been deleted."
     );
+    expect(said).toHaveAttribute("aria-live", "polite"); // read out when it comes
     expect(window.location.search).toBe(""); // a reload doesn't ask for it again
     typeAndSend("hello");
     await screen.findByText("Try this.");
@@ -241,6 +242,28 @@ describe("Chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("an earlier line")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("lists a new chat under the title the server gave it, never words it held back", async () => {
+    const earlier = { id: SAVED, title: "Lights off", updated_at: "2026-11-21T10:00:00Z" };
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [earlier] } });
+    replies["POST /api/mira/chat"] = () => ({
+      body: {
+        reply: "Please reach out now.",
+        crisis: true,
+        chatId: "7a3d5b2f-2222-4333-8444-a55566667777",
+        title: "Chat on 22 Nov",
+      },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("everything feels dark");
+    const list = await screen.findByRole("navigation", { name: "Your chats" });
+    expect(
+      within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent)
+    ).toEqual(["Chat on 22 Nov", "Lights off"]);
   });
 
   it("doesn't send on the Enter that ends an input-method composition", async () => {

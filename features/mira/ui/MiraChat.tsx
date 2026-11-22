@@ -339,6 +339,8 @@ export default function MiraChat({
       crisis?: boolean;
       crisisLines?: CrisisCountry;
       chatId?: string | null;
+      /** A new chat's title as the server named it (never crisis words: lead decision 5). */
+      title?: string;
       messageId?: number | null;
       freeLeft?: number | null;
       gate?: boolean;
@@ -429,7 +431,11 @@ export default function MiraChat({
     if (res.data.chatId && res.data.chatId !== chatId) {
       setChatId(res.data.chatId);
       setChats((c) => [
-        { id: res.data.chatId!, title: message.slice(0, 80), updated_at: new Date().toISOString() },
+        {
+          id: res.data.chatId!,
+          title: res.data.title ?? message.slice(0, 80),
+          updated_at: new Date().toISOString(),
+        },
         ...c,
       ]);
       window.history.replaceState(null, "", `/mira?chat=${res.data.chatId}`);
@@ -1123,7 +1129,10 @@ export default function MiraChat({
                 </p>
               ) : null}
               {/* Always there, so a screen reader hears the line when it comes. */}
-              <p role="status" className="mt-2 text-center text-[13px] text-ap-muted empty:mt-0">
+              <p
+                aria-live="polite"
+                className="mt-2 text-center text-[13px] text-ap-muted empty:mt-0"
+              >
                 {notice}
               </p>
               {error ? (

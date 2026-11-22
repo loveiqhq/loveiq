@@ -53,6 +53,7 @@ import { askModel } from "@features/mira/server/model";
 import { getMiraAccount } from "@features/mira/server/session";
 import {
   addMessages,
+  createChat,
   deleteChats,
   getMessages,
   getProfile,
@@ -338,6 +339,70 @@ describe("POST /api/mira/chat", () => {
     const res = await post({ message: "I want to kill myself", consent: true });
     expect(res.status).toBe(200);
     expect((await res.json()).messageId).toBeNull();
+  });
+
+  // Round-2 audit CHAT-17, lead decision 5: the crisis words became the chat's title on Home.
+  describe("a new chat's title", () => {
+    const remembering = () => {
+      vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValue({
+        id: "u1",
+        email: "lea@example.com",
+        style: {},
+        remember_chats: true,
+        use_assessment: false,
+        time_zone: "Europe/Berlin",
+      } as never);
+    };
+    const NEUTRAL = /^Chat on \d{1,2} [A-Z][a-z]{2}$/;
+    const titled = () => vi.mocked(createChat).mock.calls.map(([, title]) => title);
+
+    it("is the date, never the words, when a crisis message opens it", async () => {
+      remembering();
+      const body = await (
+        await post({ message: "I don’t want to live anymore", consent: true })
+      ).json();
+      expect(titled()[0]).toMatch(NEUTRAL);
+      expect(body.title).toBe(titled()[0]);
+    });
+
+    it("is the date when the reply to its first message brought the support lines", async () => {
+      remembering();
+      vi.mocked(askModel).mockResolvedValueOnce({
+        ok: true,
+        text: "Please reach out now.\n[[CRISIS]]",
+        refused: false,
+      });
+      vi.mocked(askModel).mockResolvedValueOnce({ ok: true, text: "", refused: true });
+      for (const message of ["everything feels dark", "something happened to me"]) {
+        const body = await (await post({ message, consent: true })).json();
+        expect(body.title).toMatch(NEUTRAL);
+      }
+      expect(titled()).toEqual([expect.stringMatching(NEUTRAL), expect.stringMatching(NEUTRAL)]);
+    });
+
+    it("is the first message otherwise, and a weekly session's is named by its date", async () => {
+      remembering();
+      const body = await (await post({ message: "I hide during sex", consent: true })).json();
+      expect(titled()).toEqual(["I hide during sex"]);
+      expect(body.title).toBe("I hide during sex");
+      // Stored as the app's opening line (it finds the session's chat again), shown by its date.
+      const session = await (
+        await post({ message: "I’m here for my weekly session.", consent: true, session: true })
+      ).json();
+      expect(titled()[1]).toBe("I’m here for my weekly session.");
+      expect(session.title).toMatch(/^Weekly session · [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/);
+      // A message in a chat that already exists names nothing.
+      vi.mocked(ownsChat).mockResolvedValueOnce(true);
+      const later = await (
+        await post({
+          message: "and then?",
+          consent: true,
+          chatId: "6f2c4a1e-1111-4222-8333-944455556666",
+        })
+      ).json();
+      expect(later.title).toBeUndefined();
+    });
   });
 
   it("answers a signed-in crisis message even at the daily cap", async () => {
