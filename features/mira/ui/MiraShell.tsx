@@ -13,7 +13,9 @@ export function Wordmark({ home = false, onHome }: { home?: boolean; onHome?: ()
   return (
     <Link
       href={home ? "/mira/home" : "/mira"}
-      className="no-underline"
+      // A box of its own, so the focus ring has an edge to follow: an inline link around the grid
+      // drew Mira's ring around nothing (round 3).
+      className="block w-fit rounded-lg no-underline"
       // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
       // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
       onClick={
@@ -60,7 +62,7 @@ export function MiraCloud({ className = "" }: { className?: string }) {
 }
 
 export const DISCLAIMER =
-  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
+  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you’re struggling, please reach out to a qualified professional.";
 
 export function MiraFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
