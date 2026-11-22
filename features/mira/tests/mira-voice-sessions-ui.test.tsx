@@ -217,15 +217,45 @@ describe("one voice session", () => {
 
   it("deletes it only after a second, plain confirmation, and says what went", async () => {
     replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
-    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({ body: { success: true } });
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({
+      status: 500,
+      body: { error: "Unable to delete right now. Please try again." },
+    });
     render(<RecordingDetail id={ID} />);
     expect(await screen.findByText(/None for this session/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete this session" }));
     expect(asked().filter((a) => a.startsWith("DELETE"))).toEqual([]);
-    expect(screen.getByText(/Its key points and its words go, here and in the chat/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const ask = screen.getByRole("group", {
+      name: /^Delete this session\? Its key points and its words go, here and in the chat/,
+    });
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete" }));
+    // A delete that didn't go through is said inside the question, which stays to try again.
+    expect(await within(ask).findByRole("alert")).toHaveTextContent("Unable to delete right now");
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({ body: { success: true } });
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete" }));
     expect(await screen.findByRole("heading", { name: "Session deleted" })).toBeTruthy();
-    expect(asked()).toContain(`DELETE /api/mira/recordings/${ID}`);
+    expect(asked().filter((a) => a === `DELETE /api/mira/recordings/${ID}`)).toHaveLength(2);
+  });
+
+  // UX-9: one way to ask before a delete on every page (the kit's ConfirmDelete).
+  it("asks like the journal and goals: the red Delete, then Keep it, which has the focus", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
+    render(<RecordingDetail id={ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+    const ask = screen.getByRole("group", { name: /^Delete this session\?/ });
+    expect(
+      within(ask)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+    ).toEqual(["Delete", "Keep it"]);
+    expect(within(ask).getByRole("button", { name: "Delete" })).toHaveClass("bg-ap-bad");
+    expect(within(ask).getByRole("button", { name: "Keep it" })).toHaveFocus();
+    // Keep it puts the focus back where it was, never on the page itself.
+    fireEvent.click(within(ask).getByRole("button", { name: "Keep it" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete this session" })).toHaveFocus()
+    );
+    expect(asked().filter((a) => a.startsWith("DELETE"))).toEqual([]);
   });
 
   it("says when it isn't there, with the way back", async () => {

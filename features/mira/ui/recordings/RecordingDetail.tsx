@@ -3,9 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
+import { ConfirmDelete } from "../kit";
 import { DurationChip, TalkShare } from "./Recordings";
 
 /**
@@ -42,6 +43,8 @@ export default function RecordingDetail({ id }: { id: string }) {
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const opener = useRef<HTMLButtonElement>(null);
 
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -75,10 +78,12 @@ export default function RecordingDetail({ id }: { id: string }) {
 
   async function remove() {
     setDeleting(true);
-    setError(null);
+    setDeleteError(null);
     const res = await miraApi(`/api/mira/recordings/${id}`, { method: "DELETE" });
     setDeleting(false);
-    if (!res.ok) return setError(res.data.error ?? "Unable to delete right now. Please try again.");
+    if (!res.ok) {
+      return setDeleteError(res.data.error ?? "Unable to delete right now. Please try again.");
+    }
     setLoad({ state: "deleted" });
   }
 
@@ -239,27 +244,21 @@ export default function RecordingDetail({ id }: { id: string }) {
 
           <section aria-label="Delete this session" className="mt-8 border-t border-ap-line pt-5">
             {confirm ? (
-              <div className="rounded-[20px] border border-ap-line bg-white p-4">
-                <p className="text-[14px] leading-snug text-ap-body">
-                  Delete this session? Its key points and its words go, here and in the chat. This
-                  can&apos;t be undone.
-                </p>
-                <div className="mt-3 flex justify-end gap-2">
-                  <button type="button" onClick={() => setConfirm(false)} className={GHOST}>
-                    Keep it
-                  </button>
-                  <button
-                    type="button"
-                    onClick={remove}
-                    disabled={deleting}
-                    className="inline-flex min-h-[44px] items-center rounded-full bg-ap-bad-ink px-5 text-[14px] font-bold text-white disabled:opacity-60"
-                  >
-                    {deleting ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
-              </div>
+              // Asked as on every Mira page (UX-9); Keep it gives the focus back to the button.
+              <ConfirmDelete
+                question="Delete this session? Its key points and its words go, here and in the chat. This can’t be undone."
+                busy={deleting}
+                error={deleteError}
+                onConfirm={() => void remove()}
+                onKeep={() => {
+                  setConfirm(false);
+                  setDeleteError(null);
+                  requestAnimationFrame(() => opener.current?.focus());
+                }}
+              />
             ) : (
               <button
+                ref={opener}
                 type="button"
                 onClick={() => setConfirm(true)}
                 className="min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline-offset-4 hover:underline"
