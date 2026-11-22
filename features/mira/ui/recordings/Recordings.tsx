@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi, signInHref } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
@@ -366,9 +366,19 @@ export function RecordingsCard() {
 export default function RecordingsPage() {
   const { load, retry, loadOlder } = useSessions(50);
   const [older, setOlder] = useState<"idle" | "loading" | "failed">("idle");
+  // Once older sessions come, the focus goes to the first of them: the button goes with the last
+  // page, and the new rows are read from there (round-3 R3-CHAT-7).
+  const list = useRef<HTMLDivElement | null>(null);
+  const firstNew = useRef<number | null>(null);
+  useEffect(() => {
+    if (firstNew.current === null) return;
+    list.current?.querySelectorAll<HTMLElement>("li > a")[firstNew.current]?.focus();
+    firstNew.current = null;
+  }, [load]);
   async function showOlder() {
     if (older === "loading") return;
     setOlder("loading");
+    firstNew.current = load.state === "ready" ? load.recordings.length : null;
     setOlder((await loadOlder()) ? "idle" : "failed");
   }
   return (
@@ -385,7 +395,7 @@ export default function RecordingsPage() {
         </div>
         {load.state === "ready" && load.recordings.length > 0 ? <StartVoiceLink /> : null}
       </div>
-      <div className="mt-6">
+      <div ref={list} className="mt-6">
         {load.state === "loading" ? <Skeleton rows={3} /> : null}
         {load.state === "failed" ? <Failed retry={retry} /> : null}
         {load.state === "minor" ? <AdultsOnly /> : null}

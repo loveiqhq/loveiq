@@ -226,14 +226,20 @@ describe("the voice sessions page", () => {
     });
     render(<RecordingsPage />);
     await waitFor(() => expect(rows()).toHaveLength(2));
-    fireEvent.click(screen.getByRole("button", { name: "Show older sessions" }));
+    const button = screen.getByRole("button", { name: "Show older sessions" });
+    button.focus();
+    fireEvent.click(button);
     expect(await screen.findByText("Older sessions didn't load.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show older sessions" })).toHaveFocus();
     replies[older] = () => ({ body: { recordings: [OLDER], more: false } });
     fireEvent.click(screen.getByRole("button", { name: "Show older sessions" }));
     await waitFor(() => expect(rows()).toHaveLength(3));
     expect(rows()[2]!.getAttribute("href")).toBe(`/mira/recordings/${OLDER.id}`);
     expect(screen.queryByText("Older sessions didn't load.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Show older sessions" })).toBeNull();
+    // Round-3 R3-CHAT-7: the button went with the last page and the focus fell to the page; it
+    // goes to the first of the sessions that came, which is read from there.
+    expect(rows()[2]).toHaveFocus();
   });
 });
 
