@@ -6,10 +6,12 @@ import { shortDate } from "@features/admin/server/ap/days";
 import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type { CohortRow, MiraPayload } from "@features/admin/server/ap/mira";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
 import ApMiraCoaches from "./ApMiraCoaches";
+import { ApMiraFeedback } from "./ApMiraFeedback";
 import { RatingsCard } from "./ApMiraRatings";
 import { ApMiraJournal } from "./ApMiraJournal";
 import { bucketTitles } from "./hover";
@@ -77,7 +79,8 @@ export default function ApMira() {
         <Busy busy={loading}>
           <RangeLine
             data={data}
-            sources="Production database (Mira's tables)"
+            // Staging reads its own database: never call that production's (DATA-8).
+            sources={`${isProductionSite() ? "Production database" : "This deployment’s database"} (Mira’s tables)`}
             trend={data.tiles.conversations?.trend}
           />
           <Overview data={data} />
@@ -243,14 +246,29 @@ function Overview({ data }: { data: Data }) {
   );
 }
 
-/** The "Keep this chat" card: shown, Keep, an account after it, and Not now. */
+/**
+ * The "Keep this chat" card: shown, Keep, an account after it, and Not now. Retired when the free
+ * messages went down to one (decision 2, 22 Nov 2026): the sign-up card carries its promise, as
+ * the chat comes with the account, and is counted in the funnel as "Shown the sign-up card". Its
+ * own figures stay readable for the days it ran, with no empty bars after them.
+ */
 function KeepCard({ data }: { data: Data }) {
   const { shown, kept, accounts, notNow } = data.keepCard;
+  const title = "“Keep this chat” card (retired)";
+  const retired =
+    "Retired when the free messages went down to one: the sign-up card now makes its promise, as the chat comes with the account (see “Shown the sign-up card” above). These figures cover only the days it ran.";
+  if (!shown) {
+    return (
+      <Card id="keep-card" labelledBy="h-keep-card">
+        <SectionHead id="h-keep-card" level={3} title={title} description={retired} />
+      </Card>
+    );
+  }
   return (
     <FunnelCard
       id="keep-card"
-      title="“Keep this chat” card"
-      description="How many people the card reaches, and how many keep their chat by creating an account."
+      title={title}
+      description={retired}
       base={shown}
       rows={[
         ["Shown the card", shown, "People who saw “Keep this chat” in the range"],
@@ -914,6 +932,7 @@ function Outcomes({ data }: { data: Data }) {
       <SelfChecks data={data} />
       <Satisfaction data={data} />
       <RatingsCard data={data} />
+      <ApMiraFeedback feedback={data.feedback ?? null} />
       <Knows data={data} />
       <SettingsCard data={data} />
       <Safety data={data} />
@@ -1434,7 +1453,7 @@ function Safety({ data }: { data: Data }) {
   const { conversations, crisis, declined, minorStops, notHelpful, referred } = data.safety;
   const per = (k: number) => (conversations ? fmt("count", (k / conversations) * 1000, 1) : EMPTY);
   const rows: Array<[string, number | null, string]> = [
-    ["Stopped coaching", crisis, "Crisis or support lines shown, the team reviews each case"],
+    ["Stopped coaching", crisis, "A crisis, with the support lines; the team reviews each"],
     ["Declined replies", declined, "Support lines shown instead of a reply"],
     ["Under-18 stops", minorStops, "Coaching stopped for someone under 18"],
     ["Referred on", referred, "Doctor or therapist suggested, coaching continues"],
@@ -1487,12 +1506,14 @@ function Safety({ data }: { data: Data }) {
         </div>
       </div>
       <p className={NOTE}>
-        Stopped coaching: the support lines shown in the range (a crisis message, or a reply that
-        raised the stop rail). Declined replies: replies Mira declined, with the support lines shown
-        instead; Under-18 stops: coaching stopped because the person is under 18 (both recorded from
-        21 Nov 2026). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor or other
-        professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000 of the
-        range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
+        Stopped coaching: the crises in the range (a crisis message, or a reply that raised the stop
+        rail), each with the support lines. Support lines shown without a crisis (Mira&rsquo;s
+        check-in after a mood check, a declined reply) are not counted as one. Declined replies:
+        replies Mira declined, with the support lines shown instead; Under-18 stops: coaching
+        stopped because the person is under 18 (both recorded from 21 Nov 2026). Referred on:
+        Mira&rsquo;s replies that suggested a therapist, doctor or other professional, at most one
+        per person and conversation, from 20 Nov 2026. Per 1,000 of the range&rsquo;s conversations
+        (3 or more messages with no gap of more than 30 minutes).
       </p>
     </Card>
   );

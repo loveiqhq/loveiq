@@ -20,6 +20,11 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "csrf-1" }));
+const site = vi.hoisted(() => ({ production: false }));
+vi.mock("@shared/env/is-non-prod-deploy", async (actual) => ({
+  ...(await actual<typeof import("@shared/env/is-non-prod-deploy")>()),
+  isProductionSite: () => site.production,
+}));
 
 import ApMira from "@features/admin/ui/ap/ApMira";
 
@@ -131,9 +136,16 @@ describe("AP › Mira, 21 Nov 2026", () => {
         .getAllByRole("cell")
         .map((c) => c.textContent);
     expect(cells("Declined replies").slice(0, 2)).toEqual(["1", "500.0"]);
+    // Crises only: the support lines the question-9 check-in opens ([[SUPPORT]]) aren't counted.
+    expect(
+      within(safety).getByText("A crisis, with the support lines; the team reviews each")
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      "Support lines shown without a crisis (Mira’s check-in after a mood check, a declined reply) are not counted as one."
+    );
     expect(cells("Under-18 stops").slice(0, 2)).toEqual(["1", "500.0"]);
 
-    const card = screen.getByRole("region", { name: "“Keep this chat” card" });
+    const card = screen.getByRole("region", { name: "“Keep this chat” card (retired)" });
     expect(within(card).getByText("Shown the card").closest("div")!.textContent).toContain(
       "2 (100.0%)"
     );
@@ -143,6 +155,27 @@ describe("AP › Mira, 21 Nov 2026", () => {
     expect(within(card).getByText("Tapped Not now").closest("div")!.textContent).toContain(
       "1 (50.0%)"
     );
+  });
+
+  it("says the “Keep this chat” card was retired, and draws no empty bars for the days after it", () => {
+    // Decision 2 (22 Nov 2026): one free message, then the sign-up card, which keeps the chat.
+    render(<ApMira />);
+    const card = screen.getByRole("region", { name: "“Keep this chat” card (retired)" });
+    expect(card.textContent).toContain("Retired when the free messages went down to one");
+    expect(card.textContent).toContain("“Shown the sign-up card”");
+    expect(within(card).queryByText("Shown the card")).toBeNull();
+    expect(screen.getByText("Shown the sign-up card")).toBeTruthy();
+  });
+
+  it("names production's database only on the live site (DATA-8)", () => {
+    render(<ApMira />);
+    expect(screen.getByText(/This deployment’s database \(Mira’s tables\)/)).toBeTruthy();
+    expect(screen.queryByText(/Production database/)).toBeNull();
+    cleanup();
+    site.production = true;
+    render(<ApMira />);
+    expect(screen.getByText(/Production database \(Mira’s tables\)/)).toBeTruthy();
+    site.production = false;
   });
 
   it("shows a team browser as such, and says users can ask for a copy, not export", () => {

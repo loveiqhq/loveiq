@@ -251,9 +251,9 @@ export async function rateMessage(
 /**
  * The person's own words that the KPI log keeps on their events: the text of a reply they rated
  * when the reply itself wasn't stored, and with `all` their feedback (free text, and their
- * address if they agreed to be emailed) and the note they gave when stopping nudges. What the
- * staff page counts stays (a rating keeps its thumb). Run before the account goes: its events
- * then lose their user link and can't be found any more.
+ * address if they agreed to be emailed) and the note they gave when stopping nudges, and then the
+ * browser ids on what stays. What the staff page counts stays (a rating keeps its thumb). Run
+ * before the account goes: its events then lose their user link and can't be found any more.
  */
 export async function forgetEventText(userId: string, all: boolean): Promise<void> {
   const mine = `/rest/v1/mira_event?user_id=eq.${enc(userId)}`;
@@ -284,6 +284,12 @@ export async function forgetEventText(userId: string, all: boolean): Promise<voi
       `${mine}&name=eq.nudge_stopped&props->>reason=not.is.null`,
       { props: {} },
     ]);
+    // Last, as the writes above find the browsers' rows by it: what stays loses the browser id,
+    // so the notice's "no longer linked to you" holds when that browser signs up again (ID-16).
+    // Only rows without an account (another account's sign-in there stays its own); the
+    // account's own link goes with the account (ON DELETE SET NULL).
+    if (anonIds.length) writes.push(["PATCH", `${owners[1]}&user_id=is.null`, { anon_id: null }]);
+    writes.push(["PATCH", `${mine}&anon_id=not.is.null`, { anon_id: null }]);
   }
   for (const [method, path, body] of writes) {
     const res = await supabaseFetch(path, {

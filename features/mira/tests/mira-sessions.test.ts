@@ -504,7 +504,10 @@ describe("the email's stop link (no sign-in)", () => {
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
     expect((await stop(t, asPage("pause"))).status).toBe(403);
     vi.mocked(isMinor).mockResolvedValueOnce(true);
-    expect((await stop(t, asPage("pause"))).status).toBe(403);
+    const refused = await stop(t, asPage("pause"));
+    expect(refused.status).toBe(403);
+    // Decision 9: the one refusal every page shows, never "didn't go through".
+    expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect(db.tables.mira_session_slot![0]!.paused_at).toBeNull();
     // A stop link can't cancel: that needs the sign-in.
     expect((await stop(t, asPage("cancel"))).status).toBe(400);

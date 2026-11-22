@@ -3,6 +3,11 @@
 -- closed), and the passkey, device and email routes need their tables. Passkeys people added stop
 -- working; they can still sign in by code or with Google.
 --
+-- After a code rollback, a device that was signed out from Settings ("Sign out" on one device,
+-- or "everywhere" for a login shared with staff) is signed in again: the new code ended those
+-- sessions by deleting their mira_session rows, and the old code checks only Supabase Auth. If
+-- that matters, sign those people out in Supabase Auth too (production review, 22 Nov 2026).
+--
 -- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20261122070000_mira_account_down.sql
 
 BEGIN;
