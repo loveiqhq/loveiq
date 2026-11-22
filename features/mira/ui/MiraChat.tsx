@@ -36,8 +36,10 @@ import {
  * 100M+ words" line (Eman's call, 21 Nov); a rating line only from real ratings (ui/reviews,
  * nothing below the threshold). Kept: the 18+ and sensitive-data consent before the first
  * anonymous message (a short step when it is sent), and the sign-up card once an anonymous
- * person's free message is answered. Board "01
- * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
+ * person's free message is answered. That card also carries the promise of board "01 Anonymous
+ * chat (embed) copy"'s "Keep this chat" card (the chat comes with the account), which could no
+ * longer show with one free message and went (round-2 audit CHAT-25, lead decision 2). The
+ * composer stays beside it: a crisis message is always answered, any other gets the card again.
  */
 
 /** `live`: written in this page view, so it animates in (a restored chat does not replay). */
@@ -113,9 +115,6 @@ export default function MiraChat({
   const [tick, setTick] = useState(false);
   // A first message waiting for the consent step: sent once the person agrees.
   const [pending, setPending] = useState<string | null>(null);
-  // "Not now" on the "Keep this chat" card: away for this chat (kept with it in this browser).
-  const [keepOff, setKeepOff] = useState(false);
-  const keepLogged = useRef(false);
   // Until this browser's chat (or the opened one) is loaded, the consent tick and the starter
   // prompts may not belong on screen: they are left out rather than flashed.
   const [ready, setReady] = useState(signedIn && !initialChatId);
@@ -130,7 +129,7 @@ export default function MiraChat({
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   // The logo while the sign-up card shows: back to the start without losing the chat the card
-  // promises to bring along (no message can be sent from there, so nothing mixes).
+  // promises to bring along (a message sent from there goes on in that chat, which comes back).
   const [atStart, setAtStart] = useState(false);
   // The one-time "Make Mira yours" tip on the coaching-style button: null until this browser's
   // record is read after mount, then whether it was shown here before.
@@ -171,7 +170,6 @@ export default function MiraChat({
         setMessages(saved.turns);
         setFreeLeft(saved.freeLeft);
         if (saved.gate) setGate(true);
-        if (saved.keepOff) setKeepOff(true);
       }
       const given = local.consent();
       setConsented(given?.version === CONSENT_VERSION);
@@ -251,9 +249,8 @@ export default function MiraChat({
       })),
       freeLeft,
       ...(gate ? { gate: true } : {}),
-      ...(keepOff ? { keepOff: true } : {}),
     });
-  }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
+  }, [ready, signedIn, minor, messages, freeLeft, gate]);
 
   // A starter from the address waits in the composer, unsent: "Ask Mira to help" on the goals
   // card (?prompt=goal), the guide's "Ask Mira about this" (?ask=N, counted once as guide_ask) and
@@ -290,7 +287,9 @@ export default function MiraChat({
     opts: { skip?: boolean; agreed?: boolean; voice?: boolean; session?: boolean } = {}
   ) {
     const message = text.trim();
-    if (!message || sending || gate) return;
+    // Past the free message too: the server answers a crisis message whatever the limits, and
+    // gives any other the sign-up card (round-2 audit CHAT-22).
+    if (!message || sending) return;
     // A message right after Mira asked an intake question answers it, tapped or typed; a skip
     // doesn't. Only the question's id is sent, for the "how well Mira knows you" figures.
     const last = messages.at(-1);
@@ -304,6 +303,7 @@ export default function MiraChat({
       return;
     }
     setError(null);
+    setAtStart(false); // sent from the start screen: the chat it goes on comes back
     if (showTip) setTipSeen(true);
     const firstOfChat = !chatId && messages.length === 0;
     const history = messages.map(({ role, content }) => ({ role, content })).slice(-24);
@@ -505,8 +505,6 @@ export default function MiraChat({
     setChatId(null);
     setError(null);
     setNps(null);
-    setKeepOff(false); // a new chat may be kept again
-    keepLogged.current = false;
     window.history.replaceState(null, "", "/mira");
     if (signedIn) return;
     // The free messages are used: a new chat needs the free account too.
@@ -549,22 +547,9 @@ export default function MiraChat({
 
   const started = messages.length > 0;
   const last = messages.at(-1);
-  // "Keep this chat" (board 01 copy): once Mira has replied to an anonymous person, but never
-  // beside her intake invitation (it comes first; the card follows the next reply), the NPS
-  // question or a crisis in this chat, and not while a reply is on its way.
-  const showKeep =
-    !signedIn &&
-    ready &&
-    !gate &&
-    !keepOff &&
-    !sending &&
-    !nps &&
-    last?.role === "assistant" &&
-    !isInvitation(last) &&
-    !last.ask &&
-    !last.goal && // Mira's goal offer goes first; its sign-up path keeps the chat too
-    !minor &&
-    !crisisIn(messages);
+  // The sign-up card, never right under a reply that brought the support lines, nor after an
+  // under-18 stop; a later message that needs the account brings it back.
+  const showGate = gate && !minor && !(last?.role === "assistant" && last.crisis);
 
   // A tapped prompt (or the consent step it opened) goes away with the welcome: focus moves to
   // the conversation rather than being lost, without opening a phone's keyboard.
@@ -573,17 +558,10 @@ export default function MiraChat({
       listRef.current?.focus({ preventScroll: true });
   }, [started]);
 
-  useEffect(() => {
-    if (!showKeep || keepLogged.current) return;
-    keepLogged.current = true; // once a chat, per page view
-    void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_shown" } });
-  }, [showKeep]);
-
   // "Make Mira yours": once per browser, after a reply of Mira's when nothing else asks for the
   // person's attention (no question with answer buttons, card, check, panel or crisis).
   const showTip =
     tipSeen === false &&
-    !showKeep && // one ask at a time: the "Keep this chat" card goes first
     !sending &&
     !gate &&
     !minor &&
@@ -619,12 +597,6 @@ export default function MiraChat({
     void send(SESSION_OPENING, { session: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, [session, signedIn]);
-
-  function keepNotNow() {
-    setKeepOff(true);
-    void miraApi("/api/mira/event", { body: { type: "track", name: "keep_card_not_now" } });
-    document.getElementById("mira-input")?.focus(); // the pressed button is about to go
-  }
 
   const empty = !started || atStart;
   // A chat opened by its link loads first: the welcome would only flash before it.
@@ -894,37 +866,6 @@ export default function MiraChat({
                   {signedIn && voice.ended && voice.ended.chatId === chatId ? (
                     <VoiceEnded voice={voice} />
                   ) : null}
-                  {showKeep ? (
-                    <div
-                      className={`${CARD} flex flex-col gap-3 motion-safe:animate-mira-reply sm:flex-row sm:items-center sm:gap-4`}
-                    >
-                      <p className="flex-1 text-[14px] leading-normal text-ap-body">
-                        Would you like Mira to remember this conversation next time? Sign in and she
-                        can also gently tailor things to your LoveIQ result.
-                      </p>
-                      <div className="flex shrink-0 items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={keepNotNow}
-                          className="min-h-[44px] px-3.5 text-[14px] font-semibold text-ap-muted"
-                        >
-                          Not now
-                        </button>
-                        {/* This browser's chat goes into the new account at sign-up. */}
-                        <Link
-                          href="/mira/start"
-                          onClick={() =>
-                            void miraApi("/api/mira/event", {
-                              body: { type: "track", name: "keep_card_keep" },
-                            })
-                          }
-                          className="inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-                        >
-                          Keep this chat
-                        </Link>
-                      </div>
-                    </div>
-                  ) : null}
                   {nps ? (
                     <div className={CARD}>
                       {nps === "thanks" ? (
@@ -1009,137 +950,143 @@ export default function MiraChat({
 
             <div className="mx-auto w-full max-w-[760px] shrink-0 px-3 pt-1 sm:px-6 sm:pt-0">
               {/* A voice session keeps its panel (and End) while Mira says her last free reply;
-                  the sign-up card follows once the session ends. */}
+                  the sign-up card follows once the session ends, above the composer, which
+                  stays: a crisis message is answered whatever the limits. */}
               {voiceOn ? (
                 <VoicePanel voice={voice} onType={typeInstead} />
-              ) : gate ? (
-                <div
-                  className={`${CARD} flex flex-col gap-3 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] sm:flex-row sm:items-center sm:gap-4 sm:p-5`}
-                >
-                  <div className="flex-1">
-                    <p className="font-serif text-[18px] font-semibold">
-                      Keep talking with Mira, for free
-                    </p>
-                    <p className="mt-1 text-[14px] leading-normal text-ap-body">
-                      You&apos;ve had your {FREE_LABEL} with Mira. Create a free account to carry
-                      on. She&apos;ll remember where you left off, and this chat comes with you.
-                    </p>
-                  </div>
-                  <Link
-                    href="/mira/start"
-                    className="inline-flex min-h-[44px] items-center justify-center whitespace-nowrap rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-                  >
-                    Create free account
-                  </Link>
-                </div>
               ) : (
-                <div
-                  className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
-                >
-                  <form
-                    className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void send(input);
-                    }}
-                  >
-                    <label htmlFor="mira-input" className="sr-only">
-                      Message Mira
-                    </label>
-                    <textarea
-                      id="mira-input"
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        // Enter that picks a word in an input method (Japanese, Chinese…) is not a send.
-                        const composing = e.nativeEvent.isComposing || e.keyCode === 229;
-                        if (e.key === "Enter" && !e.shiftKey && !composing) {
-                          e.preventDefault();
-                          void send(input);
-                        }
-                      }}
-                      rows={1}
-                      maxLength={2000}
-                      enterKeyHint="send"
-                      placeholder="Ask Mira anything…"
-                      className="max-h-[168px] min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[16px] leading-6 caret-ap-purple outline-none placeholder:text-ap-muted sm:min-h-[48px] sm:py-3"
-                    />
-                    {voice.supported && !input.trim() ? (
-                      <TalkButton
-                        onClick={talk}
-                        disabled={sending || !ready}
-                        invited={voice.invited}
-                      />
-                    ) : (
-                      <button
-                        type="submit"
-                        aria-label="Send"
-                        disabled={sending || !input.trim()}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ap-ink text-white transition-[background-color,transform] active:scale-95 disabled:cursor-not-allowed disabled:bg-ap-muted disabled:active:scale-100 sm:h-12 sm:w-12"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 19V5" />
-                          <path d="M5 12l7-7 7 7" />
-                        </svg>
-                      </button>
-                    )}
-                  </form>
-                  {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
-                      it, centred, never more than two rows (Mark, 21 Nov). */}
-                  {showChips ? (
-                    // Phones: the prompts glide in a loop, a transform animation run by the
-                    // compositor (smooth, never in steps); a touch or hover holds them, so a tap
-                    // lands where it was aimed. Reduced motion: still, and the row scrolls by hand.
-                    // Wider screens: the board's two still rows.
-                    <div className="group order-first -mx-3 overflow-hidden px-3 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] motion-reduce:overflow-x-auto sm:order-none sm:mx-0 sm:max-h-[66px] sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
-                      <div className="flex w-max group-hover:[animation-play-state:paused] group-active:[animation-play-state:paused] max-sm:will-change-transform max-sm:motion-safe:animate-mira-marquee sm:w-auto sm:flex-wrap sm:justify-center sm:gap-1.5">
-                        <span className="flex shrink-0 gap-1.5 pr-1.5 sm:contents">
-                          {miraConfig.starterChips.map((chip, i) => (
-                            <button
-                              key={chip}
-                              type="button"
-                              onClick={() => send(chip)}
-                              style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                              className={CHIP}
-                            >
-                              {chip}
-                            </button>
-                          ))}
-                        </span>
-                        {/* The second run that closes the loop: hidden from assistive tech and the
-                            tab order; never shown on wider screens or with reduced motion. */}
-                        <span
-                          aria-hidden="true"
-                          className="flex shrink-0 gap-1.5 pr-1.5 motion-reduce:hidden sm:hidden"
-                        >
-                          {miraConfig.starterChips.map((chip, i) => (
-                            <button
-                              key={chip}
-                              type="button"
-                              tabIndex={-1}
-                              onClick={() => send(chip)}
-                              style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
-                              className={CHIP}
-                            >
-                              {chip}
-                            </button>
-                          ))}
-                        </span>
+                <>
+                  {showGate ? (
+                    <div
+                      className={`${CARD} mb-2.5 flex flex-col gap-3 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] sm:flex-row sm:items-center sm:gap-4 sm:p-5`}
+                    >
+                      <div className="flex-1">
+                        <p className="font-serif text-[18px] font-semibold">
+                          Keep talking with Mira, for free
+                        </p>
+                        <p className="mt-1 text-[14px] leading-normal text-ap-body">
+                          You&apos;ve had your {FREE_LABEL} with Mira. Create a free account to
+                          carry on. She&apos;ll remember where you left off, and this chat comes
+                          with you.
+                        </p>
                       </div>
+                      {/* This browser's chat goes into the new account at sign-up. */}
+                      <Link
+                        href="/mira/start"
+                        className="inline-flex min-h-[44px] items-center justify-center whitespace-nowrap rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
+                      >
+                        Create free account
+                      </Link>
                     </div>
                   ) : null}
-                </div>
+                  <div
+                    className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
+                  >
+                    <form
+                      className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void send(input);
+                      }}
+                    >
+                      <label htmlFor="mira-input" className="sr-only">
+                        Message Mira
+                      </label>
+                      <textarea
+                        id="mira-input"
+                        ref={inputRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          // Enter that picks a word in an input method (Japanese, Chinese…) is not a send.
+                          const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+                          if (e.key === "Enter" && !e.shiftKey && !composing) {
+                            e.preventDefault();
+                            void send(input);
+                          }
+                        }}
+                        rows={1}
+                        maxLength={2000}
+                        enterKeyHint="send"
+                        placeholder="Ask Mira anything…"
+                        className="max-h-[168px] min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[16px] leading-6 caret-ap-purple outline-none placeholder:text-ap-muted sm:min-h-[48px] sm:py-3"
+                      />
+                      {voice.supported && !input.trim() ? (
+                        <TalkButton
+                          onClick={talk}
+                          disabled={sending || !ready}
+                          invited={voice.invited}
+                        />
+                      ) : (
+                        <button
+                          type="submit"
+                          aria-label="Send"
+                          disabled={sending || !input.trim()}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ap-ink text-white transition-[background-color,transform] active:scale-95 disabled:cursor-not-allowed disabled:bg-ap-muted disabled:active:scale-100 sm:h-12 sm:w-12"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 19V5" />
+                            <path d="M5 12l7-7 7 7" />
+                          </svg>
+                        </button>
+                      )}
+                    </form>
+                    {/* Phones: one row above the composer that scrolls sideways. Wider screens: under
+                      it, centred, never more than two rows (Mark, 21 Nov). */}
+                    {showChips ? (
+                      // Phones: the prompts glide in a loop, a transform animation run by the
+                      // compositor (smooth, never in steps); a touch or hover holds them, so a tap
+                      // lands where it was aimed. Reduced motion: still, and the row scrolls by hand.
+                      // Wider screens: the board's two still rows.
+                      <div className="group order-first -mx-3 overflow-hidden px-3 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] motion-reduce:overflow-x-auto sm:order-none sm:mx-0 sm:max-h-[66px] sm:overflow-hidden sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="flex w-max group-hover:[animation-play-state:paused] group-active:[animation-play-state:paused] max-sm:will-change-transform max-sm:motion-safe:animate-mira-marquee sm:w-auto sm:flex-wrap sm:justify-center sm:gap-1.5">
+                          <span className="flex shrink-0 gap-1.5 pr-1.5 sm:contents">
+                            {miraConfig.starterChips.map((chip, i) => (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => send(chip)}
+                                style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                                className={CHIP}
+                              >
+                                {chip}
+                              </button>
+                            ))}
+                          </span>
+                          {/* The second run that closes the loop: hidden from assistive tech and the
+                            tab order; never shown on wider screens or with reduced motion. */}
+                          <span
+                            aria-hidden="true"
+                            className="flex shrink-0 gap-1.5 pr-1.5 motion-reduce:hidden sm:hidden"
+                          >
+                            {miraConfig.starterChips.map((chip, i) => (
+                              <button
+                                key={chip}
+                                type="button"
+                                tabIndex={-1}
+                                onClick={() => send(chip)}
+                                style={{ animationDelay: `${440 + Math.min(i, 7) * 45}ms` }}
+                                className={CHIP}
+                              >
+                                {chip}
+                              </button>
+                            ))}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
               )}
               {/* Never after an under-18 stop: nobody under 18 is pointed at an account. */}
               {!gate && !minor && freeLeft !== null && freeLeft <= 3 && !signedIn ? (

@@ -494,6 +494,12 @@ describe("Welcome", () => {
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
+    // The composer stays there too: what is sent from it belongs to that chat, which comes back.
+    replies["POST /api/mira/chat"] = () => ({ body: { gate: true, freeLeft: 0 } });
+    typeAndSend("one more thing");
+    expect(await screen.findByText("one more thing")).toBeInTheDocument();
+    expect(screen.getByText("Try this.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
   });
 
   it("lists each starter prompt once for assistive tech, though phones show a second run", async () => {
@@ -541,16 +547,12 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     expect(tip()).toBeNull();
   });
 
-  it("waits while the “Keep this chat” card is up, and Not now puts it away", async () => {
-    giveConsent();
+  it("Not now puts it away for good in that browser", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
-    render(<MiraChat signedIn={false} initialChatId={null} />);
+    render(<MiraChat signedIn initialChatId={null} />);
     typeAndSend("hi");
-    await screen.findByText(/remember this conversation next time/);
-    expect(tip()).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
-    expect(await screen.findByRole("note", { name: "Tip" })).toBeInTheDocument();
-    fireEvent.click(within(tip()!).getByRole("button", { name: "Not now" }));
+    const note = await screen.findByRole("note", { name: "Tip" });
+    fireEvent.click(within(note).getByRole("button", { name: "Not now" }));
     expect(tip()).toBeNull();
     expect(localStorage.getItem("mira.tip.style.v1")).not.toBeNull();
   });
@@ -574,8 +576,14 @@ describe("Free messages", () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
     await screen.findByText("Keep talking with Mira, for free");
-    expect(screen.getByText(/had your free message with Mira/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Message Mira")).toBeNull();
+    // The card carries the "Keep this chat" promise (round-2 audit CHAT-25: that card could no
+    // longer show with one free message, so it went).
+    expect(screen.getByText(/had your free message with Mira/)).toHaveTextContent(
+      "this chat comes with you"
+    );
+    expect(screen.queryByRole("link", { name: "Keep this chat" })).toBeNull();
+    // Round-2 audit CHAT-22: the composer stays, so a message about a crisis can still be sent.
+    expect(screen.getByLabelText("Message Mira")).toBeInTheDocument();
     expect(screen.getByText("Try this.")).toBeInTheDocument();
     // New chat would wipe the chat the card promises to bring along.
     for (const b of screen.getAllByRole("button", { name: /New chat/ })) expect(b).toBeDisabled();
@@ -586,6 +594,33 @@ describe("Free messages", () => {
         freeLeft: 0,
       })
     );
+    expect(tracked()).not.toContain("keep_card_shown");
+  });
+
+  it("after the free message, a crisis message is answered and any other gets the sign-up card", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = (b) =>
+      b.message === "hi"
+        ? { body: { reply: "Try this.", freeLeft: 0 } }
+        : b.message === "everything feels dark"
+          ? { body: { reply: "Please reach out now.", crisis: true } }
+          : { body: { gate: true, freeLeft: 0 } };
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Keep talking with Mira, for free");
+    typeAndSend("everything feels dark");
+    await screen.findByText("Please reach out now.");
+    // Never beside the reply that brought the support lines.
+    expect(screen.queryByText("Keep talking with Mira, for free")).toBeNull();
+    typeAndSend("and then?");
+    expect(await screen.findByText("Keep talking with Mira, for free")).toBeInTheDocument();
+    // The message stays in the chat that comes along with the account.
+    expect(screen.getByText("and then?")).toBeInTheDocument();
+    expect(calls("POST /api/mira/chat").map((b) => b.message)).toEqual([
+      "hi",
+      "everything feels dark",
+      "and then?",
+    ]);
   });
 
   it("isn't put beside a crisis reply: the person can still write", async () => {
@@ -608,89 +643,6 @@ describe("Free messages", () => {
     expect(
       await screen.findByText("3 more free messages before you need a free account.")
     ).toBeInTheDocument();
-  });
-});
-
-describe("Keep this chat (board 01 copy)", () => {
-  const card = () => screen.queryByText(/remember this conversation next time/);
-
-  it("follows Mira's first reply to an anonymous person, and Keep goes to the sign-up", async () => {
-    giveConsent();
-    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
-    render(<MiraChat signedIn={false} initialChatId={null} />);
-    expect(card()).toBeNull();
-    typeAndSend("hi");
-    await screen.findByText("Try this.");
-    expect(card()).toHaveTextContent(
-      "Would you like Mira to remember this conversation next time? Sign in and she can also gently tailor things to your LoveIQ result."
-    );
-    const keep = screen.getByRole("link", { name: "Keep this chat" });
-    expect(keep).toHaveAttribute("href", "/mira/start");
-    await waitFor(() => expect(tracked()).toEqual(["chat_opened", "keep_card_shown"]));
-    fireEvent.click(keep);
-    expect(tracked()).toContain("keep_card_keep");
-  });
-
-  it("waits for the reply after the intake invitation instead of standing beside it", async () => {
-    giveConsent();
-    replies["POST /api/mira/chat"] = (b) =>
-      b.message === "hi"
-        ? { body: { reply: "Tell me more.", invitation: miraConfig.intakeInvitation } }
-        : { body: { reply: "First question, then." } };
-    render(<MiraChat signedIn={false} initialChatId={null} />);
-    typeAndSend("hi");
-    await screen.findByText("Tell me more.");
-    expect(card()).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: miraConfig.intakeReplyButtons[0] }));
-    await screen.findByText("First question, then.");
-    expect(card()).not.toBeNull();
-  });
-
-  it("never comes with a crisis reply or later in that chat, nor for a signed-in person", async () => {
-    giveConsent();
-    let n = 0;
-    replies["POST /api/mira/chat"] = () =>
-      ++n === 1
-        ? { body: { reply: "Please reach out now.", crisis: true } }
-        : { body: { reply: "I am here with you." } };
-    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
-    typeAndSend("everything feels dark");
-    await screen.findByText("Please reach out now.");
-    expect(card()).toBeNull();
-    typeAndSend("thank you");
-    await screen.findByText("I am here with you.");
-    expect(card()).toBeNull();
-    first.unmount();
-    render(<MiraChat signedIn={false} initialChatId={null} />); // the crisis is kept with the chat
-    await screen.findByText("I am here with you.");
-    expect(card()).toBeNull();
-    cleanup();
-
-    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
-    render(<MiraChat signedIn initialChatId={null} />);
-    typeAndSend("hi");
-    await screen.findByText("Try this.");
-    expect(card()).toBeNull();
-    expect(tracked()).not.toContain("keep_card_shown");
-  });
-
-  it("Not now puts it away for this chat, after a reload too; a new chat may offer it again", async () => {
-    giveConsent();
-    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
-    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
-    typeAndSend("hi");
-    await screen.findByText("Try this.");
-    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
-    expect(card()).toBeNull();
-    expect(tracked()).toContain("keep_card_not_now");
-    first.unmount();
-    render(<MiraChat signedIn={false} initialChatId={null} />);
-    await screen.findByText("Try this.");
-    expect(card()).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
-    typeAndSend("hello again");
-    await screen.findByText("Try this.");
-    expect(card()).not.toBeNull();
   });
 });
 
