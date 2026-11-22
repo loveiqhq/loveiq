@@ -162,7 +162,7 @@ describe("Settings sections", () => {
         weeklySession={<p>Weekly session here</p>}
       />
     );
-    expect(await screen.findByRole("heading", { name: "Mira is only for adults." })).toBeVisible();
+    expect(await screen.findByText("Mira is only for adults.")).toBeVisible();
     // Signing out, taking a rating back and deleting: every other section would only refuse.
     const links = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
       .getAllByRole("link")
@@ -176,6 +176,54 @@ describe("Settings sections", () => {
     }
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("names each index entry as its section and the menu do (SET-11)", async () => {
+    await openSettings({
+      security: <p>Passkeys here</p>,
+      checks: <p>Self-checks here</p>,
+      sharedReview: <p>Shared review here</p>,
+      journal: <p>Journal settings here</p>,
+      weeklySession: <p>Weekly session here</p>,
+    });
+    const labels = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
+      .getAllByRole("link")
+      .map((a) => a.textContent);
+    expect(labels).toEqual([
+      "Account",
+      "Language",
+      "Sign-in & security",
+      "How Mira coaches you",
+      "What Mira may use",
+      "Assessments",
+      "Your rating of Mira",
+      "Notifications",
+      "Daily journal",
+      "Weekly session",
+      "Appearance",
+      "Your data",
+    ]);
+    for (const name of ["How Mira coaches you", "What Mira may use"]) {
+      expect(screen.getByRole("heading", { name })).toBeInTheDocument();
+    }
+    // One name for the LoveIQ-result permission, here and on Assessments (decision 6).
+    expect(screen.getByRole("switch", { name: "Mira may use my LoveIQ result" })).toBeVisible();
+    // The text-size sample says what it is (UX-17); fields' edges are drawn at 3:1 (A11Y-8).
+    expect(within(section("Appearance")).getByText("Preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mira replies in")).toHaveClass("border-ap-field");
+    expect(screen.getByLabelText("Name or nickname")).toHaveClass("border-ap-field");
+  });
+
+  it("refreshes the page after a change of country, so the support lines follow it", async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText("Where you’re based"), { target: { value: "GB" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(router.refresh).toHaveBeenCalledTimes(1));
+    expect(calls("PATCH /api/mira/me")).toEqual([{ country: "GB" }]);
+    fireEvent.change(screen.getByLabelText("Name or nickname"), { target: { value: "Lena" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")).toHaveLength(2));
+    expect(router.refresh).toHaveBeenCalledTimes(1); // a name alone needn't reload anything
   });
 
   it("shows the page's shape while loading, and a way to try again when loading fails", async () => {
@@ -281,14 +329,16 @@ describe("Saving", () => {
     expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
   });
 
-  it("asks before deleting on its safe answer, and Cancel gives the focus back", async () => {
+  it("asks before deleting on its safe answer, and Keep it gives the focus back", async () => {
     await openSettings();
     const opener = screen.getByRole("button", { name: "Delete all chats" });
     fireEvent.click(opener);
+    // The kit's question (UX-9): named by its question, opening on "Keep it".
+    expect(screen.getByRole("group", { name: "Delete all your chats? This can't be undone." }));
     await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }))
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep it" }))
     );
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete all chats" }))
     );

@@ -4,22 +4,23 @@ import { useEffect, useState } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { captureUtmFromUrl, getStoredUtm } from "@shared/url/utm";
 import { SOURCE_COOKIE, SOURCE_HEADER, VOICE_NOTICE_VERSION } from "../server/config";
+import { ADULTS_ONLY } from "./kit";
 
 export type ApiResult<T> = {
   ok: boolean;
   status: number;
   data: T & { error?: string };
   /**
-   * Refused for good: the under-18 stop (a 403 with `minor: true`, rail 15). Show "Mira is only
-   * for adults." (ADULTS_ONLY, the shared component), never "didn't load" or Try again.
+   * Refused for good: the under-18 stop (a 403 with `minor: true`, rail 15). Show the kit's
+   * `<AdultsOnly />` ("Mira is only for adults."), never "didn't load" or Try again.
    */
   minor?: true;
   /** The sign-in ran out (any 401): say so with a way back in (signInHref), never Try again. */
   signedOut?: true;
 };
 
-/** The one refusal after the under-18 stop, whatever words the route used. */
-export const ADULTS_ONLY = "Mira is only for adults.";
+/** The one refusal after the under-18 stop, whatever words the route used (ui/kit's). */
+export { ADULTS_ONLY };
 /** The one answer to a lost sign-in (another device's "Sign out everywhere", or expiry). */
 export const SIGNED_OUT = "You were signed out. Please sign in again.";
 /** After "Send a new code" (sign-in or a new address): the code before no longer works. */

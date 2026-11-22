@@ -300,6 +300,16 @@ describe("Settings: what you shared", () => {
     age: "25–34",
   };
 
+  it("ends initials with one full stop, not two (SET-16)", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: { review: { ...mine, status: "pending", name: "R.", age: null }, name: "Lea" },
+    });
+    render(<SharedReviewSettings />);
+    expect(
+      await screen.findByText("Waiting for our team to read it. Once approved, it shows as R.")
+    ).toBeInTheDocument();
+  });
+
   it("shows the writer the team's reason when their words weren't shown", async () => {
     replies["GET /api/mira/reviews/mine"] = () => ({
       body: {

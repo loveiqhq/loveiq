@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { REJECT_REASON_LABEL } from "@features/mira/reviews";
 import type { MyReview } from "@features/mira/server/reviews";
-import { ADULTS_ONLY, miraApi } from "../api";
+import { miraApi } from "../api";
+import { AdultsOnly } from "../kit";
 import { RatingForm } from "./ReviewAsk";
 
 /**
@@ -97,6 +99,8 @@ export default function SharedReviewSettings() {
 
   const review = typeof state === "object" ? state.review : null;
   const signedAs = review?.name ? `${review.name}${review.age ? `, ${review.age}` : ""}` : "";
+  // Initials end in a full stop already ("R."): one is enough (round-2 SET-16).
+  const asShown = signedAs.endsWith(".") ? signedAs : `${signedAs}.`;
   return (
     <section aria-labelledby="mira-your-rating" className="flex flex-col gap-3">
       <h2
@@ -111,7 +115,7 @@ export default function SharedReviewSettings() {
         <div aria-hidden="true" className="h-[92px] animate-pulse rounded-2xl bg-ap-ground" />
       ) : state === "minor" ? (
         <div className="flex flex-col gap-3 rounded-2xl border border-ap-line p-4">
-          <p className="text-[14px] font-semibold">{ADULTS_ONLY}</p>
+          <AdultsOnly className="font-semibold text-ap-ink" />
           {done ? null : (
             <>
               <p className="text-[14px] text-ap-body">
@@ -161,8 +165,8 @@ export default function SharedReviewSettings() {
               </blockquote>
               <figcaption className="text-[13px] leading-snug text-ap-muted">
                 {review.status === "approved"
-                  ? `Shown on Mira’s pages as ${signedAs}.`
-                  : `Waiting for our team to read it. Once approved, it shows as ${signedAs}.`}
+                  ? `Shown on Mira’s pages as ${asShown}`
+                  : `Waiting for our team to read it. Once approved, it shows as ${asShown}`}
                 {review.status === "approved" && review.published !== review.quote ? (
                   <>
                     {" "}
@@ -237,9 +241,9 @@ export default function SharedReviewSettings() {
         Your stars count toward the average on Mira’s pages, without your name. Your words show only
         with your permission, after our team has read them, and disappear the moment you take them
         back.{" "}
-        <a href="/mira/privacy#ratings" className="underline">
+        <Link href="/mira/privacy#ratings" className="underline">
           How Mira handles your data
-        </a>
+        </Link>
       </p>
     </section>
   );

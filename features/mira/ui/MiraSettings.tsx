@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -17,7 +18,8 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { ADULTS_ONLY, miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { AdultsOnly, ConfirmDelete } from "./kit";
 import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
@@ -182,10 +184,11 @@ export default function MiraSettings({
       ["account", "Account"],
       ["language", "Language"],
       ...(security ? ([["security", "Sign-in & security"]] as Array<[SectionId, string]>) : []),
-      ["coaching", "Coaching"],
-      ["privacy", "Privacy"],
-      ...(checks ? ([["checks", "Self-checks"]] as Array<[SectionId, string]>) : []),
-      ...(sharedReview ? ([["sharing", "Your rating"]] as Array<[SectionId, string]>) : []),
+      // Each named as its heading says (and as the menu does: the self-checks are Assessments).
+      ["coaching", "How Mira coaches you"],
+      ["privacy", "What Mira may use"],
+      ...(checks ? ([["checks", "Assessments"]] as Array<[SectionId, string]>) : []),
+      ...(sharedReview ? ([["sharing", "Your rating of Mira"]] as Array<[SectionId, string]>) : []),
       ["notifications", "Notifications"],
       ...(journal ? ([["journal", "Daily journal"]] as Array<[SectionId, string]>) : []),
       ...(weeklySession ? ([["weekly", "Weekly session"]] as Array<[SectionId, string]>) : []),
@@ -216,16 +219,13 @@ export default function MiraSettings({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  // "Delete…" swaps the buttons for the question: focus goes to its safe answer, and back to the
-  // button that asked once the question goes (Cancel, or done).
-  const cancel = useRef<HTMLButtonElement | null>(null);
+  // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
+  // it"); once it goes (kept, or done) the focus is back on the button that asked.
   const openers = useRef<Partial<Record<"chats" | "account", HTMLButtonElement | null>>>({});
   const asked = useRef<"chats" | "account" | null>(null);
   useEffect(() => {
-    if (confirm) {
-      asked.current = confirm;
-      cancel.current?.focus();
-    } else if (asked.current) {
+    if (confirm) asked.current = confirm;
+    else if (asked.current) {
       openers.current[asked.current]?.focus();
       asked.current = null;
     }
@@ -293,6 +293,8 @@ export default function MiraSettings({
     if (r.ok) {
       if (stored.current) stored.current = { ...stored.current, ...body } as Profile;
       setAccountDirty(false);
+      // The support lines (read in app/mira/layout.tsx) put the new country first at once.
+      if ("country" in body) router.refresh();
       return setStatus("account", { kind: "saved" });
     }
     setStatus("account", { kind: "error", text: r.data.error ?? "Unable to save." });
@@ -403,7 +405,7 @@ export default function MiraSettings({
           <div>
             {minor ? (
               <div className="mt-8 rounded-3xl bg-ap-lilac p-5">
-                <h2 className="font-serif text-[22px] font-medium">{ADULTS_ONLY}</h2>
+                <AdultsOnly className="font-semibold text-ap-ink" />
                 <p className="mt-1 text-[14px] text-ap-body">
                   Here you can sign out, take back a rating, or delete the account.
                 </p>
@@ -565,7 +567,7 @@ export default function MiraSettings({
                         onChange={(v) => void autosave("privacy", { remember_chats: v })}
                       />
                       <Switch
-                        label="Use my test result"
+                        label="Mira may use my LoveIQ result"
                         description="Your LoveIQ Sexual Personality result tailors the coaching."
                         checked={p.use_assessment}
                         onChange={(v) => void autosave("privacy", { use_assessment: v })}
@@ -576,9 +578,12 @@ export default function MiraSettings({
                       use them with your consent, to coach you and to improve Mira; our analytics
                       tools also see what you type. Never for advertising, never to train shared
                       models.{" "}
-                      <a href="/mira/privacy" className="text-ap-plum underline underline-offset-2">
+                      <Link
+                        href="/mira/privacy"
+                        className="text-ap-plum underline underline-offset-2"
+                      >
                         How Mira handles your data
-                      </a>
+                      </Link>
                     </p>
                   </SettingsSection>
 
@@ -677,7 +682,10 @@ export default function MiraSettings({
                         value={look.text}
                         onChange={(text) => void changeLook({ text })}
                       />
-                      <p className="mt-3 rounded-[20px] bg-ap-ground px-4 py-3 text-[16px] leading-[1.65]">
+                      <p className="mt-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-ap-muted">
+                        Preview
+                      </p>
+                      <p className="mt-1 rounded-[20px] bg-ap-ground px-4 py-3 text-[16px] leading-[1.65]">
                         Go gently with yourself. Come back anytime and tell me how it went.
                       </p>
                     </fieldset>
@@ -690,12 +698,12 @@ export default function MiraSettings({
                   <p className="text-[15px] font-semibold">Your plan: free while in beta</p>
                   <p className="mt-1 text-[14px] text-ap-body">
                     We&apos;ll tell you well before anything changes.{" "}
-                    <a
+                    <Link
                       href="/mira/feedback"
                       className="font-semibold text-ap-ink underline underline-offset-2"
                     >
                       Share feedback
-                    </a>
+                    </Link>
                   </p>
                 </div>
                 <p className="mt-5 text-[14px] text-ap-body">
@@ -709,30 +717,18 @@ export default function MiraSettings({
                   and we&apos;ll send it within 30 days.
                 </p>
                 {confirm ? (
-                  <div className="mt-4 rounded-3xl border border-ap-bad p-5 motion-safe:animate-mira-in">
-                    <p id="confirm-delete" className="text-[15px] font-semibold">
-                      {confirm === "chats"
-                        ? "Delete all your chats? This can't be undone."
-                        : "Delete your account, your profile and all your chats? This can't be undone."}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => remove(confirm)}
-                        className="min-h-[44px] rounded-full bg-ap-bad px-5 text-[15px] font-semibold text-white disabled:opacity-50"
-                      >
-                        {busy ? "Deleting…" : "Delete"}
-                      </button>
-                      <button
-                        ref={cancel}
-                        type="button"
-                        onClick={() => setConfirm(null)}
-                        className="min-h-[44px] rounded-full border border-ap-line px-5 text-[15px] font-semibold"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                  <div className="mt-4">
+                    <ConfirmDelete
+                      question={
+                        confirm === "chats"
+                          ? "Delete all your chats? This can't be undone."
+                          : "Delete your account and everything Mira keeps for you: your chats, journal, goals, check results, voice sessions, rating and passkeys? A booked weekly session is cancelled. This can't be undone."
+                      }
+                      action={busy ? "Deleting…" : "Delete"}
+                      busy={busy}
+                      onConfirm={() => void remove(confirm)}
+                      onKeep={() => setConfirm(null)}
+                    />
                   </div>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-3">
@@ -760,9 +756,9 @@ export default function MiraSettings({
                 )}
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={signOut}
-                  className="mt-6 min-h-[44px] text-[15px] font-semibold text-ap-plum underline underline-offset-4 disabled:opacity-50"
+                  aria-disabled={busy || undefined}
+                  onClick={() => (busy ? undefined : void signOut())}
+                  className="mt-6 min-h-[44px] text-[15px] font-semibold text-ap-plum underline underline-offset-4 aria-disabled:cursor-wait aria-disabled:opacity-50"
                 >
                   Sign out
                 </button>
@@ -1053,7 +1049,7 @@ function Field({
 }
 
 const INPUT =
-  "min-h-[48px] w-full rounded-2xl border border-ap-line bg-white px-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25";
 
 /**
  * An on/off row: the whole row toggles. A checkbox with the switch role, so it is announced as
@@ -1115,7 +1111,7 @@ export function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSel
     <span className="relative flex">
       <select
         {...rest}
-        className="min-h-[48px] w-full cursor-pointer appearance-none rounded-2xl border border-ap-line bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25"
+        className="min-h-[48px] w-full cursor-pointer appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25"
       >
         {children}
       </select>
