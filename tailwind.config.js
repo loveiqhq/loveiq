@@ -7,6 +7,8 @@ const vars = (palette) =>
   Object.fromEntries(Object.entries(palette).map(([k, v]) => [`--ap-${k}`, channels(v)]));
 // --mira-cloud: the welcome's cloud glows stronger on the deep plum (MiraShell.tsx MiraCloud).
 const dark = { ...vars(MIRA_DARK), "--mira-cloud": "1.8", "color-scheme": "dark" };
+/** The phone's bottom bar (MiraAppFrame) at Default text, in px. */
+const BAR = 60;
 
 /**
  * Mira's themes (features/mira/ui/theme-tokens.js, MiraPrefs.tsx): the ap-* colours are CSS
@@ -16,7 +18,13 @@ const dark = { ...vars(MIRA_DARK), "--mira-cloud": "1.8", "color-scheme": "dark"
  */
 const miraTheme = plugin(({ addBase }) => {
   addBase({
-    ":root": vars(AP_LIGHT),
+    // --mira-bar: the phone bar's height, here so the page's focus room below (further down) and
+    // the bar read one value. It grows with Large text and never shrinks with Small, so each of
+    // its places stays 52px tall (round-3 R3-UXA-4: 60px × 0.9 left them 47px).
+    ":root": { ...vars(AP_LIGHT), "--mira-bar": `${BAR}px` },
+    ':root:has(.mira-root[data-mira-text="large"])': {
+      "--mira-bar": `${Math.round(BAR * TEXT_SCALE.large)}px`,
+    },
     ':root:has(.mira-root[data-mira-theme="dark"])': dark,
     "@media (prefers-color-scheme: dark)": {
       ':root:has(.mira-root[data-mira-theme="system"])': dark,
@@ -32,6 +40,20 @@ const miraTheme = plugin(({ addBase }) => {
     '.mira-root[data-mira-text="large"]': { "--mira-fs": String(TEXT_SCALE.large) },
     // iOS zooms into a field whose text is under 16px: Small keeps fields at their size.
     '.mira-root[data-mira-text="small"] :is(input, textarea, select)': { "--mira-fs": "1" },
+    // Keyboard focus never lands under the phone's bar (round-3 R3-UXA-1, WCAG 2.4.11): the page
+    // scrolls a focused control clear of the bar, its safe area and a cookie banner it stands on,
+    // with room for the focus ring. The root scroller only, so lists that scroll inside a page
+    // keep their own edges.
+    "@media not all and (min-width: 1024px)": {
+      ":root:has([data-mira-bar])": {
+        "scroll-padding-bottom":
+          "calc(var(--mira-bar) + env(safe-area-inset-bottom) + var(--liq-consent-h, 0px) + 8px)",
+      },
+    },
+    // The same for a sticky header: a page sets --mira-scroll-top (the header's height and a
+    // little air) on what scrolls under it, never on the header itself, and focus and jumps
+    // there stop below it. No weight of its own, so a scroll-mt-* class still wins.
+    ":where(.mira-root) *": { "scroll-margin-top": "var(--mira-scroll-top, 0px)" },
   });
 });
 

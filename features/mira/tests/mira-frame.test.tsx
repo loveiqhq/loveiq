@@ -260,6 +260,11 @@ describe("the signed-in frame", () => {
     expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
   });
 
+  it("marks the bar for the page's focus room below it (R3-UXA-1: global CSS keys on data-mira-bar)", () => {
+    frame("home");
+    expect(menu()).toHaveAttribute("data-mira-bar");
+  });
+
   it("marks nothing as current on a page outside the menu", () => {
     frame(undefined);
     expect(within(menu()).queryAllByRole("link", { current: "page" })).toEqual([]);

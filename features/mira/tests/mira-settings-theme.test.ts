@@ -218,3 +218,40 @@ describe("field borders (A11Y-8, WCAG 1.4.11)", () => {
     }
   });
 });
+
+describe("the phone's bar and keyboard focus (round 3)", () => {
+  /** Below lg, where the bar is fixed to the bottom (MiraAppFrame). */
+  const PHONE = "not all and (min-width: 1024px)";
+
+  it("is 60px at Default and Small text and grows with Large, so each place stays 48px or more (R3-UXA-4)", async () => {
+    const css = await compile("");
+    expect(decls(css, ":root", "--mira-bar")).toEqual(["60px"]);
+    expect(decls(css, ':root:has(.mira-root[data-mira-text="large"])', "--mira-bar")).toEqual([
+      "69px",
+    ]);
+    // Small text no longer shrinks it (60px × 0.9 left each place 47px tall).
+    let shrunk = false;
+    postcss.parse(css).walkDecls("--mira-bar", (d) => {
+      if ((d.parent as postcss.Rule).selector.includes("small")) shrunk = true;
+    });
+    expect(shrunk).toBe(false);
+  });
+
+  it("scrolls a control with keyboard focus clear of the bar, its safe area and a cookie banner under it (R3-UXA-1)", async () => {
+    const css = await compile("");
+    expect(decls(css, ":root:has([data-mira-bar])", "scroll-padding-bottom", PHONE)).toEqual([
+      "calc(var(--mira-bar) + env(safe-area-inset-bottom) + var(--liq-consent-h, 0px) + 8px)",
+    ]);
+    // Only below lg: from lg the menu is the column on the left, nothing covers the page.
+    expect(decls(css, ":root:has([data-mira-bar])", "scroll-padding-bottom")).toEqual([]);
+  });
+
+  it("lets a page with a sticky header keep focus and jumps below it: --mira-scroll-top", async () => {
+    const css = await compile("scroll-mt-16");
+    expect(decls(css, ":where(.mira-root) *", "scroll-margin-top")).toEqual([
+      "var(--mira-scroll-top, 0px)",
+    ]);
+    // No weight of its own: a component's scroll-mt-* still wins.
+    expect(css.indexOf(".scroll-mt-16")).toBeGreaterThan(css.indexOf(":where(.mira-root) *"));
+  });
+});

@@ -169,8 +169,9 @@ const pill = (on: boolean) =>
  * Phones (round-2 decision 8, 22 Nov 2026): the menu is a bar fixed to the bottom with Home, Chat,
  * Journal, Goals and More, which opens a sheet with the other pages. It keeps clear of the home
  * indicator and the notch (safe areas) and steps up over the cookie banner while it shows
- * (--liq-consent-h); its height grows with the text size (--mira-bar), and the page leaves that
- * much room under its foot, so the bar never covers it. The chat (/mira) has no frame: its own
+ * (--liq-consent-h); its height grows with Large text (--mira-bar, tailwind.config.js), and the
+ * page leaves that much room under its foot (--mira-dock), so the bar never covers it, nor a
+ * control with keyboard focus (data-mira-bar, round 3). The chat (/mira) has no frame: its own
  * full-screen header and composer stay as they are. From lg the menu is the side column it was.
  */
 export function MiraAppFrame({
@@ -191,13 +192,14 @@ export function MiraAppFrame({
   useReloadWhenRestored();
   const inMore = PAGES.some((p) => !p.short && p.key === active);
   return (
-    <div className="flex min-h-screen flex-col bg-white pb-[calc(var(--mira-bar)+env(safe-area-inset-bottom)+var(--liq-consent-h,0px))] font-sans text-ap-ink selection:bg-ap-lilac [--mira-bar:calc(60px*var(--mira-fs,1))] lg:flex-row lg:pb-0">
+    <div className="flex min-h-screen flex-col bg-white pb-[var(--mira-dock)] font-sans text-ap-ink selection:bg-ap-lilac [--mira-dock:calc(var(--mira-bar)+env(safe-area-inset-bottom)+var(--liq-consent-h,0px))] lg:flex-row lg:[--mira-dock:0px]">
       <header className="lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:gap-6 lg:border-r lg:border-ap-line lg:px-5 lg:py-6">
         <div className="px-4 pt-3 sm:px-10 lg:p-0">
           <Wordmark home />
         </div>
         <nav
           aria-label="Mira"
+          data-mira-bar
           className="fixed inset-x-0 bottom-[var(--liq-consent-h,0px)] z-30 border-t border-ap-line bg-white pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:static lg:z-auto lg:border-t-0 lg:bg-transparent lg:p-0"
         >
           <ul className="mx-auto grid h-[var(--mira-bar)] max-w-[560px] grid-cols-5 px-1 lg:flex lg:h-auto lg:max-w-none lg:flex-col lg:gap-0.5 lg:px-0">
