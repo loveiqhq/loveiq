@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -701,6 +701,59 @@ describe("Body check", () => {
     expect(screen.queryByRole("dialog", { name: "Body check" })).toBeNull();
     expect(calls("POST /api/mira/body-check")).toEqual([{ answers: picks }]);
     expect(events()).toEqual(expect.arrayContaining(["body_check_offered", "body_check_started"]));
+  });
+
+  // The card closed itself 4 s after its thank-you, and every way out left the focus on the page.
+  it("ends in the composer, and its thank-you stays until its own Close", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 0; i < 9; i++) {
+      await screen.findByText(`Body check · statement ${i + 1} of 10`);
+      fireEvent.click(screen.getByRole("button", { name: "Often" }));
+    }
+    await screen.findByText("Body check · statement 10 of 10");
+    const thanks = "Thank you. I’ll ask again in four weeks.";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Often" })));
+      await act(async () => undefined); // the save's answer
+      expect(screen.getByText(thanks)).toBeVisible();
+      await act(async () => vi.advanceTimersByTime(10_000));
+      expect(screen.getByText(thanks)).toBeVisible(); // no timer takes it away
+      expect(screen.getByLabelText("Message Mira")).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText(thanks)).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
+  });
+
+  it("puts the focus in the composer after Not now, and after Stop for now", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    const notNow = await screen.findByRole("button", { name: "Not now" });
+    notNow.focus();
+    fireEvent.click(notNow);
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
+    cleanup();
+    localStorage.clear(); // Not now's three days
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(2));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    const stop = await screen.findByRole("button", { name: "Stop for now" });
+    stop.focus();
+    fireEvent.click(stop);
+    expect(screen.queryByRole("dialog", { name: "Body check" })).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
   });
 
   it("lets a statement be changed with Back", async () => {
