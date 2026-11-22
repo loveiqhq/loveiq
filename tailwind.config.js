@@ -90,6 +90,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // Lora, as globals.css gives `.font-serif` and the headings: without it a variant such as
+      // `[&_h2]:font-serif` (the guide, the privacy notice) fell back to Tailwind's Georgia stack.
+      fontFamily: { serif: ['var(--font-serif, "Lora", "Times New Roman", serif)'] },
       colors: {
         page: "var(--color-bg)",
         surface: "var(--color-surface)",

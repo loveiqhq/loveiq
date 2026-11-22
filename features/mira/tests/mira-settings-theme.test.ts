@@ -93,6 +93,19 @@ describe("Mira's text size", () => {
   });
 });
 
+describe("Mira's serif", () => {
+  it("is Lora wherever font-serif is set, a variant's too (UX-2: the guide's h2 in Georgia)", async () => {
+    const css = await compile("font-serif [&_h2]:font-serif sm:font-serif");
+    const families: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes("font-serif"))
+        rule.walkDecls("font-family", (d) => families.push(d.value));
+    });
+    expect(families).toHaveLength(3);
+    for (const f of families) expect(f).toBe('var(--font-serif, "Lora", "Times New Roman", serif)');
+  });
+});
+
 describe("Mira's colours", () => {
   it("are CSS variables with today's light values on :root, so AP and Mira's light look don't change", async () => {
     const css = await compile("bg-white text-ap-ink bg-ap-mist/40 border-ap-line");
