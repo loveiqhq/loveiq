@@ -55,8 +55,6 @@ export type Check = {
   max: number;
   /** Days after a result before the next may be taken. */
   retakeDays: number;
-  /** The smallest change, in points, beyond the scale's noise; null where none is published. */
-  reliableChange: number | null;
   /** An item whose every answer above the lowest opens the support lines at once. */
   crisisItem?: number;
   /** Who to talk to, on the professional step. */
@@ -85,8 +83,7 @@ export const CHECKS: readonly Check[] = [
     // Spitzer RL, Kroenke K, Williams JBW, Löwe B (2006), Arch Intern Med 166:1092-1097. Items
     // and answers: the English form at phqscreeners.com. Bands: the instruction manual ("Scores
     // of 5, 10, and 15 represent cutpoints for mild, moderate, and severe anxiety"; "a
-    // recommended cutpoint for further evaluation is a score of 10 or greater"). Reliable change
-    // 4 points: NHS Talking Therapies manual v8 (2024), Table 9.
+    // recommended cutpoint for further evaluation is a score of 10 or greater").
     id: "anxiety",
     scale: "gad7",
     title: "Anxiety check",
@@ -152,7 +149,6 @@ export const CHECKS: readonly Check[] = [
       },
     ],
     retakeDays: 14,
-    reliableChange: 4,
     helpText:
       "A doctor or a therapist can look at this with you properly, and there is good help for anxiety. If you’d like to talk to someone now, these lines listen.",
     practice: 2,
@@ -167,8 +163,8 @@ export const CHECKS: readonly Check[] = [
     // the English form at phqscreeners.com (its unscored difficulty question is left out, as the
     // manual allows: "not used in calculating any PHQ score"). Bands: the manual ("Scores of 5,
     // 10, 15, and 20 represent cutpoints for mild, moderate, moderately severe and severe
-    // depression"; 10 or more is its "yellow flag"). Reliable change 6 points: NHS Talking
-    // Therapies manual v8 (2024), Table 9. Item 9 opens the support lines at once (crisisItem).
+    // depression"; 10 or more is its "yellow flag"). Item 9 opens the support lines at once
+    // (crisisItem).
     id: "mood",
     scale: "phq9",
     title: "Mood check",
@@ -246,7 +242,6 @@ export const CHECKS: readonly Check[] = [
       },
     ],
     retakeDays: 14,
-    reliableChange: 6,
     crisisItem: 8,
     helpText:
       "A doctor or a therapist can look at this with you properly, and low mood can get better with the right support. If you’d like to talk to someone now, these lines listen.",
@@ -264,7 +259,7 @@ export const CHECKS: readonly Check[] = [
     // here). Coded 1 to 3 and summed (3 to 9). The authors set no cut-off ("There is no standard
     // accepted score for which a person would definitely be considered lonely", ONS, 2018); the
     // bands are the grouping the Campaign to End Loneliness reports researchers have used (3–5
-    // "not lonely", 6–9 "lonely"). No reliable-change threshold is published for it.
+    // "not lonely", 6–9 "lonely").
     id: "loneliness",
     scale: "ucla3",
     title: "Loneliness check",
@@ -309,7 +304,6 @@ export const CHECKS: readonly Check[] = [
       },
     ],
     retakeDays: 28,
-    reliableChange: null,
     helpText:
       "If loneliness has felt heavy for a while, a doctor or a counsellor can help you find a way back to people. If you’d like to talk to someone now, these lines listen.",
     practice: 5,
@@ -366,19 +360,6 @@ export const bandOf = (check: Check, score: number): Band =>
  */
 export const supportNow = (check: Check, answers: readonly number[]): boolean =>
   check.crisisItem !== undefined && (answers[check.crisisItem] ?? 0) > check.options[0]!.value;
-
-/** From one score to the next: reliable when it reaches the published threshold, null with none. */
-export function changeSince(
-  check: Check,
-  before: number,
-  after: number
-): { diff: number; reliable: boolean | null } {
-  const diff = after - before;
-  return {
-    diff,
-    reliable: check.reliableChange === null ? null : Math.abs(diff) >= check.reliableChange,
-  };
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

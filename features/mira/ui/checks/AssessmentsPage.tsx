@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CHECKS, CHECK_IDS, bandOf, changeSince, type Check } from "@features/mira/content/checks";
+import { CHECKS, CHECK_IDS, bandOf, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
 import { UseChecksSwitch } from "./ChecksSettings";
@@ -12,6 +12,7 @@ import {
   bodyLine,
   checkLine,
   shortDate,
+  sinceLastTime,
   stateOf,
   useChecks,
   useDrafts,
@@ -206,9 +207,7 @@ function CheckCard({
 }) {
   const line = checkLine(check, state);
   const last = results.at(-1);
-  const first = results[0];
-  const change =
-    first && last && results.length > 1 ? changeSince(check, first.score, last.score) : null;
+  const before = results.length > 1 ? results.at(-2) : undefined;
   const primary = state.kind === "new" || state.kind === "due" || state.kind === "draft";
   return (
     <article className="flex h-full flex-col gap-3 rounded-3xl border border-ap-line p-5 transition-shadow duration-300 hover:shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)] motion-reduce:transition-none">
@@ -227,9 +226,7 @@ function CheckCard({
             <p className="text-[18px] font-bold leading-tight">{bandOf(check, last.score).label}</p>
             <p className="text-[13px] text-ap-muted">
               {shortDate(last.at)}
-              {change && change.diff !== 0
-                ? ` · ${Math.abs(change.diff)} ${Math.abs(change.diff) === 1 ? "point" : "points"} ${change.diff < 0 ? "lower" : "higher"} than your first`
-                : ""}
+              {before ? ` · ${sinceLastTime(before.score, last.score)}` : ""}
             </p>
           </div>
           {results.length > 1 ? <Spark check={check} results={results} /> : null}
