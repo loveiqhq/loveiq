@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   SUPPORT_HEADLINE,
@@ -11,7 +10,7 @@ import {
   type Check,
   type CheckId,
 } from "@features/mira/content/checks";
-import { BodyCheck } from "../BodyCheck";
+import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
@@ -611,14 +610,44 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
 }
 
 /**
- * /mira/assessments/body: the body check (Body Appreciation Scale-2) outside the chat, through
- * the chat's own card (ui/BodyCheck.tsx) and route, so its storage and AP numbers don't change.
- * No score is shown: it measures, it doesn't judge.
+ * /mira/assessments/body: the body check (Body Appreciation Scale-2) as a page like the other
+ * checks (the same runner: one statement per screen, radios, "n of N", Back), saved through the
+ * chat card's route, so its storage and AP numbers don't change. No score is shown: it measures,
+ * it doesn't judge. It ends on a thank-you that takes focus and stays until the person moves on.
  */
 export function BodyCheckPage() {
-  const router = useRouter();
   const { data, error, retry } = useChecks();
   const body = data?.bodyCheck;
+  const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Which check was taken, kept for the thank-you once the data says nothing is due.
+  const [took, setTook] = useState<"baseline" | "week4">("baseline");
+  const doneRef = useRef<HTMLHeadingElement | null>(null);
+
+  useEffect(() => {
+    if (mode === "done") doneRef.current?.focus();
+  }, [mode]);
+
+  function start(due: "baseline" | "week4") {
+    void miraApi("/api/mira/event", { body: { type: "track", name: "body_check_started" } });
+    setTook(due);
+    setAnswers([]);
+    setSaveError(null);
+    setMode("run");
+  }
+
+  async function save(all: number[]) {
+    setAnswers(all);
+    setSaving(true);
+    setSaveError(null);
+    const r = await miraApi("/api/mira/body-check", { body: { answers: all } });
+    setSaving(false);
+    if (r.ok) setMode("done");
+    else setSaveError(r.data.error ?? "Your answers didn’t save. Please try again.");
+  }
+
   return (
     <MiraAppFrame active={FRAME_TAB} email={data?.email} name={data?.name}>
       <nav aria-label="Breadcrumb" className="text-[13px] text-ap-muted">
@@ -639,12 +668,54 @@ export function BodyCheckPage() {
         </p>
       ) : null}
       <div className="mt-6 max-w-[600px]">
-        {body?.due ? (
-          <BodyCheck
-            due={body.due}
-            onStart={() => undefined}
-            onClose={() => router.push("/mira/assessments")}
-          />
+        {mode === "done" ? (
+          <section aria-labelledby="body-thanks-h" className="motion-safe:animate-mira-in">
+            <h2
+              id="body-thanks-h"
+              ref={doneRef}
+              tabIndex={-1}
+              className="font-serif text-[24px] font-medium leading-snug outline-none"
+            >
+              {THANKS[took]}
+            </h2>
+            <Link
+              href="/mira/assessments"
+              className="mt-5 inline-flex min-h-[48px] items-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white"
+            >
+              Back to assessments
+            </Link>
+          </section>
+        ) : mode === "run" ? (
+          <>
+            <CheckRunner
+              check={BODY_CHECK}
+              initial={answers}
+              saving={saving}
+              finishLabel="Save my answers"
+              onAnswer={() => undefined}
+              onFinish={(all) => void save(all)}
+              onStop={() => setMode("intro")}
+            />
+            {saveError ? (
+              <p role="alert" className="mt-4 text-[14px] text-ap-bad-ink">
+                {saveError}{" "}
+                <button
+                  type="button"
+                  onClick={() => void save(answers)}
+                  className="font-semibold underline"
+                >
+                  Try again
+                </button>
+              </p>
+            ) : null}
+          </>
+        ) : body?.due ? (
+          <>
+            <p className="text-[16px] leading-relaxed text-ap-body">{OFFER[body.due].text}</p>
+            <div className="mt-6">
+              <PrimaryButton onClick={() => start(body.due!)}>Start</PrimaryButton>
+            </div>
+          </>
         ) : body ? (
           <p className="text-[16px] leading-relaxed text-ap-body">
             {body.nextAt

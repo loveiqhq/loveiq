@@ -18,14 +18,18 @@ export function CheckRunner({
   check,
   initial,
   saving,
+  finishLabel = "See my result",
   onAnswer,
   onFinish,
   onStop,
 }: {
-  check: Check;
+  /** A self-check, or the body check on its own page (ui/BodyCheck.tsx BODY_CHECK). */
+  check: Pick<Check, "title" | "instructions" | "items" | "options"> & { id: string };
   /** The answers so far, in question order (a resumed check). */
   initial: number[];
   saving: boolean;
+  /** The last question's button. */
+  finishLabel?: string;
   onAnswer: (answers: number[], index: number) => void;
   onFinish: (answers: number[]) => void;
   onStop: () => void;
@@ -186,7 +190,7 @@ export function CheckRunner({
             <span />
           )}
           <PrimaryButton type="submit" disabled={picked === undefined || saving}>
-            {saving ? "Saving…" : last ? "See my result" : "Next"}
+            {saving ? "Saving…" : last ? finishLabel : "Next"}
           </PrimaryButton>
         </div>
       </form>

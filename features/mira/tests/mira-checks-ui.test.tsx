@@ -17,6 +17,7 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 import MiraPage from "@/app/mira/page";
 import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
+import { BodyCheck } from "@features/mira/ui/BodyCheck";
 import AssessmentsPage from "@features/mira/ui/checks/AssessmentsPage";
 import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
@@ -131,6 +132,12 @@ describe("taking a check", () => {
   });
 
   it("lets the last answer be checked or changed before anything is saved", async () => {
+    replies["POST /api/mira/checks"] = () => ({
+      body: {
+        result: { at: new Date().toISOString(), score: 11, band: "moderate", support: false },
+        previous: null,
+      },
+    });
     sessionStorage.setItem(
       "mira.check.v1:u1:anxiety",
       JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
@@ -151,6 +158,7 @@ describe("taking a check", () => {
         { check: "anxiety", answers: [2, 2, 2, 2, 2, 1, 1] },
       ])
     );
+    await screen.findByRole("heading", { level: 1 });
   });
 
   it("sends only the answers and shows the result in words, with the next steps", async () => {
@@ -191,6 +199,70 @@ describe("taking a check", () => {
 
 // EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
 // never a verdict on it ("a real change", "within the usual ups and downs").
+describe("the body check's own page", () => {
+  const keyboard = (label: string, next: string) => {
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: next }));
+  };
+
+  it("works like the other checks, and ends on a thank-you it doesn't leave on its own", async () => {
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    expect(tracked()).toEqual(["body_check_started"]);
+    // One statement per screen as radios, with "n of N" and Back, like the other three.
+    expect(question()).toMatch(/Question 1 of 10/);
+    expect(screen.getAllByRole("radio").map((r) => r.getAttribute("value"))).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    for (let i = 1; i < 10; i++) keyboard("Often", "Next");
+    expect(question()).toMatch(/Question 10 of 10/);
+    keyboard("Always", "Save my answers");
+    const thanks = await screen.findByRole("heading", {
+      name: "Thank you. I’ll ask again in four weeks.",
+    });
+    await waitFor(() => expect(thanks).toHaveFocus());
+    expect(sent("POST /api/mira/body-check")).toEqual([
+      { answers: [4, 4, 4, 4, 4, 4, 4, 4, 4, 5] },
+    ]);
+    expect(screen.getByRole("link", { name: "Back to assessments" }).getAttribute("href")).toBe(
+      "/mira/assessments"
+    );
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("in the chat's card, reads the thank-you out: its region is there before its words", async () => {
+    render(<BodyCheck due="week4" onStart={() => undefined} onClose={() => undefined} />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole("button", { name: "Often" }));
+    await waitFor(() =>
+      expect(region.textContent).toBe("Thank you. That’s your four-week check done.")
+    );
+    expect(screen.getByRole("status")).toBe(region);
+  });
+
+  it("keeps the answers and offers Try again when the save fails", async () => {
+    replies["POST /api/mira/body-check"] = () => ({ status: 500, body: { error: "Not saved." } });
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 1; i < 10; i++) keyboard("Seldom", "Next");
+    keyboard("Never", "Save my answers");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not saved.");
+    replies["POST /api/mira/body-check"] = () => ({ body: { success: true } });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("heading", { name: /^Thank you/ });
+    expect(sent("POST /api/mira/body-check").at(-1)).toEqual({
+      answers: [2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    });
+  });
+});
+
 describe("the change since last time", () => {
   const anxiety = (scores: number[], daysAgo: number[]) => {
     account.checks[0] = {
