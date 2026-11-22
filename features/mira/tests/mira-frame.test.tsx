@@ -3,13 +3,19 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
+const nav = vi.hoisted(() => ({ path: "/mira/home" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
-  usePathname: () => "/mira/home",
+  usePathname: () => nav.path,
   redirect: (to: string) => {
     throw new Error(`redirect ${to}`);
   },
+  notFound: () => {
+    throw new Error("not found");
+  },
 }));
+const posthog = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("posthog-js", () => ({ default: posthog }));
 
 const session = vi.hoisted(() => ({ account: null as null | { id: string; email: string } }));
 vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => session.account }));
@@ -23,7 +29,10 @@ vi.mock("@features/mira/server/nudges", async (original) => ({
   hadCrisis: (id: string, since: Date) => server.hadCrisis(id, since),
 }));
 
+import MiraError from "@/app/mira/error";
 import HomePage from "@/app/mira/home/page";
+import MissingPage from "@/app/mira/[...missing]/page";
+import MiraNotFound from "@/app/mira/not-found";
 import GuideLayout from "@/app/mira/guide/layout";
 import MiraHome from "@features/mira/ui/MiraHome";
 import { MiraAppFrame } from "@features/mira/ui/MiraAppFrame";
@@ -422,5 +431,74 @@ describe("Home's page (server)", () => {
   it("sends a signed-out visit to sign in, then back to Home", async () => {
     session.account = null;
     await expect(HomePage()).rejects.toThrow("redirect /mira/start?next=%2Fmira%2Fhome");
+  });
+});
+
+describe("Mira's own not-found page (SET-5)", () => {
+  it("catches any other address under /mira", () => {
+    expect(() => MissingPage()).toThrow("not found");
+  });
+
+  it("signed in, says the page isn't here inside the app's frame, with the way Home", async () => {
+    session.account = { id: "u1", email: "robin@example.com" };
+    render(await MiraNotFound());
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.getByRole("navigation", { name: "Mira" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/mira/home");
+  });
+
+  it("signed out, says so in the open frame, with the way to Mira", async () => {
+    session.account = null;
+    render(await MiraNotFound());
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Talk to Mira" })).toHaveAttribute("href", "/mira");
+  });
+});
+
+describe("Mira's own error page (SET-17)", () => {
+  it("on a signed-in page: says what happened, in the frame with the menu, Try again and Home", () => {
+    nav.path = "/mira/assessments/anxiety";
+    const retry = vi.fn();
+    render(<MiraError error={new Error("boom")} retry={retry} />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page didn't load");
+    const menu = screen.getByRole("navigation", { name: "Mira" });
+    expect(within(menu).getByRole("link", { current: "page" })).toHaveAttribute(
+      "href",
+      "/mira/assessments"
+    );
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/mira/home");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    // Still reported, as the site's own error page does: Mira's boundary catches it first now.
+    expect(posthog.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ error_boundary: "app/mira/error.tsx" })
+    );
+  });
+
+  it("reloads the page when its code failed to load (a dropped connection, a new release)", () => {
+    nav.path = "/mira/home";
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    const retry = vi.fn();
+    const chunk = Object.assign(new Error("Failed to load chunk /_next/x.js"), {
+      name: "ChunkLoadError",
+    });
+    render(<MiraError error={chunk} retry={retry} />);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("on an open page (the chat, the guide, a link from an email): the open frame and the way to Mira", () => {
+    nav.path = "/mira";
+    render(<MiraError error={new Error("boom")} retry={vi.fn()} />);
+    expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Talk to Mira" })).toHaveAttribute("href", "/mira");
+    nav.path = "/mira/journal/reminder";
+    cleanup();
+    render(<MiraError error={new Error("boom")} retry={vi.fn()} />);
+    expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
   });
 });
