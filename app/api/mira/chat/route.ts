@@ -446,7 +446,9 @@ export async function POST(request: Request) {
         voice: Boolean(voice),
         invitation: inviting,
       }),
-      ...(weekly === undefined ? [] : [weeklySessionInstructions(weekly)]),
+      ...(weekly === undefined
+        ? []
+        : [weeklySessionInstructions(weekly, { justBooked: answering === "weekly" })]),
       ...(opening ? [sessionOpeningInstructions(weekly ?? null, earlier)] : []),
     ].join("\n\n"),
     turns,

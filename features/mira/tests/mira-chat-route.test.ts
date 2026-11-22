@@ -512,6 +512,53 @@ describe("POST /api/mira/chat", () => {
     });
   });
 
+  // Round-2 audit CHAT-13: after booking with the picker under her weekly question, Mira read her
+  // own question beside "booked… Don't ask the weekly question again" and apologised that it
+  // "was already booked".
+  it("tells Mira a session booked in answer to her weekly question was booked just now", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+    } as never);
+    vi.mocked(supabaseFetch).mockImplementation(
+      async (path) =>
+        new Response(
+          JSON.stringify(
+            String(path).startsWith("/rest/v1/mira_session_slot?")
+              ? [
+                  {
+                    id: "s1",
+                    weekday: 3,
+                    local_time: "19:00",
+                    time_zone: "Europe/Berlin",
+                    sequence: 0,
+                    paused_at: null,
+                  },
+                ]
+              : []
+          )
+        )
+    );
+    const JUST_NOW = "booked it just now with the time picker";
+    await post({
+      message: "Wednesdays at 19:00 works for me.",
+      consent: true,
+      history: openChat,
+      answering: "weekly",
+    });
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(JUST_NOW);
+    // Any other message: booked, no more.
+    vi.mocked(askModel).mockClear();
+    await post({ message: "and then?", consent: true, history: openChat });
+    const personal = vi.mocked(askModel).mock.calls[0]![1];
+    expect(personal).toContain("They have a weekly 15-minute session with you");
+    expect(personal).not.toContain(JUST_NOW);
+  });
+
   it("leaves the invitation out when Mira's first reply already asks an intake question", async () => {
     vi.mocked(askModel).mockResolvedValueOnce({
       ok: true,

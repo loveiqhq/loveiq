@@ -263,13 +263,18 @@ type Turn = { role: "user" | "assistant"; content: string };
 /**
  * Added to every signed-in message: whether a weekly session is booked. Only the app books one
  * (the time picker), so Mira never says a session, an invite or a reminder exists before this
- * says so.
+ * says so. `justBooked`: this message answers her weekly question, which she asks only while
+ * nothing is booked, so a booked slot was booked with the picker a moment ago (round-2 audit
+ * CHAT-13: without this she read her own question beside "booked" and apologised).
  */
-export function weeklySessionInstructions(slot: BookedSlot | null): string {
+export function weeklySessionInstructions(
+  slot: BookedSlot | null,
+  { justBooked = false }: { justBooked?: boolean } = {}
+): string {
   return [
     "WEEKLY SESSION",
     slot
-      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
+      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.${justBooked ? " They booked it just now with the time picker under your weekly question, and their message is their answer to it: it wasn't booked before, so don't apologise or say it already was." : ""}`
       : "Nothing is booked. To offer a weekly session, ask the weekly question with its marker, [[ASK:weekly]]: the app shows a time picker that books it and emails the calendar invite. Only the picker books: never say a session is booked, or that an invite or reminder is coming, until this section says it is booked.",
   ].join("\n");
 }
