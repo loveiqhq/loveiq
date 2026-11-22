@@ -147,6 +147,34 @@ describe("Use Face ID next time?", () => {
   });
 });
 
+describe("Back to a Settings section after sign-in", () => {
+  // A session email's link, /mira/settings#weekly, signed out: the page's redirect can't see the
+  // hash, so it sends next=/mira/settings, and the browser keeps #weekly on the sign-in page.
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("goes back to the section the link named, by code and by Google", async () => {
+    window.history.replaceState(null, "", "/mira/start?next=%2Fmira%2Fsettings#weekly");
+    replies["POST /api/mira/auth"] = (b) =>
+      b.action === "verify" ? { body: { success: true } } : { body: { success: true } };
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    render(<SignUpFlow googleEnabled next="/mira/settings" />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    tickAll();
+    // Google leaves the page, so the section rides in its next.
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("&next=%2Fmira%2Fsettings%23weekly")
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/settings#weekly"));
+  });
+});
+
 describe("Sign in with a passkey", () => {
   it("signs in without ticks or a code, brings the chat along, then goes on", async () => {
     localStorage.setItem(
@@ -420,8 +448,9 @@ describe("Settings › Sign-in & security", () => {
     );
     expect(calls("POST /api/mira/passkeys")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    // "You'll come straight back here": to Sign-in & security, not the top of Settings.
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
     );
     expect(calls("POST /api/mira/auth")).toEqual([expect.objectContaining({ action: "logout" })]);
   });

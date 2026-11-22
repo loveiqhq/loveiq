@@ -143,10 +143,29 @@ describe("the hand-over to Google", () => {
 
 describe("where a sign-in returns to (next)", () => {
   it("is one of Mira's own pages, spelt exactly, or nothing", () => {
-    for (const ok of ["/mira", `/mira?chat=${CHAT}`, "/mira/home", "/mira/settings"]) {
+    for (const ok of [
+      "/mira",
+      `/mira?chat=${CHAT}`,
+      "/mira/home",
+      "/mira/settings",
+      // A Settings section (the session emails' #weekly), and one voice session by its id.
+      "/mira/settings#weekly",
+      "/mira/settings#security",
+      `/mira/recordings/${CHAT}`,
+    ]) {
       expect(safeNext(ok)).toBe(ok);
     }
     for (const bad of [
+      "/mira/settings#",
+      "/mira/settings#x",
+      "/mira/settings#Weekly",
+      "/mira/settings#weekly#x",
+      "/mira/settings#weekly?x=//evil.example",
+      "/mira/settings#../../admin",
+      "/mira/home#weekly",
+      "/mira/recordings/x",
+      `/mira/recordings/${CHAT}/x`,
+      `/mira/recordings/${CHAT}#x`,
       "//evil.example",
       "/\\evil.example",
       "https://evil.example/mira",
@@ -338,6 +357,11 @@ describe("GET /api/mira/auth/google/callback", () => {
     );
     expect(res.headers.get("location")).toBe(
       `https://www.loveiq.org/mira/start?google=done&about=1&next=${encodeURIComponent(chosen.next)}`
+    );
+    // A Settings section comes back from Google too (a session email's "#weekly").
+    jar.get.mockReturnValue({ value: packStart(S, { ...chosen, next: "/mira/settings#weekly" }) });
+    expect((await back(`code=abc&state=${S.state}`)).headers.get("location")).toBe(
+      "https://www.loveiq.org/mira/start?google=done&about=1&next=%2Fmira%2Fsettings%23weekly"
     );
     // A cookie whose next isn't a Mira page (it was edited) goes Home, the usual way.
     jar.get.mockReturnValue({ value: packStart(S, { ...chosen, next: "https://evil.example" }) });

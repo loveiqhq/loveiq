@@ -16,7 +16,7 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, type ApiResult } from "./api";
+import { miraApi, signInHref, type ApiResult } from "./api";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
 
@@ -177,19 +177,11 @@ export default function MiraSettings({
     ready
   );
 
-  // A link into a section (#weekly from the session emails, #security back from Google) lands
-  // on it once it exists: the sections come after the profile, so the browser's own jump on
-  // arrival found nothing to go to.
-  useEffect(() => {
-    if (!ready) return;
-    const section = document.getElementById(window.location.hash.slice(1));
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
-  }, [ready]);
+  useLandOnSection(ready);
 
   function load() {
     void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {
-      if (r.status === 401) router.replace("/mira/start");
+      if (r.status === 401) router.replace(signInHref());
       else if (r.ok) {
         stored.current = r.data.profile;
         setP(r.data.profile);
@@ -698,6 +690,37 @@ export default function MiraSettings({
       ) : null}
     </MiraAppFrame>
   );
+}
+
+/** What the person does when they take over the scrolling. */
+const TAKE_OVER = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/**
+ * A link into a section (#weekly from the session emails, #security back from Google) lands on it
+ * once it exists (the sections come after the profile, so the browser's own jump on arrival found
+ * nothing), at once, as the page's smooth scrolling would still be gliding when the sections above
+ * load their own data and grow. Until the person scrolls or taps (10 seconds at most), each growth
+ * lands it again, so it stays in view.
+ */
+function useLandOnSection(ready: boolean) {
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    // Only with an anchor: Firefox warns about an empty id.
+    const section = ready && id ? document.getElementById(id) : null;
+    if (!section) return;
+    const land = () => section.scrollIntoView({ behavior: "instant", block: "start" });
+    land();
+    const grew = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(land);
+    grew?.observe(document.body);
+    const stop = () => {
+      grew?.disconnect();
+      window.clearTimeout(timer);
+      for (const e of TAKE_OVER) window.removeEventListener(e, stop);
+    };
+    const timer = window.setTimeout(stop, 10_000);
+    for (const e of TAKE_OVER) window.addEventListener(e, stop, { passive: true });
+    return stop;
+  }, [ready]);
 }
 
 /**

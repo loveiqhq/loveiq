@@ -71,6 +71,15 @@ export async function miraApi<T = Record<string, unknown>>(
   }
 }
 
+/**
+ * The sign-in page, coming back afterwards to this page, with its query and its Settings section
+ * (the sign-in page lets `next` through only where server/session.ts safeNext allows it).
+ */
+export function signInHref(): string {
+  const { pathname, search, hash } = window.location;
+  return `/mira/start?next=${encodeURIComponent(pathname + search + hash)}`;
+}
+
 export type Turn = { role: "user" | "assistant"; content: string };
 export type Source = { id: string; label: string; link: string | null };
 /**

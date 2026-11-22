@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { useMiraLook } from "./MiraLook";
@@ -67,11 +67,16 @@ async function afterSignIn(adopt: (saved: SavedLook) => void) {
 const carriedChat = () =>
   (local.chat()?.turns ?? []).map(({ role, content }) => ({ role, content })).slice(-48);
 
+const unchanging = () => () => {};
+/** A Settings section the sign-in page was opened at (`#weekly`), or ""; "" on the server. */
+const sectionHere = () => (/^#[a-z]{2,20}$/.test(window.location.hash) ? window.location.hash : "");
+const useSectionHere = () => useSyncExternalStore(unchanging, sectionHere, () => "");
+
 export default function SignUpFlow({
   googleEnabled = false,
   googleResult = null,
   needsAbout = false,
-  next = null,
+  next: asked = null,
 }: {
   googleEnabled?: boolean;
   googleResult?: string | null;
@@ -79,6 +84,10 @@ export default function SignUpFlow({
   /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
   next?: string | null;
 }) {
+  // A link into a Settings section (a session email's #weekly) came here without it in `next`:
+  // the page's redirect can't see an anchor, but the browser keeps it in the address.
+  const section = useSectionHere();
+  const next = asked === "/mira/settings" ? asked + section : asked;
   const router = useRouter();
   const { look, adopt } = useMiraLook();
   const adoptSaved = (saved: SavedLook) => adopt(accountLook(saved, look));
