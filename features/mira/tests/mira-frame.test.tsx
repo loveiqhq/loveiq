@@ -285,6 +285,13 @@ describe("the signed-in frame", () => {
     expect(menu()).toHaveAttribute("data-mira-bar");
   });
 
+  // R3-UXA-12 item 3: Mira's copy mixed ' and ’; it writes ’.
+  it("writes its own words with typographic apostrophes", () => {
+    frame("home");
+    expect(screen.getByRole("contentinfo")).toHaveTextContent("If you’re struggling");
+    expect(screen.getByRole("contentinfo").textContent).not.toContain("'");
+  });
+
   it("marks nothing as current on a page outside the menu", () => {
     frame(undefined);
     expect(within(menu()).queryAllByRole("link", { current: "page" })).toEqual([]);
@@ -376,7 +383,7 @@ describe("Home", () => {
     render(<MiraHome hour={8} name="Robin" />);
     expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
     expect(screen.getByText("Loading your chats")).toBeInTheDocument();
-    expect(await screen.findByText("Your chats didn't load.")).toBeInTheDocument();
+    expect(await screen.findByText("Your chats didn’t load.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
     expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/mira");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -647,7 +654,7 @@ describe("Mira's own not-found page (SET-5)", () => {
   it("signed in, says the page isn't here inside the app's frame, with the way Home", async () => {
     session.account = { id: "u1", email: "robin@example.com" };
     render(await MiraNotFound());
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn’t here");
     expect(screen.getByRole("navigation", { name: "Mira" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/mira/home");
   });
@@ -681,7 +688,7 @@ describe("Mira's own not-found page (SET-5)", () => {
   it("signed out, says so in the open frame, with the way to Mira", async () => {
     session.account = null;
     render(await MiraNotFound());
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn’t here");
     expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
     expect(screen.getByRole("link", { name: "Talk to Mira" })).toHaveAttribute("href", "/mira");
   });
@@ -692,7 +699,7 @@ describe("Mira's own error page (SET-17)", () => {
     nav.path = "/mira/assessments/anxiety";
     const retry = vi.fn();
     render(<MiraError error={new Error("boom")} retry={retry} />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page didn't load");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page didn’t load");
     const menu = screen.getByRole("navigation", { name: "Mira" });
     expect(within(menu).getByRole("link", { current: "page" })).toHaveAttribute(
       "href",

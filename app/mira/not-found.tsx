@@ -22,9 +22,7 @@ export default async function MiraNotFound() {
   const signedIn = Boolean(await getMiraAccount());
   const body = (
     <div className="max-w-[560px] pb-6 pt-2">
-      <h1 className="font-serif text-[34px] font-medium leading-tight">
-        This page isn&apos;t here
-      </h1>
+      <h1 className="font-serif text-[34px] font-medium leading-tight">This page isn’t here</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-ap-body">
         The link may be old, or the address may have a typo.
       </p>

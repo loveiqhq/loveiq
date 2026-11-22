@@ -206,7 +206,7 @@ export default function MiraHome({
               <span aria-hidden="true" className={`${SKELETON} mt-4 h-[50px] !rounded-2xl`} />
             ) : failed ? (
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <p className="text-[15px] text-ap-body">Your chats didn&apos;t load.</p>
+                <p className="text-[15px] text-ap-body">Your chats didn’t load.</p>
                 <button
                   type="button"
                   aria-disabled={retrying || undefined}

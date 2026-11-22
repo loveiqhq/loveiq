@@ -62,7 +62,7 @@ export function MiraCloud({ className = "" }: { className?: string }) {
 }
 
 export const DISCLAIMER =
-  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you're struggling, please reach out to a qualified professional.";
+  "Mira is an AI coach by Applied Psychometrics, a supportive, educational tool for self-understanding. Mira does not provide medical advice, diagnosis, or treatment. If you’re struggling, please reach out to a qualified professional.";
 
 export function MiraFrame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
