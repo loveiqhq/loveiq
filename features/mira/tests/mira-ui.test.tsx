@@ -486,20 +486,29 @@ describe("Chat", () => {
     };
     const deletes = () => fetchMock.mock.calls.filter(([, i]) => i?.method === "DELETE");
 
+    // Round-3 R3-UXA-9 (UX-9): it was a dialog with Cancel · Delete, unlike every other delete;
+    // now the kit's question, opening on "Keep it". R3-CHAT-5: after Delete, focus fell to the
+    // page (it was moved while the dialog still made the page inert).
+    const ask = () => screen.getByRole("group", { name: /^Delete this chat\?/ });
     it("asks first, then deletes it, takes it off the list at once and says so", async () => {
       await open();
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      const ask = screen.getByRole("dialog", { name: "Delete this chat?" });
-      fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
-      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(ask()).toHaveTextContent("Your other chats stay. This can't be undone.");
+      expect(within(ask()).getByRole("button", { name: "Keep it" })).toHaveFocus();
+      fireEvent.click(within(ask()).getByRole("button", { name: "Keep it" }));
+      expect(screen.queryByRole("group", { name: /^Delete this chat\?/ })).toBeNull();
       expect(deletes()).toHaveLength(0);
+      // Kept: the focus is back on the button that asked.
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete this chat" })).toHaveFocus()
+      );
 
       replies[`DELETE /api/mira/chats/${SAVED}`] = () => ({ body: { success: true } });
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+      fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
       expect(await screen.findByText("Chat deleted.")).toBeInTheDocument();
       expect(deletes().map(([url]) => url)).toEqual([`/api/mira/chats/${SAVED}`]);
-      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByRole("group", { name: /^Delete this chat\?/ })).toBeNull();
       expect(screen.queryByText("an earlier line")).toBeNull();
       const nav = screen.getByRole("navigation", { name: "Your chats" });
       expect(
@@ -508,6 +517,10 @@ describe("Chat", () => {
           .map((a) => a.textContent)
       ).toEqual(["Mirror", "Clothes"]);
       expect(window.location.search).toBe("");
+      // Gone with the chat, the button hands the focus to the conversation, never the page.
+      await waitFor(() =>
+        expect(screen.getByRole("region", { name: "Conversation" })).toHaveFocus()
+      );
     });
 
     it("keeps the chat and says so when the delete doesn't go through", async () => {
@@ -517,8 +530,8 @@ describe("Chat", () => {
         body: { error: "Unable to delete this chat." },
       });
       fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
-      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
-      expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+      fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
+      expect(await within(ask()).findByRole("alert")).toHaveTextContent(
         "Unable to delete this chat."
       );
       expect(screen.getByText("an earlier line")).toBeInTheDocument();
