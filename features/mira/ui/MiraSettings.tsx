@@ -15,7 +15,7 @@ import miraConfig from "@features/mira/content/mira-config.json";
 import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
-import { PrimaryButton } from "./MiraShell";
+import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
 import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
@@ -167,6 +167,8 @@ export default function MiraSettings({
   const [status, setStatusMap] = useState<Partial<Record<SectionId, Status>>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
+  // The account and everything it kept are gone: the page says so (round-2 ID-18).
+  const [deleted, setDeleted] = useState(false);
   // The account's typed details changed since they were loaded or saved.
   const [accountDirty, setAccountDirty] = useState(false);
   // Saves go out one after another, so the last change made is the one kept; each field
@@ -331,11 +333,8 @@ export default function MiraSettings({
         text: r.data.error ?? "Unable to delete right now.",
       });
     }
-    if (what === "account") {
-      router.replace("/mira");
-      router.refresh();
-      return;
-    }
+    // Said, with what went, before the person goes anywhere (the welcome alone said nothing).
+    if (what === "account") return setDeleted(true);
     setBusy(false);
     setStatus("data", { kind: "saved", text: "All your chats are deleted." });
   }
@@ -365,6 +364,8 @@ export default function MiraSettings({
     setAccountDirty(true);
     setP((cur) => (cur ? { ...cur, ...patch } : cur));
   };
+
+  if (deleted) return <AccountDeleted />;
 
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
@@ -1220,6 +1221,41 @@ function Segmented<T extends string>({
         </label>
       ))}
     </div>
+  );
+}
+
+/**
+ * After "Delete account": the account and everything Mira kept for it are gone (the session too),
+ * so the page says so in the open frame, with the way back to the anonymous chat.
+ */
+function AccountDeleted() {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+  return (
+    <MiraFrame>
+      <div className="mx-auto flex max-w-[520px] flex-col gap-4 py-16">
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="font-serif text-[34px] font-medium leading-tight outline-none"
+        >
+          Your account is deleted
+        </h1>
+        <p className="text-[15px] leading-relaxed text-ap-body">
+          Your chats, journal, goals, check results, voice sessions, rating and passkeys went with
+          it, and any weekly session you booked is cancelled. You&apos;re signed out on every
+          device.
+        </p>
+        <div>
+          <Link
+            href="/mira"
+            className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white hover:bg-ap-ink/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+          >
+            Back to Mira
+          </Link>
+        </div>
+      </div>
+    </MiraFrame>
   );
 }
 

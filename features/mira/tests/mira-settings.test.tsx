@@ -214,6 +214,21 @@ describe("Settings sections", () => {
     expect(screen.getByLabelText("Name or nickname")).toHaveClass("border-ap-field");
   });
 
+  it("says the account is deleted, and what went, instead of the anonymous welcome (ID-18)", async () => {
+    replies["DELETE /api/mira/me"] = () => ({ body: { success: true } });
+    await openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const heading = await screen.findByRole("heading", { name: "Your account is deleted" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.getByText(/chats, journal, goals, check results, voice sessions/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Back to Mira" })).toHaveAttribute("href", "/mira");
+    expect(router.replace).not.toHaveBeenCalled();
+    // Nothing of the account is left on the page (its address, its sections).
+    expect(screen.queryByText("lea@example.com")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
   it("refreshes the page after a change of country, so the support lines follow it", async () => {
     await openSettings();
     fireEvent.change(screen.getByLabelText("Where you’re based"), { target: { value: "GB" } });
