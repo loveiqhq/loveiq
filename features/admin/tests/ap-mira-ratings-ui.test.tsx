@@ -46,6 +46,8 @@ const ratings: Ratings = {
   withdrawn: 1,
   average: 4.56,
   averaged: 9,
+  afterAsk: 8,
+  fromSettings: 1,
   words: 4,
   approved: 1,
   waiting: 1,
@@ -59,6 +61,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   fetchMock.mockClear();
+  refetch.mockClear();
 });
 
 describe("AP › Mira's Ratings card", () => {
@@ -67,7 +70,7 @@ describe("AP › Mira's Ratings card", () => {
     const card = screen.getByRole("region", { name: "Ratings" });
     expect(card).toHaveTextContent("Asks shown40");
     expect(card).toHaveTextContent("12 “Not now”");
-    expect(card).toHaveTextContent("25.0% of the asks");
+    expect(card).toHaveTextContent("20.0% of the asks · 1 from Settings");
     expect(card).toHaveTextContent("Average rating4.6");
     expect(card).toHaveTextContent("1 approved in the range, 1 waiting now");
     expect(card).toHaveTextContent(
@@ -103,9 +106,51 @@ describe("AP › Mira's Ratings card", () => {
     });
   });
 
-  it("lists what is shown now, with a way to take it down", () => {
+  it("rejects only for a reason from the list, and says critical words are never one", async () => {
+    vi.stubGlobal("fetch", fetchMock);
+    show();
+    expect(screen.getByRole("region", { name: "Ratings" })).toHaveTextContent(
+      "Critical or negative words are never a reason to reject or take down a quote."
+    );
+    const item = screen.getByText(/My husband Tom/).closest("li")!;
+    fireEvent.click(within(item).getByRole("button", { name: "Reject…" }));
+    const why = within(item).getByRole("group", { name: /Why not show it\?/ });
+    // The pressed button is gone: the first reason takes the focus, for keyboard users.
+    expect(document.activeElement).toBe(within(why).getAllByRole("radio")[0]);
+    expect(
+      within(why)
+        .getAllByRole("radio")
+        .map((r) => r.closest("label")!.textContent)
+    ).toEqual([
+      "Can’t remove identifying details",
+      "Harmful or abusive",
+      "Not about Mira",
+      "Spam or duplicate",
+    ]);
+    const reject = within(why).getByRole("button", { name: "Reject" });
+    expect(reject).toBeDisabled(); // no reason, no rejection
+    fireEvent.click(within(why).getByRole("radio", { name: "Not about Mira" }));
+    fireEvent.click(reject);
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+      id: 7,
+      decision: "reject",
+      reason: "off_topic",
+    });
+  });
+
+  it("takes a shown quote down only for a reason from the list", async () => {
+    vi.stubGlobal("fetch", fetchMock);
     show();
     const shown = screen.getByText(/Kind and clear/).closest("li")!;
-    expect(within(shown).getByRole("button", { name: "Take down" })).toBeInTheDocument();
+    fireEvent.click(within(shown).getByRole("button", { name: "Take down…" }));
+    fireEvent.click(within(shown).getByRole("radio", { name: "Spam or duplicate" }));
+    fireEvent.click(within(shown).getByRole("button", { name: "Take down" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+      id: 8,
+      decision: "reject",
+      reason: "spam",
+    });
   });
 });

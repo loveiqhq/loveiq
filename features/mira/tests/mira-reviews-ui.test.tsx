@@ -46,7 +46,7 @@ beforeEach(() => {
   replies = {
     "GET /api/mira/me": () => ({ body: { profile: { style: {} }, chats: [] } }),
     "GET /api/mira/reviews": () => ({ body: { reviews: null } }),
-    "GET /api/mira/reviews/mine": () => ({ body: { review: null, name: "Lea" } }),
+    "GET /api/mira/reviews/mine": () => ({ body: { review: null, name: "Lea", canRate: true } }),
   };
   vi.stubGlobal("fetch", fetchMock);
   localStorage.clear();
@@ -74,7 +74,7 @@ describe("the thank-you ask", () => {
     expect(screen.getByText("Without the tick, only your stars are sent.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText(/You can see or take back what you shared in/);
-    expect(calls("POST /api/mira/reviews")).toEqual([{ stars: 5 }]);
+    expect(calls("POST /api/mira/reviews")).toEqual([{ stars: 5, via: "ask" }]);
   });
 
   it("sends the words with the consent's version, the chosen name and age range", async () => {
@@ -92,6 +92,7 @@ describe("the thank-you ask", () => {
     expect(calls("POST /api/mira/reviews")).toEqual([
       {
         stars: 4,
+        via: "ask",
         words: {
           quote: "Kind and clear.",
           name: "L.",
@@ -122,6 +123,25 @@ describe("the thank-you ask", () => {
     expect(askCard()).toBeNull();
     expect(tracked()).toEqual([]);
     expect(reviewAskDue()).toBe(true);
+  });
+
+  it("never asks someone who hasn't talked with Mira enough to rate, and logs nothing", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: { review: null, name: "Lea", canRate: false },
+    });
+    const onClose = vi.fn();
+    render(<ReviewAsk from="thumbs" onClose={onClose} />);
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(askCard()).toBeNull();
+    expect(tracked()).toEqual([]);
+    expect(reviewAskDue()).toBe(true);
+  });
+
+  it("says how ratings are collected: in Settings by anyone, and asked at moments like this", async () => {
+    render(<ReviewAsk from="nps" onClose={() => {}} />);
+    const card = (await screen.findByText("Thank you, that means a lot.")).closest("section")!;
+    fireEvent.click(within(card).getByText("How we check reviews"));
+    expect(within(card).getByText(/Anyone who has talked with Mira can rate her/)).toBeVisible();
   });
 
   it("keeps its consent wording with the version it was agreed in", () => {
@@ -235,7 +255,15 @@ describe("what visitors see", () => {
     expect(block).toHaveTextContent("4.8 out of 5 · rated by 23 people");
     expect(block).toHaveTextContent("“Mira helped me stop hiding.” — Lea, 25–34");
     fireEvent.click(within(block).getByText("How we check reviews"));
-    expect(within(block).getByText(/Only people signed in to Mira can rate her/)).toBeVisible();
+    // How ratings are collected and checked (UWG §5b(3)), as the audit of 22 Nov 2026 asked.
+    expect(within(block).getByText(/Anyone who has talked/)).toHaveTextContent(
+      "Only people who have talked with Mira can rate her, once each, and our team’s own " +
+        "accounts never count. Anyone who has talked with Mira can rate her in Settings, and we " +
+        "also ask after someone says they’d recommend her or likes several of her answers. " +
+        "Every rating counts, high or low. We read each quote before it shows and remove only " +
+        "identifying details, harmful words, spam or text that isn’t about Mira, never because " +
+        "it’s critical."
+    );
   });
 
   it("gives Mira's roster card the rating line only when there is one", async () => {
@@ -259,6 +287,20 @@ describe("Settings: what you shared", () => {
     name: "Lea",
     age: "25–34",
   };
+
+  it("shows the writer the team's reason when their words weren't shown", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: {
+        review: { ...mine, quote: null, published: null, status: "rejected", reason: "harmful" },
+        name: "Lea",
+        canRate: false,
+      },
+    });
+    render(<SharedReviewSettings />);
+    expect(
+      await screen.findByText(/Your words aren’t shown, and we didn’t keep them\./)
+    ).toHaveTextContent("Our team’s reason: Harmful or abusive.");
+  });
 
   it("shows the rating and where the words stand, and takes the words back", async () => {
     replies["GET /api/mira/reviews/mine"] = () => ({ body: { review: mine, name: "Lea" } });
@@ -285,12 +327,67 @@ describe("Settings: what you shared", () => {
       screen.getByRole("heading", { name: "Your rating of Mira" })
     );
     fireEvent.click(screen.getByRole("button", { name: "Remove my rating" }));
-    expect(await screen.findByText(/You haven’t rated Mira/)).toBeInTheDocument();
+    // Gone, and open to rate again.
+    expect(await screen.findByRole("heading", { name: "Rate Mira" })).toBeInTheDocument();
   });
 
-  it("says when nothing is shared, and when it can't load", async () => {
+  it("lets anyone who has talked with Mira rate her there, high or low, words with consent", async () => {
     render(<SharedReviewSettings />);
-    expect(await screen.findByText(/You haven’t rated Mira/)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Rate Mira" });
+    fireEvent.click(screen.getByRole("radio", { name: "1 star" }));
+    fireEvent.change(screen.getByLabelText(/A sentence for others/), {
+      target: { value: "Not for me, too slow." },
+    });
+    expect(screen.getByLabelText("Shown as")).toHaveValue("Lea");
+    fireEvent.click(screen.getByRole("checkbox", { name: CONSENT_TEXT }));
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: {
+        review: {
+          stars: 1,
+          createdAt: "2026-11-22T10:00:00Z",
+          quote: "Not for me, too slow.",
+          published: null,
+          status: "pending",
+          reason: null,
+          name: "Lea",
+          age: null,
+        },
+        name: "Lea",
+        canRate: false,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText(/You rated Mira 1 out of 5/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Thank you. Your rating is in, and our team reads your words before they show."
+    );
+    expect(calls("POST /api/mira/reviews")).toEqual([
+      {
+        stars: 1,
+        via: "settings",
+        words: {
+          quote: "Not for me, too slow.",
+          name: "Lea",
+          ageRange: null,
+          consent: REVIEW_CONSENT_VERSION,
+        },
+      },
+    ]);
+    // Not the chat's ask: nothing about an ask is counted.
+    expect(tracked()).toEqual([]);
+  });
+
+  it("says when nothing is shared yet, and when it can't load", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: { review: null, name: "Lea", canRate: false },
+    });
+    render(<SharedReviewSettings />);
+    expect(
+      await screen.findByText(
+        "You can rate Mira once you’ve talked with her a little: three messages of your own."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).toBeNull();
     cleanup();
     replies["GET /api/mira/reviews/mine"] = () => ({ status: 500, body: { error: "x" } });
     render(<SharedReviewSettings />);

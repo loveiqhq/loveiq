@@ -44,7 +44,7 @@ vi.mock("@shared/observability/logger", () => ({
 import { GET, POST } from "@/app/api/admin/ap/mira/reviews/route";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { buildMiraPage, type MiraData, type MiraEventRow } from "@features/admin/server/ap/mira";
-import type { MiraReviewRow } from "@features/admin/server/ap/mira-ratings";
+import { REVIEW_SELECT, type MiraReviewRow } from "@features/admin/server/ap/mira-ratings";
 import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { revalidateTag } from "next/cache";
@@ -121,9 +121,10 @@ describe("AP › Mira: deciding on a quote", () => {
   });
 
   it("rejects or takes down by deleting the words, and keeps no words it doesn't show", async () => {
-    expect((await decide({ id: 1, decision: "reject" })).status).toBe(200);
+    expect((await decide({ id: 1, decision: "reject", reason: "identifying" })).status).toBe(200);
     expect(db.rows[0]).toMatchObject({
       quote_status: "rejected",
+      reject_reason: "identifying",
       quote: null,
       display_name: null,
       age_range: null,
@@ -132,9 +133,35 @@ describe("AP › Mira: deciding on a quote", () => {
       stars: 5, // the rating itself stays
     });
     db.rows = [pending(3, { quote_status: "approved", published_quote: said })];
-    expect((await decide({ id: 3, decision: "reject" })).status).toBe(200);
-    expect(db.rows[0]).toMatchObject({ quote_status: "rejected", published_quote: null });
+    expect((await decide({ id: 3, decision: "reject", reason: "harmful" })).status).toBe(200);
+    expect(db.rows[0]).toMatchObject({
+      quote_status: "rejected",
+      reject_reason: "harmful",
+      published_quote: null,
+    });
     expect(revalidateTag).toHaveBeenCalledWith("mira-reviews", { expire: 0 });
+  });
+
+  it("rejects or takes down only for a reason from the list, never for being critical", async () => {
+    db.rows = [pending(1, { stars: 1, quote: "It didn't help me at all." })];
+    for (const reason of [undefined, "", "negative", "critical", "toString"]) {
+      expect((await decide({ id: 1, decision: "reject", reason })).status, reason).toBe(400);
+    }
+    expect(db.rows[0]).toMatchObject({
+      quote_status: "pending",
+      quote: "It didn't help me at all.",
+    });
+    expect(revalidateTag).not.toHaveBeenCalled();
+    for (const [id, reason] of [
+      [11, "identifying"],
+      [12, "harmful"],
+      [13, "off_topic"],
+      [14, "spam"],
+    ] as const) {
+      db.rows = [pending(id)];
+      expect((await decide({ id, decision: "reject", reason })).status, reason).toBe(200);
+      expect(db.rows[0]).toMatchObject({ quote_status: "rejected", reject_reason: reason });
+    }
   });
 
   it("never approves words the person took back meanwhile", async () => {
@@ -145,9 +172,9 @@ describe("AP › Mira: deciding on a quote", () => {
 
   it("is for editors, with the CSRF token", async () => {
     mockVerifyAdminSession.mockResolvedValueOnce({ email: "v@loveiq.org", role: "viewer" });
-    expect((await decide({ id: 1, decision: "reject" })).status).toBe(403);
+    expect((await decide({ id: 1, decision: "reject", reason: "spam" })).status).toBe(403);
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
-    expect((await decide({ id: 1, decision: "reject" })).status).toBe(403);
+    expect((await decide({ id: 1, decision: "reject", reason: "spam" })).status).toBe(403);
     expect((await decide({ id: "1", decision: "publish" })).status).toBe(400);
     expect(db.rows[0]!.quote_status).toBe("pending");
   });
@@ -181,6 +208,7 @@ describe("AP › Mira: the Ratings card", () => {
       age_range: null,
       consent_at: null,
       from_team: false,
+      via: "ask",
       created_at: "2026-11-24T10:00:00Z",
       reviewed_at: null,
       mira_user: { email: `${user}@example.com`, is_team: false, minor_at: null },
@@ -231,6 +259,7 @@ describe("AP › Mira: the Ratings card", () => {
         quote_status: "approved",
         published_quote: "It helped.",
         reviewed_at: "2026-11-25T10:00:00Z",
+        via: "settings", // rated in Settings, not after an ask
       }),
       review("u2", 2, { created_at: "2026-11-01T10:00:00Z" }), // before the range
       review("staff", 1, {
@@ -247,12 +276,25 @@ describe("AP › Mira: the Ratings card", () => {
       withdrawn: 1,
       average: 4.5, // u1's 4 and u3's 5: the range's ratings that still stand
       averaged: 2,
+      afterAsk: 1, // u1, after the chat's ask
+      fromSettings: 1, // u3
       words: 2,
       approved: 1,
       waiting: 1,
       // What visitors see: 3 real people so far (u1, u2, u3), short of 20, so nothing shows.
       live: { people: 3, quotes: 1, average: null, needs: 20 },
     });
+  });
+
+  it("reads where each rating was given, so the ask's share stays true", () => {
+    // PostgREST returns only the columns the AP's select names (the account comes embedded).
+    const columns = REVIEW_SELECT.split(",").map((c) => c.split("!")[0]);
+    const asRead = (row: MiraReviewRow) =>
+      Object.fromEntries(
+        Object.entries(row).filter(([k]) => columns.includes(k))
+      ) as unknown as MiraReviewRow;
+    const r = build([asRead(review("u1", 4, { via: "settings" })), asRead(review("u2", 2))]);
+    expect(r).toMatchObject({ afterAsk: 1, fromSettings: 1, average: 3 });
   });
 
   it("says when the ratings table could not be read, rather than showing zeros as real", () => {

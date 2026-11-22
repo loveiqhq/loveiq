@@ -144,12 +144,15 @@ function RatingLine({ reviews: r }: { reviews: TodaysReviews }) {
 }
 
 /**
- * Whether and how we check reviews, beside every rating shown (UWG §5b(3)): a native disclosure,
- * so it works with a keyboard, a screen reader and no script.
+ * Whether and how we collect and check reviews, beside every rating shown and in the chat's ask
+ * (UWG §5b(3); no review gating or selective publication, Annex nos. 23b and 23c): a native
+ * disclosure, so it works with a keyboard, a screen reader and no script. `align="start"` lines
+ * it up with a card's text instead of centring it.
  */
-export function HowWeCheck() {
+export function HowWeCheck({ align = "center" }: { align?: "center" | "start" }) {
+  const start = align === "start";
   return (
-    <details className="group text-[12px] text-ap-muted">
+    <details className={`group text-[12px] text-ap-muted ${start ? "-ml-2 mt-1" : ""}`}>
       <summary className="inline-flex min-h-[32px] cursor-pointer list-none items-center gap-1 rounded-full px-2 underline decoration-ap-mist underline-offset-[3px] transition-colors hover:text-ap-body [&::-webkit-details-marker]:hidden">
         How we check reviews
         <svg
@@ -167,12 +170,16 @@ export function HowWeCheck() {
           <path d="m6 9 6 6 6-6" />
         </svg>
       </summary>
-      <p className="mx-auto mb-1 mt-1 max-w-[46ch] text-pretty text-left leading-relaxed text-ap-body motion-safe:animate-mira-in">
-        Only people signed in to Mira can rate her, once each, and our team&rsquo;s own accounts
-        never count. Every quote is read by our team before it shows, and only with the
-        writer&rsquo;s permission. We never change anyone&rsquo;s words, except to take out a detail
-        that could identify someone, marked […]. Nothing shows until {REVIEWS_MIN_PEOPLE} people
-        have rated her.
+      <p
+        className={`mb-1 mt-1 max-w-[46ch] text-pretty text-left leading-relaxed text-ap-body motion-safe:animate-mira-in ${start ? "pl-2" : "mx-auto"}`}
+      >
+        Only people who have talked with Mira can rate her, once each, and our team&rsquo;s own
+        accounts never count. Anyone who has talked with Mira can rate her in Settings, and we also
+        ask after someone says they&rsquo;d recommend her or likes several of her answers. Every
+        rating counts, high or low. We read each quote before it shows and remove only identifying
+        details, harmful words, spam or text that isn&rsquo;t about Mira, never because it&rsquo;s
+        critical. A quote shows only with its writer&rsquo;s permission, and a detail we take out is
+        marked […]. Nothing shows until {REVIEWS_MIN_PEOPLE} people have rated her.
       </p>
     </details>
   );

@@ -6,7 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * it does on Vercel. So "a withdrawal hides at once" is tested as what the next visitor sees.
  */
 type Row = Record<string, unknown> & { id: number; user_id: string };
-const db = vi.hoisted(() => ({ rows: [] as Row[], nextId: 1, failDeletes: false }));
+const db = vi.hoisted(() => ({
+  rows: [] as Row[],
+  nextId: 1,
+  failDeletes: false,
+  /** The chats' messages (mira_message, with their chat's account) and the event log. */
+  messages: [] as Array<Record<string, unknown>>,
+  events: [] as Array<Record<string, unknown>>,
+}));
 const cache = vi.hoisted(() => new Map<string, { value: unknown; tags: string[] }>());
 
 function matches(row: Row, query: URLSearchParams): boolean {
@@ -26,8 +33,17 @@ vi.mock("@features/admin/server/supabase", () => ({
     db.rows.filter((r) => path.startsWith("/rest/v1/mira_review") && matches(r, parse(path)))
   ),
   supabaseFetch: vi.fn(async (path: string, init: { method?: string; body?: string } = {}) => {
-    if (!path.startsWith("/rest/v1/mira_review")) return json([]);
     const query = parse(path);
+    const limit = Number(query.get("limit") ?? Infinity);
+    for (const [table, rows] of [
+      ["mira_message", db.messages],
+      ["mira_event", db.events],
+    ] as const) {
+      if (path.startsWith(`/rest/v1/${table}?`)) {
+        return json(rows.filter((r) => matches(r as Row, query)).slice(0, limit));
+      }
+    }
+    if (!path.startsWith("/rest/v1/mira_review")) return json([]);
     const hit = db.rows.filter((r) => matches(r, query));
     switch (init.method ?? "GET") {
       case "POST": {
@@ -128,6 +144,20 @@ const others = () =>
   }));
 const shown = async () =>
   (await (await getPublic(call("GET", "/api/mira/reviews"))).json()).reviews;
+/**
+ * What an account said to Mira: `said` messages of its own in its saved chats, each with Mira's
+ * reply, and `sent` messages in the event log (every message sent, saved or not).
+ */
+const talk = (userId: string, said: number, sent = said) => {
+  for (let i = 0; i < said; i++) {
+    for (const role of ["user", "assistant"]) {
+      db.messages.push({ id: db.messages.length + 1, role, "mira_chat.user_id": userId });
+    }
+  }
+  for (let i = 0; i < sent; i++) {
+    db.events.push({ id: db.events.length + 1, user_id: userId, name: "message_sent" });
+  }
+};
 /** Lea's approved words, with 19 others' ratings: Mira's pages show them. */
 const live = () => {
   db.rows = [
@@ -154,6 +184,9 @@ beforeEach(() => {
   db.rows = [];
   db.nextId = 1;
   db.failDeletes = false;
+  db.messages = [];
+  db.events = [];
+  talk(LEA.id, 3); // Lea has talked with Mira
   cache.clear();
   vi.mocked(getMiraAccount).mockResolvedValue(LEA);
   vi.mocked(fromTeamBrowser).mockResolvedValue(false);
@@ -207,12 +240,64 @@ describe("POST /api/mira/reviews: a signed-in person's one rating", () => {
     expect(vi.mocked(logMiraEvent).mock.calls[0]![2]).toEqual({ words: true });
   });
 
+  it("records where the rating was given: Settings, or the chat's ask (older pages too)", async () => {
+    expect((await rate({ stars: 2, via: "everywhere" })).status).toBe(400);
+    expect((await rate({ stars: 2, via: "settings" })).status).toBe(200);
+    expect(db.rows).toMatchObject([{ stars: 2, via: "settings" }]);
+    db.rows = [];
+    expect((await rate({ stars: 4, via: "ask" })).status).toBe(200);
+    db.rows = [];
+    expect((await rate({ stars: 4 })).status).toBe(200);
+    expect(db.rows).toMatchObject([{ stars: 4, via: "ask" }]);
+  });
+
   it("marks a rating from a team browser, and needs the CSRF token", async () => {
     vi.mocked(fromTeamBrowser).mockResolvedValueOnce(true);
     await rate({ stars: 5 });
     expect(db.rows[0]!.from_team).toBe(true);
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
     expect((await rate({ stars: 5 })).status).toBe(403);
+  });
+});
+
+describe("only people who have talked with Mira can rate her", () => {
+  it("refuses, kindly, an account with fewer than three messages of its own", async () => {
+    db.messages = [];
+    db.events = [];
+    // Two messages, each with Mira's reply, and someone else's chats: not yet.
+    talk(LEA.id, 2);
+    talk("someone-else", 5);
+    db.events.push({ id: 99, user_id: LEA.id, name: "chat_opened" });
+    const res = await rate({ stars: 1, words });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(
+      "You can rate Mira once you've talked with her a little: three messages of your own."
+    );
+    expect(db.rows).toEqual([]);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    // The third message: a low rating is as welcome as any.
+    talk(LEA.id, 1);
+    expect((await rate({ stars: 1 })).status).toBe(200);
+    expect(db.rows).toMatchObject([{ user_id: LEA.id, stars: 1 }]);
+  });
+
+  it("counts the messages of someone who keeps no chats (Remember our conversations off)", async () => {
+    db.messages = [];
+    db.events = [];
+    talk(LEA.id, 0, 3); // sent, never saved
+    expect((await rate({ stars: 3 })).status).toBe(200);
+  });
+
+  it("tells Settings and the ask whether the person may rate", async () => {
+    const mine = async () => (await getMine(call("GET", "/api/mira/reviews/mine"))).json();
+    expect(await mine()).toEqual({ review: null, name: "Lea", canRate: true });
+    db.messages = [];
+    db.events = [];
+    talk(LEA.id, 2);
+    expect(await mine()).toMatchObject({ review: null, canRate: false });
+    talk(LEA.id, 1);
+    live(); // talked with her, and rated already: nothing more to give
+    expect(await mine()).toMatchObject({ review: { stars: 5 }, canRate: false });
   });
 });
 
@@ -297,9 +382,30 @@ describe("taking back what you shared", () => {
     expect(db.rows.some((r) => r.user_id === LEA.id)).toBe(true);
   });
 
+  it("shows the writer why the team didn't show their words", async () => {
+    db.rows = [
+      {
+        ...others()[0]!,
+        id: 1,
+        user_id: LEA.id,
+        stars: 2,
+        quote: null, // a rejection deletes the words
+        quote_status: "rejected",
+        reject_reason: "off_topic",
+      },
+    ];
+    const res = await getMine(call("GET", "/api/mira/reviews/mine"));
+    expect((await res.json()).review).toMatchObject({
+      stars: 2,
+      status: "rejected",
+      quote: null,
+      reason: "off_topic",
+    });
+  });
+
   it("shows the person what they shared, and the first name to sign with", async () => {
     let res = await getMine(call("GET", "/api/mira/reviews/mine"));
-    expect(await res.json()).toEqual({ review: null, name: "Lea" });
+    expect(await res.json()).toEqual({ review: null, name: "Lea", canRate: true });
     live();
     res = await getMine(call("GET", "/api/mira/reviews/mine"));
     expect((await res.json()).review).toMatchObject({
