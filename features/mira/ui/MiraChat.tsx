@@ -103,9 +103,15 @@ export default function MiraChat({
   initialChatId,
   starter = null,
   session = false,
+  stopped = false,
 }: {
   signedIn: boolean;
   initialChatId: string | null;
+  /**
+   * This browser or account was stopped as under 18 (app/mira/page.tsx reads it): the chat starts
+   * as after a stop, with the one refusal and no 18+ tick, prompts or sign-up asks.
+   */
+  stopped?: boolean;
   /**
    * The words for `?ask=N` (the guide's "Ask Mira about this") or `?say=<check>`, which the page
    * builds from the id: they wait in the composer while the address still asks for them, and only
@@ -128,7 +134,7 @@ export default function MiraChat({
   // error doesn't replace it), and it stays the chat being continued (CHAT-16, R3-CHAT-10).
   const [unloaded, setUnloaded] = useState(false);
   // A calm line about the chat itself (it isn't here any more), read out as a status.
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(stopped ? ADULTS_ONLY : null);
   // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
   // (with her invitation), never the person's own words or the buttons and cards (round-2 audit
   // A11Y-11). Set as each send goes, so a turn taken back never reads the reply before it again.
@@ -151,7 +157,7 @@ export default function MiraChat({
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
   // Said they are under 18: nothing of this chat is kept in the browser any more.
-  const [minor, setMinor] = useState(false);
+  const [minor, setMinor] = useState(stopped);
   const [supportOpen, setSupportOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   // "Delete this chat" (round-2 audit CHAT-29): its question, open ("ask") or deleting ("busy").
@@ -542,9 +548,12 @@ export default function MiraChat({
     return ok;
   }
 
-  /** Talk: the first-message consent comes first, as for typing ("" marks it as Talk's). */
+  /**
+   * Talk: the first-message consent comes first, as for typing ("" marks it as Talk's); never
+   * after an under-18 stop, as for typing (round-3 R3-ACCT-8).
+   */
   function talk() {
-    if (consented) voice.start();
+    if (consented || minor) voice.start();
     else setPending("");
   }
 
@@ -759,7 +768,7 @@ export default function MiraChat({
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
   // A chat opened by its link loads first: the welcome would only flash before it.
   const showWelcome = empty && (ready || !initialChatId) && !unloaded;
-  const showChips = ready && empty && !gate && !unloaded;
+  const showChips = ready && empty && !gate && !unloaded && !minor;
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">

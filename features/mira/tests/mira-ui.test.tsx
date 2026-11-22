@@ -1,15 +1,24 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, redirect: vi.fn() }));
+/** This browser's cookies, for the chat page itself (the under-18 mark lives here). */
+const cookieJar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined),
+  }),
+}));
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => null }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION, VOICE_NOTICE_VERSION } from "@features/mira/server/config";
 import { StyleScales } from "@features/mira/ui/CoachingStylePanel";
+import MiraPage from "@/app/mira/page";
 import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
@@ -357,6 +366,35 @@ describe("Chat", () => {
     typeAndSend("hello");
     await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
     expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+  });
+
+  // Round-3 R3-ACCT-8 (lead decision): a stopped browser's next visit opened the usual welcome,
+  // and its first message the "I'm 18 or older" tick again. The page reads the stop's cookie and
+  // the chat starts stopped: the one refusal, no prompts, no tick; the composer stays, as a
+  // crisis message is still answered.
+  it("starts stopped for a browser stopped as under 18, never asking for the 18+ tick", async () => {
+    cookieJar.set("mira_minor", "1");
+    onTestFinished(() => cookieJar.clear());
+    const page = (await MiraPage({ searchParams: Promise.resolve({}) })) as ReactElement<{
+      stopped?: boolean;
+    }>;
+    expect(page.props.stopped).toBe(true);
+    cookieJar.clear();
+    const usual = (await MiraPage({ searchParams: Promise.resolve({}) })) as ReactElement<{
+      stopped?: boolean;
+    }>;
+    expect(usual.props.stopped).toBe(false);
+
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: miraConfig.minorMessage, sources: [], minor: true },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} stopped />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    typeAndSend("hello");
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
+    expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+    expect(screen.queryByText(/free message|free account/)).toBeNull();
   });
 
   // Round-2 audit CHAT-16: a saved chat that couldn't load opened as an empty new chat, silently.
@@ -1219,6 +1257,16 @@ describe("after a voice session", () => {
     b.focus();
     fireEvent.click(b);
   };
+
+  // Round-3 R3-ACCT-8: Talk opened "Before your first message" for a browser with no tick on
+  // file, which is every browser stopped as under 18.
+  it("never asks a stopped browser for the 18+ tick before Talk either", async () => {
+    localStorage.removeItem("mira.consent.v1"); // the stop forgets it
+    render(<MiraChat signedIn={false} initialChatId={null} stopped />);
+    press(talk().getAttribute("aria-label")!);
+    expect(await screen.findByRole("heading", { name: "Before you talk" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
+  });
 
   it("gives the focus back to Talk when the notice is put off", async () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
