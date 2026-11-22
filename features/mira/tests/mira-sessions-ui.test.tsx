@@ -319,9 +319,14 @@ describe("Settings' weekly session section", () => {
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel session" }));
+    const cancel = screen.getByRole("button", { name: "Cancel session" });
+    cancel.focus();
+    fireEvent.click(cancel);
     expect(await screen.findByText("Your weekly session is cancelled.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Choose a time" })).toBeInTheDocument();
+    // R3-HAB-4: focus goes to what took the cancelled session's place, never to the page.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Choose a time" })).toHaveFocus()
+    );
   });
 });
 

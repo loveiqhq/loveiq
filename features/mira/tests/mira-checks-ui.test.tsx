@@ -567,12 +567,17 @@ describe("Settings › Self-checks", () => {
       screen.getByText(/Delete all 2 of your check results, your body check included\?/)
     ).toBeTruthy();
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    confirm.focus();
+    fireEvent.click(confirm);
     expect(await screen.findByText("Your check results are deleted.")).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(([u, i]) => u === "/api/mira/checks" && i?.method === "DELETE")
     ).toBe(true);
-    expect(screen.getByRole("button", { name: "No check results to delete" })).toBeDisabled();
+    // R3-HAB-4: what took the button's place keeps the focus (aria-disabled, never `disabled`).
+    const none = screen.getByRole("button", { name: "No check results to delete" });
+    expect(none).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(none).toHaveFocus());
   });
 });
 

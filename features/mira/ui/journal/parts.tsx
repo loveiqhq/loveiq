@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { addDays } from "@features/admin/server/ap/days";
 import { longDate, week, type JournalEntry, type WeekDot } from "@features/mira/journal";
 import { ConfirmDelete } from "../kit";
@@ -40,6 +40,26 @@ export function refocus(to: () => HTMLElement | null | undefined): void {
     if (!document.activeElement || document.activeElement === document.body) to()?.focus();
   });
 }
+
+/**
+ * After a row left a list (deleted, done, put away, brought back), focus goes to the first button
+ * of the row now in its place, or of the last row when it was the end, else to `fallback` (the
+ * list's heading): never to the page (round-3 R3-HAB-4).
+ */
+export function refocusRow(
+  list: RefObject<HTMLElement | null>,
+  index: number,
+  fallback: () => HTMLElement | null | undefined
+): void {
+  refocus(() => {
+    const rows = list.current?.children;
+    const row = rows?.[Math.min(index, rows.length - 1)];
+    return row?.querySelector<HTMLElement>("button") ?? fallback();
+  });
+}
+
+/** A heading focus can land on (tabIndex -1), by id: refocus's and refocusRow's fallbacks. */
+export const byId = (id: string) => document.getElementById(id);
 
 /**
  * A deletion asked first, as everywhere in Mira (kit ConfirmDelete, round-2 UX-9): the button,

@@ -404,6 +404,76 @@ describe("the goals page", () => {
     expect(within(done).getByRole("button", { name: `Bring back: ${OLD.text}` })).toBeTruthy();
   });
 
+  // R3-HAB-4: a row that leaves its list takes focus with it: to the row now in its place, else
+  // to the list's heading, never to the page.
+  it("keeps focus in place when a goal is done, put away, brought back or deleted", async () => {
+    const [one, two, three] = ["g1", "g2", "g3"].map((id) => goal(id));
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [one, two, three] } });
+    for (const g of [one, two, three]) {
+      replies[`PATCH /api/mira/goals/${g!.id}`] = (b) => ({
+        body: {
+          goal: {
+            ...g,
+            days: undefined,
+            completed_at: b.completed ? "2026-11-21T12:00:00Z" : null,
+            archived_at: b.archived ? "2026-11-21T12:00:00Z" : null,
+          },
+        },
+      });
+    }
+    render(<GoalsPage />);
+    const press = async (name: string) => {
+      const button = await screen.findByRole("button", { name });
+      button.focus();
+      fireEvent.click(button);
+    };
+    const focused = () => document.activeElement;
+    await press("Mark done: Goal g1");
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Did it today: Goal g2" }))
+    );
+    await press("Put away: Goal g3");
+    // The last row went: the one before it takes its place.
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Did it today: Goal g2" }))
+    );
+    await press("Put away: Goal g2");
+    await waitFor(() => expect(focused()).toBe(screen.getByRole("heading", { name: "On the go" })));
+    // Put away now holds g3 and g2: bringing one back lands on the other's.
+    await press("Bring back: Goal g3");
+    await waitFor(() =>
+      expect(focused()).toBe(screen.getByRole("button", { name: "Bring back: Goal g2" }))
+    );
+    // Its section goes with its last goal: focus goes to where the goals on the go are.
+    await press("Bring back: Goal g2");
+    await waitFor(() => expect(focused()).toBe(screen.getByRole("heading", { name: "On the go" })));
+    expect(screen.queryByRole("region", { name: "Put away" })).toBeNull();
+  });
+
+  it("keeps focus in place after a goal, or all of them, are deleted", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [goal("g1"), goal("g2")] } });
+    render(<GoalsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit: Goal g1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete goal" }));
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    confirm.focus();
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Did it today: Goal g2" })
+      )
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete all goals" }));
+    const all = screen.getByRole("button", { name: "Delete all" });
+    all.focus();
+    fireEvent.click(all);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Who sees your goals" })
+      )
+    );
+  });
+
   it("keeps a few goals on the go: no new one past five", async () => {
     replies["GET /api/mira/goals"] = () => ({
       body: { goals: ["a", "b", "c", "d", "e"].map((id) => goal(id)) },

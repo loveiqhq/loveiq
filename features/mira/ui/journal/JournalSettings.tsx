@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
 import { zoneLabel } from "@features/mira/server/calendar";
 import { AdultsOnly } from "../kit";
-import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
+import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch, refocus } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
 /** On the hour or half hour, 6:00 to 23:00: the nudge cron runs twice an hour. */
@@ -33,6 +33,7 @@ export function JournalSettings({
   const id = useId();
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const heading = useRef<HTMLHeadingElement | null>(null);
   const s = j.settings;
 
   async function change(
@@ -51,6 +52,8 @@ export function JournalSettings({
     const ok = await j.remove();
     if (!ok) return "Unable to delete right now. Please try again.";
     setStatus({ text: "Your journal is deleted." });
+    // Its button goes with the journal: focus stays in this section (R3-HAB-4).
+    refocus(() => heading.current);
     return null;
   }
 
@@ -60,7 +63,12 @@ export function JournalSettings({
       aria-labelledby={`${id}-h`}
       className="flex flex-col gap-3 font-sans text-ap-ink"
     >
-      <h2 id={`${id}-h`} className="font-serif text-[22px] font-medium">
+      <h2
+        ref={heading}
+        id={`${id}-h`}
+        tabIndex={-1}
+        className="font-serif text-[22px] font-medium outline-none"
+      >
         {title}
       </h2>
       {j.status === "loading" ? (

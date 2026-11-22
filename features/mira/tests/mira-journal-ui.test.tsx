@@ -415,9 +415,15 @@ describe("the journal's settings", () => {
     render(<JournalSettings />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete my journal" }));
     expect(screen.getByText(/Delete every check-in in your journal\?/)).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Delete my journal" })[0]!);
+    const confirm = screen.getAllByRole("button", { name: "Delete my journal" })[0]!;
+    confirm.focus();
+    fireEvent.click(confirm);
     expect(await screen.findByText("Your journal is deleted.")).toBeInTheDocument();
     expect(sent("DELETE").map((d) => d.url)).toEqual(["/api/mira/journal?all=1"]);
+    // R3-HAB-4: the button went with the journal; focus goes to the section's heading.
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Daily journal" })).toHaveFocus()
+    );
   });
 });
 
@@ -466,6 +472,44 @@ describe("the journal page", () => {
     expect(await screen.findByText("Today: check-in deleted.")).toBeInTheDocument();
     expect(sent("DELETE").map((d) => d.url)).toEqual([`/api/mira/journal?day=${TODAY}`]);
     expect(days.queryByText("“Slept well”")).toBeNull();
+  });
+
+  // R3-HAB-4: focus goes to the day now in the deleted one's place, and deleting the last day
+  // is said too, though its "Day by day" section goes with it.
+  it("keeps focus in place after a day is deleted, and says when the last one goes", async () => {
+    replies = journalReply([entry(day(0), { mood: 4 }), entry(day(-2), { body: 3 })]);
+    render(<JournalPage />);
+    const deleteDay = async (name: string) => {
+      fireEvent.click(await screen.findByRole("button", { name: `Delete ${name}` }));
+      const confirm = screen.getByRole("button", { name: "Delete" });
+      confirm.focus();
+      fireEvent.click(confirm);
+    };
+    await deleteDay("Today");
+    const list = screen.getByRole("heading", { name: "Day by day" }).closest("section")!;
+    const older = within(list).getByRole("button", { name: /^Edit (?!Today)/ });
+    await waitFor(() => expect(older).toHaveFocus());
+    const said = screen.getByText("Today: check-in deleted.");
+    expect(said).toHaveAttribute("role", "status");
+    await deleteDay(older.getAttribute("aria-label")!.replace(/^Edit /, ""));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Your patterns start here" })).toHaveFocus()
+    );
+    // The same status line, still there to say it.
+    expect(said).toBeInTheDocument();
+    expect(said).toHaveTextContent(/: check-in deleted\.$/);
+  });
+
+  it("keeps the question open with its error when a day can't be deleted", async () => {
+    replies = journalReply([entry(day(0), { mood: 4 })]);
+    replies["DELETE /api/mira/journal"] = () => ({ status: 500, body: { error: "x" } });
+    render(<JournalPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Today" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const question = screen.getByRole("group", { name: /Delete this check-in\?/ });
+    expect(await within(question).findByRole("alert")).toHaveTextContent(
+      "Unable to delete right now. Please try again."
+    );
   });
 
   it("invites a first check-in when there is nothing yet", async () => {
