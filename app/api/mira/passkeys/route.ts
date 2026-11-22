@@ -32,7 +32,12 @@ import { z } from "zod";
 import { anonId } from "@features/mira/server/anon";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { CONSENT_VERSION } from "@features/mira/server/config";
-import { deviceLabel, isRecentSignIn, recordSession } from "@features/mira/server/devices";
+import {
+  cityFrom,
+  deviceLabel,
+  isRecentSignIn,
+  recordSession,
+} from "@features/mira/server/devices";
 import { loginEmail } from "@features/mira/server/email-change";
 import { isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
@@ -262,8 +267,9 @@ export async function POST(request: Request) {
     if (body.via === "offer") logMiraEvent("passkey_offer_accepted", { userId: account.id });
     // The owner hears of every new passkey, wherever it was added from (security review M1).
     const label = passkey.label;
+    const city = cityFrom(request.headers);
     scheduleAfterResponse("mira-passkey-added-notice", async () => {
-      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label)))) {
+      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label, city)))) {
         logger.warn("mira: the new-passkey notice was not sent");
       }
     });

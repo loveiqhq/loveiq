@@ -25,7 +25,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 import MiraSettings from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import SecuritySettings, { lastActive } from "@features/mira/ui/account/SecuritySettings";
-import { unlockName } from "@features/mira/ui/account/passkeys";
+import { unlockMark, unlockName } from "@features/mira/ui/account/passkeys";
 
 type Reply = { status?: number; body: unknown };
 let replies: Record<string, (body: Record<string, unknown>) => Reply>;
@@ -135,6 +135,13 @@ describe("Use Face ID next time?", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     await screen.findByRole("heading", { name: "About you" });
+  });
+
+  it("shows a fingerprint beside a fingerprint, and a face beside Face ID", () => {
+    expect(unlockMark("your fingerprint")).toBe("fingerprint"); // Android
+    expect(unlockMark("Touch ID")).toBe("fingerprint");
+    expect(unlockMark("Face ID")).toBe("face");
+    expect(unlockMark("Touch ID or Face ID")).toBe("face");
   });
 
   it("speaks the device's language", () => {
@@ -368,6 +375,10 @@ describe("Settings › Sign-in & security", () => {
       within(how).getByText(label, { selector: "p" }).closest("li");
     expect(passkey("iPhone · Safari")).toHaveTextContent("Synced");
     expect(passkey("Work laptop")).toHaveTextContent("On this device only");
+    // True on every device, Android's screen lock included (not "Face ID, Touch ID or Windows Hello").
+    expect(how).toHaveTextContent(
+      "Sign in with your face, fingerprint or screen lock instead of a code."
+    );
   });
 
   it("lists this device first, and tells look-alike devices apart by when they signed in", async () => {

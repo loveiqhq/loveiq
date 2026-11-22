@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { PrimaryButton } from "../MiraShell";
 import { miraApi } from "../api";
-import { addPasskey, markOffered, unlockName } from "./passkeys";
+import { addPasskey, markOffered, unlockMark, unlockName } from "./passkeys";
 
 /**
  * "Use Face ID next time?", once per browser, right after a code sign-in on a device that can make
@@ -42,7 +42,7 @@ export function PasskeyOffer({
 
   return (
     <div className="flex flex-col gap-5">
-      <FaceMark done={state === "done"} />
+      <UnlockMark kind={unlockMark(name)} done={state === "done"} />
       <div>
         <h1
           ref={headingRef}
@@ -93,8 +93,11 @@ export function PasskeyOffer({
   );
 }
 
-/** A quiet face-scan mark: a line sweeps while it asks, then a check. Still without motion. */
-function FaceMark({ done }: { done: boolean }) {
+/**
+ * A quiet mark of the device's lock, a face or a fingerprint as the offer names it: a line sweeps
+ * while it asks, then a check. Still without motion.
+ */
+function UnlockMark({ kind, done }: { kind: "face" | "fingerprint"; done: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -113,6 +116,12 @@ function FaceMark({ done }: { done: boolean }) {
         <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
         {done ? (
           <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+        ) : kind === "fingerprint" ? (
+          <>
+            <path d="M8.5 14.5c.3-1.6.5-3 .5-4.5a3 3 0 0 1 6 0c0 1.2-.1 2.4-.3 3.5" />
+            <path d="M12 10v1.5c0 2.2-.4 4.2-1.2 6" />
+            <path d="M14.4 15.5c-.2.9-.5 1.8-.9 2.6" />
+          </>
         ) : (
           <>
             <path d="M9 9.5v1M15 9.5v1M12 9.5v3.5h-1" />

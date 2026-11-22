@@ -46,6 +46,10 @@ export function unlockName(userAgent: string, touchPoints = 0): string {
   return "your device";
 }
 
+/** The mark beside that name: a fingerprint for Touch ID and Android's fingerprint, else a face. */
+export const unlockMark = (name: string): "face" | "fingerprint" =>
+  /^(Touch ID|your fingerprint)$/.test(name) ? "fingerprint" : "face";
+
 export const passkeysWork = () => browserSupportsWebAuthn();
 const unchanging = () => () => {};
 /** Whether this browser has passkeys at all: false on the server, then the browser's answer. */

@@ -536,7 +536,7 @@ function Passkeys({
       title="Passkeys"
       sub={
         <span className="block text-[13px] text-ap-muted">
-          Sign in with Face ID, Touch ID or Windows Hello instead of a code. Your face or
+          Sign in with your face, fingerprint or screen lock instead of a code. Your face or
           fingerprint never leaves your device.
         </span>
       }

@@ -174,6 +174,18 @@ describe("adding a passkey", () => {
     expect(notice.subject).toBe("A passkey was added to your account");
     expect(notice.text).toContain("iPhone · Safari");
     expect(notice.text).not.toMatch(/chat|journal|goal/i);
+    // Where from, a way in, and one thing to do if it wasn't them (round-2 ID-7).
+    const html = notice.html.replace(/<[^>]+>/g, "");
+    for (const part of [notice.text, html]) {
+      expect(part).toContain(
+        "A passkey (iPhone · Safari) was just added for signing in to Mira, near Berlin."
+      );
+      expect(part).toContain(
+        "choose “Sign out everywhere” and tick “Also remove my passkeys”: every device is signed out and every passkey removed, this one too."
+      );
+    }
+    expect(notice.text).toMatch(/https:\/\/\S+\/mira\/settings#security/);
+    expect(notice.html).toMatch(/href="https:\/\/[^"]+\/mira\/settings#security"/);
     // Requires user verification and a discoverable passkey; never asks for attestation.
     const { body } = await read(await post({ action: "register-options", via: "settings" }));
     expect(body.options.authenticatorSelection).toMatchObject({

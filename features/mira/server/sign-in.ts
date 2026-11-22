@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { escapeHtml } from "@shared/emails/shared";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { checkCooldown } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -104,20 +105,27 @@ export function emailChangedNotice(maskedNewAddress: string) {
 /**
  * The note to the account's address when a passkey is added (security review M1, 22 Nov 2026):
  * someone with the browser for a few minutes could add a passkey that lives on their own phone,
- * so the owner hears of every new one. Neutral like every Mira email (nothing about chats).
+ * so the owner hears of every new one: which device, roughly where (the city Vercel saw, when it
+ * did), a link to Sign-in & security, and one thing to do if it wasn't them. Neutral like every
+ * Mira email (nothing about chats).
  */
-export function passkeyAddedNotice(label: string) {
+export function passkeyAddedNotice(label: string, city: string | null = null) {
   const subject = "A passkey was added to your account";
+  const added = `was just added for signing in to Mira${city ? `, near ${city}` : ""}.`;
+  const link = `${getEmailSiteUrl()}/mira/settings#security`;
+  const act =
+    "choose “Sign out everywhere” and tick “Also remove my passkeys”: every device is signed " +
+    "out and every passkey removed, this one too. You can add yours again after signing in.";
   const text =
-    `A passkey (${label}) was just added for signing in to Mira.\n\n` +
-    `If you added it, there is nothing more to do.\n\nIf you didn't, open Mira's Settings, ` +
-    `Sign-in & security: remove it there, then use "Sign out everywhere" and remove your ` +
-    `passkeys. Write to hello@loveiq.org if you need help.\n\n${FOOTER}`;
+    `A passkey (${label}) ${added}\n\n` +
+    `If you added it, there is nothing more to do.\n\nIf you didn't, open Sign-in & security ` +
+    `in Mira's Settings (${link}) and ${act} Write to hello@loveiq.org if you need help.\n\n` +
+    FOOTER;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
-    <p style="margin:0 0 16px 0;">A passkey (<strong>${escapeHtml(label)}</strong>) was just added for signing in to Mira.</p>
+    <p style="margin:0 0 16px 0;">A passkey (<strong>${escapeHtml(label)}</strong>) ${escapeHtml(added)}</p>
     <p style="margin:0 0 16px 0;">If you added it, there is nothing more to do.</p>
-    <p style="margin:0 0 16px 0;">If you didn't, open Mira's Settings, Sign-in &amp; security: remove it there, then use &ldquo;Sign out everywhere&rdquo; and remove your passkeys. Write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> if you need help.</p>
+    <p style="margin:0 0 16px 0;">If you didn't, open <a href="${escapeHtml(link)}" style="color:#161021;">Sign-in &amp; security</a> in Mira's Settings and ${escapeHtml(act)} Write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> if you need help.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
   </div>`;
   return { subject, text, html };
