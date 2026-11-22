@@ -39,14 +39,22 @@ export interface RecognizerClass {
   install?: (o: RecognitionOptions) => Promise<boolean>;
 }
 
+/** The browser's own recognizer, wherever the page may use it; null where none exists (Firefox). */
+function browserRecognizer(): RecognizerClass | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as Record<string, RecognizerClass | undefined>;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/** Whether this browser can turn speech into text at all: Talk needs Chrome, Safari or Edge. */
+export const canRecognizeSpeech = (): boolean => browserRecognizer() !== null;
+
 /**
  * The browser's recognizer, or null where none exists (Firefox) or the page may not use the
  * microphone (its Permissions-Policy, see proxy.ts): then Talk is not offered at all.
  */
 export function recognizerClass(): RecognizerClass | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as Record<string, RecognizerClass | undefined>;
-  const found = w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  const found = browserRecognizer();
   const policy = (document as { featurePolicy?: { allowsFeature?: (f: string) => boolean } })
     .featurePolicy;
   if (!found || policy?.allowsFeature?.("microphone") === false) return null;

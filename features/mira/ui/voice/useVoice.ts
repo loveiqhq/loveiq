@@ -442,13 +442,17 @@ export function useVoice(options: {
     if (m.phase === "paused") resume();
   }
 
-  /** A tapped answer button in voice mode: the person's turn, answered out loud. */
-  function say(text: string, opts?: { skip?: boolean }) {
+  /**
+   * A tapped answer button in voice mode: the person's turn, answered out loud. False when the
+   * session can't take a turn now (its notice, getting ready, a microphone problem): the chat
+   * sends it as typed instead.
+   */
+  function say(text: string, opts?: { skip?: boolean }): boolean {
+    if (m.phase !== "speaking" && m.phase !== "listening" && m.phase !== "paused") return false;
     if (m.phase === "speaking") hush();
-    if (m.phase === "speaking" || m.phase === "listening" || m.phase === "paused") {
-      set("listening");
-      finishTurn(text, opts);
-    }
+    set("listening");
+    finishTurn(text, opts);
+    return true;
   }
 
   /** End: the microphone and her voice stop; a session with turns is counted, and kept if it can. */
@@ -489,7 +493,8 @@ export function useVoice(options: {
       "/api/mira/recordings",
       { body, keepalive }
     );
-    if (keepalive) return;
+    // Gone by now (a new chat, or another session): its card isn't brought back.
+    if (keepalive || m.last !== body) return;
     setEnded(
       res.ok && res.data.kept && res.data.recording
         ? { chatId, status: "saved", recording: res.data.recording }
@@ -561,6 +566,11 @@ export function useVoice(options: {
     tap,
     end: () => end(),
     retrySave: () => void save(),
+    /** A new chat: the last session's end card stays with the chat it happened in. */
+    dismissEnded: () => {
+      m.last = null;
+      setEnded(null);
+    },
   };
 }
 

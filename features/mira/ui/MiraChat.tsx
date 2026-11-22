@@ -430,9 +430,10 @@ export default function MiraChat({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  /** An answer button: answered out loud in voice mode, as typed otherwise. */
-  const reply = (text: string, o?: { skip?: boolean }) =>
-    voiceOn ? voice.say(text, o) : void send(text, o);
+  /** An answer button: answered out loud in voice mode, as typed when the session can't take it. */
+  const reply = (text: string, o?: { skip?: boolean }) => {
+    if (!voiceOn || !voice.say(text, o)) void send(text, o);
+  };
 
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
@@ -474,6 +475,7 @@ export default function MiraChat({
   /** Off while the sign-up card shows, so the chat it promises to bring along isn't wiped. */
   function newChat() {
     if (sending || voiceOn) return; // a reply on its way, or a voice session, belongs to this chat
+    voice.dismissEnded();
     setMessages([]);
     setChatId(null);
     setError(null);

@@ -89,12 +89,12 @@ const calls = (key: string) =>
 const REPLY = "That makes sense. Wanting the lights off is a way of feeling safe.";
 /** Sanjin's message G, as the chat route sends it for an under-18 stop. */
 const STOP_G = "Thanks for reaching out. I can only talk about this with adults.";
-/** Holds every answer of the chat route back until the test lets one through. */
-function holdChatAnswers() {
+/** Holds every answer of one route back until the test lets one through. */
+function holdAnswers(route: string) {
   const answer = { current: (_r: Reply) => {} };
   const usual = fetchMock.getMockImplementation()!;
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) =>
-    String(url).includes("/api/mira/chat")
+    String(url).includes(route)
       ? new Promise<Response>((done) => {
           answer.current = (r) =>
             done({ ok: true, status: 200, json: async () => r.body } as Response);
@@ -103,6 +103,7 @@ function holdChatAnswers() {
   );
   return answer;
 }
+const holdChatAnswers = () => holdAnswers("/api/mira/chat");
 const visibility = (state: "hidden" | "visible") => {
   vi.spyOn(document, "visibilityState", "get").mockReturnValue(state);
   act(() => void document.dispatchEvent(new Event("visibilitychange")));
@@ -625,6 +626,103 @@ describe("the sign-up stop in a voice session (everyone signed out)", () => {
     await waitFor(() => expect(signUpCard()).toBeTruthy());
     expect(screen.queryByText("Mira is thinking")).toBeNull();
     expect(listening()).toHaveLength(0);
+  });
+});
+
+describe("answer buttons while Talk can't take a turn", () => {
+  const asked = () => {
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "When did it start?", ask: "onset", sources: [], freeLeft: 5 },
+    });
+  };
+  async function typedQuestion() {
+    fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: "Hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("button", { name: "A few years" });
+  }
+  async function tapIsTyped() {
+    fireEvent.click(screen.getByRole("button", { name: "A few years" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    expect(calls("POST /api/mira/chat")[1]).toMatchObject({
+      message: "A few years",
+      answering: "onset",
+    });
+    expect(calls("POST /api/mira/chat")[1]!.voice).toBeUndefined();
+    expect(screen.getByText("A few years", { selector: "p" })).toBeTruthy();
+  }
+
+  it("sends a tapped answer as typed while the panel shows a microphone problem", async () => {
+    asked();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await typedQuestion();
+    talk();
+    act(() => mic().onerror?.({ error: "audio-capture" }));
+    expect(screen.getByText("No microphone found")).toBeTruthy();
+    await tapIsTyped();
+  });
+
+  it("sends it as typed while the notice waits for its tick", async () => {
+    asked();
+    localStorage.removeItem("mira.voice.notice.v1");
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await typedQuestion();
+    talk();
+    expect(screen.getByRole("heading", { name: "Before you talk" })).toBeTruthy();
+    await tapIsTyped();
+    expect(FakeRecognizer.made).toHaveLength(0); // the browser's service never started
+  });
+
+  it("sends it as typed while Talk is getting ready", async () => {
+    asked();
+    FakeRecognizer.available = () => new Promise<string>(() => {}); // still checking the device
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await typedQuestion();
+    talk();
+    expect(screen.getByText("Getting ready…")).toBeTruthy();
+    await tapIsTyped();
+  });
+});
+
+describe("the end card", () => {
+  const notKept = () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: REPLY, sources: [], chatId: null } });
+    replies["POST /api/mira/recordings"] = () => ({ body: { kept: false } });
+  };
+  async function newChatAndType() {
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: "A new topic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    await screen.findAllByText(REPLY);
+  }
+
+  it("stays with its own chat: 'wasn't kept' doesn't follow into a new chat", async () => {
+    notKept();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    await waitFor(() => expect(screen.getByText(/wasn.t kept/)).toBeTruthy());
+    await newChatAndType();
+    expect(screen.queryByText(/wasn.t kept/)).toBeNull();
+  });
+
+  it("doesn't come back when the save answers after the new chat began", async () => {
+    notKept();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    const saved = holdAnswers("/api/mira/recordings");
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await act(async () => saved.current({ body: { kept: false } }));
+    fireEvent.change(screen.getByLabelText("Message Mira"), { target: { value: "A new topic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    await screen.findAllByText(REPLY);
+    expect(screen.queryByText(/wasn.t kept|Saving your voice session/)).toBeNull();
   });
 });
 

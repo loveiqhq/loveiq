@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
+import { canRecognizeSpeech } from "../voice/speech";
 
 /**
  * Voice sessions with Mira (Mark's board "Home": "Session recordings"), kept as words, never
@@ -188,6 +189,23 @@ export function SessionRowLink({ r }: { r: SessionRow }) {
 }
 
 export function StartVoiceLink({ quiet = false }: { quiet?: boolean }) {
+  // Talk needs the browser's speech recognition (Firefox has none): say so rather than open a
+  // chat without Talk. Read after mount; the link until then.
+  const [canTalk, setCanTalk] = useState(true);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser is known after mount
+  useEffect(() => setCanTalk(canRecognizeSpeech()), []);
+  if (!canTalk) {
+    return (
+      <p className="max-w-[36ch] text-[13px] leading-snug text-ap-muted">
+        Talking to Mira out loud needs Chrome, Safari or Edge: this browser can&apos;t turn speech
+        into text. You can{" "}
+        <Link href="/mira" className="font-semibold text-ap-plum underline underline-offset-4">
+          type to her in the chat
+        </Link>
+        .
+      </p>
+    );
+  }
   return (
     <Link
       href={START}
