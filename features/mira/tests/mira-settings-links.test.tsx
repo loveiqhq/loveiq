@@ -61,7 +61,7 @@ async function openAt(hash: string) {
   window.history.replaceState({}, "", `/mira/settings${hash}`);
   render(
     <MiraSettings
-      security={<section id="security">Sign-in &amp; security</section>}
+      security={<section>Sign-in &amp; security</section>}
       checks={<p>Self-checks</p>}
       sharedReview={<p>Your rating</p>}
       journal={<p>Daily journal</p>}
@@ -71,28 +71,56 @@ async function openAt(hash: string) {
   await screen.findByRole("heading", { name: "Account" });
 }
 
+/** A ResizeObserver whose growth the test sets off (jsdom has none, and lays nothing out). */
+function observeGrowth() {
+  const seen: Array<() => void> = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private grew: () => void) {}
+      observe() {
+        seen.push(this.grew);
+      }
+      disconnect() {
+        seen.splice(seen.indexOf(this.grew), 1);
+      }
+    }
+  );
+  return () => seen.forEach((grew) => grew());
+}
+
 describe("a link into a Settings section", () => {
   it("lands on that section once it has loaded (the browser's own jump found nothing)", async () => {
     await openAt("#weekly");
     await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
     expect(scrolled.mock.contexts[0]).toBe(document.getElementById("weekly"));
-    expect(scrolled).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    // At once: the page's smooth scrolling would glide, and the sections above still grow.
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "instant", block: "start" });
   });
 
-  it("jumps without the glide for someone who asked for less motion", async () => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(prefers-reduced-motion: reduce)",
-    }));
-    await openAt("#security");
+  it("stays on it while the sections above load and grow, until the person scrolls", async () => {
+    const grow = observeGrowth();
+    await openAt("#weekly");
     await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
-    expect(scrolled.mock.contexts[0]).toBe(document.getElementById("security"));
-    expect(scrolled).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+    grow(); // Sign-in & security, the self-checks and the rating load their own data
+    expect(scrolled).toHaveBeenCalledTimes(2);
+    expect(scrolled.mock.contexts[1]).toBe(document.getElementById("weekly"));
+    window.dispatchEvent(new Event("wheel"));
+    grow();
+    expect(scrolled).toHaveBeenCalledTimes(2); // the person took over
   });
 
   it("does nothing without a section to go to", async () => {
     await openAt("#nowhere");
     await new Promise((r) => setTimeout(r, 50));
     expect(scrolled).not.toHaveBeenCalled();
+    cleanup();
+    // Without a hash it looks nothing up (Firefox warns about an empty id on every visit).
+    const lookUp = vi.spyOn(document, "getElementById");
+    await openAt("");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(lookUp).not.toHaveBeenCalledWith("");
+    lookUp.mockRestore();
   });
 
   it("is what the session emails and the stop page link to", async () => {

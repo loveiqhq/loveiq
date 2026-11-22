@@ -68,6 +68,10 @@ const pairs = (p: Palette): Array<[string, string, string, number]> => [
   // The chat's message box (A11Y-8): its edge, and its edge while it has the focus.
   ["Chat message box: its edge on the page", p.field, p.paper, 3],
   ["Chat message box: its focused edge on the page", p.purple, p.paper, 3],
+  // Settings › Appearance › Text size: the chosen size is the ink pill (round-2 SET-S1b; paper
+  // on the grey track was 1.1:1 in Dark), its label paper on ink.
+  ["Text size: the chosen pill on its track", p.ink, p.ground, 3],
+  ["Text size: the chosen size's label", p.paper, p.ink, 4.5],
   // The logo's BETA, "Your chats" and other small labels (muted, not quiet).
   ["Small labels (BETA, 'Your chats') on the page", p.muted, p.paper, 4.5],
   ["Small labels on a grey surface", p.muted, p.ground, 4.5],

@@ -7,8 +7,11 @@
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), records the device (devices.ts; Mira honours only recorded sessions), moves the
  *       anonymous chat into the account ("your current chat comes with you"), and says whether to
- *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys)
- *   { action: "carry", carry } → after Google sign-in, moves the anonymous chat into the account
+ *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys);
+ *       `minor: true` when this browser or the account was stopped as under 18 (nothing carried)
+ *   { action: "carry", carry } → after a Google or passkey sign-in, moves the anonymous chat into
+ *       the account (never from a browser or for an account Mira stopped as under 18: 403
+ *       `minor: true`)
  *   { action: "logout" }  → also forgets this device (its row in Settings › Devices)
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
@@ -17,11 +20,14 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION, HISTORY_TURNS, MAX_MESSAGE_CHARS } from "@features/mira/server/config";
 import { recordSession, signOutDevices } from "@features/mira/server/devices";
+import { neutralTitle } from "@features/mira/server/chat-titles";
 import { isStaffEmail } from "@features/mira/server/google";
 import { carryMinorStop, isMinor } from "@features/mira/server/minor";
 import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
+import { isCrisisMessage } from "@features/mira/server/safety";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
 import {
   SIGN_IN_CODE,
@@ -70,10 +76,19 @@ const MAX_REPLY_CHARS = 4000;
 const CARRIES_PER_DAY = 5;
 
 const email = z.string().trim().toLowerCase().email().max(320);
-// The page sends up to 48 turns; carryChat keeps what the chat itself allows.
+// The page sends up to 48 turns; carryChat keeps what the chat itself allows. `crisis`: the
+// browser's mark on a reply that opened the support lines (only ever makes a title neutral).
 const carrySchema = z
-  .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(8000) }))
+  .array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().min(1).max(8000),
+      crisis: z.boolean().optional(),
+    })
+  )
   .max(HISTORY_TURNS * 2);
+/** The fixed replies that open the support lines: the crisis message and a declined reply's. */
+const SUPPORT_REPLIES = new Set([miraConfig.crisisMessage, miraConfig.refusalMessage]);
 
 const schema = z.discriminatedUnion("action", [
   z.object({
@@ -99,6 +114,7 @@ const schema = z.discriminatedUnion("action", [
 type Turn = z.infer<typeof carrySchema>[number];
 
 const tryLater = () => NextResponse.json({ error: "Please try again later." }, { status: 429 });
+const ADULTS_ONLY = "Mira is only for adults.";
 const codeSent = () => NextResponse.json({ success: true });
 
 /**
@@ -115,12 +131,16 @@ async function sentNothing(): Promise<NextResponse> {
  * Moves the anonymous chat into the account, within the chat's own limits: its newest
  * HISTORY_TURNS turns, each no longer than the chat lets it be. At most CARRIES_PER_DAY a day
  * per account, so this can't be used to fill the database. The new chat's id, null when there
- * is nothing to keep, or "limited".
+ * is nothing to keep, or "limited". Named after its first message, unless that message has
+ * crisis words or the first reply opened the support lines: then by its date in the person's
+ * zone, "Chat on 22 Nov", never those words (round-2 CHAT-17, lead decision 5, as the chat
+ * route names its chats).
  */
 async function carryChat(
   accountId: string,
   remember: boolean,
-  turns: Turn[]
+  turns: Turn[],
+  timeZone?: string | null
 ): Promise<string | null | "limited"> {
   const kept = turns.slice(-HISTORY_TURNS).map((t) => ({
     role: t.role,
@@ -134,7 +154,15 @@ async function carryChat(
   });
   if (!quota.allowed) return "limited";
   const firstUser = kept.find((t) => t.role === "user")?.content ?? "New chat";
-  const chatId = await createChat(accountId, firstUser.replace(/\s+/g, " ").slice(0, 80));
+  const firstReply = turns.slice(-HISTORY_TURNS).find((t) => t.role === "assistant");
+  const supportShown =
+    isCrisisMessage(firstUser) ||
+    firstReply?.crisis === true ||
+    SUPPORT_REPLIES.has(firstReply?.content ?? "");
+  const title = supportShown
+    ? neutralTitle(new Date(), timeZone)
+    : firstUser.replace(/\s+/g, " ").slice(0, 80);
+  const chatId = await createChat(accountId, title);
   await addMessages(chatId, kept);
   return chatId;
 }
@@ -169,11 +197,17 @@ export async function POST(request: Request) {
     const account = await getMiraAccount();
     if (!account) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     try {
+      // A browser (or an account) Mira stopped as under 18 keeps none of its chat, as with the code.
+      if (await isMinor(account.id)) {
+        return NextResponse.json({ error: ADULTS_ONLY, minor: true }, { status: 403 });
+      }
       const profile = await getProfile(account.id);
       const turns = body.carry.filter((t) => t.content.trim());
-      const chatId = await carryChat(account.id, profile?.remember_chats !== false, turns);
+      const remember = profile?.remember_chats !== false;
+      const chatId = await carryChat(account.id, remember, turns, profile?.time_zone);
       if (chatId === "limited") return tryLater();
-      return NextResponse.json({ success: true, chatId });
+      // Not kept as "Remember our conversations" is off: the page says so (round-2 ID-20).
+      return NextResponse.json({ success: true, chatId, ...(remember ? {} : { memoryOff: true }) });
     } catch (err) {
       logger.error({ err }, "mira: the chat was not carried into the account");
       return NextResponse.json({ error: "We couldn't bring your chat along." }, { status: 500 });
@@ -195,10 +229,12 @@ export async function POST(request: Request) {
     if (!perIp.allowed) return tryLater();
     const inbox = addressKey(body.email);
     if (!(await checkCooldown(inbox, CODE_WAIT, 10 * MINUTE_MS)).allowed) {
+      // `codeSent`: the code that went out still works, so the page opens its code field.
       return NextResponse.json(
         {
           error:
             "We just sent you a code. Check your inbox and spam, or try again in a few minutes.",
+          codeSent: true,
         },
         { status: 429 }
       );
@@ -318,21 +354,35 @@ export async function POST(request: Request) {
   // A browser Mira stopped as under 18: a new account takes the stop, and its chat isn't kept.
   const stopped = await carryMinorStop(account.id, profile?.created_at);
   try {
+    // That browser, or an account stopped before: every route refuses them from here on, so the
+    // page says "Mira is only for adults." at once, never "About you" and its nudge promise.
+    // Unsure is not stopped (each route checks again and refuses).
+    const minor = stopped || (await isMinor(account.id).catch(() => false));
     const carry = body.carry?.filter((t) => t.content.trim()) ?? [];
-    const remember = !stopped && profile?.remember_chats !== false;
-    const chatId = await carryChat(account.id, remember, carry);
+    const remember = !minor && profile?.remember_chats !== false;
+    // A chat came along but the account keeps none: the page says so (round-2 ID-20).
+    const memoryOff = carry.length > 0 && !minor && profile?.remember_chats === false;
+    const chatId = await carryChat(account.id, remember, carry, profile?.time_zone);
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },
       { carried: carry.length, method: "email" }
     );
+    if (minor) {
+      return NextResponse.json({
+        success: true,
+        minor: true,
+        needsProfile: false,
+        chatId: null,
+        offerPasskey: false,
+      });
+    }
     // Only an offer: a failed read just doesn't make it.
     const offerPasskey = await Promise.all([
       isStaffEmail(account.email),
-      isMinor(account.id),
       listPasskeys(account.id),
     ]).then(
-      ([staff, minor, keys]) => !staff && !minor && keys.length < MAX_PASSKEYS,
+      ([staff, keys]) => !staff && keys.length < MAX_PASSKEYS,
       () => false
     );
     return NextResponse.json({
@@ -340,6 +390,7 @@ export async function POST(request: Request) {
       needsProfile: !profile?.name,
       chatId: chatId === "limited" ? null : chatId,
       offerPasskey,
+      ...(memoryOff ? { memoryOff: true } : {}),
     });
   } catch (err) {
     logger.error({ err }, "mira: the chat was not carried in at sign-in");

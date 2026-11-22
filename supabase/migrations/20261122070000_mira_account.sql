@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS public.mira_email_change (
 
 ALTER TABLE public.mira_user ADD COLUMN IF NOT EXISTS google_connected_at timestamptz;
 
+-- Accounts that already sign in with Google show as connected from the start, not only after
+-- their next Google sign-in (production review, 22 Nov 2026). Their login's Google identity
+-- says when it was last used; nobody else is touched.
+UPDATE public.mira_user u
+   SET google_connected_at = i.last_sign_in_at
+  FROM auth.identities i
+ WHERE i.user_id = u.id
+   AND i.provider = 'google'
+   AND u.google_connected_at IS NULL;
+
 DO $$
 DECLARE
   t text;

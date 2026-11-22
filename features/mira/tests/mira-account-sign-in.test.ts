@@ -228,12 +228,31 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
     browser.set("mira_minor", "1");
     const res = await verifyCarrying();
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ offerPasskey: false, chatId: null });
+    // Straight to "Mira is only for adults.": never "About you" and its nudge promise.
+    expect(await res.json()).toMatchObject({
+      minor: true,
+      needsProfile: false,
+      offerPasskey: false,
+      chatId: null,
+    });
     expect(db.tables.mira_user![0]).toMatchObject({
       minor_at: expect.any(String),
       nudges_on: false,
       remember_chats: false,
     });
+    expect(db.tables.mira_chat ?? []).toEqual([]);
+  });
+
+  it("keeps none of the browser's chat after a passkey or Google sign-in either (carry)", async () => {
+    browser.set("mira_minor", "1");
+    const res = await auth(
+      new Request("https://www.loveiq.org/api/mira/auth", {
+        method: "POST",
+        body: JSON.stringify({ action: "carry", carry: [{ role: "user", content: "hi" }] }),
+      })
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect(db.tables.mira_chat ?? []).toEqual([]);
   });
 
@@ -245,7 +264,8 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
     browser.set("mira_minor", "1");
     const res = await verifyCarrying();
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ offerPasskey: false, chatId: null });
+    // Signed in, but every route refuses this browser: the page says so at once.
+    expect(await res.json()).toMatchObject({ minor: true, offerPasskey: false, chatId: null });
     expect(db.tables.mira_user![0]!.minor_at).toBeNull();
     expect(db.tables.mira_chat).toEqual([{ id: "c-old", user_id: LEA, title: "Before" }]);
   });
@@ -269,7 +289,9 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
   });
 
   it("leaves an account alone when the browser carries no such mark", async () => {
-    expect((await verify()).status).toBe(200);
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(await res.json()).not.toHaveProperty("minor");
     expect(db.tables.mira_user![0]!.minor_at).toBeNull();
   });
 });

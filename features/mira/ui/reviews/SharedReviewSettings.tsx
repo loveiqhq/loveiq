@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { REJECT_REASON_LABEL } from "@features/mira/reviews";
 import type { MyReview } from "@features/mira/server/reviews";
 import { miraApi } from "../api";
+import { AdultsOnly } from "../kit";
 import { RatingForm } from "./ReviewAsk";
 
 /**
@@ -19,7 +21,9 @@ const BUTTON =
   "min-h-[44px] rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function SharedReviewSettings() {
-  const [state, setState] = useState<Loaded | "loading" | "failed">("loading");
+  // "minor": this browser or the account was stopped as under 18, so reading is refused (403);
+  // taking back never is, so that stays on offer.
+  const [state, setState] = useState<Loaded | "loading" | "failed" | "minor">("loading");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +39,9 @@ export default function SharedReviewSettings() {
             name: r.data.name ?? "",
             canRate: r.data.canRate === true,
           }
-        : "failed"
+        : r.minor
+          ? "minor"
+          : "failed"
     );
   }, []);
   useEffect(() => {
@@ -54,7 +60,9 @@ export default function SharedReviewSettings() {
     setDone(
       what === "words"
         ? "Your words are no longer shown, and we’ve deleted them."
-        : "Your rating is removed."
+        : state === "minor"
+          ? "Nothing this account rated is kept or shown."
+          : "Your rating is removed."
     );
     setState((s) =>
       typeof s !== "object" || !s.review
@@ -91,6 +99,8 @@ export default function SharedReviewSettings() {
 
   const review = typeof state === "object" ? state.review : null;
   const signedAs = review?.name ? `${review.name}${review.age ? `, ${review.age}` : ""}` : "";
+  // Initials end in a full stop already ("R."): one is enough (round-2 SET-16).
+  const asShown = signedAs.endsWith(".") ? signedAs : `${signedAs}.`;
   return (
     <section aria-labelledby="mira-your-rating" className="flex flex-col gap-3">
       <h2
@@ -103,6 +113,27 @@ export default function SharedReviewSettings() {
       </h2>
       {state === "loading" ? (
         <div aria-hidden="true" className="h-[92px] animate-pulse rounded-2xl bg-ap-ground" />
+      ) : state === "minor" ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-ap-line p-4">
+          <AdultsOnly className="font-semibold text-ap-ink" />
+          {done ? null : (
+            <>
+              <p className="text-[14px] text-ap-body">
+                If this account rated Mira, you can remove the rating and any words with it.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void takeBack("all")}
+                  className={BUTTON}
+                >
+                  Remove my rating
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       ) : state === "failed" ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           We couldn’t load what you shared.{" "}
@@ -134,8 +165,8 @@ export default function SharedReviewSettings() {
               </blockquote>
               <figcaption className="text-[13px] leading-snug text-ap-muted">
                 {review.status === "approved"
-                  ? `Shown on Mira’s pages as ${signedAs}.`
-                  : `Waiting for our team to read it. Once approved, it shows as ${signedAs}.`}
+                  ? `Shown on Mira’s pages as ${asShown}`
+                  : `Waiting for our team to read it. Once approved, it shows as ${asShown}`}
                 {review.status === "approved" && review.published !== review.quote ? (
                   <>
                     {" "}
@@ -210,9 +241,9 @@ export default function SharedReviewSettings() {
         Your stars count toward the average on Mira’s pages, without your name. Your words show only
         with your permission, after our team has read them, and disappear the moment you take them
         back.{" "}
-        <a href="/mira/privacy#ratings" className="underline">
+        <Link href="/mira/privacy#ratings" className="underline">
           How Mira handles your data
-        </a>
+        </Link>
       </p>
     </section>
   );
