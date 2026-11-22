@@ -18,7 +18,7 @@ const RECIPIENTS = [
   {
     who: "Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)",
     role: "Processor. Its AI model, Claude, writes Mira's replies and her daily nudges.",
-    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in, your goals on the go with this week's ticks and, if you allow it, your LoveIQ result and the bands of your self-checks (never your answers).",
+    gets: "Your messages, the chat so far, and what Mira knows about you: your coaching style and, with an account, your name, gender, country, the language you want her replies in, your goals on the go with this week's ticks, your weekly session's day and time and, if you allow it, your LoveIQ result, your journal, the bands of your self-checks and whether your mood check reported thoughts of being better off dead or of hurting yourself (never your answers or scores). When you open a weekly session, your last saved chat. When a voice session ends, its words once more, to write its key points.",
     basis: "Your explicit consent",
     where:
       "Stored in the USA. It may be processed in the USA, Europe, Asia or Australia. EU standard contractual clauses.",
@@ -41,8 +41,8 @@ const RECIPIENTS = [
   {
     who: "Resend",
     role: "Processor. Sends our emails.",
-    gets: "Your email address, your sign-in codes and your nudges. Whether a nudge reached you and was opened, with your IP address and email app.",
-    basis: "Our contract with you; for opens, our legitimate interest",
+    gets: "Your email address and the emails we send you: sign-in and confirmation codes, nudges, weekly-session invites and reminders, journal reminders, and the note when your address changes or a passkey is added. For each email, whether it reached you, was opened and which link was clicked, with your IP address and email app.",
+    basis: "Our contract with you; for opens and clicks, our legitimate interest",
     where: "USA. EU standard contractual clauses.",
   },
   {
@@ -62,14 +62,14 @@ const RECIPIENTS = [
   {
     who: "PostHog",
     role: "Processor. Product analytics and session recordings.",
-    gets: "How you use our pages, including what you and Mira write in the chat and your self-check answers and results, as they show on the page.",
+    gets: "How you use our pages, including what you and Mira write in the chat, your goals, your journal, your voice sessions and their key points, your picks and your answers in “Find my challenge”, the words of a rating, and your self-check answers and results, as they show on the page.",
     basis: "Our legitimate interest",
     where: "EU (Frankfurt). PostHog is in the EU–US Data Privacy Framework.",
   },
   {
     who: "Microsoft: Clarity",
     role: "Independent controller.",
-    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat and your self-check answers and results.",
+    gets: "Recordings and heatmaps of how you use our pages, including what you and Mira write in the chat, your goals, your journal, your voice sessions and their key points, your picks and your answers in “Find my challenge”, the words of a rating, and your self-check answers and results, as they show on the page.",
     basis: "Our legitimate interest",
     where: "USA. EU–US Data Privacy Framework.",
   },
@@ -106,7 +106,7 @@ const RECIPIENTS = [
     who: "Your browser's speech service (for example Apple's or Google's)",
     role: "Your browser's maker, under its own terms. Only when you talk to Mira and your browser can't turn speech into text on your device.",
     gets: "Your voice while you talk to Mira, which it turns into text for your browser. We never receive the sound.",
-    basis: "Your explicit consent, and a notice you tick before you first talk",
+    basis: "Your explicit consent, which you give with a tick before you first talk",
     where: "Decided by your browser's maker. It may be outside the EU.",
   },
 ];
@@ -128,6 +128,9 @@ const COLUMNS = [
  * 22 Nov 2026: goals (Challenges & goals), in each section below; ratings and quotes
  * (features/mira/reviews.ts), to be checked by Eman; passkeys, signed-in devices and changing
  * the email (Settings › Sign-in & security); the self-checks (to be checked by Eman).
+ * 22 Nov 2026, after the privacy audit: what the analytics tools see (nothing on Mira's pages is
+ * masked, DPIA M5), the team's data tool, every email Resend sends, the voice tick, the
+ * self-checks' counts and the under-18 stop in full.
  */
 export default function MiraPrivacyPage() {
   return (
@@ -216,14 +219,21 @@ export default function MiraPrivacyPage() {
           <li id="self-checks">
             Your self-checks, if you choose to take them: your answers to the anxiety check (GAD-7),
             the mood check (PHQ-9) and the loneliness check, with the date. They are health data. We
-            work out your score and band from your answers and show them only to you, with how they
-            change over time. Mira sees only each check&apos;s latest band from the last 90 days,
-            such as &ldquo;mild anxiety&rdquo;, and only if you turn on &ldquo;Mira may use my check
-            results&rdquo;; never your answers or scores. Our statistics count the checks started
-            and finished and when the mood check&apos;s question about thoughts of self-harm showed
-            support lines, never what you answered. Until you finish a check, your answers so far
-            stay only in this browser tab, for up to a day. The checks support self-reflection; they
-            are not a diagnosis.
+            work out your score and band from your answers and show them to you, with how many
+            points higher or lower each is than last time. If your answer to the mood check&apos;s
+            question about thoughts of being better off dead or of hurting yourself was above
+            &ldquo;Not at all&rdquo;, that result keeps the support lines at its top whenever you
+            open it, and for 14 days Mira sends you no nudges or journal reminders; deleting your
+            check results ends that pause. Mira sees only each check&apos;s latest band from the
+            last 90 days, such as &ldquo;mild anxiety&rdquo;, and only if you turn on &ldquo;Mira
+            may use my check results&rdquo;. Then she is also told if that mood check reported such
+            thoughts, so she can gently check in once a chat, offer support lines and, if you are at
+            risk now, follow her crisis rules. She never sees your answers or scores. We keep when
+            you turn that on or off, and which wording you saw. Our statistics count the checks
+            started and finished, never what you answered, and how often that question showed
+            support lines: a count only, not linked to you or your browser. Until you finish a
+            check, your answers so far are kept only in this browser tab, for up to a day. The
+            checks support self-reflection; they are not a diagnosis.
           </li>
           <li>
             Your goals, if you set any with an account: each goal in your words, how many days a
@@ -243,7 +253,9 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             If you book a weekly session: the day, time and time zone you choose, when each reminder
-            was sent, and whether you opened the session within 30 minutes of its start.
+            was sent, and whether you opened the session within 30 minutes of its start. When you
+            open a session, Mira picks up from your last saved chat, but never from one that held a
+            crisis in the last 14 days.
           </li>
           <li>
             A random id in a cookie on this browser, kept for a year. Without an account it counts
@@ -280,17 +292,20 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             &ldquo;Find my challenge&rdquo; asks two quick questions. We keep only which coach it
-            suggested, never your answers.
+            suggested, never your answers. That coach shows which challenge you picked; like the
+            rest of Mira&apos;s log, it is deleted after 12 months.
           </li>
           <li>
             &ldquo;Picked for you&rdquo; on your Home page suggests practices from the guide, and
             sometimes a coach, from the topics of your own chats (the labels above). It uses only
             the chats you had while signed in, never one from before you last deleted your chats,
-            and nothing while &ldquo;Remember our conversations&rdquo; is off. Only you see it.
+            and nothing while &ldquo;Remember our conversations&rdquo; is off. It shows only on your
+            Home page, which our analytics tools also record.
           </li>
           <li>
-            The search on your Home page runs in your browser: what you type is not sent to us. We
-            count searches that find nothing, without the words.
+            The search on your Home page runs in your browser: what you type is not sent to our
+            servers, though our analytics tools record the page as they do every page. We count
+            searches that find nothing, without the words.
           </li>
           <li>
             We also count, as steps, when you open the coaches page and the finder, which picks you
@@ -299,7 +314,8 @@ export default function MiraPrivacyPage() {
           <li>
             Legal basis: your explicit consent to coaching (Art. 6(1)(a) and Art. 9(2)(a) GDPR), as
             for Mira&apos;s other labels. If you tell Mira you are under 18, your requests to hear
-            about coaches are deleted and no coach is offered to you.
+            about coaches and the coach the finder suggested are deleted, and no coach is offered to
+            you.
           </li>
         </ul>
 
@@ -320,10 +336,10 @@ export default function MiraPrivacyPage() {
             GDPR).
           </li>
           <li>
-            To show you your self-checks and, if you allow it, to let Mira tailor her coaching to
-            their bands. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR),
-            which you give at sign-up for what you share about your health and confirm when you
-            start your first check.
+            To show you your self-checks, to count how they are used (never your answers) and, if
+            you allow it, to let Mira tailor her coaching to them. Legal basis: your explicit
+            consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR), which you give at sign-up for what you
+            share about your health and confirm when you start your first check.
           </li>
           <li>
             To run your free account: signing in, your settings and the emails that come with it,
@@ -333,20 +349,21 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             To keep your account safe: passkeys, the list of devices you&apos;re signed in on,
-            signing them out, and changing your email (we tell your old address). Legal basis: our
-            contract with you (Art. 6(1)(b) GDPR); for each device&apos;s approximate city, our
-            legitimate interest in letting you spot a sign-in that isn&apos;t yours (Art. 6(1)(f)
-            GDPR).
+            signing them out, changing your email (a code goes to the new address, and we tell your
+            old one), and telling you when a passkey is added. Legal basis: our contract with you
+            (Art. 6(1)(b) GDPR); for each device&apos;s approximate city, our legitimate interest in
+            letting you spot a sign-in that isn&apos;t yours (Art. 6(1)(f) GDPR).
           </li>
           <li>
             If you book a weekly session: to keep it, and to email you its calendar invite, any
             change, and a reminder before each session. Legal basis: our contract with you (Art.
-            6(1)(b) GDPR), as you asked for it. These emails never contain anything from your chats.
+            6(1)(b) GDPR), as you asked for it. These emails never contain anything from your chats,
+            and the reminders pause for 14 days after a crisis, as the nudges do.
           </li>
           <li>
-            To improve Mira from ratings, feedback, the steps people take and nudge opens, and to
-            stop abuse. Legal basis: our legitimate interest in a service that works and is safe
-            (Art. 6(1)(f) GDPR).
+            To improve Mira from ratings, feedback, the steps people take and the opens and clicks
+            of our emails, and to stop abuse. Legal basis: our legitimate interest in a service that
+            works and is safe (Art. 6(1)(f) GDPR).
           </li>
           <li>
             To show honest ratings on Mira&apos;s pages. Your stars count toward the average shown,
@@ -359,9 +376,10 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             Our analytics tools run on Mira&apos;s pages, as on the rest of our site. PostHog and
-            Microsoft Clarity see what you and Mira write in the chat, as it appears on the page.
-            Legal basis, as in section 7.4 of our privacy policy: our legitimate interest (Art.
-            6(1)(f) GDPR). Google cookies and identifiers need your cookie consent.
+            Microsoft Clarity see what is on them as it appears there, from what you and Mira write
+            in the chat to your goals, journal and self-checks (see the table below). Legal basis,
+            as in section 7.4 of our privacy policy: our legitimate interest (Art. 6(1)(f) GDPR).
+            Google cookies and identifiers need your cookie consent.
           </li>
           <li>
             We do not use what you tell Mira for advertising or to train AI models. Anthropic may
@@ -413,20 +431,28 @@ export default function MiraPrivacyPage() {
           to your calendar, your calendar provider (for example Google or Apple) keeps that entry
           under its own privacy policy.
         </p>
+        <p className="mt-3">
+          Our team can currently also read much of what Mira stores, including your chats, goals,
+          journal, the key points of your voice sessions and your name, with an internal data tool
+          that only team members can use. Its answers reach them through Claude, Anthropic&apos;s AI
+          assistant.
+        </p>
 
         {/* Talking to Mira by voice (22 Nov 2026, features/mira/ui/voice). */}
         <h2>Talking to Mira by voice</h2>
         <ul>
           <li>
-            If you tap Talk, your browser listens through your microphone and turns what you say
-            into text. Mira never receives your voice or any recording of it, only the text. The
-            text goes to Mira like a typed message: the same consent, safety rules and limits apply.
+            If you tap Talk, your browser listens through your microphone, in the language you chose
+            for Mira&apos;s replies or else your browser&apos;s own, and turns what you say into
+            text. Mira never receives your voice or any recording of it, only the text. The text
+            goes to Mira like a typed message: the same consent, safety rules and limits apply.
           </li>
           <li>
             Where your browser can, this happens on your device (in Chrome, for example). Otherwise
             your browser uses its maker&apos;s speech service (for example Apple&apos;s or
-            Google&apos;s), under that company&apos;s terms, not ours. We tell you before you first
-            talk, and you agree with a tick.
+            Google&apos;s), under that company&apos;s terms, not ours, possibly outside the EU.
+            Before you first talk, you agree to that with a tick; we keep that you agreed, when, and
+            which wording you saw.
           </li>
           <li>
             Mira&apos;s replies are read aloud by a voice on your device. We never use an online
@@ -442,8 +468,8 @@ export default function MiraPrivacyPage() {
             the talking was yours and Mira&apos;s (counted in words), whether speech became text on
             your device or in your browser&apos;s service, and up to three key points.
             Anthropic&apos;s model writes the key points from the session&apos;s words, under the
-            same rules as Mira&apos;s replies. There are none for a session in which Mira showed
-            support lines.
+            same rules as Mira&apos;s replies. Mira is told not to sum up a session in which she
+            showed support lines.
           </li>
           <li>
             You can read and delete each session under Voice sessions. Deleting it deletes its key
@@ -640,9 +666,12 @@ export default function MiraPrivacyPage() {
         <h2>Only for adults</h2>
         <p className="mt-3">
           Mira is only for people aged 18 or older. If you tell Mira you are under 18, she stops
-          coaching for good on that account or in that browser. She turns her emails off and deletes
-          the chats saved in that account. In a browser without an account, the chat there is
-          cleared. Any goals in that account are deleted too.
+          coaching for good on that account or in that browser. In a browser without an account, the
+          chat there is cleared. In an account, she turns her emails off, forgets its reply language
+          and look, and deletes what it keeps: its chats, goals, journal, self-check and body check
+          results, voice sessions, rating and words, passkeys, weekly session, requests to hear
+          about coaches and the coach the finder suggested, and a change of email waiting for its
+          code.
         </p>
 
         <h2>Mira is not a therapist</h2>

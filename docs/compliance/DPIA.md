@@ -24,7 +24,7 @@ GDPR Art. 35 requires a DPIA when processing involves "systematic monitoring of 
 | Engagement analytics              | analytics_event rows (from 2026-10-16 incl. report chapter reading time and actions, pre-report slides skipped), survey_behavior_event rows (from 2026-10-16 incl. `is_tablet`), scroll depth, time-on-section, click telemetry; funnel_event rows (from 2026-10-16 incl. each survey intro card and its Back and Skip); landing section time (PostHog and GA4) | our own tables: legitimate interest since 2026-09-18 (privacy policy §7.4); funnel_event: every visitor from 2026-10-16 (visitor ID cookie with consent, a page-only id held in memory otherwise), legitimate interest; GA4: cookies and identifiers with consent, cookieless events on every visit from 2026-10-16 (Google Consent Mode), legitimate interest | Supabase (`analytics_event`, `survey_behavior_event`, `funnel_event`) + GA4 + Microsoft Clarity + PostHog |
 | Admin operations                  | admin email, action, IP, target resource                                                                                                                                                                                                                                                                                                                        | legitimate interest (operational forensics)                                                                                                                                                                                                                                                                                                                    | Supabase (`admin_action_log`)                                                                             |
 | GDPR DSAR                         | email, action (export/delete), admin email, IP, rows_affected JSON                                                                                                                                                                                                                                                                                              | legal obligation (Art. 17 / Art. 20)                                                                                                                                                                                                                                                                                                                           | Supabase (`data_subject_request_log`)                                                                     |
-| Mira, the AI coach (beta, §7)     | what people write about their sex life and health, Mira's replies, account data, labels, ratings, feedback, body check answers, nudge records, a random browser id; IP and email in rate-limit counters                                                                                                                                                         | explicit consent (Art. 6(1)(a), 9(2)(a)) for coaching and rated-reply text; contract for the account and its emails; legitimate interest for steps, ratings, nudge opens and abuse prevention                                                                                                                                                                  | Supabase (Zurich), the browser (chats without an account), Anthropic (30 days)                            |
+| Mira, the AI coach (beta, §7)     | what people write about their sex life and health, Mira's replies, account data, labels, ratings, feedback, body check answers, nudge records, a random browser id; IP and email in rate-limit counters; from 2026-11-21 weekly sessions and from 2026-11-22 goals, journal, self-checks, voice sessions, passkeys and devices                                  | explicit consent (Art. 6(1)(a), 9(2)(a)) for coaching and the Art. 9 features; contract for the account and its emails; legitimate interest for steps, ratings, email opens and clicks and abuse prevention                                                                                                                                                    | Supabase (Zurich), the browser (chats without an account), Anthropic (30 days)                            |
 
 ## 2. Categories of data subjects
 
@@ -240,12 +240,13 @@ are left out of Mira's statistics.
 
 - Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
   (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
-  (`mira_event`); body check answers and score (`mira_body_check`); the LoveIQ result on opt-in.
+  (`mira_event`); body check answers and score (`mira_body_check`); self-check answers
+  (`mira_check`, scored by the app; §7.16); the LoveIQ result on opt-in.
 - Art. 9, Challenges & goals (from 2026-11-22, §7.13): an account holder's goals in their own
   words, with an optional number of days a week, and the days they ticked them (`mira_goal`,
   `mira_goal_log`); exported and erased with the account by the data-request tool (§4).
-  (`mira_event`); body check answers and score (`mira_body_check`); self-check answers
-  (`mira_check`, scored by the app; §7.16); the LoveIQ result on opt-in.
+- Art. 9, also from 2026-11-22: what "Notify me" and "Find my challenge" say about the person's
+  challenge (§7.12), voice sessions with their key points (§7.15) and the daily journal (§7.17).
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason; from
   2026-11-21 the language Mira replies in, and light or dark and the text size), and each consent
@@ -262,7 +263,6 @@ are left out of Mira's statistics.
   the display choice (`mira_look` cookie, one year, Mira's pages only: light, dark or system and the
   text size, with or without an account), IP and email addresses as rate-limit keys (Upstash),
   request logs (Vercel).
-  IP and email addresses as rate-limit keys (Upstash), request logs (Vercel).
 - Sign-in and security (from 2026-11-22): passkeys (`mira_passkey`: credential id, public key,
   signature counter, transports, synced or not, a label, made and last used; no biometric data,
   which never leaves the device); signed-in devices (`mira_session`: the Supabase session id, how
@@ -275,8 +275,9 @@ are left out of Mira's statistics.
 - Weekly session (`mira_session_slot`: weekday, local time, time zone, the invite's update count,
   reminders paused; `mira_session_reminder`: each reminded start, and when the session was opened
   within 30 minutes of it). Times only, never words; the session emails carry no chat content.
-- Analytics: what the site-wide tools record on Mira's pages, which includes the chat as it
-  appears on screen.
+- Analytics: what the site-wide tools record on Mira's pages, which includes everything shown
+  there: the chat, goals, the journal, voice captions and sessions with their key points, the
+  finder and the picks, a rating's words, and the self-checks' answers and results (M5).
 
 **Flow**: the browser sends each message with the chat so far (the latest 24 turns) to
 `/api/mira/chat` on Vercel in Frankfurt. A message plainly about suicide or self-harm gets a fixed
@@ -291,14 +292,14 @@ or the conversation.
 
 | Recipient                                             | Role                              | What it receives                                                                  | Where, and transfer basis                                                                          |
 | ----------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Anthropic Ireland, Limited, with Anthropic, PBC (USA) | Processor (Commercial Terms, DPA) | the messages, the chat so far, the person's context; the nudge prompts            | stored in the USA; requests routed to the USA, Europe, Asia or Australia; SCCs (Modules 2 and 3)   |
+| Anthropic Ireland, Limited, with Anthropic, PBC (USA) | Processor (Commercial Terms, DPA) | the messages, the chat so far, the person's context; nudge and key-point prompts  | stored in the USA; requests routed to the USA, Europe, Asia or Australia; SCCs (Modules 2 and 3)   |
 | Supabase Inc.                                         | Processor                         | everything Mira stores, and the sign-in users                                     | Zurich (`eu-central-2`): Swiss adequacy decision; Supabase Inc.'s own access: its DPA (to confirm) |
 | Vercel Inc.                                           | Processor                         | every request (IP, user agent, URL), messages in transit                          | functions in Frankfurt (`fra1`); company in the USA: DPF and SCCs                                  |
-| Resend Inc.                                           | Processor                         | email address, sign-in codes, nudge text; opens and clicks with IP and user agent | USA: SCCs                                                                                          |
+| Resend Inc.                                           | Processor                         | every Mira email (below); opens and clicks with IP and user agent                 | USA: SCCs                                                                                          |
 | Upstash Inc.                                          | Processor                         | rate-limit keys: IP address, email address, browser id                            | region to confirm; SCCs in its DPA (to confirm)                                                    |
 | Google Ireland Ltd. (Sign in with Google)             | Independent controller            | the email address it confirms, and that the person signed in to the "Mira" client | USA: DPF                                                                                           |
-| PostHog Inc.                                          | Processor                         | events, autocapture and session recordings of Mira's pages, chat text included    | EU (Frankfurt); PostHog Inc. is in the DPF                                                         |
-| Microsoft Ireland Operations Ltd. (Clarity)           | Independent controller            | recordings and heatmaps of Mira's pages, chat text included, without consent      | USA: DPF                                                                                           |
+| PostHog Inc.                                          | Processor                         | events, autocapture and session recordings of everything on Mira's pages (M5)     | EU (Frankfurt); PostHog Inc. is in the DPF                                                         |
+| Microsoft Ireland Operations Ltd. (Clarity)           | Independent controller            | recordings and heatmaps of everything on Mira's pages, without consent (M5)       | USA: DPF                                                                                           |
 | Google Ireland Ltd. (Analytics, Tag Manager)          | Processor                         | page views and events; identifiers only with cookie consent                       | USA: DPF                                                                                           |
 | Google Ireland Ltd. (Ads)                             | Independent controller            | its tag runs on Mira's pages and may set `_gcl_au` before the banner is answered  | USA: DPF                                                                                           |
 | CookieYes Ltd.                                        | Processor                         | the consent record                                                                | UK: adequacy decision                                                                              |
@@ -306,6 +307,28 @@ or the conversation.
 Weekly sessions add no recipient: Resend sends their emails (the address, and the invite with the
 session's day, time and zone). A calendar the person adds the session to (from the invite, the
 download or the Google Calendar link) keeps that entry under its provider's own terms.
+
+**The person's context sent to Anthropic**: the coaching style and, for account holders, name,
+gender, country, reply language, the goals on the go with this week's ticks and the weekly
+session's slot; only with their switches, the LoveIQ result, the journal's last 7 days (the notes
+only with the second switch), each self-check's latest band from the last 90 days and whether
+that mood check's question 9 was above "Not at all". When a weekly session opens, the last
+remembered chat goes too, never one that held a crisis in the last 14 days; when a voice session
+ends, its words go once more, to write its key points.
+
+**Every Mira email goes through Resend**: sign-in codes and change-of-email codes, nudges,
+weekly-session invites, changes and reminders, journal reminders, the note to the old address
+after a change of email and the note to the account when a passkey is added. Open and click
+tracking is on for the whole sending domain (§6), so Resend records each email's delivery, opens
+and clicked links with the IP address and user agent.
+
+**The team's data tool**: Jarvis's live-data tool (`query_product_data`, `app/api/mcp/route.ts`),
+open to staff only, reads the production database with the service role, and its answers go into
+the staff member's Claude conversation (Anthropic). It masks columns by name (email addresses,
+gender, display names and the self-checks' `answers` among them) but does not leave out the
+`mira_*` tables, so chat words (`mira_message.content`), goal words, journal notes and ratings,
+voice key points and names (`mira_user.name`) can currently be read through it. Whether to leave
+`mira_*` out, as the team export does (R3.8), is an open decision for Eman (7.9, point 7).
 
 Google's roles are Google's own list: Analytics and Tag Manager are processor services, Google Ads a
 controller service ([business.safety.google/adsservices](https://business.safety.google/adsservices/)).
@@ -345,13 +368,14 @@ controller service ([business.safety.google/adsservices](https://business.safety
 
 ### 7.4 Necessity and proportionality
 
-- **Lawful basis** per purpose: [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A16 to A19. Coaching rests on
-  explicit consent (Art. 6(1)(a), 9(2)(a)): a required tick before a first message without an
-  account ("I'm 18 or older, and I agree that Mira may process what I share about my sex life and
-  health to coach me, and to count, without my words, how Mira is used and whether she helps. Our
-  analytics tools also see what I type."), or at sign-up a required "Mira may process what I share
+- **Lawful basis** per purpose: [LAWFUL_BASIS.md](LAWFUL_BASIS.md) A16 to A19 and A21 to A26.
+  Coaching rests on explicit consent (Art. 6(1)(a), 9(2)(a)): a required tick before a first
+  message without an account ("I'm 18 or older, and I agree that Mira may process what I share
   about my sex life and health to coach me, and to count, without my words, how Mira is used and
-  whether she helps". The wording's version is stored with each consent.
+  whether she helps. Our analytics tools also see what I type."), or at sign-up a required "Mira
+  may process what I share about my sex life and health to coach me, and to count, without my
+  words, how Mira is used and whether she helps". The wording's version is stored with each
+  consent.
 - **Purpose limitation**: chats are used for coaching, never for advertising. We do not train
   models on them, and Anthropic may not.
 - **Data minimisation**: Mira works without an account (one message, then a free account; a crisis
@@ -368,12 +392,10 @@ controller service ([business.safety.google/adsservices](https://business.safety
 - **Rights**: chats and the account can be deleted in Settings; data requests (access, copy,
   deletion) cover all Mira data, from 2026-11-22 also passkeys (ids, labels, public keys), devices
   and a pending change of email (never a code's hash or a challenge); the DPO is named in both
-  notices.
-  deletion) cover all Mira data; the DPO is named in both notices. The staff data-subject tool
-  (`features/admin/server/data-subject.ts`) exports the weekly session's `mira_session_slot` and
-  `mira_session_reminder` rows and erases them with the account (by cascade); a weekly session is
-  changed, its reminders paused or the session cancelled in Settings, and every session email
-  has a stop link.
+  notices. The staff data-subject tool (`features/admin/server/data-subject.ts`) exports the
+  weekly session's `mira_session_slot` and `mira_session_reminder` rows and erases them with the
+  account (by cascade); a weekly session is changed, its reminders paused or the session cancelled
+  in Settings, and every session email has a stop link.
 - **Alternatives**: EU-only processing (Claude on Google Cloud or Amazon Bedrock in the EU) was
   asked for on Sanjin's coach board; Anthropic's own API was chosen on 19 Nov 2026. Revisit before
   Mira leaves the beta.
@@ -391,19 +413,22 @@ details.
   Gmail and Workspace addresses, never for `admin_users`); Mira's own sign-in cookie; neutral
   sender and subject on every email and a hidden neutral preview line; backups encrypted and kept
   30 days; nothing logs the conversation.
+- **Staff access**: AP's Mira pages show counts and ids, and the words of ratings waiting for
+  approval (7.14); Jarvis's live-data tool can currently read the `mira_*` tables, chat words
+  included (7.3, "The team's data tool"), an open decision for Eman (7.9, point 7).
 - **Residual**: low to medium.
 
 #### M2 — Minors (HIGH before, MEDIUM after)
 
 - **Measures**: an 18+ tick before the first message and at sign-up; the terms of use require 18+.
-  Anyone who says they are under 18 is stopped for good on that account or browser: nudges off,
-  the account's saved chats deleted, a browser chat cleared, and (from 2026-11-21) the account's
-  reply language and display choices cleared; Settings then refuses changes (403).
-  the account's saved chats and self-check results deleted, a browser chat cleared, and the
-  self-check routes refuse the account from then on.
-  the account's saved chats deleted, a browser chat cleared.
-  From 2026-11-21 a booked weekly session is deleted too, without any email; its routes refuse
-  the account and the reminder job never emails it.
+  Anyone who says they are under 18 is stopped for good on that account or browser
+  (`server/minor.ts`): a browser chat is cleared; the account's nudges go off, its reply language
+  and display choices are cleared, and its saved chats, goals, journal, self-check and body check
+  results (with the account's earlier counts of the mood check's support lines), voice sessions,
+  rating and words, passkeys, weekly session (without any email), "Notify me" requests and the
+  finder's outcome, and a pending change of email are deleted. From then on Settings refuses
+  changes and Mira's feature routes refuse the account (403), except deleting goals, taking back a
+  rating and signing devices out; no reminder job emails it.
 - **Residual**: medium. Age is self-declared; there is no age verification.
 
 #### M3 — Crises: suicide, self-harm, abuse (HIGH before, MEDIUM after)
@@ -411,10 +436,12 @@ details.
 - **Measures**: a plain crisis message gets a fixed reply and support lines without a model call,
   and is never stopped by any limit; the model ends a reply with `[[CRISIS]]` when a stop rail
   fires, which opens the support panel; support lines for nine countries, checked on 2026-11-20
-  (re-check by 2027-02-20); no nudge for 14 days after a crisis. Mira replies in the language the
-  person writes in, or one they choose in Settings (from 2026-11-21); the languages offered are
-  only those whose crisis words the fixed check reads, and the fixed crisis reply, the under-18
-  message and the support lines stay in English.
+  (re-check by 2027-02-20); no nudge, journal reminder or weekly-session reminder for 14 days
+  after a crisis, and a weekly session never opens with a chat that held a crisis in the last 14
+  days; a mood check whose question 9 was above "Not at all" starts the same 14 days for nudges
+  and journal reminders (7.16, S2). Mira replies in the language the person writes in, or one they choose in Settings (from
+  2026-11-21); the languages offered are only those whose crisis words the fixed check reads, and
+  the fixed crisis reply, the under-18 message and the support lines stay in English.
 - **Residual**: medium. Keyword and model detection can miss a crisis. A message in a language the
   fixed check doesn't read relies on the model's marker alone, as before.
 
@@ -425,14 +452,17 @@ details.
   in the terms, the beta label, a fallback model, and ratings and feedback read by the team.
 - **Residual**: medium.
 
-#### M5 — Analytics see the chat (HIGH, owner's accepted risk)
+#### M5 — Analytics see the chat and every other Mira screen (HIGH, owner's accepted risk)
 
-PostHog and Microsoft Clarity record Mira's pages, including the chat text shown on screen;
-Google's tags and CookieYes load too. Clarity runs without consent site-wide (owner decision
-2026-08-10), and Microsoft is an independent controller in the USA with no per-person deletion.
+PostHog and Microsoft Clarity record Mira's pages unmasked, including everything shown on them:
+the chat, goals, the journal, voice captions and sessions with their key points, the finder and
+the picks, a rating's words, and the self-checks' answers and results. Google's tags and
+CookieYes load too. Clarity runs without consent site-wide (owner decision 2026-08-10), and
+Microsoft is an independent controller in the USA with no per-person deletion.
 
 - **Measures**: disclosure only: the chat consent says "Our analytics tools also see what I type",
-  and both notices say so. PostHog is a processor in the EU.
+  the goals page, the journal's settings and the note before a first self-check say the tools see
+  those screens, and Mira's notice lists what they see. PostHog is a processor in the EU.
 - **Why it stays high**: Art. 9 content reaches an independent controller in the USA. The basis the
   privacy policy states for this measurement, legitimate interest (§7.4), is not an Art. 9(2)
   condition, and the explicit consent's purpose is coaching, so whether the sentence inside it
@@ -442,8 +472,8 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
 - **Since 2026-11-22, the self-checks too** (§7.16, S3): PostHog and Clarity also record the
   answers and results of the anxiety, mood and loneliness checks, health data under Art. 9, on
   the same basis the privacy policy states (legitimate interest, §7.4), which is not an Art. 9(2)
-  condition. Mira's notice says so. Whether the owner's acceptance of M5 extends to them is an
-  open decision for Eman (§7.16, open point 3).
+  condition. Mira's notice says so. By Eman's decision nothing on Mira's pages is masked, the
+  self-checks and the journal included (7.7, item 1).
 
 #### M6 — Transfers to the USA (MEDIUM)
 
@@ -466,8 +496,9 @@ Google's tags and CookieYes load too. Clarity runs without consent site-wide (ow
 
 - **Measures**: said on the sign-up's "About you" step, in Mira's notice and the terms, and in every
   nudge ("Daily nudges from Mira come with your free account"); at most one a day; pause and
-  one-click stop in every email and in Settings; none while chatting, for 14 days after a crisis,
-  to suppressed addresses or without remembered chats.
+  one-click stop in every email and in Settings; none while chatting, for 14 days after a crisis
+  or a mood check that showed support lines (7.16, S2), to suppressed addresses or without
+  remembered chats.
 - **Residual**: medium. Whether a nudge counts as advertising that needs prior consent (§7 UWG) has
   not been reviewed by a lawyer.
 
@@ -536,8 +567,9 @@ Recorded as owner decisions, not as risks this assessment found acceptable on it
 1. **Analytics on Mira's pages stay as they are** (M5), including Microsoft Clarity without consent
    (owner decision of 2026-08-10, kept for Mira on 2026-11-20). The chat is not masked in Clarity
    or PostHog either (owner decision of 2026-11-21), so the Berlin Commissioner is consulted before
-   Mira is promoted (7.10, condition 1). Whether this extends to the self-checks' answers and
-   results (7.16, S3) is still open.
+   Mira is promoted (7.10, condition 1). Nothing else on Mira's pages is masked either, by the
+   same decision: goals, the journal, voice sessions, the finder, ratings and the self-checks'
+   answers and results (7.16, S3) included.
 2. **Nudges on by default** for new accounts (M8).
 3. **Nudge open tracking** (M7).
 4. **Mira stays on Eman's own Anthropic organization** ("Eman's Individual Org") and its keys, not
@@ -574,6 +606,8 @@ take one of the M5 measures.
 5. **§25 TDDDG**: the browser id cookie is needed for the free limit but also links anonymous
    statistics; the nudge open image (M7).
 6. **§7 UWG**: nudges on by default (M8).
+7. **The team's data tool**: Jarvis's live-data tool can read the `mira_*` tables (7.3). For Eman
+   to decide: leave them out, as the team export does, or keep them readable to staff.
 
 ### 7.10 DPO's opinion (Art. 35(2))
 
@@ -621,21 +655,24 @@ Home, a search on Home, and "Ask Mira about this" after each of the guide's prac
   rows written under the account (`user_id`) are read, never a browser id's, because a browser can
   be shared and another person's topics must not shape the account's picks. Nothing is used while
   "Remember our conversations" is off, and nothing from before the person's last "Delete all
-  chats". Only the person sees the suggestions.
+  chats". The suggestions show only on the person's Home page.
 - **New labels in `mira_event`**, ids and numbers only: which coach a "Notify me" was for
   (`notify_me`), which coach the finder suggested (`finder_done`, never the answers), the coaches
   page and finder opened, picks shown and tapped, which practice a chat was opened from
   (`guide_ask`), and searches that found nothing (`search_empty`, never the words; the search runs
   in the browser). A "Notify me" or a finder outcome says which sex-related challenge the person
   is interested in, so it is Art. 9 data, like the topic labels.
+- **Analytics**: PostHog and Clarity see these screens (M5): the roster, the finder's questions
+  and taps, the picks and Home's search, as they show on the page.
 - **Basis**: the A16 consent, as for Mira's other labels (LAWFUL_BASIS A21).
 - **Measures**: "Notify me" needs an account (there is no one to tell otherwise); the route lets in
   only the listed ids and numbers, so no words can reach the log; someone stopped as under 18 is
-  refused (403) and their "Notify me" requests are deleted (`stopForMinor`), so no one under 18 is
-  told a coach for sex is ready; no new table, so data requests and account deletion cover these
-  rows as all of `mira_event`.
+  refused (403) and their "Notify me" requests and the finder's outcome are deleted
+  (`stopForMinor`), so no one under 18 is told a coach for sex is ready; no new table, so data
+  requests and account deletion cover these rows as all of `mira_event`.
 - **Retention**: 12 months, as `mira_event` (7.6). A "Notify me" request older than that is gone,
-  so nobody is told about a coach a year after asking.
+  so nobody is told about a coach a year after asking. The finder's outcome is kept as long; it
+  shows the challenge the person picked.
 - **Risk**: LOW after the measures. Who is told when a coach is ready, how and by whom, is to be
   decided before the first such email (7.9).
 - **Open**: the system prompt lets Mira name only Jonas and Ana as coming soon; the coaches page
@@ -660,7 +697,7 @@ their goals on the go with this week's ticks, so she can check in at most once a
 - **Recipients**: Anthropic gets the goals on the go with each message of a signed-in person, as
   part of the person's context (7.3). PostHog and Clarity see goals as they show on the goals page
   and on Home (M5, the owner's accepted risk, 7.7 item 1). `mira_*` tables stay out of the team's
-  data export (R3.8).
+  data export (R3.8), but Jarvis's live-data tool can read the goals' words (7.3).
 - **Minors (M2)**: the under-18 stop deletes the account's goals with its chats, and such an account
   or browser can no longer see, add, change or tick goals; deleting them always works.
 - **Rights**: one goal or all of them can be deleted on the goals page, with their ticks; deleting
@@ -673,9 +710,9 @@ their goals on the go with this week's ticks, so she can check in at most once a
   the screens show a quiet week only as an empty bar while the total keeps growing.
 - **Open points**: (1) unlike saved chats, goals have no 12-month limit: forget goals with no
   activity for 12 months in `mira_forget_old_memory`, or decide that they stay with the account;
-  (2) Jarvis's live data tool (`query_product_data`, `app/api/mcp/route.ts`) masks columns by name
-  but does not leave out `mira_*` tables, so `mira_message.content` (already) and `mira_goal.text`
-  can be read through it: leave `mira_*` out, as the team export does.
+  (2) Jarvis's live-data tool (`query_product_data`, `app/api/mcp/route.ts`) masks columns by name
+  but does not leave out `mira_*` tables, so `mira_goal.text` can be read through it, as the chats
+  can: whether to leave `mira_*` out, as the team export does, is Eman's decision (7.9, point 7).
 
 ### 7.14 Ratings and quotes (from 2026-11-22, to be checked by Eman)
 
@@ -755,7 +792,12 @@ and "Home" (session recordings). How it works: [`features/mira/AGENT_README.md`]
   can (Chrome's on-device recognition), else in the browser maker's own speech service (Apple's
   for Safari; Google's for Chrome without on-device support). The text goes to `/api/mira/chat`
   like a typed message, through the same consent, crisis rails, minor stop, limits and sign-up
-  card. No audio reaches us or Anthropic, and none is stored.
+  card. No audio reaches us or Anthropic, and none is stored. Talk listens in the language chosen
+  for Mira's replies, else the browser's language.
+- Before the first Talk, an explicit tick: "I agree that my browser's speech service (for example
+  Apple's or Google's) hears what I say to Mira, under that company's terms, possibly outside the
+  EU." The agreement is logged as `voice_notice_agreed` with its wording version
+  (`mira-voice-2026-11-22`).
 - Mira's replies are read aloud only by a voice on the device (`localService`): an online voice
   would send her words, which reflect what the person said, to another company.
 - With an account and memory on, a voice session is kept as words (`mira_voice_session`, migration
@@ -774,24 +816,28 @@ session's words a second time, to write the key points.
 
 **Risks and measures**
 
-- **V1, the browser maker hears the voice (MEDIUM)**: on-device first; a one-time notice with a
-  tick names the service before its first use; Talk is not offered where no recognition exists.
+- **V1, the browser maker hears the voice (MEDIUM)**: on-device first; the explicit tick before
+  the first Talk names the service and says it may be outside the EU, and is logged with its
+  wording version; Talk is not offered where no recognition exists.
   Residual: what Apple or Google keep of the audio is set by their terms, which we can't change,
   and Safari offers no way to ask for on-device recognition.
 - **V2, key points are new sensitive data (MEDIUM before, LOW after)**: the same rules as her
-  replies; none when a stop rail fired (the crisis or refusal message, crisis words) or when the
-  model answers NONE; kept only with memory on; deleted with the session, the chat, the account,
-  the 12-month forgetting and the under-18 stop (`deleteRecordings` in `stopForMinor`); staff data
-  requests export `mira_voice_session` with the account (`features/admin/server/data-subject.ts`).
-- **V3, captions on screen (as M5)**: the words appear on the page as they are spoken, where
-  PostHog and Clarity see them like typed text: no new exposure, the same owner's accepted risk.
+  replies; none when the session holds a fixed stop message (crisis, refusal, under 18) or crisis
+  words, and the model is told to answer NONE for a session where a stop rail fired, so a crisis
+  it marked itself rests on that instruction; kept only with memory on; deleted with the
+  session, the chat, the account, the 12-month forgetting and the under-18 stop
+  (`deleteRecordings` in `stopForMinor`); staff data requests export `mira_voice_session` with the
+  account (`features/admin/server/data-subject.ts`).
+- **V3, captions and sessions on screen (as M5)**: PostHog and Clarity see these screens (M5):
+  the words as they are spoken, like typed text, and the voice sessions' pages with their words
+  and key points: no new kind of exposure, the same owner's accepted risk.
 - **V4, someone nearby, or a misheard word (LOW)**: the caption shows what was heard before it is
   sent; Mute and End stay on screen; a pause or a tap sends; leaving the tab or opening a panel
   pauses the microphone; someone stopped as under 18 is refused on every voice route.
 
 **Retention**: as the chat (7.6): the session and its words go with the chat or the account, at the
-latest 12 months after the person's last message. Without an account nothing is kept beyond the KPI
-event (12 months, as `mira_event`).
+latest 12 months after the person's last message. Without an account nothing is kept beyond the
+events (the session's count and the voice tick's record, 12 months, as `mira_event`).
 
 **Open**: (1) whether a browser maker's speech service must be named per browser in the notice
 (it names Apple's and Google's as examples); (2) Android: whether Chrome reports its own voices as
@@ -811,11 +857,14 @@ scale's published point for further evaluation, the person is pointed to a docto
 and to the support lines.
 
 **What is processed.** The answers to the GAD-7, the PHQ-9 and the Three-Item Loneliness Scale
-with the date (`mira_check`), scored by the app, never by the browser; the switch
-`mira_user.use_checks`; events naming the check and whether it was a retake, and a count of the
-support panels the PHQ-9's question 9 opened (never answers, scores or bands); an unfinished
-check's answers in the browser tab's session storage for up to a day. All of it is health data
-(Art. 9).
+with the date (`mira_check`), scored by the app, never by the browser, with a result's support
+flag (the PHQ-9's question 9 above "Not at all", worked out from the stored answers); the switch
+`mira_user.use_checks`, each change logged as `use_checks_set` with its wording version
+(`mira-checks-2026-11-22`); events naming the check and whether it was a retake; a count of the
+support panels the PHQ-9's question 9 opened, without any account or browser link (the
+account's earlier rows of that count are deleted with "Delete my check results" and at an
+under-18 stop); never answers, scores or bands in an event; an unfinished check's answers in the
+browser tab's session storage for up to a day. All of it is health data (Art. 9).
 
 **Lawful basis.** Explicit consent (Art. 6(1)(a), 9(2)(a)). The sign-up tick covers "what I share
 about my sex life and health to coach me"; before a first check, a plain note says what is kept,
@@ -823,21 +872,30 @@ who sees it, that analytics tools see the screen and how to delete it, and start
 ("By starting, you agree that we keep your answers this way"). Open point 1.
 
 **Measures.** Signed-in accounts only; service-role tables; one result per scale and day, and a
-retake only after 14 days (28 for loneliness); results shown to the person alone; Mira sees each
-check's latest band from the last 90 days, never answers or scores, and only with
-`use_checks` (off by default); "Delete my check results" in Settings; deleted with the account
+retake only after 14 days (28 for loneliness); results shown to the person (and seen by the
+analytics tools, S3), a change only as points higher or lower than last time; a result with the
+support flag keeps the support lines at its top on every visit, and Home and Assessments show it
+(for example "Minimal · support for you"); Mira sees each check's latest band from the last 90
+days and, with the flag, that the person reported thoughts of being better off dead or of hurting
+themselves in that check, never answers or scores, and only with `use_checks` (off by default);
+she then checks in gently once a chat, offers the support lines and follows the crisis rail if
+there is risk now; "Delete my check results" in Settings; deleted with the account
 (cascade) and at an under-18 stop, after which the routes answer 403; included in a staff
 data-subject export (`features/admin/server/data-subject.ts`, `mira_check`).
 
 **Risks.**
 
 - **S1, a result read as a diagnosis, or as reassurance (MEDIUM):** plain wording, "not a
-  diagnosis" on every result and on the cards, the professional step from the published points.
+  diagnosis" on every result and on the cards, the professional step from the published points;
+  a change is shown only as how many points higher or lower than last time, never called a real
+  change.
 - **S2, thoughts of suicide or self-harm reported with no clinician to follow up (HIGH before,
   MEDIUM after):** any answer above "Not at all" on the PHQ-9's question 9 opens the support
   lines at once, the person's country first, with warm words and a way to Mira, whose crisis
   rails apply; the result keeps that support at its top. As with the chat, no person follows up.
-  The panel's opening is counted for the weekly safety review.
+  The panel's opening is counted for the weekly safety review, as a count only, never linked to
+  an account or browser. Such a result starts 14 days without Mira's nudges and journal reminders,
+  read from `mira_check`; deleting the results ends that early.
 - **S3, analytics see the answers (HIGH; it extends M5):** PostHog and Microsoft Clarity record the
   check screens as they record the chat: every answer tapped, and the result with its band and
   score, which are Art. 9 health data, in session recordings and, for PostHog, in the taps it
@@ -846,9 +904,9 @@ data-subject export (`features/admin/server/data-subject.ts`, `mira_check`).
   notice. The option that would lower it: mark the check screens `ph-no-capture` (PostHog then drops
   the taps and blanks the screens in its replays) and `data-clarity-mask="true"` (Clarity masks
   them), or not load the two tools on `/mira/assessments`. Not taken: reducing analytics is Eman's
-  decision alone, and he kept the chat visible on 2026-11-21 (7.7, item 1). An open decision for him
-  (open point 3).
-- **S4, bands reach Anthropic (as M6):** only with the switch on, bands only.
+  decision alone, and by his decision nothing on Mira's pages is masked (7.7, item 1).
+- **S4, bands reach Anthropic (as M6):** only with the switch on, the bands and the support flag
+  only.
 
 **Medical device question (EU MDR 2017/745), for the owner to decide.** Software its manufacturer
 intends for the diagnosis, prevention, monitoring, prediction, prognosis, treatment or
@@ -873,10 +931,10 @@ used: WHO publishes it under CC BY-NC-SA 3.0 IGO (2024), so commercial use needs
 1. Whether the sign-up consent and the note before a first check are specific enough for health
    questionnaires, or a tick of their own is wanted.
 2. Permission to use the three-item loneliness scale in a commercial product.
-3. **For Eman to decide:** does the owner's acceptance of M5 extend to the self-check answers and
-   results in PostHog and Clarity (Art. 9 data in recordings, on a basis that is not an Art. 9(2)
-   condition), or are the check screens masked as S3 describes? Until he decides, nothing is
-   masked and the notice says the tools see the screens.
+3. **Settled by Eman's decision**: the owner's acceptance of M5 extends to the self-check answers
+   and results in PostHog and Clarity (Art. 9 data in recordings, on a basis that is not an Art.
+   9(2) condition): nothing on Mira's pages is masked (7.7, item 1), and the notice says the tools
+   see the screens.
 4. The regulatory opinion on the medical device question.
 
 ### 7.17 The daily journal (added 2026-11-22)
@@ -889,18 +947,19 @@ words (AP › Mira's "Journal" card reads only who checked in on which day and t
 
 **Basis**: the account's explicit consent (LAWFUL_BASIS A26). "Let Mira read my journal" is a
 separate opt-in, off by default (the last 7 days' ratings join the person's context sent to
-Anthropic, §7.3), and "Include my notes" a second one; `mira_user.journal_share_at` records when
-each was chosen, and turning one off applies from the next message. The reminder email is an
-opt-in with a one-click stop.
+Anthropic, §7.3), and "Include my notes" a second one; `mira_user.journal_share_at` records the
+latest choice, each change is logged as `journal_share_set`, and turning one off applies from the
+next message. The reminder email is an opt-in with a one-click stop.
 
 **Risks and measures**:
 
 - **J1 Disclosure (MEDIUM)**: service-role-only table with RLS, every read and write scoped to
-  the signed-in account; no staff screen shows entries; like the chat, the journal's screens are
-  visible to PostHog and Clarity recordings (M5, the owner's accepted risk; masking them is an open
-  decision for Eman, as for the self-checks); emails never carry
-  journal content, and the reminder's subject is neutral; its stop link carries a token of its own
-  purpose (`journal-stop`) that opens nothing else.
+  the signed-in account; AP shows no entries (its Journal card reads days and settings only), but
+  Jarvis's live-data tool can currently read them, ratings and notes included (7.3; Eman's
+  decision, 7.9 point 7); PostHog and Clarity see these screens, as the chat (M5, the owner's
+  accepted risk; nothing on Mira's pages is masked); emails never carry journal content, and the
+  reminder's subject is neutral; its stop link carries a token of its own purpose
+  (`journal-stop`) that opens nothing else.
 - **J2 Model processing (MEDIUM)**: only after the opt-in, only 7 days, notes only after the
   second opt-in, and nothing is read from the table while it is off. Anthropic's terms as §7.3.
 - **J3 Crisis (MEDIUM before, LOW after)**: a note with crisis words is kept and shows the chat's

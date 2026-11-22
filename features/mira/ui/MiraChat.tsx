@@ -30,10 +30,11 @@ import {
  * (21 Nov 2026, after Marcus asked for a less noisy phone version): no frame around the chat, a
  * welcome line in the middle, one pill-shaped composer, Mira's words as plain text and the
  * person's in a grey bubble. On phones the composer sits at the bottom from the start.
- * Decisions kept from 18 Nov: typing only (no voice yet), no invented numbers or quotes on the
- * page (so V2's "trained on 100M+ words" line and its review score are not shown), the 18+ and
- * sensitive-data consent before the first anonymous message (now a short step when it is sent),
- * and the sign-up card once an anonymous person's free message is answered. Board "01
+ * Since 22 Nov: Talk (voice, ui/voice) beside typing; V2's "trained on 100+ scientific papers &
+ * 100M+ words" line (Eman's call, 21 Nov); a rating line only from real ratings (ui/reviews,
+ * nothing below the threshold). Kept: the 18+ and sensitive-data consent before the first
+ * anonymous message (a short step when it is sent), and the sign-up card once an anonymous
+ * person's free message is answered. Board "01
  * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
  */
 
