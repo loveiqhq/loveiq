@@ -23,6 +23,7 @@ import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
 import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
 import type { ChecksData } from "@features/mira/ui/checks/data";
+import { Switch as SettingsSwitch } from "@features/mira/ui/MiraSettings";
 
 /** The self-check screens (features/mira/ui/checks): runner, result, Home card, chat starter. */
 
@@ -724,6 +725,25 @@ describe("Assessments' 'Mira may use my LoveIQ result'", () => {
     fireEvent.click(sw);
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
     expect(sw).toBeChecked();
+  });
+
+  // R3-HAB-8 (decision 6): one name, one description and one switch, here and in Settings.
+  it("says what Settings says, on a switch drawn at Settings' size", async () => {
+    render(<AssessmentsPage />);
+    const sw = await screen.findByRole("switch", { name: "Mira may use my LoveIQ result" });
+    expect(sw).toHaveAccessibleDescription(
+      "Your LoveIQ Sexual Personality result tailors the coaching."
+    );
+    const settings = render(
+      <SettingsSwitch label="Mira may use my LoveIQ result" checked onChange={() => undefined} />
+    );
+    // The track's and the knob's sizes (h-7 w-12, h-5 w-5), whatever else either one draws.
+    const sizes = (root: Element) =>
+      [...root.querySelectorAll("span")]
+        .map((el) => [...el.classList].filter((c) => /^[hw]-\d/.test(c)).join(" "))
+        .filter(Boolean);
+    expect(sizes(sw)).toEqual(sizes(settings.container));
+    expect(sizes(sw)).toEqual(["h-7 w-12", "h-5 w-5"]);
   });
 });
 

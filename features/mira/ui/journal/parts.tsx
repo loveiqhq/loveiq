@@ -124,8 +124,9 @@ export const DEFAULT_REMINDER = "20:00";
 export { CHECK };
 
 /**
- * The board's switch (52 × 30, plum when on) inside a 44 px tall target. Its accessible name is
- * its own text (`label`) or the element `labelledBy` names.
+ * The switch (48 × 28, plum when on, as Settings' own: one size everywhere, round-3 R3-HAB-8)
+ * inside a 44 px tall target. Its accessible name is its own text (`label`) or the element
+ * `labelledBy` names.
  */
 export function Switch({
   checked,
@@ -156,10 +157,10 @@ export function Switch({
     >
       <span
         aria-hidden="true"
-        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-ap-muted/75"}`}
+        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-50 ${checked ? "bg-ap-purple" : "bg-ap-muted/75"}`}
       >
         <span
-          className={`h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-[22px]" : ""}`}
+          className={`h-5 w-5 rounded-full bg-white shadow-ap transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-5" : ""}`}
         />
       </span>
       {label}

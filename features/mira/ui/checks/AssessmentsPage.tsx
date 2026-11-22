@@ -181,7 +181,7 @@ export default function AssessmentsPage() {
           <SwitchRow
             id={switchId}
             label="Mira may use my LoveIQ result"
-            description="Your Sexual Personality result tailors her coaching."
+            description="Your LoveIQ Sexual Personality result tailors the coaching."
             checked={data.useAssessment}
             busy={useBusy}
             onChange={(on) => void toggleAssessment(on)}
