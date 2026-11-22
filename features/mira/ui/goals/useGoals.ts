@@ -83,14 +83,17 @@ export function useGoals() {
     weeklyTarget: number | null,
     via: GoalRow["via"] = "hand"
   ): Promise<string | null> {
-    const r = await miraApi<{ goal: Goal }>("/api/mira/goals", {
+    const r = await miraApi<{ goal: Goal; existing?: boolean }>("/api/mira/goals", {
       body: { text, weeklyTarget, via },
     });
     if (!r.ok || !r.data.goal) return r.data.error ?? "Your goal didn't save. Please try again.";
     // The same words as a goal on the go answer that goal: never listed twice.
     const made = r.data.goal;
     setGoals((all) => (all.some((g) => g.id === made.id) ? all : [...all, made]));
-    return null;
+    // Nothing was added or changed: said as it is, and the form keeps what was typed (R3-HAB-3).
+    return r.data.existing
+      ? "You already have this goal on the go. To change its days a week, use Edit on it above."
+      : null;
   }
 
   async function update(goal: Goal, patch: GoalPatch): Promise<string | null> {

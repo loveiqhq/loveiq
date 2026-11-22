@@ -355,15 +355,23 @@ describe("the goals page", () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   });
 
-  it("lists a goal once when the same words come back as the goal already on the go", async () => {
+  // R3-HAB-3: the same words answer the goal on the go. Say so, and drop nothing typed.
+  it("says a goal is already on the go, keeping the words and the new aim in the form", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
-    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT } });
+    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT, existing: true } });
     render(<GoalsPage />);
     const input = await screen.findByLabelText("Your goal, in your own words");
-    fireEvent.change(input, { target: { value: LIGHT.text } });
+    const typed = `  ${LIGHT.text.toUpperCase()} `;
+    fireEvent.change(input, { target: { value: typed } });
+    for (let i = 0; i < 7; i++) fireEvent.click(screen.getByRole("button", { name: "More days" }));
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
-    await waitFor(() => expect(calls("POST /api/mira/goals")).toHaveLength(1));
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You already have this goal on the go. To change its days a week, use Edit on it above."
+    );
+    expect(calls("POST /api/mira/goals")).toHaveLength(1);
+    expect((input as HTMLInputElement).value).toBe(typed);
+    expect(screen.getByText("Every day")).toBeTruthy();
+    expect(screen.queryByText("Goal added.")).toBeNull();
     expect(screen.getAllByRole("heading", { name: LIGHT.text })).toHaveLength(1);
   });
 
