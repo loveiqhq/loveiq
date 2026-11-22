@@ -413,7 +413,11 @@ export default function MiraSettings({
               </div>
             ) : null}
             <SectionIndex sections={sections} active={active} variant="row" />
-            <div className="mt-8 flex flex-col gap-12">
+            {/* A control the keyboard focuses scrolls clear of the phones' sticky row, as the
+                anchors do (WCAG 2.4.11, round-3 R3-UXA-1). On what scrolls under the row, never
+                the row itself. Once the frame's --mira-scroll-top hook is in, it can set that
+                instead. */}
+            <div className="mt-8 flex flex-col gap-12 [&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16">
               {!minor ? (
                 <>
                   <SettingsSection
@@ -883,9 +887,11 @@ function SectionIndex({
         aria-label="Settings sections"
         className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden"
       >
+        {/* Its edges fade, so a label cut there reads as more to scroll to (round-3
+            R3-UXA-10), as the chat's prompt row does. */}
         <ol
           ref={row}
-          className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex overflow-x-auto [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {sections.map(([id, label]) => (
             <li key={id} className="shrink-0">

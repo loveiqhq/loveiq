@@ -184,6 +184,20 @@ describe("Settings sections", () => {
     await waitFor(() => expect(marked()).toEqual(["#data", "#data"]));
   });
 
+  // Round-3 R3-UXA-10 and R3-UXA-1 (Settings' half): the phones' sticky index row cut its labels
+  // mid-word at both edges with no cue, and going back up, a focused control landed under it.
+  it("fades the phones' index row at its edges, and keeps a focused control clear of it", async () => {
+    await openSettings();
+    const row = screen.getAllByRole("navigation", { name: "Settings sections" })[0]!;
+    expect(row).toHaveClass("sticky", "xl:hidden");
+    expect(row.querySelector("ol")!.className).toMatch(/\[mask-image:linear-gradient\(to_right,/);
+    // What scrolls under the row gives every control in it a top margin for focus scrolling,
+    // the row's own links none (they stick, so a margin there would only jump the page).
+    const content = document.getElementById("account")!.parentElement!;
+    expect(content).toHaveClass("[&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16");
+    expect(row.contains(content)).toBe(false);
+  });
+
   it("after an under-18 stop, says so once and keeps only what still works", async () => {
     replies["GET /api/mira/me"] = () => ({ body: { profile: { ...PROFILE }, minor: true } });
     render(
