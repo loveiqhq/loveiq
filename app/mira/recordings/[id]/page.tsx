@@ -12,10 +12,15 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-/** One voice session: its key points, what was said, and a way to delete it. */
+/**
+ * One voice session: its key points, what was said, and a way to delete it. Signed out, the
+ * sign-in comes back to this session (server/session.ts safeNext lets it through).
+ */
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await getMiraAccount())) redirect("/mira/start?next=%2Fmira%2Frecordings");
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  if (!(await getMiraAccount())) {
+    redirect(`/mira/start?next=${encodeURIComponent(`/mira/recordings/${id}`)}`);
+  }
   return <RecordingDetail id={id} />;
 }

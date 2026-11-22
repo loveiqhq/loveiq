@@ -2,7 +2,8 @@ import { GUIDE_PRACTICES, SKIP_IT } from "../content/guide";
 import miraConfig from "../content/mira-config.json";
 import { MIRA_SYSTEM_PROMPT } from "../content/system-prompt";
 import { REPLY_LANGUAGES } from "../reply-languages";
-import { slotLabel, zoneLabel } from "./calendar";
+import { SESSION_OPENING, slotLabel, zoneLabel } from "./calendar";
+import { SKIP_ANSWER } from "./config";
 import { renderCards } from "./cards";
 import type { CheckForMira } from "./checks";
 
@@ -151,13 +152,17 @@ export function topicInstruction(): string {
 /**
  * The language of Mira's replies (Settings, 21 Nov 2026): the one the person chose, else the one
  * they write in, for anonymous chats too. The stable instructions keep the Sources line and the
- * markers in English, which the app reads (safety.ts parseReply).
+ * markers in English, which the app reads (safety.ts parseReply). The lines the app sends for the
+ * person, in English, don't count as their writing (round-2 SET-S4): read as theirs, they
+ * switched someone who writes in German to English.
  */
 export function replyLanguageInstruction(code: string | null | undefined): string {
   const chosen = REPLY_LANGUAGES.find((l) => l.code === code);
-  return chosen
-    ? `Reply in ${chosen.name}, whatever language the person writes in.`
-    : "Reply in the language of the person's latest message (English when you can't tell).";
+  if (chosen) return `Reply in ${chosen.name}, whatever language the person writes in.`;
+  return [
+    "Reply in the language of the person's own latest words, typed or spoken (English when you can't tell).",
+    `The app sends some lines for them, always in English, and these never set the language: a tapped answer to an intake question (one of the answers listed with it), "${SKIP_ANSWER}" and "${SESSION_OPENING}". After one of those, keep to the language of their own words before it.`,
+  ].join(" ");
 }
 
 /**

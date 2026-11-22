@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { SESSION_OPENING } from "@features/mira/server/calendar";
-import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
+import { ANON_FREE_MESSAGES, CONSENT_VERSION, SKIP_ANSWER } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
 import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
+import { ADULTS_ONLY } from "./kit";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import { ReviewsWelcome } from "./reviews/PublicReviews";
@@ -73,7 +74,6 @@ const crisisIn = (turns: LocalTurn[]) =>
   turns.some(
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
-const SKIP_ANSWER = "I’d rather skip this one.";
 const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
 export { SESSION_OPENING };
 
@@ -631,6 +631,14 @@ export default function MiraChat({
     for (const k of changed) merged[k] = next[k] ?? 3;
     if (signedIn) {
       const res = await miraApi("/api/mira/me", { method: "PATCH", body: { style: merged } });
+      if (res.minor) {
+        // Stopped as under 18 meanwhile (another device): no error to try again, the panel goes
+        // and the chat says the one refusal (decision 9), as its other asks stop.
+        setStyleOpen(false);
+        setMinor(true);
+        setNotice(ADULTS_ONLY);
+        return null;
+      }
       if (!res.ok) return res.data.error ?? "Unable to save. Please try again.";
     } else local.saveStyle(merged);
     setStyle(merged);
@@ -1129,9 +1137,11 @@ export default function MiraChat({
                   <div
                     className={`flex flex-col gap-2.5 sm:gap-3.5 ${empty ? "[animation-delay:360ms] motion-safe:animate-mira-in" : ""}`}
                   >
+                    {/* The pill's edge is a field's (A11Y-8): 3:1 or more on the page in both
+                        themes, and so is its focused purple (lavender is under 3:1 on white). */}
                     <form
                       ref={formRef}
-                      className="flex items-end gap-1.5 rounded-[28px] border border-ap-line bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-lavender sm:py-2 sm:pl-6 sm:pr-2"
+                      className="flex items-end gap-1.5 rounded-[28px] border border-ap-field bg-white py-1.5 pl-5 pr-1.5 shadow-[0_6px_24px_-14px_rgba(22,16,33,0.25)] transition-colors focus-within:border-ap-purple sm:py-2 sm:pl-6 sm:pr-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void send(input);

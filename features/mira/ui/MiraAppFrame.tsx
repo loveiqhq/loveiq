@@ -305,7 +305,7 @@ function MoreSheet({
   onSupport: () => void;
 }) {
   return (
-    <Modal label="More" onClose={onClose}>
+    <Modal label="More" closeOnBackdrop onClose={onClose}>
       <h2 data-autofocus tabIndex={-1} className="font-serif text-[24px] font-medium outline-none">
         More
       </h2>

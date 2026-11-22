@@ -165,6 +165,14 @@ describe("the shared kit (features/mira/ui/kit)", () => {
     const now = new Date("2026-11-22T12:00:00Z");
     expect(shortDate("2026-11-15T12:00:00Z", now)).toBe("15 Nov");
     expect(shortDate("2025-11-25T12:00:00Z", now)).toBe("25 Nov 2025");
+    // Every month three letters, as AP spells them: ICU's en-GB says "Sept" in some builds.
+    expect(
+      Array.from({ length: 12 }, (_, m) => shortDate(new Date(2026, m, 3, 12).toISOString(), now))
+    ).toEqual(
+      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
+        (m) => `3 ${m}`
+      )
+    );
   });
 });
 
@@ -232,6 +240,14 @@ describe("the signed-in frame", () => {
     );
     expect(within(sheet).getByRole("button", { name: "Need support right now?" })).toBeVisible();
     fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
+  });
+
+  it("closes More on a tap outside the sheet, as people expect of it", () => {
+    frame("home");
+    fireEvent.click(within(menu()).getByRole("button", { name: "More" }));
+    // The dimmed page around the sheet: a tap on the dialog element outside its box.
+    fireEvent.click(screen.getByRole("dialog", { name: "More" }), { clientX: 500, clientY: 900 });
     expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
   });
 
@@ -349,12 +365,42 @@ describe("Home", () => {
     expect(await screen.findByRole("heading", { name: "Start with Mira" })).toBeInTheDocument();
   });
 
+  // HAB-16 on Home: the journal and goals cards each said it, so Home said it twice.
+  it("says a lost sign-in once, above the cards, when the cards' own reads find it gone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const path = url.split("?")[0];
+        if (path === "/api/mira/me") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ profile: { name: "Robin", email: "r@example.com" }, chats: [] }),
+          } as Response;
+        }
+        if (path === "/api/mira/journal" || path === "/api/mira/goals") {
+          return { ok: false, status: 401, json: async () => ({ error: "x" }) } as Response;
+        }
+        return new Promise<Response>(() => undefined); // the other cards: never answered
+      })
+    );
+    render(<MiraHome hour={8} name="Robin" />);
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Daily journal" })).toBeNull());
+    expect(screen.queryByRole("region", { name: "Challenges & goals" })).toBeNull();
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Sign in again" })).toHaveLength(1);
+  });
+
   it("sends a lost sign-in back to Home after signing in again", async () => {
+    // The way back is the page's own address (signInHref), as on every Mira page.
+    window.history.replaceState(null, "", "/mira/home");
     account({ status: 401 });
     render(<MiraHome hour={8} name="Robin" />);
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fhome")
     );
+    window.history.replaceState(null, "", "/");
   });
 
   it("opens every chat on any screen, not only the latest four (CHAT-26)", async () => {

@@ -9,10 +9,22 @@ import { miraApi } from "../api";
 /**
  * The page behind the journal reminder email's "Stop these reminders" link. The signed token in the
  * link stands for the person, so no sign-in is needed; one button stops the reminder (a link that
- * only opens the page changes nothing, as mail scanners open links).
+ * only opens the page changes nothing, as mail scanners open links). `already`: what the page
+ * found when it opened (the reminder off, or no account), so a link opened again says so instead
+ * of offering to stop what is stopped, as the weekly session's stop page does (CHAT-23).
  */
-export function ReminderStop({ token, valid }: { token: string; valid: boolean }) {
-  const [screen, setScreen] = useState<"ask" | "stopped" | "invalid">(valid ? "ask" : "invalid");
+export function ReminderStop({
+  token,
+  valid,
+  already,
+}: {
+  token: string;
+  valid: boolean;
+  already?: "done" | "none";
+}) {
+  const [screen, setScreen] = useState<"ask" | "done" | "none" | "invalid">(
+    valid ? (already ?? "ask") : "invalid"
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -25,11 +37,10 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
   async function stop() {
     setBusy(true);
     setError(null);
-    const res = await miraApi(`/api/mira/journal/unsubscribe?t=${encodeURIComponent(token)}`, {
-      method: "POST",
-    });
+    // The token in the body, never in an address (DATA-1).
+    const res = await miraApi("/api/mira/journal/unsubscribe", { body: { t: token } });
     setBusy(false);
-    if (res.ok) setScreen("stopped");
+    if (res.ok) setScreen("done");
     else if (res.status === 403) setScreen("invalid");
     else setError("That didn’t go through. Please try again.");
   }
@@ -56,7 +67,11 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
   return (
     <EmailLinkPage>
       <h1 ref={heading} tabIndex={-1} className={HEADING}>
-        {screen === "ask" ? "Stop your daily check-in reminder?" : "Reminders are off."}
+        {screen === "ask"
+          ? "Stop your daily check-in reminder?"
+          : screen === "done"
+            ? "No more reminders"
+            : "Nothing to stop"}
       </h1>
       {screen === "ask" ? (
         <>
@@ -81,6 +96,10 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
             </p>
           ) : null}
         </>
+      ) : screen === "none" ? (
+        <p role="status" className="text-[15px] leading-relaxed text-ap-body">
+          There’s no check-in reminder to stop, so none will come.
+        </p>
       ) : (
         <>
           <p role="status" className="text-[15px] leading-relaxed text-ap-body">

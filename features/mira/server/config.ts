@@ -32,6 +32,12 @@ export const MAX_MESSAGE_CHARS = 2000;
 export const HISTORY_TURNS = 24;
 
 /**
+ * What the chat sends for the person when they skip an intake question. The prompt names it, so
+ * it never sets the language Mira replies in (round-2 SET-S4, server/prompt.ts).
+ */
+export const SKIP_ANSWER = "I’d rather skip this one.";
+
+/**
  * Bumped whenever the consent wording on the chat or the sign-up changes: a browser that ticked
  * an older version is asked again. Pure constants, so the chat page imports this file too.
  */

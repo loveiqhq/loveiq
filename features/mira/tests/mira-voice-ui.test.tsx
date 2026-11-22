@@ -363,10 +363,17 @@ describe("a spoken turn", () => {
     vi.spyOn(navigator, "vendor", "get").mockReturnValue("Apple Computer, Inc.");
     render(<MiraChat signedIn={false} initialChatId={null} />);
     talk();
-    await sayToMira("It's the lights");
+    mic().hear(["It's the lights", true]);
+    // A11Y-16: words for every way of choosing her photo (a click, a key, a screen reader).
+    expect(screen.getByText("Pause when you're done, or select her photo.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send what you said" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
     await waitFor(() => expect(screen.getByText("Mira is speaking")).toBeTruthy());
     expect(listening()).toHaveLength(0);
-    expect(screen.getByText("Tap her photo to stop her.")).toBeTruthy();
+    expect(screen.getByText("Select her photo to stop her.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Talking with Mira" }).textContent).not.toMatch(
+      /\btap\b/i
+    );
     fireEvent.click(screen.getByRole("button", { name: "Stop Mira and talk" }));
     expect(synth.cancel).toHaveBeenCalled();
     expect(listening()).toHaveLength(1);
@@ -620,6 +627,25 @@ describe("an under-18 stop in a voice session", () => {
     expect(
       screen.queryByText(/couldn.t be saved|Saving your voice session|wasn.t kept/)
     ).toBeNull();
+  });
+
+  // Decision 9: the account was stopped elsewhere while this session ran, so its save is refused.
+  it("says Mira is only for adults when the save is refused as under 18, never 'try again'", async () => {
+    const chatId = "6f2c4a1e-1111-4222-8333-944455556666";
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: REPLY, sources: [], chatId } });
+    replies["POST /api/mira/recordings"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(1));
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.queryByText(/couldn.t be saved|Saving your voice session/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("ends the session when the stop arrives after the tab was left: no Resume", async () => {

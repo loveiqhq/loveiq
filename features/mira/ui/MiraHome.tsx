@@ -7,7 +7,8 @@ import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
-import { miraApi } from "./api";
+import { SignedOutNotice } from "./account/SignedOut";
+import { miraApi, signInHref, useSignedOut } from "./api";
 import ChecksHomeCard from "./checks/ChecksHomeCard";
 import CoachesCard from "./coaches/CoachesCard";
 import HomeSearch from "./coaches/HomeSearch";
@@ -75,12 +76,14 @@ export default function MiraHome({
   const [attempt, setAttempt] = useState(0);
   const [allChats, setAllChats] = useState(false);
   const [support, setSupport] = useState(false);
+  const signedOut = useSignedOut();
 
   useEffect(() => {
     let live = true;
     void miraApi<Me>("/api/mira/me").then((r) => {
       if (!live) return;
-      if (r.status === 401) router.replace("/mira/start?next=%2Fmira%2Fhome");
+      // A lost sign-in signs in again and comes back here, as on every Mira page.
+      if (r.status === 401) router.replace(signInHref());
       else if (r.ok) setMe(r.data);
       else setFailed(true);
     });
@@ -124,6 +127,9 @@ export default function MiraHome({
           <HomeSearch />
         </div>
       </header>
+
+      {/* A lost sign-in found by any card's call: said once here, as the cards go quiet (HAB-16). */}
+      {signedOut ? <SignedOutNotice /> : null}
 
       <section
         aria-labelledby="continue-h"

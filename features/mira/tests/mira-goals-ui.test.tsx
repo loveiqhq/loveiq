@@ -150,13 +150,17 @@ describe("Home's goals card", () => {
     expect(document.body.textContent).not.toMatch(/missed|behind|failed|broke/i);
   });
 
-  it("says a lost sign-in the one way when a tick finds it gone (HAB-16)", async () => {
+  // HAB-16: Home says a lost sign-in once, above its cards (mira-frame.test.tsx); the card goes
+  // quiet rather than offer ticks that can't save, or a second notice.
+  it("goes quiet when a tick finds the sign-in gone, leaving the notice to Home", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     replies["POST /api/mira/goals/g1/log"] = () => ({ status: 401, body: { error: "x" } });
     render(<GoalsCard />);
     fireEvent.click(await screen.findByRole("button", { name: /Did it today/ }));
-    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in again" })).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Challenges & goals" })).toBeNull()
+    );
+    expect(screen.queryByText("You were signed out.")).toBeNull();
   });
 
   it("puts a tick back when it doesn't save, and says so", async () => {

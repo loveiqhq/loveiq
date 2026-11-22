@@ -27,6 +27,17 @@ vi.mock("@features/mira/server/weekly-sessions", () => ({
   }),
 }));
 
+// The journal reminder, as its stop page reads it before offering to stop it.
+const reminder = vi.hoisted(() => ({ time: "20:00" as string | null, account: true, down: false }));
+vi.mock("@features/mira/server/journal", () => ({
+  readJournal: vi.fn(async () => {
+    if (reminder.down) throw new Error("supabase down");
+    return reminder.account
+      ? { entries: [], settings: { share: "off", reminderTime: reminder.time, timeZone: "UTC" } }
+      : null;
+  }),
+}));
+
 import JournalReminderPage from "@/app/mira/journal/reminder/page";
 import NudgesPage from "@/app/mira/nudges/page";
 import SessionStopPage from "@/app/mira/session/stop/page";
@@ -42,6 +53,7 @@ const fetchMock = vi.fn(
 beforeEach(() => {
   jar.clear();
   booked.slot = { paused: false };
+  Object.assign(reminder, { time: "20:00", account: true, down: false });
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
@@ -49,6 +61,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   fetchMock.mockClear();
 });
+/** The one call a page made: where it went, and the body it sent. */
+const sentTo = () => {
+  const [url, init] = fetchMock.mock.calls[0]!;
+  return [url, JSON.parse(String(init?.body))];
+};
 
 /** A page as Next renders it, with `t` in its address as an old link would put it there. */
 const open = async (
@@ -63,9 +80,8 @@ describe("a weekly session's stop page", () => {
     await open(SessionStopPage);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeVisible();
-    expect(fetchMock.mock.calls[0]![0]).toBe(
-      `/api/mira/weekly-session/stop?t=${encodeURIComponent(t)}`
-    );
+    // DATA-1: the token goes in the request's body, never in an address (logs, analytics).
+    expect(sentTo()).toEqual(["/api/mira/weekly-session/stop", { action: "pause", t }]);
   });
 
   it("says Mira is only for adults when the stop is refused as under 18, never 'try again'", async () => {
@@ -95,10 +111,8 @@ describe("the journal reminder's stop page", () => {
     jar.set("mira_link", t);
     await open(JournalReminderPage);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminders" }));
-    expect(await screen.findByRole("heading", { name: "Reminders are off." })).toBeVisible();
-    expect(fetchMock.mock.calls[0]![0]).toBe(
-      `/api/mira/journal/unsubscribe?t=${encodeURIComponent(t)}`
-    );
+    expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeVisible();
+    expect(sentTo()).toEqual(["/api/mira/journal/unsubscribe", { t }]);
   });
 
   it("ignores a token in the address: without the cookie the link doesn't work", async () => {
@@ -132,6 +146,28 @@ describe("the three pages behind email links", () => {
       expect(document.body.textContent).not.toMatch(/anymore/);
       cleanup();
     }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// CHAT-23's other half, for the journal: opened again, it offered "Stop reminders" as if on.
+describe("the journal reminder's stop page, opened again", () => {
+  it("says the reminder is already off, or that there's nothing to stop, instead of offering to stop it", async () => {
+    jar.set("mira_link", makeToken("journal-stop", ID)!);
+    reminder.time = null;
+    await open(JournalReminderPage);
+    expect(screen.getByRole("heading", { name: "No more reminders" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop reminders" })).toBeNull();
+    cleanup();
+    reminder.account = false; // the account is gone: no reminder can come
+    await open(JournalReminderPage);
+    expect(screen.getByRole("heading", { name: "Nothing to stop" })).toBeVisible();
+    expect(screen.queryByText(/Your journal/)).toBeNull();
+    cleanup();
+    // Unreadable: the button stays, as before, and the stop itself still works.
+    Object.assign(reminder, { account: true, down: true });
+    await open(JournalReminderPage);
+    expect(screen.getByRole("button", { name: "Stop reminders" })).toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -65,7 +65,9 @@ export async function saveNudgeChoice(
  * Boards 3 and 4a and the email's one-click unsubscribe, with the optional one-tap reason and
  * note: every email Mira sends on her own stops, as page 4a says ("Mira won't email you
  * anymore"). Nudges and the journal reminder end, and the weekly session's reminders pause (the
- * session and its calendar entry stay); each comes back in Settings › Notifications.
+ * session and its calendar entry stay); each comes back in Settings › Notifications. The reason
+ * and note are kept once, in the log's `nudge_stopped` (which deleting the account empties), not
+ * on the profile too: a stop clears an older copy there (round-2 DATA-7).
  */
 export async function stopNudges(
   userId: string,
@@ -75,7 +77,7 @@ export async function stopNudges(
   await patch(userId, {
     nudges_on: false,
     nudges_stopped_at: new Date().toISOString(),
-    nudge_stop_reason: reason,
+    nudge_stop_reason: null,
     journal_reminder_time: null,
   });
   await setPaused(userId, true);

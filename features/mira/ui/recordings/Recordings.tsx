@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
+import { AdultsOnly, SectionLink } from "../kit";
 import { canRecognizeSpeech } from "../voice/speech";
 
 /**
@@ -26,17 +27,32 @@ export type SessionRow = {
 };
 
 type List = { recordings: SessionRow[]; more: boolean };
-type Load = { state: "loading" } | { state: "failed" } | ({ state: "ready" } & List);
+type Load =
+  | { state: "loading" }
+  | { state: "failed" }
+  /** Stopped as under 18, for good: the kit's one refusal, never Try again (decision 9). */
+  | { state: "minor" }
+  | ({ state: "ready" } & List);
 
-/** The account's sessions, newest first, with their loading and failed states. */
+/**
+ * The account's sessions, newest first, with their loading, failed and refused states. A lost
+ * sign-in goes to sign in and comes back to this page (signInHref).
+ */
 function useSessions(limit: number) {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<List>(`/api/mira/recordings?limit=${limit}`).then((res) => {
-      if (res.status === 401) router.replace("/mira/start");
-      else setLoad(res.ok ? { state: "ready", ...res.data } : { state: "failed" });
+      if (res.status === 401) router.replace(signInHref());
+      else
+        setLoad(
+          res.ok
+            ? { state: "ready", ...res.data }
+            : res.minor
+              ? { state: "minor" }
+              : { state: "failed" }
+        );
     });
   }, [limit, router, attempt]);
   const retry = () => {
@@ -50,7 +66,11 @@ function useSessions(limit: number) {
     const res = await miraApi<List>(
       `/api/mira/recordings?limit=${limit}&before=${encodeURIComponent(last.startedAt)}`
     );
-    if (res.status === 401) router.replace("/mira/start");
+    if (res.status === 401) router.replace(signInHref());
+    if (res.minor) {
+      setLoad({ state: "minor" }); // the list gives way to the one refusal
+      return true;
+    }
     if (!res.ok) return false;
     setLoad((l) =>
       l.state === "ready"
@@ -311,10 +331,13 @@ function Rows({ list }: { list: SessionRow[] }) {
   );
 }
 
-/** Home's card: the latest three sessions, "See all" and "Start a voice session". */
+/**
+ * Home's card: the latest three sessions, with every Home card's "See all →" in its header
+ * (UX-10), and "Start a voice session" after them.
+ */
 export function RecordingsCard() {
   const { load, retry } = useSessions(3);
-  const ready = load.state === "ready" ? load : null;
+  const any = load.state === "ready" && load.recordings.length > 0;
   return (
     <section aria-labelledby="mira-voice-sessions" className="mt-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -324,21 +347,17 @@ export function RecordingsCard() {
           </h2>
           <p className="text-[13px] text-ap-muted">Kept as words, never audio.</p>
         </div>
-        {ready && ready.recordings.length > 0 ? (
-          <div className="flex items-center gap-2">
-            <Link
-              href="/mira/recordings"
-              className="inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline"
-            >
-              See all
-            </Link>
-            <StartVoiceLink />
-          </div>
-        ) : null}
+        {any ? <SectionLink href="/mira/recordings" what="voice sessions" /> : null}
       </div>
       {load.state === "loading" ? <Skeleton rows={2} /> : null}
       {load.state === "failed" ? <Failed retry={retry} /> : null}
-      {ready ? ready.recordings.length ? <Rows list={ready.recordings} /> : <Empty /> : null}
+      {load.state === "minor" ? <AdultsOnly /> : null}
+      {load.state === "ready" ? any ? <Rows list={load.recordings} /> : <Empty /> : null}
+      {any ? (
+        <div>
+          <StartVoiceLink />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -369,6 +388,7 @@ export default function RecordingsPage() {
       <div className="mt-6">
         {load.state === "loading" ? <Skeleton rows={3} /> : null}
         {load.state === "failed" ? <Failed retry={retry} /> : null}
+        {load.state === "minor" ? <AdultsOnly /> : null}
         {load.state === "ready" ? (
           load.recordings.length ? (
             <>

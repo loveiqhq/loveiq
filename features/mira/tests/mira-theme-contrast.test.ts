@@ -65,6 +65,9 @@ const pairs = (p: Palette): Array<[string, string, string, number]> => [
   ["Journal week: a checked-in day's tick on its tint", p.purple, over(p.purple, 0.1, p.paper), 3],
   // Recordings: the weekday over each voice session's date.
   ["Recordings: the weekday", p.pii, p.paper, 4.5],
+  // The chat's message box (A11Y-8): its edge, and its edge while it has the focus.
+  ["Chat message box: its edge on the page", p.field, p.paper, 3],
+  ["Chat message box: its focused edge on the page", p.purple, p.paper, 3],
   // Settings › Appearance › Text size: the chosen size is the ink pill (round-2 SET-S1b; paper
   // on the grey track was 1.1:1 in Dark), its label paper on ink.
   ["Text size: the chosen pill on its track", p.ink, p.ground, 3],
