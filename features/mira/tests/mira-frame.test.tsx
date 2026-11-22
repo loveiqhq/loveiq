@@ -165,6 +165,14 @@ describe("the shared kit (features/mira/ui/kit)", () => {
     const now = new Date("2026-11-22T12:00:00Z");
     expect(shortDate("2026-11-15T12:00:00Z", now)).toBe("15 Nov");
     expect(shortDate("2025-11-25T12:00:00Z", now)).toBe("25 Nov 2025");
+    // Every month three letters, as AP spells them: ICU's en-GB says "Sept" in some builds.
+    expect(
+      Array.from({ length: 12 }, (_, m) => shortDate(new Date(2026, m, 3, 12).toISOString(), now))
+    ).toEqual(
+      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
+        (m) => `3 ${m}`
+      )
+    );
   });
 });
 
