@@ -347,7 +347,9 @@ export async function POST(request: Request) {
       };
       // The daily journal's last 7 days, only if the person let Mira read it (server/journal.ts).
       person.journal = await journalContext(account.id).catch(() => null);
-      if (askedChatId && (await ownsChat(account.id, askedChatId))) {
+      // A saved chat is read from storage only while remembering is on: with it off nothing new is
+      // stored, so the conversation on the page is the only full one (round-2 audit CHAT-8).
+      if (askedChatId && remember && (await ownsChat(account.id, askedChatId))) {
         chatId = askedChatId;
         const stored = await getMessages(account.id, chatId, HISTORY_TURNS);
         turns = cleanHistory(stored.map((m) => ({ role: m.role, content: m.content })));

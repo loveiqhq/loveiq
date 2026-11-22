@@ -500,7 +500,7 @@ export default function MiraSettings({
                 <SettingsGroup>
                   <Switch
                     label="Remember our conversations"
-                    description="Mira keeps your chats, so you don't have to start over."
+                    description="Mira keeps your chats, so you can pick any of them up again."
                     checked={p.remember_chats}
                     onChange={(v) => void autosave("privacy", { remember_chats: v })}
                   />

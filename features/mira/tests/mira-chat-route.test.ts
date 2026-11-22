@@ -54,6 +54,7 @@ import { getMiraAccount } from "@features/mira/server/session";
 import {
   addMessages,
   deleteChats,
+  getMessages,
   getProfile,
   logMiraEvent,
   ownsChat,
@@ -565,6 +566,42 @@ describe("POST /api/mira/chat", () => {
     });
     await post({ message: "hello", consent: true });
     expect(addMessages).not.toHaveBeenCalled();
+  });
+
+  // Round-2 audit CHAT-8: a chat saved while remembering was on, continued after it was turned
+  // off, was rebuilt from storage on every message, and storage takes nothing new then.
+  it("with remembering off, a saved chat that goes on uses the conversation on the page", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-18",
+    });
+    vi.mocked(ownsChat).mockResolvedValue(true);
+    vi.mocked(getMessages).mockResolvedValue([
+      { role: "user", content: "an old saved message" } as never,
+    ]);
+    await post({
+      message: "What was the code word?",
+      consent: true,
+      chatId: "6f2c4a1e-1111-4222-8333-944455556666",
+      history: [
+        { role: "user", content: "The code word is lantern." },
+        { role: "assistant", content: "Got it: lantern." },
+      ],
+    });
+    const turns = JSON.stringify(vi.mocked(askModel).mock.calls[0]![2]);
+    expect(turns).toContain("lantern");
+    expect(turns).not.toContain("an old saved message");
+    expect(addMessages).not.toHaveBeenCalled();
+    vi.mocked(ownsChat).mockResolvedValue(false);
   });
 
   const events = (name: string) =>

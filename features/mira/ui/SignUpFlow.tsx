@@ -332,7 +332,7 @@ export default function SignUpFlow({
           <blockquote className="font-serif text-[22px] italic leading-snug sm:text-[26px]">
             {step === "about"
               ? "“Nice to meet you. What should I call you?”"
-              : "“With an account, I remember what matters to you, so we never have to start over.”"}
+              : "“With an account, I keep our chats, so we can always pick up where we left off.”"}
           </blockquote>
           <ul className="flex flex-col gap-2 text-[14px] text-ap-body">
             <li>Your chat history, kept on every device</li>

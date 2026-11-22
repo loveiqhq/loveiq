@@ -21,6 +21,8 @@ export async function createMiraSupabase() {
     {
       cookieOptions: {
         name: MIRA_AUTH_COOKIE,
+        // Read only on the server: no script on the page may read the tokens (round-2 DATA-6).
+        httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         path: "/",
