@@ -133,7 +133,7 @@ describe("AP › Mira, 21 Nov 2026", () => {
     expect(cells("Declined replies").slice(0, 2)).toEqual(["1", "500.0"]);
     expect(cells("Under-18 stops").slice(0, 2)).toEqual(["1", "500.0"]);
 
-    const card = screen.getByRole("region", { name: "“Keep this chat” card" });
+    const card = screen.getByRole("region", { name: "“Keep this chat” card (retired)" });
     expect(within(card).getByText("Shown the card").closest("div")!.textContent).toContain(
       "2 (100.0%)"
     );
@@ -143,6 +143,16 @@ describe("AP › Mira, 21 Nov 2026", () => {
     expect(within(card).getByText("Tapped Not now").closest("div")!.textContent).toContain(
       "1 (50.0%)"
     );
+  });
+
+  it("says the “Keep this chat” card was retired, and draws no empty bars for the days after it", () => {
+    // Decision 2 (22 Nov 2026): one free message, then the sign-up card, which keeps the chat.
+    render(<ApMira />);
+    const card = screen.getByRole("region", { name: "“Keep this chat” card (retired)" });
+    expect(card.textContent).toContain("Retired when the free messages went down to one");
+    expect(card.textContent).toContain("“Shown the sign-up card”");
+    expect(within(card).queryByText("Shown the card")).toBeNull();
+    expect(screen.getByText("Shown the sign-up card")).toBeTruthy();
   });
 
   it("shows a team browser as such, and says users can ask for a copy, not export", () => {

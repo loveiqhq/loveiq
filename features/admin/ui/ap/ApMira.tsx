@@ -244,14 +244,29 @@ function Overview({ data }: { data: Data }) {
   );
 }
 
-/** The "Keep this chat" card: shown, Keep, an account after it, and Not now. */
+/**
+ * The "Keep this chat" card: shown, Keep, an account after it, and Not now. Retired when the free
+ * messages went down to one (decision 2, 22 Nov 2026): the sign-up card carries its promise, as
+ * the chat comes with the account, and is counted in the funnel as "Shown the sign-up card". Its
+ * own figures stay readable for the days it ran, with no empty bars after them.
+ */
 function KeepCard({ data }: { data: Data }) {
   const { shown, kept, accounts, notNow } = data.keepCard;
+  const title = "“Keep this chat” card (retired)";
+  const retired =
+    "Retired when the free messages went down to one: the sign-up card now makes its promise, as the chat comes with the account (see “Shown the sign-up card” above). These figures cover only the days it ran.";
+  if (!shown) {
+    return (
+      <Card id="keep-card" labelledBy="h-keep-card">
+        <SectionHead id="h-keep-card" level={3} title={title} description={retired} />
+      </Card>
+    );
+  }
   return (
     <FunnelCard
       id="keep-card"
-      title="“Keep this chat” card"
-      description="How many people the card reaches, and how many keep their chat by creating an account."
+      title={title}
+      description={retired}
       base={shown}
       rows={[
         ["Shown the card", shown, "People who saw “Keep this chat” in the range"],
