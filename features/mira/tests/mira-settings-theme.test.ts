@@ -205,3 +205,16 @@ describe("the dark palette", () => {
     }
   });
 });
+
+describe("field borders (A11Y-8, WCAG 1.4.11)", () => {
+  it("are 3:1 against every surface a field sits on, in both themes", () => {
+    for (const [theme, t] of [
+      ["light", tokens.AP_LIGHT],
+      ["dark", tokens.MIRA_DARK],
+    ] as const) {
+      for (const bg of ["paper", "ground", "lilac"] as const) {
+        expect(contrast(t.field, t[bg]), `${theme}: field on ${bg}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});
