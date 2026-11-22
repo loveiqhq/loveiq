@@ -11,6 +11,7 @@ import CoachesCard from "@features/mira/ui/coaches/CoachesCard";
 import PicksCard from "@features/mira/ui/coaches/PicksCard";
 import GoalsCard from "@features/mira/ui/goals/GoalsCard";
 import { JournalCard } from "@features/mira/ui/journal/JournalCard";
+import { RecordingsCard } from "@features/mira/ui/recordings/Recordings";
 import { NextSessionCard } from "@features/mira/ui/weekly-session/NextSessionCard";
 
 /**
@@ -26,6 +27,7 @@ const CARDS: Array<[region: string, said: string]> = [
   ["Picked for you", "Your picks didn’t load."],
   ["Your assessments", "Your assessments didn’t load."],
   ["Your coaches", "Your coaches didn’t load."],
+  ["Voice sessions", "Your voice sessions didn’t load."],
 ];
 
 const home = () =>
@@ -36,6 +38,7 @@ const home = () =>
       <NextSessionCard />
       <PicksCard />
       <ChecksHomeCard />
+      <RecordingsCard />
       <CoachesCard />
     </>
   );
@@ -70,7 +73,7 @@ describe("Home's habit cards when their reads fail", () => {
         await waitFor(() => within(screen.getByRole("region", { name })).getByText(said));
         const card = within(screen.getByRole("region", { name }));
         const again = card.getByRole("button", { name: "Try again" });
-        // Six of them on Home: each says what it tries again.
+        // Seven of them on Home: each says what it tries again.
         expect(again).toHaveAccessibleDescription(said);
         buttons.push(again.className);
       }

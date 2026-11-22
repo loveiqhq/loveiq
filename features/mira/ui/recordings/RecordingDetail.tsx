@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi, signInHref } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
+import { miraApi, useSignedOut } from "../api";
 import { AdultsOnly, ConfirmDelete } from "../kit";
 import { DurationChip, TalkShare } from "./Recordings";
 
@@ -39,7 +39,7 @@ type Load =
 const BACK = "/mira/recordings";
 
 export default function RecordingDetail({ id }: { id: string }) {
-  const router = useRouter();
+  const signedOut = useSignedOut();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [writing, setWriting] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -51,8 +51,8 @@ export default function RecordingDetail({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<Detail>(`/api/mira/recordings/${id}`).then((res) => {
-      // A lost sign-in comes back to this session after signing in again.
-      if (res.status === 401) return router.replace(signInHref());
+      // A lost sign-in is said in place (useSignedOut), never a move to sign-in of the page's own.
+      if (res.signedOut) return;
       setLoad(
         res.ok
           ? { state: "ready", ...res.data }
@@ -63,7 +63,7 @@ export default function RecordingDetail({ id }: { id: string }) {
               : { state: "failed" }
       );
     });
-  }, [id, router, attempt]);
+  }, [id, attempt]);
 
   async function writePoints() {
     setWriting(true);
@@ -94,14 +94,30 @@ export default function RecordingDetail({ id }: { id: string }) {
     setLoad({ state: "deleted" });
   }
 
+  const back = (
+    <Link
+      href={BACK}
+      className="inline-flex min-h-[44px] items-center gap-1.5 text-[14px] font-semibold text-ap-plum"
+    >
+      <span aria-hidden="true">←</span> Voice sessions
+    </Link>
+  );
+  // A lost sign-in, at the load or at a later write: said here once, with the way back to this
+  // session, in place of what can no longer be read or changed. Nothing moves to sign-in on its
+  // own: the sign-in page may still see the session and send the person straight back (round 3).
+  if (signedOut) {
+    return (
+      <MiraAppFrame active="recordings">
+        {back}
+        <h1 className="mt-6 font-serif text-[28px] font-medium">Voice session</h1>
+        <SignedOutNotice />
+      </MiraAppFrame>
+    );
+  }
+
   return (
     <MiraAppFrame active="recordings">
-      <Link
-        href={BACK}
-        className="inline-flex min-h-[44px] items-center gap-1.5 text-[14px] font-semibold text-ap-plum"
-      >
-        <span aria-hidden="true">←</span> Voice sessions
-      </Link>
+      {back}
 
       {load.state === "loading" ? (
         <div aria-hidden="true" className="mt-4 flex flex-col gap-4">
