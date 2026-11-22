@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi } from "../api";
-import { SectionLink } from "../kit";
+import { miraApi, signInHref } from "../api";
+import { AdultsOnly, SectionLink } from "../kit";
 import { canRecognizeSpeech } from "../voice/speech";
 
 /**
@@ -27,17 +27,32 @@ export type SessionRow = {
 };
 
 type List = { recordings: SessionRow[]; more: boolean };
-type Load = { state: "loading" } | { state: "failed" } | ({ state: "ready" } & List);
+type Load =
+  | { state: "loading" }
+  | { state: "failed" }
+  /** Stopped as under 18, for good: the kit's one refusal, never Try again (decision 9). */
+  | { state: "minor" }
+  | ({ state: "ready" } & List);
 
-/** The account's sessions, newest first, with their loading and failed states. */
+/**
+ * The account's sessions, newest first, with their loading, failed and refused states. A lost
+ * sign-in goes to sign in and comes back to this page (signInHref).
+ */
 function useSessions(limit: number) {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<List>(`/api/mira/recordings?limit=${limit}`).then((res) => {
-      if (res.status === 401) router.replace("/mira/start");
-      else setLoad(res.ok ? { state: "ready", ...res.data } : { state: "failed" });
+      if (res.status === 401) router.replace(signInHref());
+      else
+        setLoad(
+          res.ok
+            ? { state: "ready", ...res.data }
+            : res.minor
+              ? { state: "minor" }
+              : { state: "failed" }
+        );
     });
   }, [limit, router, attempt]);
   const retry = () => {
@@ -51,7 +66,11 @@ function useSessions(limit: number) {
     const res = await miraApi<List>(
       `/api/mira/recordings?limit=${limit}&before=${encodeURIComponent(last.startedAt)}`
     );
-    if (res.status === 401) router.replace("/mira/start");
+    if (res.status === 401) router.replace(signInHref());
+    if (res.minor) {
+      setLoad({ state: "minor" }); // the list gives way to the one refusal
+      return true;
+    }
     if (!res.ok) return false;
     setLoad((l) =>
       l.state === "ready"
@@ -332,6 +351,7 @@ export function RecordingsCard() {
       </div>
       {load.state === "loading" ? <Skeleton rows={2} /> : null}
       {load.state === "failed" ? <Failed retry={retry} /> : null}
+      {load.state === "minor" ? <AdultsOnly /> : null}
       {load.state === "ready" ? any ? <Rows list={load.recordings} /> : <Empty /> : null}
       {any ? (
         <div>
@@ -368,6 +388,7 @@ export default function RecordingsPage() {
       <div className="mt-6">
         {load.state === "loading" ? <Skeleton rows={3} /> : null}
         {load.state === "failed" ? <Failed retry={retry} /> : null}
+        {load.state === "minor" ? <AdultsOnly /> : null}
         {load.state === "ready" ? (
           load.recordings.length ? (
             <>

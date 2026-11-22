@@ -61,6 +61,8 @@ export type VoiceEnded = { chatId: string | null } & (
   /** `memoryOff`: "Remember our conversations" is why, not words missing from the chat. */
   | { status: "not-kept"; memoryOff: boolean }
   | { status: "failed" }
+  /** Refused as under 18 (the account was stopped meanwhile): the one refusal (decision 9). */
+  | { status: "minor" }
 );
 
 type SessionEnd = {
@@ -525,7 +527,9 @@ export function useVoice(options: {
         ? { chatId, status: "saved", recording: res.data.recording }
         : res.ok
           ? { chatId, status: "not-kept", memoryOff: res.data.reason === "memory_off" }
-          : { chatId, status: "failed" }
+          : res.minor
+            ? { chatId, status: "minor" }
+            : { chatId, status: "failed" }
     );
   }
 

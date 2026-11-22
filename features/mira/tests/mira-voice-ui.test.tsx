@@ -629,6 +629,25 @@ describe("an under-18 stop in a voice session", () => {
     ).toBeNull();
   });
 
+  // Decision 9: the account was stopped elsewhere while this session ran, so its save is refused.
+  it("says Mira is only for adults when the save is refused as under 18, never 'try again'", async () => {
+    const chatId = "6f2c4a1e-1111-4222-8333-944455556666";
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: REPLY, sources: [], chatId } });
+    replies["POST /api/mira/recordings"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    talk();
+    await sayToMira("It's the lights");
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    await waitFor(() => expect(calls("POST /api/mira/recordings")).toHaveLength(1));
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.queryByText(/couldn.t be saved|Saving your voice session/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("ends the session when the stop arrives after the tab was left: no Resume", async () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     talk();

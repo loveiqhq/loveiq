@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AdultsOnly } from "../kit";
 import { INSTALL_WAIT_MS } from "./speech";
 import type { Voice, VoiceTrouble } from "./useVoice";
 
@@ -322,6 +323,13 @@ function EndCard({ voice }: { voice: Voice }) {
       <p role="status" className={`${CARD} text-ap-muted`}>
         Saving your voice session…
       </p>
+    );
+  }
+  if (ended.status === "minor") {
+    return (
+      <div role="status" className={CARD}>
+        <AdultsOnly />
+      </div>
     );
   }
   if (ended.status === "failed") {

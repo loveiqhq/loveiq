@@ -8,7 +8,8 @@
  *   DELETE  deletes its words from the chat, then the session (server/voice.ts deleteRecording).
  *
  * Every read is scoped to the account, so another person's session answers 404. Someone Mira
- * stopped as under 18 (server/minor.ts) is refused (403), like on Mira's other routes.
+ * stopped as under 18 (server/minor.ts) is refused (403 `minor: true`), like on Mira's other
+ * routes.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -50,8 +51,9 @@ async function find(request: Request, { params }: Params) {
   const account = await getMiraAccount();
   if (!account) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
   if (await isMinor(account.id)) {
-    const error = "Mira is only for people aged 18 or older.";
-    return { error: NextResponse.json({ error }, { status: 403 }) };
+    // Decision 9: the one refusal every page shows for `minor: true` (ui/kit `<AdultsOnly />`).
+    const error = "Mira is only for adults.";
+    return { error: NextResponse.json({ error, minor: true }, { status: 403 }) };
   }
   const id = z
     .string()

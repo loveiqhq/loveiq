@@ -27,6 +27,14 @@ const rows = () => [
   ...document.querySelectorAll<HTMLAnchorElement>('a[href^="/mira/recordings/"]'),
 ];
 const asked = () => fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${url}`);
+/** The under-18 stop's refusal, as every Mira route gives it (decision 9). */
+const MINOR = () => ({ status: 403, body: { error: "Mira is only for adults.", minor: true } });
+/** Nothing of a failed load: no "didn't load", no Try again, no alert. */
+const noRetry = () => {
+  expect(screen.queryByText(/didn.t load/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+};
 
 const ID = "1c2d3e4f-3333-4444-8555-a66677778888";
 const CHAT = "0b8a7c6d-2222-4333-8444-955566667777";
@@ -122,6 +130,35 @@ describe("Home's voice sessions card", () => {
     );
   });
 
+  // Decision 9: an account Mira stopped as under 18 gets the one calm refusal, never "didn't
+  // load" or Try again. Only `minor: true` counts: a CSRF refusal is a 403 too.
+  it("says 'Mira is only for adults.' to an account stopped as under 18, here and on the page", async () => {
+    replies["GET /api/mira/recordings?limit=3"] = MINOR;
+    render(<RecordingsCard />);
+    const card = screen.getByRole("region", { name: "Voice sessions" });
+    expect(await within(card).findByText("Mira is only for adults.")).toBeTruthy();
+    expect(within(card).queryByRole("link")).toBeNull(); // nothing to start or to see
+    noRetry();
+    cleanup();
+    replies["GET /api/mira/recordings?limit=50"] = MINOR;
+    render(<RecordingsPage />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Start a voice session" })).toBeNull();
+    noRetry();
+    cleanup();
+    // Stopped while the page was open: "Show older sessions" ends the same way.
+    replies = {}; // the older page's key first: the fake answers the first key a request starts with
+    replies[`GET /api/mira/recordings?limit=50&before=`] = MINOR;
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: true },
+    });
+    render(<RecordingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show older sessions" }));
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(rows()).toHaveLength(0);
+    noRetry();
+  });
+
   it("says when they didn't load, and tries again", async () => {
     replies["GET /api/mira/recordings?limit=3"] = () => ({ status: 500, body: {} });
     render(<RecordingsCard />);
@@ -144,9 +181,23 @@ describe("the voice sessions page", () => {
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(screen.getByRole("button", { name: "Show older sessions" })).toBeTruthy();
     cleanup();
+    // A lost sign-in signs in again and comes back here (signInHref), not to Home.
+    window.history.replaceState(null, "", "/mira/recordings");
     replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 401, body: {} });
     render(<RecordingsPage />);
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Frecordings")
+    );
+    cleanup();
+    window.history.replaceState(null, "", `/mira/recordings/${ID}`);
+    replies[`GET /api/mira/recordings/${ID}`] = () => ({ status: 401, body: {} });
+    render(<RecordingDetail id={ID} />);
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenLastCalledWith(
+        `/mira/start?next=${encodeURIComponent(`/mira/recordings/${ID}`)}`
+      )
+    );
+    window.history.replaceState(null, "", "/");
   });
 
   // VOI-V9: only the 50 newest could be opened or deleted, though the notice says each can.
@@ -261,6 +312,44 @@ describe("one voice session", () => {
       expect(screen.getByRole("button", { name: "Delete this session" })).toHaveFocus()
     );
     expect(asked().filter((a) => a.startsWith("DELETE"))).toEqual([]);
+  });
+
+  it("says 'Mira is only for adults.' to an account stopped as under 18, also once it was open", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = MINOR;
+    render(<RecordingDetail id={ID} />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Voice session" })).toBeTruthy();
+    noRetry();
+    cleanup();
+    // Stopped while the page was open: a refused delete or key points end the same way.
+    for (const method of ["DELETE", "POST"] as const) {
+      replies[`GET /api/mira/recordings/${ID}`] = () => detail(method === "POST" ? null : []);
+      replies[`${method} /api/mira/recordings/${ID}`] = MINOR;
+      render(<RecordingDetail id={ID} />);
+      if (method === "DELETE") {
+        fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      } else {
+        fireEvent.click(await screen.findByRole("button", { name: "Write them now" }));
+      }
+      expect(await screen.findByText("Mira is only for adults."), method).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Key points" })).toBeNull();
+      noRetry();
+      cleanup();
+    }
+  });
+
+  it("still says another refusal (a 403 without `minor`) as an error to try again", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({
+      status: 403,
+      body: { error: "Invalid request." },
+    });
+    render(<RecordingDetail id={ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid request.");
+    expect(screen.queryByText("Mira is only for adults.")).toBeNull();
   });
 
   it("says when it isn't there, with the way back", async () => {

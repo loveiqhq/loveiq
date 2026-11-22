@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi } from "../api";
-import { ConfirmDelete } from "../kit";
+import { miraApi, signInHref } from "../api";
+import { AdultsOnly, ConfirmDelete } from "../kit";
 import { DurationChip, TalkShare } from "./Recordings";
 
 /**
@@ -32,7 +32,9 @@ type Load =
   | { state: "missing" }
   | { state: "failed" }
   | ({ state: "ready" } & Detail)
-  | { state: "deleted" };
+  | { state: "deleted" }
+  /** Stopped as under 18, for good: the kit's one refusal, never Try again (decision 9). */
+  | { state: "minor" };
 
 const BACK = "/mira/recordings";
 
@@ -49,13 +51,16 @@ export default function RecordingDetail({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<Detail>(`/api/mira/recordings/${id}`).then((res) => {
-      if (res.status === 401) return router.replace("/mira/start");
+      // A lost sign-in comes back to this session after signing in again.
+      if (res.status === 401) return router.replace(signInHref());
       setLoad(
         res.ok
           ? { state: "ready", ...res.data }
-          : res.status === 404
-            ? { state: "missing" }
-            : { state: "failed" }
+          : res.minor
+            ? { state: "minor" }
+            : res.status === 404
+              ? { state: "missing" }
+              : { state: "failed" }
       );
     });
   }, [id, router, attempt]);
@@ -68,6 +73,7 @@ export default function RecordingDetail({ id }: { id: string }) {
       body: {},
     });
     setWriting(false);
+    if (res.minor) return setLoad({ state: "minor" });
     if (!res.ok) return setError(res.data.error ?? "That didn't work. Please try again.");
     setLoad((l) =>
       l.state === "ready"
@@ -81,6 +87,7 @@ export default function RecordingDetail({ id }: { id: string }) {
     setDeleteError(null);
     const res = await miraApi(`/api/mira/recordings/${id}`, { method: "DELETE" });
     setDeleting(false);
+    if (res.minor) return setLoad({ state: "minor" });
     if (!res.ok) {
       return setDeleteError(res.data.error ?? "Unable to delete right now. Please try again.");
     }
@@ -100,6 +107,13 @@ export default function RecordingDetail({ id }: { id: string }) {
         <div aria-hidden="true" className="mt-4 flex flex-col gap-4">
           <div className="h-10 w-2/3 rounded-xl bg-ap-ground motion-safe:animate-pulse" />
           <div className="h-32 rounded-[22px] bg-ap-ground motion-safe:animate-pulse" />
+        </div>
+      ) : null}
+
+      {load.state === "minor" ? (
+        <div role="status" className="mt-6 max-w-[560px]">
+          <h1 className="font-serif text-[28px] font-medium">Voice session</h1>
+          <AdultsOnly className="mt-2" />
         </div>
       ) : null}
 
