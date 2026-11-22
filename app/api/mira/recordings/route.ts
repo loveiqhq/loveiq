@@ -6,7 +6,8 @@
  *        words). Signed in with "Remember our conversations" on, its turns (stored by the chat
  *        route, tagged with the session) become a session to look back on: times, the talk share
  *        by words, the recognition mode and up to three key points from Mira's model, under the
- *        same rules as her replies. Sent again (the End tap and the page closing), it is saved once.
+ *        same rules as her replies (none for a session in which the support lines showed, by its
+ *        words or the KPI log). Sent again (the End tap and the page closing), it is saved once.
  *   GET ?limit=1..50  the account's sessions, newest first, each with the start of the one before
  *        it (Home's card, /mira/recordings).
  *
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
 
     // Kept even when the key points can't be written now: the session page can ask again.
     const points = (await mayWriteKeyPoints(account.id))
-      ? await writeKeyPoints(spoken, started + KEY_POINTS_MS)
+      ? await writeKeyPoints(account.id, spoken, started + KEY_POINTS_MS)
       : null;
     if (points) await saveKeyPoints(account.id, session, points);
     logMiraEvent("voice_session_ended", who, {

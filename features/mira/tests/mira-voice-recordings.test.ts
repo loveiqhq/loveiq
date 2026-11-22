@@ -246,6 +246,44 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     expect(body.recording.keyPoints).toEqual([]);
   });
 
+  // The model can flag a crisis itself ([[CRISIS]]): the chat stores its reply without the marker,
+  // so the words alone don't show that the support lines opened. The KPI log does.
+  const FLAGGED = [
+    turn("user", "Honestly I don't see why I should keep going", "2026-11-22T20:21:00Z"),
+    turn("assistant", "I'm really worried about what you just said.", "2026-11-22T20:21:05Z"),
+  ];
+  const SHOWN = `GET /rest/v1/mira_event?user_id=eq.${LEA.id}&name=in.(crisis_shown,reply_declined)`;
+
+  it("writes no key points when the support lines opened in the session, whatever its words say", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = FLAGGED;
+    tables[SHOWN] = [{ id: 9 }];
+    const body = await (await ended(request("/api/mira/recordings", "POST", END))).json();
+    expect(askModel).not.toHaveBeenCalled();
+    expect(body.recording.keyPoints).toEqual([]);
+    expect(
+      called(`PATCH /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`)[0]!.body
+    ).toEqual({ key_points: [] });
+    // Asked over the session's own turns, from its first to a minute after its last.
+    const asked = called("GET /rest/v1/mira_event")[0]!.call;
+    expect(asked).toContain(`created_at=gte.${encodeURIComponent("2026-11-22T20:21:00.000Z")}`);
+    expect(asked).toContain(`created_at=lte.${encodeURIComponent("2026-11-22T20:22:05.000Z")}`);
+  });
+
+  it("asks the model only when the log shows no support lines in the session", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = FLAGGED;
+    tables[SHOWN] = [];
+    await ended(request("/api/mira/recordings", "POST", END));
+    expect(askModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the key points for later when the log can't be read, and asks no model", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = FLAGGED;
+    tables[SHOWN] = new Response("{}", { status: 503 });
+    const body = await (await ended(request("/api/mira/recordings", "POST", END))).json();
+    expect(askModel).not.toHaveBeenCalled();
+    expect(body).toMatchObject({ kept: true, recording: { keyPoints: null } });
+  });
+
   it("keeps nothing from a chat that isn't the person's, or with memory off", async () => {
     for (const setup of [
       () => vi.mocked(ownsChat).mockResolvedValueOnce(false),
@@ -406,6 +444,22 @@ describe("/api/mira/recordings/[id]", () => {
     vi.mocked(verifyCsrfToken).mockResolvedValue(false);
     expect((await remove(request(url, "DELETE"), params(SESSION))).status).toBe(403);
     expect((await rewrite(request(url, "POST"), params(SESSION))).status).toBe(403);
+  });
+
+  it("writes none on asking again when the support lines opened in that session", async () => {
+    tables[`GET /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`] = [
+      { ...RECORDING, key_points: null },
+    ];
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = [
+      turn("user", "Honestly I don't see why I should keep going", "2026-11-22T20:21:00Z"),
+      turn("assistant", "I'm really worried about what you just said.", "2026-11-22T20:21:05Z"),
+    ];
+    tables[
+      `GET /rest/v1/mira_event?user_id=eq.${LEA.id}&name=in.(crisis_shown,reply_declined)`
+    ] = [{ id: 9 }];
+    const body = await (await rewrite(request(url, "POST"), params(SESSION))).json();
+    expect(body.keyPoints).toEqual([]);
+    expect(askModel).not.toHaveBeenCalled();
   });
 
   it("writes the key points again only when there are none", async () => {

@@ -245,12 +245,39 @@ export function heldAStop(
   );
 }
 
-/** The key points; [] on purpose (a stop rail, nothing to keep), null when the model failed. */
+/** How long after its reply the chat route's KPI row may land (it is written after the response). */
+const LOG_LAG_MS = MINUTE_MS;
+
+/**
+ * Whether the chat showed the account the support lines during these turns (crisis_shown, or a
+ * declined reply's reply_declined, from the first turn to a minute after the last). The words
+ * can't always tell: a crisis the model flagged itself keeps its own reply, stored without the
+ * marker. Read like the nudges' quiet days after a crisis.
+ */
+async function supportShown(userId: string, turns: ReadonlyArray<SpokenTurn>): Promise<boolean> {
+  const times = turns.map((t) => Date.parse(t.created_at));
+  const from = new Date(Math.min(...times)).toISOString();
+  const to = new Date(Math.max(...times) + LOG_LAG_MS).toISOString();
+  const found = await rows<{ id: number }>(
+    `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=in.(crisis_shown,reply_declined)&created_at=gte.${enc(from)}&created_at=lte.${enc(to)}&select=id&limit=1`
+  );
+  return found.length > 0;
+}
+
+/**
+ * The key points of the account's session; [] on purpose (a stop rail fired or the support lines
+ * showed, nothing to keep), null when they can't be written now (the model failed, or whether
+ * the lines showed can't be read).
+ */
 export async function writeKeyPoints(
-  transcript: ReadonlyArray<Pick<SpokenTurn, "role" | "content">>,
+  userId: string,
+  transcript: ReadonlyArray<SpokenTurn>,
   until: number
 ): Promise<string[] | null> {
-  if (heldAStop(transcript)) return [];
+  if (transcript.length === 0 || heldAStop(transcript)) return [];
+  const shown = await supportShown(userId, transcript).catch(() => null);
+  if (shown === null) return null;
+  if (shown) return [];
   const result = await askModel(
     STABLE_INSTRUCTIONS,
     KEY_POINTS_INSTRUCTIONS,
