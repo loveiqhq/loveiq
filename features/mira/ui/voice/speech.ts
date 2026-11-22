@@ -61,14 +61,18 @@ export function recognizerClass(): RecognizerClass | null {
   return found;
 }
 
+/** The longest Talk waits for the browser to fetch a language for the device (the panel says so). */
+export const INSTALL_WAIT_MS = 20_000;
+
 /**
  * On the device when the browser can (and fetches the language once, which needs the tap that
- * started this), else the browser's service. A download that hangs falls back after a while.
+ * started this; `installing` hears when that wait begins), else the browser's service. A
+ * download that hangs falls back after INSTALL_WAIT_MS.
  */
 export async function chooseMode(
   Recognizer: RecognizerClass,
   lang: string,
-  waitMs = 20_000
+  installing?: () => void
 ): Promise<RecognitionMode> {
   if (typeof Recognizer.available !== "function") return "service";
   const options = { langs: [lang], processLocally: true };
@@ -76,7 +80,8 @@ export async function chooseMode(
     const status = await Recognizer.available(options);
     if (status === "available") return "device";
     if (status === "unavailable" || typeof Recognizer.install !== "function") return "service";
-    const timeout = new Promise<boolean>((done) => setTimeout(() => done(false), waitMs));
+    installing?.();
+    const timeout = new Promise<boolean>((done) => setTimeout(() => done(false), INSTALL_WAIT_MS));
     return (await Promise.race([Recognizer.install(options), timeout])) ? "device" : "service";
   } catch {
     return "service";

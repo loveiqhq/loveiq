@@ -91,6 +91,8 @@ export function useVoice(options: {
   const [trouble, setTrouble] = useState<VoiceTrouble | null>(null);
   const [pause, setPause] = useState<PauseReason | null>(null);
   const [mode, setMode] = useState<RecognitionMode | null>(null);
+  /** Getting ready waits on the browser fetching its speech recognition for the device. */
+  const [downloading, setDownloading] = useState(false);
   const [ended, setEnded] = useState<VoiceEnded | null>(null);
   /** The device has no voice of its own: her replies stay in writing. */
   const [voiceless, setVoiceless] = useState(false);
@@ -390,6 +392,7 @@ export function useVoice(options: {
     setTrouble(null);
     setPause(null);
     setInvited(false);
+    setDownloading(false);
     set("preparing");
     const go = (chosen: RecognitionMode) => {
       if (m.phase !== "preparing") return; // ended while it got ready
@@ -400,7 +403,7 @@ export function useVoice(options: {
     };
     // Safari has no on-device check: it starts within the tap.
     if (typeof Recognizer.available !== "function") go("service");
-    else void chooseMode(Recognizer, m.lang).then(go);
+    else void chooseMode(Recognizer, m.lang, () => setDownloading(true)).then(go);
   }
 
   /**
@@ -553,6 +556,7 @@ export function useVoice(options: {
     trouble,
     pause,
     mode,
+    downloading,
     ended,
     voiceless,
     /** The session a spoken turn belongs to, sent with it so a kept chat tags its messages. */

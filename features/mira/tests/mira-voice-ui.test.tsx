@@ -224,6 +224,31 @@ describe("Talk", () => {
     expect(screen.queryByRole("heading", { name: "Before you talk" })).toBeNull();
     expect(screen.getByText(/Speech becomes text on this device/)).toBeTruthy();
   });
+
+  // The first Talk in Chrome can wait up to 20 s on the language download (CHAT-14).
+  it("says so while the browser downloads its speech recognition, and can be cancelled", async () => {
+    let installed: (ok: boolean) => void = () => {};
+    FakeRecognizer.available = vi.fn(async () => "downloadable");
+    FakeRecognizer.install = vi.fn(() => new Promise<boolean>((done) => (installed = done)));
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await waitFor(() => expect(FakeRecognizer.install).toHaveBeenCalled());
+    const panel = screen.getByRole("region", { name: "Talking with Mira" });
+    // In the status line, so a screen reader says it too.
+    expect(screen.getByRole("status").textContent).toBe("Setting up speech recognition…");
+    expect(panel.textContent).toContain(
+      "Your browser is downloading it to this device. This can take up to 20 seconds."
+    );
+    expect(panel.textContent).not.toMatch(/Starting the microphone|speech service turns/);
+    expect(screen.queryByRole("button", { name: /Mute|End/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("region", { name: "Talking with Mira" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Talk to Mira" })).toBeTruthy();
+    // The download finishing later starts nothing.
+    await act(async () => installed(true));
+    expect(FakeRecognizer.made).toHaveLength(0);
+    expect(calls("POST /api/mira/recordings")).toHaveLength(0);
+  });
 });
 
 describe("the language Talk listens and speaks in", () => {
