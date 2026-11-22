@@ -12,13 +12,20 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 vi.mock("@features/mira/server/store", () => ({
   deleteChat: vi.fn(),
   getMessages: vi.fn().mockResolvedValue([]),
+  goalTexts: vi.fn().mockResolvedValue([]),
   logMiraEvent: vi.fn(),
   ownsChat: vi.fn(),
 }));
 
-import { DELETE } from "@/app/api/mira/chats/[id]/route";
+import { DELETE, GET } from "@/app/api/mira/chats/[id]/route";
 import { getMiraAccount } from "@features/mira/server/session";
-import { deleteChat, logMiraEvent } from "@features/mira/server/store";
+import {
+  deleteChat,
+  getMessages,
+  goalTexts,
+  logMiraEvent,
+  ownsChat,
+} from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
@@ -71,5 +78,46 @@ describe("DELETE /api/mira/chats/[id]", () => {
     const res = await remove();
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Unable to delete this chat." });
+  });
+});
+
+// Round-2 audit CHAT-9, lead decision 3: a reopened chat shows Mira's goal offers again.
+describe("GET /api/mira/chats/[id]", () => {
+  const open = () =>
+    GET(new Request(`http://localhost/api/mira/chats/${CHAT}`), {
+      params: Promise.resolve({ id: CHAT }),
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getMiraAccount).mockResolvedValue(LEA as never);
+    vi.mocked(ownsChat).mockResolvedValue(true);
+  });
+
+  it("returns the goal offers with the messages, and which of them are among the goals", async () => {
+    const messages = [
+      { id: 1, role: "assistant", content: "Try this.", goal: "Leave one soft light on" },
+      { id: 2, role: "assistant", content: "Or this.", goal: "Write one kind line" },
+      { id: 3, role: "user", content: "ok", goal: null },
+    ];
+    vi.mocked(getMessages).mockResolvedValue(messages as never);
+    vi.mocked(goalTexts).mockResolvedValue(["Write one kind line", "Something older"]);
+    const body = await (await open()).json();
+    expect(body.messages).toEqual(messages);
+    expect(body.added).toEqual(["Write one kind line"]);
+    expect(goalTexts).toHaveBeenCalledWith(LEA.id);
+  });
+
+  it("reads no goals for a chat without an offer, and still opens when they can't be read", async () => {
+    vi.mocked(getMessages).mockResolvedValue([{ id: 1, role: "user", content: "hi" }] as never);
+    expect((await (await open()).json()).added).toEqual([]);
+    expect(goalTexts).not.toHaveBeenCalled();
+    vi.mocked(getMessages).mockResolvedValue([
+      { id: 1, role: "assistant", content: "Try this.", goal: "Leave one soft light on" },
+    ] as never);
+    vi.mocked(goalTexts).mockRejectedValueOnce(new Error("down"));
+    const res = await open();
+    expect(res.status).toBe(200);
+    expect((await res.json()).added).toEqual([]);
   });
 });

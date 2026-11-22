@@ -46,14 +46,23 @@ import {
 type Message = LocalTurn & {
   messageId?: number | null;
   live?: boolean;
-  /** A small goal Mira offers with this reply (Challenges & goals); this page view only. */
+  /**
+   * A small goal Mira offers with this reply (Challenges & goals), kept with the reply (round-2
+   * audit CHAT-9); `goalAdded` once the account's goals hold it (a reopened chat says "Added").
+   */
   goal?: string;
+  goalAdded?: boolean;
 };
 type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
 /** A stored message as /api/mira/chats/[id] returns it. */
-type StoredTurn = Message & { id: number; rating: number | null; ask: string | null };
+type StoredTurn = Message & {
+  id: number;
+  rating: number | null;
+  ask: string | null;
+  goal?: string | null;
+};
 
 /** Sanjin's intake invitation: Mira's own message after her first reply, with two reply buttons. */
 const isInvitation = (m: Turn) =>
@@ -199,7 +208,9 @@ export default function MiraChat({
    * and the chat is kept, so what is typed goes on in it). Round-2 audit CHAT-16.
    */
   const openChat = useCallback(async (id: string) => {
-    const chat = await miraApi<{ messages: StoredTurn[] }>(`/api/mira/chats/${id}`);
+    const chat = await miraApi<{ messages: StoredTurn[]; added?: string[] }>(
+      `/api/mira/chats/${id}`
+    );
     if (chat.ok) {
       setError(null);
       setMessages(
@@ -210,6 +221,7 @@ export default function MiraChat({
           messageId: m.id,
           rated: m.rating === 1 || m.rating === -1 ? m.rating : undefined,
           ask: m.ask ?? undefined,
+          ...(m.goal ? { goal: m.goal, goalAdded: chat.data.added?.includes(m.goal) } : {}),
         }))
       );
     } else if (chat.status === 404) {
@@ -287,13 +299,14 @@ export default function MiraChat({
   useEffect(() => {
     if (!ready || signedIn || minor || (messages.length === 0 && !local.chat())) return;
     local.saveChat({
-      turns: messages.map(({ role, content, sources, rated, ask, crisis }) => ({
+      turns: messages.map(({ role, content, sources, rated, ask, crisis, goal }) => ({
         role,
         content,
         sources,
         rated,
         ask,
         crisis,
+        goal, // a goal offer survives a reload here too (round-2 audit CHAT-9)
       })),
       freeLeft,
       ...(gate ? { gate: true } : {}),
@@ -908,7 +921,7 @@ export default function MiraChat({
                         </div>
                       ) : null}
                       {m.role === "assistant" && m.goal && !minor ? (
-                        <GoalSuggestion text={m.goal} signedIn={signedIn} />
+                        <GoalSuggestion text={m.goal} signedIn={signedIn} added={m.goalAdded} />
                       ) : null}
                       {m.role === "assistant" && !isInvitation(m) ? (
                         <div

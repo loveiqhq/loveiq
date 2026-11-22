@@ -50,6 +50,8 @@ export type StoredMessage = {
   rating: number | null;
   /** The intake question this reply of Mira's asked (its answers show as buttons). */
   ask: string | null;
+  /** The small goal this reply of Mira's offered ("Add as a goal"; migration 20261122120000). */
+  goal: string | null;
 };
 
 const enc = encodeURIComponent;
@@ -163,7 +165,7 @@ export async function getMessages(
 ): Promise<StoredMessage[]> {
   if (!(await ownsChat(userId, chatId))) return [];
   const newest = await rows<StoredMessage>(
-    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating,ask&order=id.desc&limit=${limit}`
+    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id,role,content,sources,rating,ask,goal&order=id.desc&limit=${limit}`
   );
   return newest.reverse();
 }
@@ -188,8 +190,13 @@ export async function addMessages(
     ask?: string | null;
     /** A spoken turn's voice session (features/mira/server/voice.ts); only sent when there is one. */
     voiceSession?: string | null;
+    /** The small goal a reply of Mira's offered (round-2 audit CHAT-9); only sent when there is one. */
+    goal?: string | null;
   }>
 ): Promise<number[]> {
+  // Every row of one insert has the same keys (PostgREST refuses others), so the goal key goes
+  // on all of them when one has an offer, and on none otherwise.
+  const offers = messages.some((m) => m.goal);
   const res = await supabaseFetch("/rest/v1/mira_message?select=id", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -201,6 +208,7 @@ export async function addMessages(
         sources: m.sources ?? null,
         ask: m.ask ?? null,
         ...(m.voiceSession ? { voice_session: m.voiceSession } : {}),
+        ...(offers ? { goal: m.goal ?? null } : {}),
       }))
     ),
   });
@@ -210,6 +218,17 @@ export async function addMessages(
     body: JSON.stringify({ updated_at: new Date().toISOString() }),
   });
   return ((await res.json()) as Array<{ id: number }>).map((r) => r.id);
+}
+
+/**
+ * The texts of the account's goals, whatever their state, so a reopened chat shows "Added" under
+ * an offer they already took (round-2 audit CHAT-9). Texts as stored: the goals route tidies the
+ * spaces as parseReply does, so an offer and its goal match exactly.
+ */
+export async function goalTexts(userId: string): Promise<string[]> {
+  return (
+    await rows<{ text: string }>(`/rest/v1/mira_goal?user_id=eq.${enc(userId)}&select=text`)
+  ).map((g) => g.text);
 }
 
 /** A thumbs up or down on one of the account's own stored replies. */

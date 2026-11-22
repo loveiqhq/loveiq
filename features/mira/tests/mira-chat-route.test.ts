@@ -973,6 +973,34 @@ describe("POST /api/mira/chat", () => {
     expect(stored[1]).toMatchObject({ role: "assistant", ask: "onset" });
   });
 
+  // Round-2 audit CHAT-9, lead decision 3: the offer is kept with the reply it came with.
+  it("stores Mira's goal offer with her reply", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      style: {},
+      remember_chats: true,
+      use_assessment: false,
+    } as never);
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "One small step could help.\n[[GOAL:Leave one soft light on]]",
+      refused: false,
+    });
+    const body = await (
+      await post({ message: "what could I try?", consent: true, history: openChat })
+    ).json();
+    expect(body.goal).toBe("Leave one soft light on");
+    const stored = vi.mocked(addMessages).mock.calls[0]![1];
+    expect(stored[1]).toMatchObject({
+      role: "assistant",
+      content: "One small step could help.",
+      goal: "Leave one soft light on",
+    });
+    expect(stored[0]!.goal ?? null).toBeNull();
+  });
+
   it("logs which intake question a message answered, by id only, and only a real one", async () => {
     await post({ message: "A few years", consent: true, history: openChat, answering: "onset" });
     expect(events("intake_answered")).toEqual([{ q: "onset" }]);

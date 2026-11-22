@@ -301,6 +301,42 @@ describe("Chat", () => {
     ).toEqual(["Chat on 22 Nov", "Lights off"]);
   });
 
+  // Round-2 audit CHAT-9, lead decision 3: a goal offer lived in its page view only, so after a
+  // reload Mira's words pointed at an "Add as a goal" that was gone.
+  it("shows a reopened chat's goal offers again, and Added for one already taken", async () => {
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({
+      body: {
+        messages: [
+          { id: 1, role: "user", content: "what could I try?" },
+          { id: 2, role: "assistant", content: "One small step.", goal: "Leave one soft light on" },
+          { id: 3, role: "user", content: "and another?" },
+          { id: 4, role: "assistant", content: "Or this one.", goal: "Write one kind line" },
+        ],
+        added: ["Write one kind line"],
+      },
+    });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    await screen.findByText("Or this one.");
+    expect(screen.getAllByRole("button", { name: "Add as a goal" })).toHaveLength(1);
+    expect(screen.getByText("Add as a goal").closest("div[class*=rounded]")).toHaveTextContent(
+      "Leave one soft light on"
+    );
+    expect(screen.getByText("Added to your goals")).toBeInTheDocument();
+  });
+
+  it("keeps an anonymous chat's goal offer through a reload", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "One small step.", goal: "Leave one soft light on" },
+    });
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("what could I try?");
+    await screen.findByRole("button", { name: "Add as a goal" });
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    expect(await screen.findByRole("button", { name: "Add as a goal" })).toBeInTheDocument();
+  });
+
   // Round-2 audit CHAT-29, lead decision 4: one chat can be deleted.
   describe("deleting this chat", () => {
     const list = [

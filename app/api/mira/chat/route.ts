@@ -520,7 +520,7 @@ export async function POST(request: Request) {
       const voiceSession = voice?.session;
       const ids = await addMessages(chatId, [
         { role: "user", content: message, voiceSession },
-        { role: "assistant", content: reply, sources, ask, voiceSession },
+        { role: "assistant", content: reply, sources, ask, goal, voiceSession },
         ...(invitation ? [{ role: "assistant" as const, content: invitation, voiceSession }] : []),
       ]);
       messageId = ids[1] ?? null;

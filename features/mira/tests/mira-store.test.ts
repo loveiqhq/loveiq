@@ -10,10 +10,13 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { memberByEmail } from "@features/brain/server/sign-in";
 import { SESSION_OPENING } from "@features/mira/server/calendar";
 import {
+  addMessages,
   claimCodeAttempt,
   deleteAccount,
   deleteChat,
   deleteChats,
+  getMessages,
+  goalTexts,
   listChats,
 } from "@features/mira/server/store";
 import { fakeDb } from "./fake-db";
@@ -201,5 +204,49 @@ describe("deleteChat", () => {
     expect(db.tables.mira_chat!.map((c) => c.id)).toEqual([TWO, THEIRS]);
     // The rated replies' words an older event may keep go too, as with Delete all chats.
     expect(db.calls.some((c) => c.startsWith("PATCH /rest/v1/mira_event?user_id=eq."))).toBe(true);
+  });
+});
+
+// Round-2 audit CHAT-9, lead decision 3: Mira's goal offer is kept with her reply.
+describe("goal offers with Mira's replies", () => {
+  const CHAT = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
+  const STEP = "Leave one soft light on for the first minute";
+  const inserts = () =>
+    vi
+      .mocked(supabaseFetch)
+      .mock.calls.filter(
+        ([p, i]) => i?.method === "POST" && String(p).startsWith("/rest/v1/mira_message")
+      )
+      .map(([, i]) => JSON.parse(String(i!.body)) as Array<Record<string, unknown>>);
+
+  it("stores the offer with the reply and reads it back with the chat", async () => {
+    const db = fakeDb({ mira_chat: [{ id: CHAT, user_id: LEA.id, title: "One" }] });
+    vi.mocked(supabaseFetch).mockImplementation(db.handle);
+    await addMessages(CHAT, [
+      { role: "user", content: "I want to try something small" },
+      { role: "assistant", content: "Try this.", goal: STEP },
+    ]);
+    // PostgREST refuses a bulk insert whose rows don't share their keys (PGRST102).
+    const [rows] = inserts();
+    expect(rows!.map((r) => r.goal)).toEqual([null, STEP]);
+    // Without an offer there is no goal key at all.
+    await addMessages(CHAT, [{ role: "user", content: "and then?" }]);
+    expect(inserts()[1]![0]).not.toHaveProperty("goal");
+    const read = await getMessages(LEA.id, CHAT);
+    expect(read.find((m) => m.role === "assistant")?.goal).toBe(STEP);
+    expect(db.calls).toContainEqual(
+      expect.stringContaining("select=id,role,content,sources,rating,ask,goal&")
+    );
+  });
+
+  it('lists the texts of the account\'s own goals, for "Added"', async () => {
+    const db = fakeDb({
+      mira_goal: [
+        { id: "g1", user_id: LEA.id, text: STEP },
+        { id: "g2", user_id: "someone-else", text: "Not hers" },
+      ],
+    });
+    vi.mocked(supabaseFetch).mockImplementation(db.handle);
+    expect(await goalTexts(LEA.id)).toEqual([STEP]);
   });
 });
