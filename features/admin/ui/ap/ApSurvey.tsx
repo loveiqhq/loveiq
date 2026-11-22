@@ -813,7 +813,8 @@ function QuestionDetail({
             )}
           </div>
           {loading && !data && <p className="m-0 text-sm text-ap-muted">Loading the answers…</p>}
-          {error && (
+          {/* The hook keeps an error until a load succeeds: not while the next question's loads. */}
+          {error && !loading && (
             <p className="m-0 text-sm text-ap-bad-ink">Could not load the answers: {error}</p>
           )}
           {data?.blocked && <p className="m-0 text-sm text-ap-muted">{data.blocked}</p>}

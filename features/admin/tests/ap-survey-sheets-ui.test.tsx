@@ -107,7 +107,8 @@ const view: {
   /** What the answers call holds: the hook keeps the last answers while the next load. */
   answers: AnswerSplit | null;
   answersLoading: boolean;
-} = { payload, answers: null, answersLoading: false };
+  answersError: string | null;
+} = { payload, answers: null, answersLoading: false, answersError: null };
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (url: string) => ({
     data:
@@ -117,7 +118,7 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
           ? view.answers
           : null,
     loading: url === "/api/admin/ap/survey/answers" ? view.answersLoading : false,
-    error: null,
+    error: url === "/api/admin/ap/survey/answers" ? view.answersError : null,
     refetch: () => {},
   }),
 }));
@@ -132,6 +133,9 @@ Element.prototype.scrollIntoView = vi.fn();
 afterEach(() => {
   cleanup();
   view.payload = payload;
+  view.answers = null;
+  view.answersLoading = false;
+  view.answersError = null;
 });
 
 const funnel = () => screen.getByRole("table", { name: "Survey question funnel" });
@@ -493,8 +497,20 @@ describe("the Question dropdown in Question detail (Mark, 16–17 Nov 2026)", ()
     const detail = document.getElementById("question-detail")!;
     expect(detail.textContent).not.toContain("7 · Completely true");
     expect(detail.textContent).toContain("Loading the answers…");
-    view.answers = null;
-    view.answersLoading = false;
+  });
+
+  it("never shows the last question's load error while the next question's answers load", () => {
+    view.answersError = "timed out";
+    render(<ApSurvey />);
+    const pick = screen.getByRole("combobox", { name: "Question" }) as HTMLSelectElement;
+    expect(document.getElementById("question-detail")!.textContent).toContain(
+      "Could not load the answers: timed out"
+    );
+    view.answersLoading = true;
+    fireEvent.change(pick, { target: { value: "03008" } });
+    const detail = document.getElementById("question-detail")!.textContent!;
+    expect(detail).not.toContain("Could not load the answers");
+    expect(detail).toContain("Loading the answers…");
   });
 
   it("starts a newly picked question unsplit", () => {

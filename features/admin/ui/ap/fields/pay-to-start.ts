@@ -1,5 +1,6 @@
 /**
- * The Pay to start page's fields: each measure of "Funnel metrics compared", each step of the
+ * The Funnel and paywall page's fields (Pay to start until Marcus's rename of 19 Nov 2026): each
+ * measure of "Funnel metrics compared", each step of the
  * step cards and the week-by-week chart (Eman, 25 Oct 2026: the rows had only a hover hint).
  * Each query was run read-only on production for 10–24 Oct and 1 May – 24 Oct 2026 and gave the
  * page's own figures.
@@ -8,14 +9,17 @@ import { ADS_LANDING, FC_FREE, REPORTS, USERS } from "./focus";
 import { STARTS_CTES } from "./survey";
 import type { FieldRegistry, FieldTable } from "./types";
 
-/** Said on every card: the page doesn't take the filter bar's narrowing. */
+/**
+ * Said on every card: the page doesn't take the filter bar's narrowing, and which of the
+ * queries' funnels it shows (they still give all four, as the page did before the rename).
+ */
 const WHOLE =
-  "Each funnel is read whole: the Funnel filter, source, device, country tier and visitor type don't narrow this page.";
+  "Each funnel is read whole: the Funnel filter, source, device, country tier and visitor type don't narrow this page. Before the paywall is the queries' Pay after the report, read over 1–22 Oct 2026 whatever the range; €1.99 after the survey is the gate's, over the range. The queries' pay-to-start rows are the paused funnels, no longer shown.";
 /** The table's second view, said once. */
 const PAID_VIEW =
-  "With Paid traffic only, it counts those whose survey (pay after the report) or purchase (pay to start) came through a Google Ads click.";
+  "With Paid traffic only, it counts those whose survey came through a Google Ads click.";
 const COHORT =
-  "A cohort figure: the range's finishers (pay after the report) and buyers (pay to start), with what they paid so far, so a recent range still rises.";
+  "A cohort figure: the stretch's finishers, with what they paid so far, so a recent range still rises.";
 const NOT_SPLIT = "None: the page reads each funnel whole";
 
 const T_VISITS: FieldTable = {
@@ -386,7 +390,7 @@ export const fields: FieldRegistry = {
   // ---- Ads
   "pts.spend": {
     label: "Ad spend",
-    what: "What Google Ads cost for each funnel's own pages, by the page the ad lands on: the two pay-to-start pages, and every other page for the free survey.",
+    what: "What Google Ads cost for each funnel's pages, by the page the ad lands on: the free survey's landing pages (both funnels on this page are the free survey, before and since its €1.99 page).",
     stat: "Sum",
     per: "per euro",
     formula: { num: "Google Ads cost of the ads that land on the funnel's pages" },
@@ -422,7 +426,7 @@ export const fields: FieldRegistry = {
   // ---- Conversion
   "pts.visits": {
     label: "Visits",
-    what: "Visitors to each funnel's own pages, each counted once a day: the free survey's landing pages, and each pay-to-start page. Every measure per visit divides by it.",
+    what: "Visitors to the free survey's landing pages, each counted once a day, over each funnel's stretch. Every measure per visit divides by it.",
     stat: "Count",
     per: "per visitor-day (a visitor counts once a day)",
     formula: { num: "Visitors each day, added up over the range" },
@@ -433,7 +437,7 @@ export const fields: FieldRegistry = {
   },
   "pts.completions": {
     label: "Survey completions",
-    what: "Surveys finished in each funnel: the range's free-survey finishers, and the surveys finished by the people who paid to start in the range.",
+    what: "Surveys finished in each funnel: the free survey's finishers over its stretch (1–22 Oct 2026 before the paywall, the range for the €1.99 page).",
     good: "up",
     stat: "Count",
     per: "per finished survey",
@@ -458,7 +462,7 @@ export const fields: FieldRegistry = {
   },
   "pts.paying": {
     label: "Paying customers",
-    what: "People in each funnel whose payment took money and stands: the free survey's finishers who paid so far, and pay to start's buyers of the range.",
+    what: "People in each funnel whose payment took money and stands: the stretch's finishers who paid so far.",
     good: "up",
     stat: "Count",
     per: "per person",
@@ -504,7 +508,7 @@ export const fields: FieldRegistry = {
   // ---- Money
   "pts.revenue": {
     label: "Revenue",
-    what: "Everything each funnel's customers paid: the free survey's finishers so far, and pay to start's buyers of the range with what they bought on the report after.",
+    what: "Everything each funnel's customers paid: the stretch's finishers, so far, upgrades included.",
     good: "up",
     stat: "Sum",
     per: "per euro",
@@ -530,7 +534,7 @@ export const fields: FieldRegistry = {
   },
   "pts.rpf": {
     label: "Revenue per survey completion",
-    what: "What each finished survey earned. Pay to start counts only the money of buyers who have finished: a buyer yet to take the survey adds nothing yet.",
+    what: "What each finished survey earned: the funnel's revenue over its finished surveys.",
     good: "up",
     stat: "Average",
     per: "per finished survey",
@@ -613,7 +617,7 @@ export const fields: FieldRegistry = {
   },
   "pts.ppf": {
     label: "Profit per survey completion",
-    what: "What each finished survey left after card fees, the reports' running cost and the ads. Pay to start counts only the money and payments of buyers who have finished.",
+    what: "What each finished survey left after card fees, the reports' running cost and the ads.",
     good: "up",
     stat: "Average",
     per: "per finished survey",
@@ -734,7 +738,7 @@ export const fields: FieldRegistry = {
   },
   "pts.step-full": {
     label: "Bought the full report",
-    what: "Buyers who went on to buy the full report: after €1.99 on the pay-to-start page, or after the report's €1.99 page.",
+    what: "Buyers who went on to buy the full report: after the report's €1.99 page.",
     good: "up",
     stat: "Count",
     per: "per person",
@@ -754,7 +758,7 @@ export const fields: FieldRegistry = {
     per: "per week (Monday to Sunday; the range's first and last week only its own days)",
     formula: { num: "The week's figure, worked out as the table works it out, over that week" },
     caveat:
-      "Ads and organic. Each customer in the week they came in: the week their free survey was finished, or the week they paid to start, so a funnel that is paid later is not undercounted. A week with no figure breaks the line. The spend is the Ad spend row's, by week; the query gives the visits, customers and revenue.",
+      "Ads and organic. Each customer in the week their survey was finished, so a funnel that is paid later is not undercounted. Before the paywall's line stops at the €1.99 page's first week: from then on, a finisher outside the page's cohort is not before the paywall. A week with no figure breaks the line, and a funnel with no week in the range says so in the key. The spend is the Ad spend row's, by week; the query gives the visits, customers and revenue.",
     tables: [T_VISITS, ADS_LANDING, ...MONEY_TABLES],
     query: SQL(WEEKS),
     related: ["pts.cpp", "pts.cvr", "pts.roas"],

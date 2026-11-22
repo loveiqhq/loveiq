@@ -1347,7 +1347,7 @@ SELECT key, enabled, updated_at
       den: "Opened it 30 minutes ago or more, closed it, or answered on",
       mult: "× 100",
     },
-    caveat: `Someone who left with the sheet open is also an exit of the question it opens over in the question funnel (the steps can't tell a sheet from its question); someone who closed it and then left is the next question's exit. A sheet opened in the last 30 minutes and not closed yet counts nowhere yet. All sheets together: every sheet's leavers over every sheet's settled people. ${SHEET_PEOPLE}`,
+    caveat: `Someone who left with the sheet open is also an exit of the question it opens over in the question funnel (the steps can't tell a sheet from its question); someone who closed it and then left is an exit of the question they were then on: the next one, or for a sheet that opens before its question (the expert's, before 01005), that question. A sheet opened in the last 30 minutes and not closed yet counts nowhere yet. All sheets together: every sheet's leavers over every sheet's settled people. ${SHEET_PEOPLE}`,
     tables: SHEET_EVENTS,
     query: { lang: "HogQL", text: SHEETS },
     related: ["survey.sheetSaw", "survey.exits", "survey.dropRate"],
