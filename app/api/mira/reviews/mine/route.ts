@@ -7,7 +7,7 @@
  *   DELETE ?what=words   → takes their words back (the rating stays)
  *   DELETE ?what=all     → removes the rating and the words
  *   Either way they show nowhere from the next request (features/mira/server/reviews.ts).
- *   After an under-18 stop GET is refused (403); taking back never is.
+ *   After an under-18 stop GET is refused (403 `minor: true`); taking back never is.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -52,7 +52,11 @@ async function guard(request: Request, write: boolean) {
   if (minor === null) {
     return { error: NextResponse.json({ error: "Please try again." }, { status: 500 }) };
   }
-  if (minor) return { error: NextResponse.json({ error: "Not available." }, { status: 403 }) };
+  // The one under-18 refusal (decision 9): Settings then offers taking a rating back (SET-R1).
+  if (minor) {
+    const refused = { error: "Mira is only for adults.", minor: true };
+    return { error: NextResponse.json(refused, { status: 403 }) };
+  }
   return { account };
 }
 

@@ -29,6 +29,8 @@ type Failure = {
   needsConsent?: boolean;
   /** Worth asking again: the person closed the sheet, or the challenge ran out. */
   again?: boolean;
+  /** Refused for good: this browser or the account was stopped as under 18 (rail 15). */
+  minor?: boolean;
 };
 
 /** What the person calls their device's lock, for "Use Face ID next time?". */
@@ -43,6 +45,10 @@ export function unlockName(userAgent: string, touchPoints = 0): string {
   if (/Android/.test(userAgent)) return "your fingerprint";
   return "your device";
 }
+
+/** The mark beside that name: a fingerprint for Touch ID and Android's fingerprint, else a face. */
+export const unlockMark = (name: string): "face" | "fingerprint" =>
+  /^(Touch ID|your fingerprint)$/.test(name) ? "fingerprint" : "face";
 
 export const passkeysWork = () => browserSupportsWebAuthn();
 const unchanging = () => () => {};
@@ -156,7 +162,10 @@ export async function signInWithPasskey(opts: {
       useBrowserAutofill: opts.autofill === true,
     });
   } catch (err) {
-    return failure(err, "Your device couldn't use the passkey. Please try again.");
+    const failed = failure(err, "Your device couldn't use the passkey. Please try again.");
+    // The suggestions end quietly whatever the browser says (some say they can make them, then
+    // refuse at once): the person asked for nothing, and a message there would replace another.
+    return opts.autofill ? { ...failed, error: null } : failed;
   }
   const t = opts.ticks();
   const ticked = t.adult && t.terms && t.consent;
@@ -183,6 +192,7 @@ export async function signInWithPasskey(opts: {
     error: res.data.error ?? "That passkey didn't work. Please try again, or use your email.",
     needsConsent: res.data.needsConsent === true,
     again: res.data.retry === true,
+    minor: res.minor === true,
   };
 }
 

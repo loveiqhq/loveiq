@@ -174,6 +174,18 @@ describe("adding a passkey", () => {
     expect(notice.subject).toBe("A passkey was added to your account");
     expect(notice.text).toContain("iPhone · Safari");
     expect(notice.text).not.toMatch(/chat|journal|goal/i);
+    // Where from, a way in, and one thing to do if it wasn't them (round-2 ID-7).
+    const html = notice.html.replace(/<[^>]+>/g, "");
+    for (const part of [notice.text, html]) {
+      expect(part).toContain(
+        "A passkey (iPhone · Safari) was just added for signing in to Mira, near Berlin."
+      );
+      expect(part).toContain(
+        "choose “Sign out everywhere” and tick “Also remove my passkeys”: every device is signed out and every passkey removed, this one too."
+      );
+    }
+    expect(notice.text).toMatch(/https:\/\/\S+\/mira\/settings#security/);
+    expect(notice.html).toMatch(/href="https:\/\/[^"]+\/mira\/settings#security"/);
     // Requires user verification and a discoverable passkey; never asks for attestation.
     const { body } = await read(await post({ action: "register-options", via: "settings" }));
     expect(body.options.authenticatorSelection).toMatchObject({
@@ -203,7 +215,7 @@ describe("adding a passkey", () => {
     db.tables.mira_user![0]!.minor_at = new Date().toISOString();
     expect(await read(await post({ action: "register-options" }))).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     db.tables.mira_user![0]!.minor_at = null;
     db.tables.mira_passkey = Array.from({ length: 10 }, (_, i) => ({
@@ -367,7 +379,7 @@ describe("signing in with a passkey", () => {
     db.tables.mira_user![0]!.minor_at = new Date().toISOString();
     expect(await signInWith(key)).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     expect(verifyOtp).not.toHaveBeenCalled();
     expect(db.tables.mira_session ?? []).toEqual([]);
@@ -460,14 +472,40 @@ describe("a passkey from a browser Mira stopped as under 18", () => {
   // A passkey's account always exists already: the browser's cookie alone never stops or wipes it.
   it("is refused, and the account it belongs to is left as it was", async () => {
     const key = await addPasskey();
+    const before = { ...db.tables.mira_passkey![0]! };
     browser = new Map([["mira_minor", "1"]]);
     expect(await signInWith(key)).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     expect(db.tables.mira_user![0]!.minor_at ?? null).toBeNull();
     expect(db.tables.mira_passkey).toHaveLength(1);
     expect(verifyOtp).not.toHaveBeenCalled();
+    // Nobody signed in: Settings must not say the passkey was "last used today".
+    expect(db.tables.mira_passkey![0]!.counter).toBe(before.counter);
+    expect(db.tables.mira_passkey![0]!.last_used_at ?? null).toBeNull();
+  });
+
+  it("a refused sign-in of any kind leaves the passkey as unused as it was", async () => {
+    const key = await addPasskey();
+    const unused = () => expect(db.tables.mira_passkey![0]!.last_used_at ?? null).toBeNull();
+    db.tables.mira_user![0]!.minor_at = new Date().toISOString();
+    expect((await signInWith(key)).status).toBe(403);
+    unused();
+    db.tables.mira_user![0]!.minor_at = null;
+    db.tables.mira_user![0]!.email = "staff@loveiq.org";
+    logins.set(LEA, "staff@loveiq.org");
+    expect((await signInWith(key)).status).toBe(403);
+    unused();
+    logins.delete(LEA);
+    db.tables.mira_user![0]!.email = "lea@example.com";
+    db.tables.mira_user![0]!.consent_version = "older";
+    expect((await signInWith(key)).status).toBe(409); // ticks first
+    unused();
+    // A real sign-in marks it.
+    const ticks = { adult: true, terms: true, consent: true, useAssessment: false };
+    expect((await signInWith(key, {}, { ticks })).status).toBe(200);
+    expect(db.tables.mira_passkey![0]!.last_used_at).toEqual(expect.any(String));
   });
 });
 
@@ -503,6 +541,16 @@ describe("renaming and removing", () => {
     // A removed passkey signs nobody in.
     browser = new Map();
     expect(await signInWith(key)).toMatchObject({ status: 400, body: { unknown: true } });
+  });
+
+  it("answers a removal with the passkeys left, one added elsewhere meanwhile included", async () => {
+    const first = await addPasskey();
+    const second = await addPasskey(); // another device, after this page loaded its list
+    const res = await read(await call("DELETE", undefined, `?id=${first.id}`));
+    expect(res.status).toBe(200);
+    // The page tells the passkey manager which still work: the server's list, never its own.
+    expect(res.body.passkeys.map((p: { id: string }) => p.id)).toEqual([second.id]);
+    expect(JSON.stringify(res.body)).not.toContain("public_key");
   });
 
   it("needs a signed-in account", async () => {

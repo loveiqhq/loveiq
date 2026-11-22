@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { escapeHtml } from "@shared/emails/shared";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { checkCooldown } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -48,6 +49,9 @@ function replyTo(): string | null {
 const FOOTER =
   "Applied Psychometrics UG (haftungsbeschränkt) · Hasenheide 62, 10967 Berlin · HRB 282986 B, Amtsgericht Charlottenburg · Managing director: Marcus Börner";
 
+/** A newer code voids the one before (Supabase mints a fresh one; a change keeps one code). */
+const ONCE = "It works once, for an hour, and a newer code replaces it.";
+
 /**
  * A code email: for signing in, or (22 Nov 2026) for confirming a new address in Settings, with
  * the same neutral sender, layout and footer.
@@ -60,13 +64,13 @@ export function signInCodeEmail(code: string, purpose: "sign-in" | "new-address"
       : "Type it on the page you just came from to confirm this email address.";
   const subject = `Your ${what}: ${code}`;
   const text =
-    `Your ${what} is ${code}.\n\n${why} It works once, ` +
-    `for an hour.\n\nIf you did not ask for this, you can ignore this email.\n\n${FOOTER}`;
+    `Your ${what} is ${code}.\n\n${why} ${ONCE}\n\nIf you did not ask for this, you can ignore ` +
+    `this email.\n\n${FOOTER}`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
     <p style="margin:0 0 16px 0;">Your ${what} is</p>
     <p style="margin:0 0 20px 0; font-size:32px; font-weight:700; letter-spacing:6px;">${escapeHtml(code)}</p>
-    <p style="margin:0 0 16px 0;">${why} It works once, for an hour.</p>
+    <p style="margin:0 0 16px 0;">${why} ${ONCE}</p>
     <p style="margin:0 0 12px 0; font-size:13px; color:#6b6678;">If you did not ask for this, you can ignore this email.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
   </div>`;
@@ -75,17 +79,22 @@ export function signInCodeEmail(code: string, purpose: "sign-in" | "new-address"
 
 /**
  * The note to the old address after a change of email (22 Nov 2026): neutral like every Mira
- * email (nothing about chats), with the new address masked, and who to write to if it wasn't them.
+ * email (nothing about chats), with the new address masked, that this address now starts a new
+ * account (round-2 ID-17), and who to write to if it wasn't them.
  */
+const NEW_ACCOUNT =
+  "From now on, sign in with the new address. This one, by code or with Google, would start a new, empty account.";
 export function emailChangedNotice(maskedNewAddress: string) {
   const subject = "Your sign-in email was changed";
   const text =
     `The email address you sign in with was changed to ${maskedNewAddress}.\n\n` +
+    `${NEW_ACCOUNT}\n\n` +
     `If you made this change, there is nothing more to do.\n\nIf you didn't, write to ` +
     `hello@loveiq.org straight away and we'll help you get your account back.\n\n${FOOTER}`;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
     <p style="margin:0 0 16px 0;">The email address you sign in with was changed to <strong>${escapeHtml(maskedNewAddress)}</strong>.</p>
+    <p style="margin:0 0 16px 0;">${NEW_ACCOUNT}</p>
     <p style="margin:0 0 16px 0;">If you made this change, there is nothing more to do.</p>
     <p style="margin:0 0 16px 0;">If you didn't, write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> straight away and we'll help you get your account back.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
@@ -96,20 +105,27 @@ export function emailChangedNotice(maskedNewAddress: string) {
 /**
  * The note to the account's address when a passkey is added (security review M1, 22 Nov 2026):
  * someone with the browser for a few minutes could add a passkey that lives on their own phone,
- * so the owner hears of every new one. Neutral like every Mira email (nothing about chats).
+ * so the owner hears of every new one: which device, roughly where (the city Vercel saw, when it
+ * did), a link to Sign-in & security, and one thing to do if it wasn't them. Neutral like every
+ * Mira email (nothing about chats).
  */
-export function passkeyAddedNotice(label: string) {
+export function passkeyAddedNotice(label: string, city: string | null = null) {
   const subject = "A passkey was added to your account";
+  const added = `was just added for signing in to Mira${city ? `, near ${city}` : ""}.`;
+  const link = `${getEmailSiteUrl()}/mira/settings#security`;
+  const act =
+    "choose “Sign out everywhere” and tick “Also remove my passkeys”: every device is signed " +
+    "out and every passkey removed, this one too. You can add yours again after signing in.";
   const text =
-    `A passkey (${label}) was just added for signing in to Mira.\n\n` +
-    `If you added it, there is nothing more to do.\n\nIf you didn't, open Mira's Settings, ` +
-    `Sign-in & security: remove it there, then use "Sign out everywhere" and remove your ` +
-    `passkeys. Write to hello@loveiq.org if you need help.\n\n${FOOTER}`;
+    `A passkey (${label}) ${added}\n\n` +
+    `If you added it, there is nothing more to do.\n\nIf you didn't, open Sign-in & security ` +
+    `in Mira's Settings (${link}) and ${act} Write to hello@loveiq.org if you need help.\n\n` +
+    FOOTER;
   const html = `
   <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
-    <p style="margin:0 0 16px 0;">A passkey (<strong>${escapeHtml(label)}</strong>) was just added for signing in to Mira.</p>
+    <p style="margin:0 0 16px 0;">A passkey (<strong>${escapeHtml(label)}</strong>) ${escapeHtml(added)}</p>
     <p style="margin:0 0 16px 0;">If you added it, there is nothing more to do.</p>
-    <p style="margin:0 0 16px 0;">If you didn't, open Mira's Settings, Sign-in &amp; security: remove it there, then use &ldquo;Sign out everywhere&rdquo; and remove your passkeys. Write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> if you need help.</p>
+    <p style="margin:0 0 16px 0;">If you didn't, open <a href="${escapeHtml(link)}" style="color:#161021;">Sign-in &amp; security</a> in Mira's Settings and ${escapeHtml(act)} Write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> if you need help.</p>
     <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
   </div>`;
   return { subject, text, html };

@@ -327,8 +327,13 @@ describe("under 18: nothing shared stays, and nothing more is taken", () => {
 
   it("refuses someone Mira stopped as under 18, and refuses when that can't be checked", async () => {
     vi.mocked(isMinor).mockResolvedValue(true);
-    expect((await rate({ stars: 5, words })).status).toBe(403);
-    expect((await getMine(call("GET", "/api/mira/reviews/mine"))).status).toBe(403);
+    // The one refusal every screen reads as "Mira is only for adults." (decision 9): Settings ›
+    // Your rating then offers taking back, never a retry that can't work (SET-R1).
+    const refused = { error: "Mira is only for adults.", minor: true };
+    const rated = await rate({ stars: 5, words });
+    expect([rated.status, await rated.json()]).toEqual([403, refused]);
+    const mine = await getMine(call("GET", "/api/mira/reviews/mine"));
+    expect([mine.status, await mine.json()]).toEqual([403, refused]);
     // Taking back is never refused: whatever is left of it goes.
     expect((await DELETE(call("DELETE", "/api/mira/reviews/mine?what=all"))).status).toBe(200);
     vi.mocked(isMinor).mockRejectedValue(new Error("mira minor read failed (500)"));

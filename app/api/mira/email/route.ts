@@ -86,7 +86,7 @@ export async function POST(request: Request) {
   if (!account) return fail("Please sign in again.", 401);
 
   try {
-    if (await isMinor(account.id)) return fail("Mira is only for adults.", 403);
+    if (await isMinor(account.id)) return fail("Mira is only for adults.", 403, { minor: true });
 
     if (body.action === "start") {
       if (body.email === account.email) return fail("That's already your email.", 400);
