@@ -364,6 +364,49 @@ describe("Home", () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/mira/me")).toHaveLength(2);
   });
 
+  // R3-UXA-7: the button was swapped for the placeholder at once, dropping focus to the page.
+  it("keeps focus on Try again while it retries, then on the card's heading once it loads", async () => {
+    const meReply = (status: number) =>
+      ({
+        ok: status < 400,
+        status,
+        json: async () =>
+          status < 400
+            ? { profile: { name: "Robin", email: "r@example.com" }, chats: [chat(1)] }
+            : { error: "Unable to load your account." },
+      }) as Response;
+    let answer!: (r: Response) => void;
+    const replies = [
+      Promise.resolve(meReply(500)),
+      Promise.resolve(meReply(500)),
+      new Promise<Response>((r) => (answer = r)),
+    ];
+    const fetchMock = vi.fn((url: string) =>
+      url === "/api/mira/me" ? replies.shift()! : new Promise<Response>(() => undefined)
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MiraHome hour={8} name="Robin" />);
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    retry.focus();
+
+    // A retry that fails again: the same button, still focused, ready again.
+    fireEvent.click(retry);
+    expect(document.activeElement).toBe(retry);
+    await waitFor(() => expect(retry).not.toHaveAttribute("aria-disabled"));
+    expect(document.activeElement).toBe(retry);
+
+    // While a retry runs the button stays, aria-disabled, and a second press waits for it.
+    fireEvent.click(retry);
+    expect(retry).toHaveAttribute("aria-disabled", "true");
+    expect(document.activeElement).toBe(retry);
+    fireEvent.click(retry);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/mira/me")).toHaveLength(3);
+
+    answer(meReply(200));
+    const heading = await screen.findByRole("heading", { name: "Continue with Mira" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
   it("invites a person with no chats to start", async () => {
     account({ status: 200, chats: [] });
     render(<MiraHome hour={8} name="Robin" />);

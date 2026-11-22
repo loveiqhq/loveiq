@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
@@ -72,6 +72,10 @@ export default function MiraHome({
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Try again keeps the failed card, and its focus, until the retry answers (round-3 R3-UXA-7).
+  const [retrying, setRetrying] = useState(false);
+  const retried = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const [allChats, setAllChats] = useState(false);
   const [support, setSupport] = useState(false);
   const signedOut = useSignedOut();
@@ -80,16 +84,26 @@ export default function MiraHome({
     let live = true;
     void miraApi<Me>("/api/mira/me").then((r) => {
       if (!live) return;
+      setRetrying(false);
       // A lost sign-in is said once, above the cards (SignedOutNotice, with the way back in), and
       // never a move to sign-in on Home's own: the sign-in page may still see the session and send
       // the person straight back, round and round (round-3 R3-UXA-2).
-      if (r.ok) setMe(r.data);
-      else if (!r.signedOut) setFailed(true);
+      if (r.ok) {
+        setMe(r.data);
+        setFailed(false);
+      } else if (!r.signedOut) setFailed(true);
     });
     return () => {
       live = false;
     };
   }, [attempt]);
+
+  // A retry that loaded replaced Try again: its focus goes to the card's heading, not the page.
+  useEffect(() => {
+    if (!me || !retried.current) return;
+    retried.current = false;
+    heading.current?.focus();
+  }, [me]);
 
   // Until the chats are known, the card claims nothing: not "Start with Mira" to a person with
   // chats (SET-4). A failed read says so, with a retry; "New chat" works either way.
@@ -133,7 +147,7 @@ export default function MiraHome({
       {signedOut ? null : (
         <section
           aria-labelledby="continue-h"
-          aria-busy={loading}
+          aria-busy={loading || retrying}
           className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
         >
           <div className="flex items-center gap-3">
@@ -146,7 +160,12 @@ export default function MiraHome({
               className="h-12 w-12 shrink-0 rounded-full object-cover"
             />
             <div className="min-w-0 flex-1">
-              <h2 id="continue-h" className="font-serif text-[22px] font-medium leading-tight">
+              <h2
+                ref={heading}
+                id="continue-h"
+                tabIndex={-1}
+                className="font-serif text-[22px] font-medium leading-tight outline-none"
+              >
                 {loading ? (
                   <>
                     <span className="sr-only">Loading your chats</span>
@@ -177,8 +196,11 @@ export default function MiraHome({
               <p className="text-[15px] text-ap-body">Your chats didn&apos;t load.</p>
               <button
                 type="button"
+                aria-disabled={retrying || undefined}
                 onClick={() => {
-                  setFailed(false);
+                  if (retrying) return;
+                  retried.current = true;
+                  setRetrying(true);
                   setAttempt((n) => n + 1);
                 }}
                 className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS_RING}`}
