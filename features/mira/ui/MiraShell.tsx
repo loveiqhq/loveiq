@@ -13,7 +13,9 @@ export function Wordmark({ home = false, onHome }: { home?: boolean; onHome?: ()
   return (
     <Link
       href={home ? "/mira/home" : "/mira"}
-      className="no-underline"
+      // A box of its own, so the focus ring has an edge to follow: an inline link around the grid
+      // drew Mira's ring around nothing (round 3).
+      className="block w-fit rounded-lg no-underline"
       // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
       // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
       onClick={

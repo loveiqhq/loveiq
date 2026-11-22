@@ -9,6 +9,8 @@ const vars = (palette) =>
 const dark = { ...vars(MIRA_DARK), "--mira-cloud": "1.8", "color-scheme": "dark" };
 /** The phone's bottom bar (MiraAppFrame) at Default text, in px. */
 const BAR = 60;
+/** Mira's focus ring (ui/kit FOCUS_RING draws the same). */
+const RING = "2px solid rgb(var(--ap-purple))";
 
 /**
  * Mira's themes (features/mira/ui/theme-tokens.js, MiraPrefs.tsx): the ap-* colours are CSS
@@ -54,6 +56,11 @@ const miraTheme = plugin(({ addBase }) => {
     // little air) on what scrolls under it, never on the header itself, and focus and jumps
     // there stop below it. No weight of its own, so a scroll-mt-* class still wins.
     ":where(.mira-root) *": { "scroll-margin-top": "var(--mira-scroll-top, 0px)" },
+    // One focus style (round-3 R3-UXA-3): Mira's 2px purple ring, 3:1 or more in both themes, on
+    // any control that brings none of its own. The browser's default changed colour by browser
+    // and theme, and all but vanished on the ink pill in Dark. No weight of its own, so
+    // outline-none and a component's own focus classes still win.
+    ":where(.mira-root) :focus-visible": { outline: RING, "outline-offset": "2px" },
   });
 });
 

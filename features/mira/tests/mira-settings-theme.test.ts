@@ -255,3 +255,36 @@ describe("the phone's bar and keyboard focus (round 3)", () => {
     expect(css.indexOf(".scroll-mt-16")).toBeGreaterThan(css.indexOf(":where(.mira-root) *"));
   });
 });
+
+describe("one focus style (round 3)", () => {
+  const RING = "2px solid rgb(var(--ap-purple))";
+  /** Each `prop` declared by rules whose selector passes `pick`, with the selectors. */
+  function find(css: string, pick: (selector: string) => boolean, prop: string) {
+    const found: Array<[string, string]> = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (pick(rule.selector)) rule.walkDecls(prop, (d) => found.push([rule.selector, d.value]));
+    });
+    return found;
+  }
+
+  it("rings any control that brings none of its own in Mira's purple, never the browser's (R3-UXA-3)", async () => {
+    const css = await compile("outline-none focus-visible:outline-ap-purple");
+    expect(decls(css, ":where(.mira-root) :focus-visible", "outline")).toEqual([RING]);
+    expect(decls(css, ":where(.mira-root) :focus-visible", "outline-offset")).toEqual(["2px"]);
+    // No weight of its own: outline-none and a component's own focus classes, later, still win.
+    expect(css.indexOf(".outline-none")).toBeGreaterThan(
+      css.indexOf(":where(.mira-root) :focus-visible")
+    );
+  });
+
+  it("is 3:1 or more on every surface a control sits on, in both themes", () => {
+    for (const [theme, t] of [
+      ["light", tokens.AP_LIGHT],
+      ["dark", tokens.MIRA_DARK],
+    ] as const) {
+      for (const bg of ["paper", "ground", "lilac", "track"] as const) {
+        expect(contrast(t.purple, t[bg]), `${theme}: ring on ${bg}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});
