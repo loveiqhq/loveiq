@@ -36,7 +36,6 @@ export default async function Page() {
       name={profile?.name ?? null}
       hour={profile ? Math.floor(localParts(now, profile.time_zone).minutes / 60) : null}
       quiet={quiet}
-      country={profile?.country ?? null}
     />
   );
 }

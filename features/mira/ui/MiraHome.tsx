@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
+import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
 import { miraApi } from "./api";
 import ChecksHomeCard from "./checks/ChecksHomeCard";
@@ -59,7 +60,6 @@ export default function MiraHome({
   name = null,
   hour = null,
   quiet = false,
-  country = null,
 }: {
   /** The account's first name, read with the page (app/mira/home), so the heading never changes. */
   name?: string | null;
@@ -67,10 +67,9 @@ export default function MiraHome({
   hour?: number | null;
   /** Support lines showed in the last 14 days: a neutral greeting, the lines at hand (CHAT-17). */
   quiet?: boolean;
-  /** Where the person is based: that country's lines come first when they open them here. */
-  country?: string | null;
 }) {
   const router = useRouter();
+  const country = useSupportCountry();
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);

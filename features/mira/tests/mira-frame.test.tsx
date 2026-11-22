@@ -16,6 +16,7 @@ vi.mock("next/navigation", () => ({
 }));
 const posthog = vi.hoisted(() => ({ captureException: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: posthog }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
 const session = vi.hoisted(() => ({ account: null as null | { id: string; email: string } }));
 vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => session.account }));
@@ -31,6 +32,9 @@ vi.mock("@features/mira/server/nudges", async (original) => ({
 
 import MiraError from "@/app/mira/error";
 import HomePage from "@/app/mira/home/page";
+import MiraLayout from "@/app/mira/layout";
+import { MiraLookRoot } from "@features/mira/ui/MiraLook";
+import { DEFAULT_LOOK } from "@features/mira/ui/prefs";
 import MissingPage from "@/app/mira/[...missing]/page";
 import MiraNotFound from "@/app/mira/not-found";
 import GuideLayout from "@/app/mira/guide/layout";
@@ -405,7 +409,7 @@ describe("Home's page (server)", () => {
       return true;
     };
     const el = (await HomePage()) as { props: Record<string, unknown> };
-    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true, country: "JP" });
+    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true });
     // The same 14 days as the nudges and the journal reminders.
     expect(asked).toEqual([["u1", new Date("2026-11-08T07:30:00Z")]]);
   });
@@ -500,5 +504,37 @@ describe("Mira's own error page (SET-17)", () => {
     cleanup();
     render(<MiraError error={new Error("boom")} retry={vi.fn()} />);
     expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
+  });
+});
+
+describe("the support lines, from any page (SET-9)", () => {
+  const open = (country: string | null) => {
+    render(
+      <MiraLookRoot initial={DEFAULT_LOOK} country={country}>
+        <MiraAppFrame active="journal">
+          <p>Page</p>
+        </MiraAppFrame>
+      </MiraLookRoot>
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Need support right now?" })[0]!);
+    return within(screen.getByRole("dialog", { name: "Support right now" }));
+  };
+
+  it("list the country saved in Settings first", () => {
+    expect(open("DE").getAllByRole("region")[0]).toHaveAccessibleName("Germany");
+  });
+
+  it("keep their usual order without one", () => {
+    expect(open(null).getAllByRole("region")[0]).toHaveAccessibleName("United States");
+  });
+
+  it("take the country from the account once, in Mira's layout, for every page", async () => {
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = { name: "Kim", time_zone: "Europe/Berlin", country: "DE" };
+    const signedIn = (await MiraLayout({ children: null })) as { props: Record<string, unknown> };
+    expect(signedIn.props.country).toBe("DE");
+    session.account = null;
+    const signedOut = (await MiraLayout({ children: null })) as { props: Record<string, unknown> };
+    expect(signedOut.props.country).toBeNull();
   });
 });

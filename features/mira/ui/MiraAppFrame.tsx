@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
+import { useSupportCountry } from "./MiraLook";
 import { DISCLAIMER, LegalLinks, Wordmark } from "./MiraShell";
 import { Modal, SupportPanel } from "./SupportPanel";
 import { useReloadWhenRestored } from "./api";
@@ -186,6 +187,7 @@ export function MiraAppFrame({
 }) {
   const [support, setSupport] = useState(false);
   const [more, setMore] = useState(false);
+  const country = useSupportCountry();
   useReloadWhenRestored();
   const inMore = PAGES.some((p) => !p.short && p.key === active);
   return (
@@ -282,7 +284,12 @@ export function MiraAppFrame({
           }}
         />
       ) : null}
-      {support ? <SupportPanel highlight={null} onClose={() => setSupport(false)} /> : null}
+      {support ? (
+        <SupportPanel
+          highlight={country ? { code: country } : null}
+          onClose={() => setSupport(false)}
+        />
+      ) : null}
     </div>
   );
 }
