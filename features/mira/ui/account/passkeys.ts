@@ -156,7 +156,10 @@ export async function signInWithPasskey(opts: {
       useBrowserAutofill: opts.autofill === true,
     });
   } catch (err) {
-    return failure(err, "Your device couldn't use the passkey. Please try again.");
+    const failed = failure(err, "Your device couldn't use the passkey. Please try again.");
+    // The suggestions end quietly whatever the browser says (some say they can make them, then
+    // refuse at once): the person asked for nothing, and a message there would replace another.
+    return opts.autofill ? { ...failed, error: null } : failed;
   }
   const t = opts.ticks();
   const ticked = t.adult && t.terms && t.consent;
