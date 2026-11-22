@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { SESSION_OPENING } from "@features/mira/server/calendar";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
@@ -52,6 +52,8 @@ type Message = LocalTurn & {
 type BodyDue = "baseline" | "week4" | null;
 type CrisisCountry = SupportCountry;
 type ChatSummary = { id: string; title: string; updated_at: string };
+/** A stored message as /api/mira/chats/[id] returns it. */
+type StoredTurn = Message & { id: number; rating: number | null; ask: string | null };
 
 /** Sanjin's intake invitation: Mira's own message after her first reply, with two reply buttons. */
 const isInvitation = (m: Turn) =>
@@ -108,7 +110,12 @@ export default function MiraChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
+  // `retry`: the saved chat didn't load (Try again loads it).
+  const [error, setError] = useState<{ text: string; signIn?: boolean; retry?: boolean } | null>(
+    null
+  );
+  // A calm line about the chat itself (it isn't here any more), read out as a status.
+  const [notice, setNotice] = useState<string | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const [gate, setGate] = useState(false);
   const [consented, setConsented] = useState(signedIn);
@@ -160,6 +167,38 @@ export default function MiraChat({
   });
   const voiceOn = voice.phase !== "off";
 
+  /**
+   * A saved chat, opened by its link (Home, the list, a nudge): on screen; gone (deleted: said so,
+   * the address forgets it and a new chat begins); or not loaded (a blip: said so with Try again,
+   * and the chat is kept, so what is typed goes on in it). Round-2 audit CHAT-16.
+   */
+  const openChat = useCallback(async (id: string) => {
+    const chat = await miraApi<{ messages: StoredTurn[] }>(`/api/mira/chats/${id}`);
+    if (chat.ok) {
+      setError(null);
+      setMessages(
+        chat.data.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          sources: m.sources ?? undefined,
+          messageId: m.id,
+          rated: m.rating === 1 || m.rating === -1 ? m.rating : undefined,
+          ask: m.ask ?? undefined,
+        }))
+      );
+    } else if (chat.status === 404) {
+      setChatId(null);
+      window.history.replaceState(null, "", "/mira");
+      setNotice("That chat isn't here any more. It may have been deleted.");
+    } else {
+      setError(
+        chat.status === 401
+          ? { text: "Please sign in again.", signIn: true }
+          : { text: "This chat didn't load. Please try again.", retry: true }
+      );
+    }
+  }, []);
+
   useEffect(() => {
     void miraApi("/api/mira/event", { body: { type: "track", name: "chat_opened" } });
     if (!signedIn) {
@@ -192,28 +231,10 @@ export default function MiraChat({
         setReplyLanguage(me.data.profile.reply_language ?? null);
         setBodyDue(me.data.bodyCheck?.due ?? null);
       }
-      if (initialChatId) {
-        const chat = await miraApi<{
-          messages: Array<Message & { id: number; rating: number | null; ask: string | null }>;
-        }>(`/api/mira/chats/${initialChatId}`);
-        if (chat.ok) {
-          setMessages(
-            chat.data.messages.map((m) => ({
-              role: m.role,
-              content: m.content,
-              sources: m.sources ?? undefined,
-              messageId: m.id,
-              rated: m.rating === 1 || m.rating === -1 ? m.rating : undefined,
-              ask: m.ask ?? undefined,
-            }))
-          );
-        } else {
-          setChatId(null);
-        }
-      }
+      if (initialChatId) await openChat(initialChatId);
       setReady(true);
     })();
-  }, [signedIn, initialChatId]);
+  }, [signedIn, initialChatId, openChat]);
 
   // Only the message list scrolls, never the page: the composer stays where the person typed.
   // A new reply of Mira's is shown from its start, so a long one (or a question with its answer
@@ -303,6 +324,7 @@ export default function MiraChat({
       return;
     }
     setError(null);
+    setNotice(null);
     setAtStart(false); // sent from the start screen: the chat it goes on comes back
     if (showTip) setTipSeen(true);
     const firstOfChat = !chatId && messages.length === 0;
@@ -505,6 +527,7 @@ export default function MiraChat({
     setMessages([]);
     setChatId(null);
     setError(null);
+    setNotice(null);
     setNps(null);
     window.history.replaceState(null, "", "/mira");
     if (signedIn) return;
@@ -600,9 +623,11 @@ export default function MiraChat({
   }, [session, signedIn]);
 
   const empty = !started || atStart;
+  // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
+  const unloaded = Boolean(error?.retry);
   // A chat opened by its link loads first: the welcome would only flash before it.
-  const showWelcome = empty && (ready || !initialChatId);
-  const showChips = ready && empty && !gate;
+  const showWelcome = empty && (ready || !initialChatId) && !unloaded;
+  const showChips = ready && empty && !gate && !unloaded;
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">
@@ -1097,6 +1122,10 @@ export default function MiraChat({
                     : `${freeLeft} more free ${freeLeft === 1 ? "message" : "messages"} before you need a free account.`}
                 </p>
               ) : null}
+              {/* Always there, so a screen reader hears the line when it comes. */}
+              <p role="status" className="mt-2 text-center text-[13px] text-ap-muted empty:mt-0">
+                {notice}
+              </p>
               {error ? (
                 <div className="mt-2 text-center">
                   <p role="alert" className="text-[13px] text-ap-bad-ink">
@@ -1107,6 +1136,18 @@ export default function MiraChat({
                         <Link href="/mira/start" className="font-semibold underline">
                           Sign in again
                         </Link>
+                      </>
+                    ) : null}
+                    {error.retry && chatId ? (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          onClick={() => void openChat(chatId)}
+                          className="font-semibold underline"
+                        >
+                          Try again
+                        </button>
                       </>
                     ) : null}
                   </p>

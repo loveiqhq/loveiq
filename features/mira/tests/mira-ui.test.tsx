@@ -207,6 +207,42 @@ describe("Chat", () => {
     expect(calls("POST /api/mira/chat")).toHaveLength(1);
   });
 
+  // Round-2 audit CHAT-16: a saved chat that couldn't load opened as an empty new chat, silently.
+  const SAVED = "6f2c4a1e-1111-4222-8333-944455556666";
+  it("says a deleted chat isn't here any more, and starts a new one", async () => {
+    window.history.replaceState(null, "", `/mira?chat=${SAVED}`);
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({
+      status: 404,
+      body: { error: "Not found." },
+    });
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "That chat isn't here any more. It may have been deleted."
+    );
+    expect(window.location.search).toBe(""); // a reload doesn't ask for it again
+    typeAndSend("hello");
+    await screen.findByText("Try this.");
+    expect(calls("POST /api/mira/chat")[0]!.chatId).toBeUndefined();
+  });
+
+  it("says a chat that didn't load didn't, keeps it, and loads it on Try again", async () => {
+    let up = false;
+    replies[`GET /api/mira/chats/${SAVED}`] = () =>
+      up
+        ? { body: { messages: [{ id: 1, role: "user", content: "an earlier line" }] } }
+        : { status: 500, body: { error: "Unable to load this chat." } };
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("This chat didn't load.");
+    // Not the welcome and its prompts, which would read as a new chat.
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    up = true;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("an earlier line")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("doesn't send on the Enter that ends an input-method composition", async () => {
     render(<MiraChat signedIn initialChatId={null} />);
     const box = screen.getByLabelText("Message Mira");
