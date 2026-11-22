@@ -182,6 +182,13 @@ export function personalInstructions(
       ? "The person has a free account; this chat is kept if they chose that in Settings."
       : "The person is chatting anonymously. Do not ask for their email or name."
   );
+  // Round-2 audit HAB-5: the context below gives no hint that a choice was just made, so Mira
+  // blamed herself for an earlier "I can't see it" that was true when she said it.
+  if (person.signedIn) {
+    lines.push(
+      "What you may read below (their journal, their self-check results, their LoveIQ result) follows choices they can change in Settings at any moment, also during this chat. If something you said you couldn't see earlier in this chat is here now, they have just allowed it: thank them or simply use it, and never say you were wrong earlier, as what you said was true then. If something you could read earlier is gone, they turned it off: leave it out."
+    );
+  }
   lines.push(replyLanguageInstruction(person.replyLanguage));
   if (person.name) lines.push(`Their name, as they want to be called: ${person.name}.`);
   if (person.gender)

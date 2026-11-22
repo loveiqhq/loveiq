@@ -344,4 +344,15 @@ describe("Mira's instructions", () => {
     expect(known).toContain("Lea");
     expect(known).toContain("Spark Seeker");
   });
+
+  // Round-2 audit HAB-5: after "Let Mira read my journal" was switched on mid-chat, Mira said
+  // her earlier "I can't see it" had been wrong, as if she could see it before the consent.
+  it("tell a signed-in Mira that what she may read can change mid-chat, and how to say so", () => {
+    const signedIn = personalInstructions({}, { signedIn: true });
+    expect(signedIn).toContain(
+      "If something you said you couldn't see earlier in this chat is here now, they have just allowed it"
+    );
+    expect(signedIn).toContain("never say you were wrong earlier");
+    expect(personalInstructions({}, { signedIn: false })).not.toContain("just allowed it");
+  });
 });
