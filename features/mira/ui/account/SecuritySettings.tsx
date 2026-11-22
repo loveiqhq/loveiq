@@ -717,6 +717,8 @@ function Devices({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
+  // "Also remove my passkeys": a passkey someone else added would outlive every sign-out.
+  const [alsoKeys, setAlsoKeys] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
 
@@ -727,8 +729,9 @@ function Devices({
   async function signOut(id: string | "all") {
     setBusy(id);
     setError(null);
+    const keys = id === "all" && alsoKeys ? "&passkeys=1" : "";
     const r = await miraApi<{ signedOut?: boolean }>(
-      `/api/mira/security?device=${encodeURIComponent(id)}`,
+      `/api/mira/security?device=${encodeURIComponent(id)}${keys}`,
       { method: "DELETE" }
     );
     setBusy(null);
@@ -801,6 +804,20 @@ function Devices({
               Sign out on every device, this one too? You&apos;ll sign in again with a code, Google
               or a passkey.
             </p>
+            <label className="flex min-h-[44px] items-center gap-3 text-[14px]">
+              <input
+                type="checkbox"
+                checked={alsoKeys}
+                onChange={(e) => setAlsoKeys(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-[#795fc8]"
+              />
+              <span>
+                Also remove my passkeys{" "}
+                <span className="text-ap-muted">
+                  (if one isn&apos;t yours; you can add yours again)
+                </span>
+              </span>
+            </label>
             <div className="flex flex-wrap gap-3">
               <button
                 ref={confirmButton}

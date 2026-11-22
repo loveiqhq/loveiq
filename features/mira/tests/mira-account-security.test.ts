@@ -177,15 +177,34 @@ describe("DELETE /api/mira/security", () => {
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
-  it("signs out everywhere: every device of the account, this one too, and counts it", async () => {
+  it("signs out everywhere: every device of the account, this one too, and the login at Supabase", async () => {
     const res = await read(await DELETE(at(undefined, "?device=all", "DELETE")));
     expect(res.body).toEqual({ success: true, signedOut: true });
     expect(db.tables.mira_session!.map((s) => s.user_id)).toEqual([KAI]);
-    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    // A login only Mira uses: its other Supabase sessions end too (security review L1).
+    expect(signOut).toHaveBeenCalledWith({ scope: "global" });
+    expect(db.tables.mira_passkey!.some((p) => p.user_id === LEA)).toBe(true); // kept unless asked
     expect(logMiraEvent).toHaveBeenCalledWith(
       "signed_out_everywhere",
       { userId: LEA },
-      { devices: 2 }
+      { devices: 2, passkeys: false }
+    );
+  });
+
+  it("keeps a shared staff or Jarvis login's other sessions, which Mira refuses anyway", async () => {
+    vi.mocked(memberByEmail).mockResolvedValueOnce({ email: "lea@example.com" } as never);
+    await DELETE(at(undefined, "?device=all", "DELETE"));
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  it("removes the passkeys too when asked, so one someone else added can't sign in (M1)", async () => {
+    const res = await read(await DELETE(at(undefined, "?device=all&passkeys=1", "DELETE")));
+    expect(res.body).toEqual({ success: true, signedOut: true });
+    expect(db.tables.mira_passkey!.some((p) => p.user_id === LEA)).toBe(false);
+    expect(logMiraEvent).toHaveBeenCalledWith(
+      "signed_out_everywhere",
+      { userId: LEA },
+      { devices: 2, passkeys: true }
     );
   });
 

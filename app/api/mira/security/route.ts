@@ -20,6 +20,7 @@ import { isMinor } from "@features/mira/server/minor";
 import {
   listPasskeys,
   relyingParty,
+  removePasskeys,
   summarise,
   userHandleOf,
 } from "@features/mira/server/passkeys";
@@ -96,15 +97,27 @@ export async function DELETE(request: Request) {
   if (!device.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
     const all = device.data === "all";
+    // "Also remove my passkeys" (security review M1): a passkey someone else added would
+    // otherwise outlive every sign-out.
+    const keys = all && new URL(request.url).searchParams.get("passkeys") === "1";
     const gone = await signOutDevices(account.id, all ? undefined : device.data);
     if (!all && gone === 0) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    if (keys) await removePasskeys(account.id);
     const here = all || device.data === account.session?.id;
     if (here) {
       const supabase = await createMiraSupabase();
-      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      // A login only Mira uses ends everywhere at Supabase too (security review L1); a staff or
+      // Jarvis login shared with Mira keeps its other sessions, which Mira refuses anyway.
+      const scope = all && !(await sharesLogin(account.email)) ? "global" : "local";
+      await supabase.auth.signOut({ scope }).catch(() => undefined);
     }
-    if (all) logMiraEvent("signed_out_everywhere", { userId: account.id }, { devices: gone });
-    else logMiraEvent("device_signed_out", { userId: account.id }, { thisDevice: here });
+    if (all) {
+      logMiraEvent(
+        "signed_out_everywhere",
+        { userId: account.id },
+        { devices: gone, passkeys: keys }
+      );
+    } else logMiraEvent("device_signed_out", { userId: account.id }, { thisDevice: here });
     return NextResponse.json({ success: true, signedOut: here });
   } catch (err) {
     logger.error({ err }, "mira: a device was not signed out");

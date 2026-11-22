@@ -53,13 +53,18 @@ import {
   type ChallengePurpose,
 } from "@features/mira/server/passkeys";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
-import { mintSignInCode } from "@features/mira/server/sign-in";
+import {
+  mintSignInCode,
+  passkeyAddedNotice,
+  sendNeutralEmail,
+} from "@features/mira/server/sign-in";
 import {
   getProfile,
   logMiraEvent,
   updateProfile,
   upsertProfileAtSignIn,
 } from "@features/mira/server/store";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -253,6 +258,13 @@ export async function POST(request: Request) {
       { via: body.via, synced: info.credentialBackedUp }
     );
     if (body.via === "offer") logMiraEvent("passkey_offer_accepted", { userId: account.id });
+    // The owner hears of every new passkey, wherever it was added from (security review M1).
+    const label = passkey.label;
+    scheduleAfterResponse("mira-passkey-added-notice", async () => {
+      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label)))) {
+        logger.warn("mira: the new-passkey notice was not sent");
+      }
+    });
     return NextResponse.json({ passkey });
   } catch (err) {
     logger.error({ err }, "mira: a passkey step failed");

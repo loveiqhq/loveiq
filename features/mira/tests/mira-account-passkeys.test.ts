@@ -31,8 +31,11 @@ vi.mock("@features/mira/server/session", () => ({
   createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut } })),
   getMiraAccount: vi.fn(),
 }));
-vi.mock("@features/mira/server/sign-in", () => ({
+vi.mock("@features/mira/server/sign-in", async (importOriginal) => ({
+  passkeyAddedNotice: (await importOriginal<typeof import("@features/mira/server/sign-in")>())
+    .passkeyAddedNotice,
   mintSignInCode: vi.fn().mockResolvedValue("12345678"),
+  sendNeutralEmail: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@features/mira/server/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/mira/server/store")>()),
@@ -41,6 +44,8 @@ vi.mock("@features/mira/server/store", async (importOriginal) => ({
 }));
 
 import { DELETE, PATCH, POST } from "@/app/api/mira/passkeys/route";
+import { sendNeutralEmail } from "@features/mira/server/sign-in";
+import { flushAfterResponse } from "@shared/http/after-response";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { stopForMinor } from "@features/mira/server/minor";
@@ -151,6 +156,13 @@ describe("adding a passkey", () => {
       { via: "offer", synced: true }
     );
     expect(logMiraEvent).toHaveBeenCalledWith("passkey_offer_accepted", { userId: LEA });
+    // The owner hears of every new passkey (security review M1), neutrally.
+    await flushAfterResponse();
+    const [to, notice] = vi.mocked(sendNeutralEmail).mock.calls.at(-1)!;
+    expect(to).toMatch(/@/);
+    expect(notice.subject).toBe("A passkey was added to your account");
+    expect(notice.text).toContain("iPhone · Safari");
+    expect(notice.text).not.toMatch(/chat|journal|goal/i);
     // Requires user verification and a discoverable passkey; never asks for attestation.
     const { body } = await read(await post({ action: "register-options", via: "settings" }));
     expect(body.options.authenticatorSelection).toMatchObject({
