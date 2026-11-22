@@ -436,6 +436,22 @@ describe("the mood check's question 9", () => {
     expect(within(headline.closest("header")!).getByText("Minimal · support for you")).toBeTruthy();
   });
 
+  // R3-HAB-9: on iPhone (WebKit) a tap focuses no radio, so the panel's opener is the page.
+  it("hands focus back to the chosen answer when the panel closes, though the tap focused nothing", async () => {
+    sessionStorage.setItem(
+      "mira.check.v1:u1:mood",
+      JSON.stringify({ answers: [0, 0, 0, 0, 0, 0, 0, 0], at: Date.now() })
+    );
+    render(<CheckPage checkId="mood" practice={null} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 9" }));
+    (document.activeElement as HTMLElement | null)?.blur();
+    tap("Several days");
+    const panel = screen.getByRole("dialog", { name: "Support right now" });
+    fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Several days" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "See my result" })).toBeInTheDocument();
+  });
+
   it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
     account.checks[1] = {
       id: "mood",

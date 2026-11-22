@@ -12,6 +12,7 @@ import {
 } from "@features/mira/content/checks";
 import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
@@ -72,6 +73,7 @@ export default function CheckPage({
   const [panel, setPanel] = useState<"q9" | "help" | null>(null);
   const supportShown = useRef(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const runRef = useRef<HTMLDivElement | null>(null);
   const summary = data?.checks.find((c) => c.id === checkId);
 
   // Once the account is loaded: its draft in this tab, then the result or the introduction.
@@ -171,8 +173,12 @@ export default function CheckPage({
       highlight={data ? { code: data.support } : null}
       onClose={() => {
         setPanel(null);
-        // The result may have arrived behind the panel: land on it, not on the page's top.
-        window.requestAnimationFrame(() => headingRef.current?.focus());
+        // When the panel's opener was the page itself (a tap focuses no radio on iPhone's WebKit),
+        // back to the result if it arrived behind the panel, else to the answer just chosen
+        // (round-3 R3-HAB-9). An opener that took the focus back keeps it.
+        refocus(
+          () => headingRef.current ?? runRef.current?.querySelector<HTMLElement>("input:checked")
+        );
       }}
     >
       {panel === "q9" ? <QuestionNineWords /> : null}
@@ -209,7 +215,7 @@ export default function CheckPage({
       ) : null}
 
       {data && mode === "run" ? (
-        <div className="mt-6">
+        <div ref={runRef} className="mt-6">
           <CheckRunner
             check={check}
             initial={answers}
