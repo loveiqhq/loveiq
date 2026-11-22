@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 // Mock crypto for deterministic nonce generation
 vi.stubGlobal("crypto", {
@@ -602,11 +602,18 @@ describe("proxy middleware", () => {
       mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
       const fortyMinAgo = String(Date.now() - 40 * 60 * 1000);
 
-      await proxy(makeNextRequest(adminUrl, undefined, undefined, undefined, fortyMinAgo));
+      const res = await proxy(
+        makeNextRequest(adminUrl, undefined, undefined, undefined, fortyMinAgo)
+      );
 
       expect(mockRedirect).toHaveBeenCalledWith(
         expect.objectContaining({ href: expect.stringContaining("error=idle_timeout") })
       );
+      // The stale stamp stays, so a reload is idle again rather than stampless and let in.
+      expect(
+        (res as unknown as { cookies: { delete: Mock } }).cookies.delete
+      ).not.toHaveBeenCalled();
+      expect(mockCookiesSet.mock.calls.some((call) => call[0] === "__admin_activity")).toBe(false);
     });
 
     it("returns 401 JSON (not a redirect) for idle /api/admin/* callers", async () => {
@@ -625,6 +632,9 @@ describe("proxy middleware", () => {
 
       expect((res as unknown as { status: number }).status).toBe(401);
       expect(mockRedirect).not.toHaveBeenCalled();
+      expect(
+        (res as unknown as { cookies: { delete: Mock } }).cookies.delete
+      ).not.toHaveBeenCalled();
     });
   });
 

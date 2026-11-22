@@ -763,18 +763,17 @@ export async function proxy(request: NextRequest) {
       const lastActivity = lastActivityRaw ? parseInt(lastActivityRaw, 10) : NaN;
       const now = Date.now();
       if (Number.isFinite(lastActivity) && now - lastActivity > ADMIN_IDLE_TIMEOUT_MS) {
-        // Idle — force re-auth. JSON 401 for API callers, redirect for pages.
+        // Idle — force re-auth. JSON 401 for API callers, redirect for pages. The stale stamp
+        // is KEPT: deleting it (as this did until 22 Nov 2026) made the next request stampless,
+        // which skips this check, so a reload walked straight back in. Only a sign-in writes
+        // a fresh one.
         if (isApiAdmin) {
-          const resp = NextResponse.json(
+          return NextResponse.json(
             { error: "Session idle — please re-authenticate." },
             { status: 401 }
           );
-          resp.cookies.delete("__admin_activity");
-          return resp;
         }
-        const redirect = NextResponse.redirect(signIn("idle_timeout"));
-        redirect.cookies.delete("__admin_activity");
-        return redirect;
+        return NextResponse.redirect(signIn("idle_timeout"));
       }
       // Bump activity. SameSite=lax + secure in prod. httpOnly because the
       // client never reads it and the Edge middleware is the only writer.

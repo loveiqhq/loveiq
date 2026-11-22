@@ -16,8 +16,8 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 
 ## Access Model
 
-- Sign-in is by magic link. [`/admin/login`](../app/admin/login/page.tsx) renders [`AdminLoginForm`](../features/admin/ui/AdminLoginForm.tsx) in AP's light design and posts to [`POST /api/admin/login`](admin-api.md#sign-in-gdpr-submissions-and-kill-switch), which sends a link only to an address in `admin_users`.
-- The link opens [`/admin/auth/callback`](../app/admin/auth/callback/route.ts), which sets the session and lands on `/admin/ap`.
+- Sign-in is by one team password (since 22 Nov 2026), as on staging's `/login`. [`/admin/login`](../app/admin/login/page.tsx) renders [`AdminLoginForm`](../features/admin/ui/AdminLoginForm.tsx) in AP's light design and posts to [`POST /api/admin/login`](admin-api.md#sign-in-gdpr-submissions-and-kill-switch), where Supabase Auth checks it as the password of the team account (`ap-team@loveiq.org`, an admin in `admin_users`). Everyone signed in is that account: roles, the audit log and saved filters are its. A sign-in never ends the other sessions.
+- An operator's one-time link (minted with the service key, never emailed) opens [`/admin/auth/callback`](../app/admin/auth/callback/route.ts), which sets the session and lands on `/admin/ap`.
 - `proxy.ts` sends a signed-out visitor to `/admin/login`, and after 30 minutes without activity to `/admin/login?error=idle_timeout`, where the form says why.
 - API routes check the session again through [`verifyAdminSession()`](../features/admin/server/auth.ts) and map the email to its role in `admin_users`. The role hierarchy lives in [`features/admin/server/roles.ts`](../features/admin/server/roles.ts): `viewer`, `editor`, `admin`.
 - "Sign out" in AP's sidebar posts to [`/api/admin/logout`](../app/api/admin/logout/route.ts) with a CSRF token, then returns to `/admin/login`.
@@ -126,7 +126,7 @@ charts, their axes and the info texts all go through `fmt("pct")` in
 - Admin auth utility: [`features/admin/tests/admin-auth-lib.test.ts`](../features/admin/tests/admin-auth-lib.test.ts)
 - Admin login route: [`features/admin/tests/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts)
 - Sign-in form: [`features/admin/tests/AdminLoginForm.test.tsx`](../features/admin/tests/AdminLoginForm.test.tsx)
-- Magic-link callback: [`features/admin/tests/admin-auth-callback.test.ts`](../features/admin/tests/admin-auth-callback.test.ts)
+- Password sign-in: [`features/admin/tests/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts); one-time link callback: [`features/admin/tests/admin-auth-callback.test.ts`](../features/admin/tests/admin-auth-callback.test.ts)
 - AP route guard and explorer routes: [`features/admin/tests/ap-routes.test.ts`](../features/admin/tests/ap-routes.test.ts)
 - Shared admin fetch hook: [`features/admin/tests/admin-hooks/useAdminFetch.test.ts`](../features/admin/tests/admin-hooks/useAdminFetch.test.ts)
 - End-to-end sign-in page and signed-out redirect: [`e2e/admin.spec.ts`](../e2e/admin.spec.ts)

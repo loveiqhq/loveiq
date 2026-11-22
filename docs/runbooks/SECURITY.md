@@ -94,7 +94,7 @@ Both behaviours have three problems for us:
 1. **Privacy disclosure gap** — our privacy policy did not list Resend as
    a click/open tracking processor. Closed 2026-10-14 (privacy policy §7.3).
 2. **Brand** — `resend-links.com` in hover-preview erodes trust on
-   transactional emails (purchase confirms, share links, magic links).
+   transactional emails (purchase confirms, share links).
 3. **Compliance** — the open pixel is a tracking technology that requires
    consent in some EU jurisdictions; transactional emails arguably escape
    under legitimate interest, but marketing nurtures do not.
@@ -280,12 +280,55 @@ detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
 - **The shared `LOVEIQ_MCP_TOKEN`** remains for the unattended jobs. Rotate it after
   everyone has connected as themselves. Its calls log as `actor = 'shared'`.
 
+## Admin sign-in: the team password (since 2026-11-22)
+
+Eman's decision (22 Nov 2026): the admin signs in with one password for the whole team, as staging's
+`/login` does, instead of an emailed link per person. He chose it knowing the trade-offs below.
+
+- **How it works.** `/admin/login` asks only for the password. `POST /api/admin/login` (CSRF first,
+  5 tries a minute per address) has Supabase Auth check it as the password of the team account
+  `ap-team@loveiq.org` (set in `features/admin/server/sign-in.ts`), mixed first with the server-only
+  secret `ADMIN_TEAM_PASSWORD_SECRET` (HMAC-SHA256). Supabase's own sign-in endpoint is open to
+  anyone with the project's public key, so the team password alone must open nothing there: every
+  sign-in goes through the route. The account must be in `admin_users` (role `admin`), or the new
+  session is ended at once and the answer is the wrong password's, so it never tells a guesser they
+  were right. The session is an ordinary admin session: the proxy's gate, the 30-minute idle
+  sign-out and the roles work as before. Every sign-in writes a `login` row to `admin_audit_log` and
+  posts "Admin login with the team password" to #ops. A sign-in never ends the other sessions (T-15
+  is for personal links only, never a link to the team account), or each teammate's sign-in would
+  sign out everyone else. For the same reason, signing out ends only that browser's session
+  (`signOut({ scope: "local" })`).
+- **The session cookies** are `httpOnly` (forced in `sign-in.ts`, the proxy's refresh in
+  `shared/auth/supabase-middleware.ts` and `features/admin/server/supabase-server.ts`; the SDK's own
+  default leaves them readable by page scripts, and nothing in the browser reads them).
+- **What it costs.** Everyone signed in is the same admin: the audit log, saved filters and the
+  explorer's unlocks no longer say who. Whoever has the password can read raw survey answers and
+  send emails to customers. The password is in Notion and indexed by the brain (his choice), so
+  anyone with Notion or Jarvis access has it.
+- **Where it lives.** The row "AP-Analytics admin (loveiq.org/admin)" in Notion's Company Accounts
+  Directory (Operations & Admin), where the team keeps its log-ins; the brain indexes that
+  database, `pass` column included. Supabase holds only the mixed value (bcrypt), the same in
+  production and staging. The secret is in Vercel (loveiq-web: production, preview, development;
+  loveiq-staging: production, preview) and in Eman's Keychain (`loveiq-admin-team-password-secret`).
+- **Change it** (a leaver, or a leak): compute the value Supabase must hold,
+  `node -e 'console.log(require("crypto").createHmac("sha256", process.env.ADMIN_TEAM_PASSWORD_SECRET).update(process.argv[1]).digest("base64url"))' '<new password>'`
+  with the secret in the environment, set it on `ap-team@loveiq.org` in both projects
+  (`PUT /auth/v1/admin/users/<id>` with the service key, `{"password": "<that value>"}`), end its
+  open sessions (`DELETE FROM auth.sessions WHERE user_id = '<id>'`), then update the Notion row.
+  Changing the secret itself needs the same `PUT` with the new mix, and a redeploy.
+- **Operators** can still mint a one-time link with the service key (`generate_link`, never
+  emailed) for a signed-in check; `/admin/auth/callback` takes it.
+- **Jarvis shares the session cookie.** `/jarvis/connect` reads the same Supabase session, so a
+  browser signed in to the admin says "`ap-team@loveiq.org` cannot use Jarvis" there; its "Sign
+  out" (this browser only) and the person's own code fix it.
+
 ## Admin sign-in return path (`next`)
 
 Since 2026-10-16 a link to an AP-Analytics view keeps its view through the sign-in. `proxy.ts`
 sends a signed-out (or idle) visitor to `/admin/login?next=<the page>`, the login page posts
-`next` with the email, `/api/admin/login` puts it on the magic link, and
-`/admin/auth/callback` redirects there after the usual session, allowlist and audit checks.
+`next` with the password, and `/api/admin/login` answers with it after the session, allowlist and
+audit steps; the page then opens it. An operator's one-time link carries it the same way to
+`/admin/auth/callback`.
 
 - **Every hop reads it through `safeAdminNext` (`shared/url/admin-next.ts`)**, so it cannot
   become an open redirect. Only a same-site path passes: it starts with `/admin/`, uses only

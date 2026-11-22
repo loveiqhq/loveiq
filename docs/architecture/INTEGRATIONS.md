@@ -15,7 +15,7 @@
 
 **Email Service:**
 
-- Resend - Transactional emails (contact form, invite emails, admin magic links)
+- Resend - Transactional emails (contact form, invite emails)
   - SDK/Client: `resend` npm package (exact version in `docs/versions.md` / `package.json`)
   - Auth: API key in `RESEND_API_KEY` env var
   - From address: `RESEND_FROM` env var (default: `LoveIQ <hello@send.loveiq.org>`)
@@ -73,9 +73,9 @@
 
 **Admin Auth:**
 
-- Supabase Auth - Magic link email authentication for admin panel
+- Supabase Auth - Password authentication for the admin panel: one team account, `ap-team@loveiq.org` (since 2026-11-22)
   - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
-  - Flow: Admin enters email → magic link sent → callback at `/admin/auth/callback` → session cookie set
+  - Flow: Admin enters the team password → `POST /api/admin/login` → `signInWithPassword` → session cookie set
   - Access control: `admin_users` table in Supabase acts as email allowlist
   - Session management: Server-side via `@supabase/ssr` cookie helpers (`features/admin/server/supabase-server.ts`, `shared/auth/supabase-middleware.ts`)
   - Role support: `features/admin/server/roles.ts` (role-based access control)
@@ -92,7 +92,7 @@
 
 **OAuth Integrations:**
 
-- Not applicable (magic links are passwordless, not OAuth)
+- Not applicable (a password sign-in, not OAuth)
 
 ## Monitoring & Observability
 

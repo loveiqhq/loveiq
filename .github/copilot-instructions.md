@@ -20,7 +20,7 @@ Before suggesting code, understand:
 **Type:** Next.js 16 App Router marketing site
 **Stack:** TypeScript, React, Tailwind CSS, Supabase, Resend
 **Purpose:** Pre-launch marketing with assessment funnel + contact form
-**Auth:** No end-user auth; admin panel uses Supabase Auth (magic links)
+**Auth:** No end-user auth; admin panel uses Supabase Auth (one team password since 2026-11-22)
 
 ## 🔒 Security Requirements (Critical)
 

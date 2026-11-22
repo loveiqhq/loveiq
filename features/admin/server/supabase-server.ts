@@ -18,7 +18,13 @@ export async function createSupabaseServer() {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             try {
-              cookieStore.set(name, value, options);
+              // The sign-in's flags (features/admin/server/sign-in.ts): never readable by scripts.
+              cookieStore.set(name, value, {
+                ...options,
+                httpOnly: true,
+                sameSite: "lax",
+                secure: process.env.NODE_ENV === "production",
+              });
             } catch {
               // Ignore — may be called from a server component where
               // cookies are read-only. The middleware handles refresh.

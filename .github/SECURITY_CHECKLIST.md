@@ -129,7 +129,7 @@ When reviewing PRs, pay special attention to:
 - ❌ SQL injection (not applicable - we use REST API)
 - ❌ XSS (dangerouslySetInnerHTML, unescaped user input)
 - ❌ CSRF (missing token verification)
-- ❌ Broken authentication (admin panel uses Supabase Auth magic links)
+- ❌ Broken authentication (admin panel uses Supabase Auth: the team password since 2026-11-22)
 - ❌ Sensitive data exposure (logging secrets, error messages)
 - ❌ XXE (not applicable - no XML parsing)
 - ❌ Broken access control (admin panel uses email allowlist via `admin_users` table)

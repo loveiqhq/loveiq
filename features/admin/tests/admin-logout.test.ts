@@ -54,6 +54,8 @@ describe("admin logout route", () => {
     expect(res.status).toBe(307); // NextResponse.redirect default
     expect(res.headers.get("location")).toMatch(/\/admin\/login$/);
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+    // This browser only: one shared team account, so never every session (22 Nov 2026).
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("clears the legacy admin_session cookie on logout", async () => {

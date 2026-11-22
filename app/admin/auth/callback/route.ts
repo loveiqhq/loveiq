@@ -1,50 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import {
+  createAdminAuthClient as createCallbackClient,
+  finishAdminSignIn,
+} from "@features/admin/server/sign-in";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { logAdminAction } from "@features/admin/server/audit";
 import { getClientIp } from "@shared/http/ratelimit";
-import { TEAM_COOKIE, teamCookieOptions } from "@shared/http/team-cookie";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { ADMIN_HOME, safeAdminNext } from "@shared/url/admin-next";
 
 /**
- * Creates a Supabase client that reads cookies from the request and writes
- * them onto a NextResponse object. This is the same pattern used by
- * middleware (createSupabaseMiddleware) and is required when the route
- * returns an explicit NextResponse.redirect() — the next/headers cookies()
- * API does NOT propagate to explicit redirect responses.
+ * The one-time link's landing: an operator's way in (a link minted with the service key, e.g.
+ * for a signed-in check). The team signs in with the team password (app/api/admin/login);
+ * nothing emails these links any more (22 Nov 2026).
  */
-function createCallbackClient(request: NextRequest, response: NextResponse) {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Supabase SSR sets browser cookies via `options` it constructs
-          // itself: sameSite="lax", httpOnly=true, secure=true in prod, path="/".
-          // Semgrep can't statically prove that across the SDK boundary —
-          // the rule fires on any literal containing a `sameSite` key. The
-          // OVERRIDE below forces sameSite=lax + secure regardless of what
-          // the SDK passes, so the final cookie is provably safe.
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value)); // nosemgrep
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, {
-              ...options,
-              sameSite: "lax",
-              secure: process.env.NODE_ENV === "production",
-            }); // nosemgrep
-          });
-        },
-      },
-    }
-  );
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
@@ -134,64 +103,12 @@ export async function GET(request: NextRequest) {
     return loginRedirect;
   }
 
-  // Log successful login
-  const ip = getClientIp(request);
-  await logAdminAction({
-    admin_email: user.email,
-    action: "login",
-    ip,
+  await finishAdminSignIn({
+    request,
+    response: redirectToAdmin,
+    supabase,
+    user: { id: user.id, email: user.email },
+    via: "link",
   });
-  await notifySlack({
-    channel: "ops",
-    kind: "admin_login",
-    text: `:lock: Admin login — *${escapeSlack(user.email)}*`,
-    username: "ops_alerts",
-  });
-
-  // Make the authenticated user's immutable Supabase ID available to the admin
-  // client for PostHog identification. Scope it to /admin so public-site
-  // activity is never associated with an administrator account.
-  redirectToAdmin.cookies.set("admin_posthog_distinct_id", user.id, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/admin",
-    maxAge: 7 * 24 * 60 * 60,
-  });
-
-  // R-13: a sign-in is activity. A stamp left from an earlier session that idled out
-  // (the proxy keeps it 7 days) would otherwise bounce the first page after this
-  // sign-in to "idle timeout". The proxy re-stamps it on every admin request after.
-  redirectToAdmin.cookies.set("__admin_activity", String(Date.now()), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60,
-  });
-
-  // A teammate's browser: what it does on Mira stays out of the numbers (shared/http/team-cookie).
-  redirectToAdmin.cookies.set(TEAM_COOKIE, "1", teamCookieOptions());
-
-  // R-03: rotate the CSRF cookie on privilege change. Clearing both prod and
-  // dev names is a no-op for whichever one isn't present in the request. The
-  // middleware re-mints a fresh CSRF value on the next request.
-  redirectToAdmin.cookies.delete("__Host-csrf");
-  redirectToAdmin.cookies.delete("__csrf");
-
-  // T-15: kill all OTHER active sessions for this admin user, keeping
-  // only the just-minted one. Stops the "magic link clicked on phone
-  // then laptop then public computer = three live sessions" failure
-  // mode. Supabase's `scope: "others"` revokes every refresh token
-  // EXCEPT the current request's, so this user's prior browser tabs
-  // are forced to re-auth on the next request. Best-effort: a failure
-  // here doesn't block the successful login; ops sees it in the
-  // audit log if the warn fires.
-  try {
-    await supabase.auth.signOut({ scope: "others" });
-  } catch (err) {
-    logger.warn({ err, email: user.email }, "T-15: failed to revoke other admin sessions on login");
-  }
-
   return redirectToAdmin;
 }

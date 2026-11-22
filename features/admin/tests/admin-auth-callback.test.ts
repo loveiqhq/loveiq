@@ -93,6 +93,19 @@ describe("GET /admin/auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
   });
 
+  it("signs a person out everywhere else (T-15), but never the team account's teammates", async () => {
+    await callback();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "others" });
+    auth.signOut.mockClear();
+    auth.getUser.mockResolvedValue({ data: { user: { id: "t1", email: "ap-team@loveiq.org" } } });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: "ap-team@loveiq.org", role: "admin" }],
+    });
+    expect((await callback()).headers.get("location")).toBe("http://localhost/admin/ap");
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
   it("stamps nothing for someone not on the admin list", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
     const res = await callback();

@@ -157,10 +157,10 @@
 
 ## Email Templates
 
-| Task                   | Files                                              |
-| ---------------------- | -------------------------------------------------- |
-| Admin magic link email | `features/admin/server/emails/admin-magic-link.ts` |
-| Invite email template  | `features/invite/emails/invite.ts`                 |
+| Task                          | Files                                                              |
+| ----------------------------- | ------------------------------------------------------------------ |
+| Admin sign-in (team password) | `app/api/admin/login/route.ts`, `features/admin/server/sign-in.ts` |
+| Invite email template         | `features/invite/emails/invite.ts`                                 |
 
 ## Glossary
 

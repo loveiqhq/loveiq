@@ -44,7 +44,7 @@ backup a day for 7 days, so up to a day of writes can be lost.
   view and policy) and `supabase_migrations` (which migrations are applied). Beside each copy,
   a small `.cron.sql` file holds the live pg_cron jobs as `cron.schedule(...)` statements:
   the restored migration history would otherwise stop the migrations from recreating them.
-- **Not in it:** sign-in accounts (`auth`): staff (email magic link) and, since 20 Nov 2026,
+- **Not in it:** sign-in accounts (`auth`): staff (the team account `ap-team@loveiq.org` and its password) and, since 20 Nov 2026,
   Mira's users (email code or Google). Staff sign in again after a restore; the allowlist
   `admin_users` is in `public`. Mira is different: `mira_user.id` IS the sign-in id
   (`mira_user_id_fkey` → `auth.users`), so a restore leaves that key out (step 4), and a Mira

@@ -8,43 +8,26 @@ test.describe("Admin Panel", () => {
   });
 
   test.describe("Login page", () => {
-    test("shows login page with email input and magic link button", async ({ page }) => {
+    test("asks for the team password only (22 Nov 2026)", async ({ page }) => {
       await page.goto("/admin/login");
-      await expect(page.getByPlaceholder(/enter your email/i)).toBeVisible();
-      await expect(page.getByRole("button", { name: /send magic link/i })).toBeVisible();
+      const password = page.getByLabel("Password");
+      await expect(password).toBeVisible();
+      await expect(password).toHaveAttribute("type", "password");
+      await expect(password).toHaveAttribute("required", "");
+      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+      await expect(page.getByText(/magic link|enter your email/i)).toHaveCount(0);
     });
 
-    test("shows validation error for empty submit", async ({ page }) => {
+    test("refuses a wrong password and stays on the form", async ({ page }) => {
       await page.goto("/admin/login");
-      const emailInput = page.getByPlaceholder(/enter your email/i);
-      // HTML5 required attribute should prevent empty submission
-      await expect(emailInput).toHaveAttribute("required", "");
-    });
-
-    test("submits email and shows confirmation message", async ({ page }) => {
-      await page.goto("/admin/login");
-      await page.getByPlaceholder(/enter your email/i).fill("test@example.com");
-      await page.getByRole("button", { name: /send magic link/i }).click();
-
-      // After submission, should show the "Check your email" confirmation
-      // or an error message (if Supabase/Resend is not configured)
-      const confirmation = page.getByText(/check your email/i);
-      const errorMessage = page.getByText(/error|wrong|not authorized|unable/i).first();
-
-      await expect(confirmation.or(errorMessage)).toBeVisible({ timeout: 10000 });
-    });
-
-    test("shows 'Try a different email' after successful submit", async ({ page }) => {
-      await page.goto("/admin/login");
-      await page.getByPlaceholder(/enter your email/i).fill("test@example.com");
-      await page.getByRole("button", { name: /send magic link/i }).click();
-
-      // If the magic link was sent, there should be a "Try a different email" option
-      const tryDifferent = page.getByText(/try a different email/i);
-      const errorMessage = page.getByText(/error|wrong|not authorized|unable/i).first();
-
-      // Either the confirmation flow or an error will show
-      await expect(tryDifferent.or(errorMessage)).toBeVisible({ timeout: 10000 });
+      await page.getByLabel("Password").fill("not-the-password");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      // Incorrect password with Supabase configured; a plain error without it (CI's build).
+      await expect(page.getByRole("alert")).toHaveText(
+        /incorrect password|unable to process|something went wrong|try again later/i,
+        { timeout: 10000 }
+      );
+      await expect(page).toHaveURL(/\/admin\/login/);
     });
 
     test("shows error message from URL params", async ({ page }) => {
