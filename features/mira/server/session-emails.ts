@@ -126,7 +126,7 @@ export function sessionEmail(
           preheader: "Your updated invite is attached.",
           heading: "Your new time",
           paragraphs: [
-            `Done: from now on we meet every ${day} at ${slot.time}.`,
+            `Done: from now on we meet every ${day} at ${slot.time} (${zone}).`,
             "The updated invite is attached; opening it moves the session in your calendar.",
           ],
           card: upcoming("Next one"),

@@ -22,6 +22,13 @@ describe("the weekly session's emails (22 Nov 2026 design)", () => {
     expect(e.html).toMatch(/>Nov<\/div>[\s\S]*?>24<\/div>[\s\S]*?>Tue<\/div>/);
   });
 
+  it("name the zone in a new time's sentence: a move may change only the zone", () => {
+    const ny = { weekday: 7, time: "08:00", timeZone: "America/New_York" };
+    const e = sessionEmail("moved", { slot: ny, links, googleUrl: "https://g/x", now });
+    expect(e.text).toContain("Done: from now on we meet every Sunday at 08:00 (New York time).");
+    expect(e.html).toContain("every Sunday at 08:00 (New York time).");
+  });
+
   it("read the date where the session is, not where the server is", () => {
     // Monday 23:30 in Los Angeles is already Tuesday in UTC.
     const la = { weekday: 1, time: "23:30", timeZone: "America/Los_Angeles" };
