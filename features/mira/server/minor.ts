@@ -11,6 +11,8 @@ import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 import { deleteSlot } from "./weekly-sessions";
+import { deleteBodyChecks } from "./body-check";
+import { dropPendingChange } from "./email-change";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -20,8 +22,8 @@ import { deleteSlot } from "./weekly-sessions";
  * reads crisis words first. The account's nudges go off, its chats are deleted and no longer
  * kept, and its Settings choices (reply language, appearance) are cleared, as are its self-check results
  * (server/checks.ts); the browser forgets its
- * own chat (MiraChat). Its Notify me requests for coming-soon coaches go too (22 Nov 2026), so
- * nobody under 18 is told a coach for sex is ready.
+ * own chat (MiraChat). Its Notify me requests for coming-soon coaches and the coach finder's
+ * outcomes go too (22 Nov 2026), so nobody under 18 is told a coach for sex is ready.
  *
  * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
  * and none can be added again (the passkey, email and Google-connect routes answer 403). Its
@@ -39,6 +41,27 @@ export async function isMinor(userId: string | null): Promise<boolean> {
   );
   if (!res.ok) throw new Error(`mira minor read failed (${res.status})`);
   return ((await res.json()) as unknown[]).length > 0;
+}
+
+/** How new a Mira profile must be to count as made by this sign-in (clocks may differ a little). */
+const NEW_ACCOUNT_MS = 5 * 60_000;
+
+/**
+ * A sign-in from a browser Mira stopped as under 18 (the stop came while signed out, so only its
+ * cookie has it). A Mira account this sign-in made takes the stop, as it has nothing of its own
+ * yet. An existing one is never stopped or wiped on the cookie alone: it may be someone else's on
+ * a shared browser, and the cookie isn't signed. This browser stays stopped (isMinor) and the
+ * account stays as it was. True when the browser is stopped, so the caller keeps none of its chat.
+ */
+export async function carryMinorStop(
+  userId: string,
+  profileCreatedAt: string | undefined
+): Promise<boolean> {
+  if ((await cookies()).get(MINOR_COOKIE)?.value !== "1") return false;
+  if (Date.now() - Date.parse(profileCreatedAt ?? "") < NEW_ACCOUNT_MS) {
+    await stopForMinor(userId);
+  }
+  return true;
 }
 
 /** Remembers the stop on this browser and the account. A failed write is logged, never shown. */
@@ -77,6 +100,9 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     forgetJournal(userId),
     // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
     deleteSlot(userId),
+    // The body check too, as the other self-checks, and any change of email still pending.
+    deleteBodyChecks(userId),
+    dropPendingChange(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

@@ -196,9 +196,17 @@ export function personalInstructions(
     const ago = (d: number) => (d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`);
     lines.push(
       "Self-checks they took in the app and allowed you to use (the latest of each; a questionnaire's band, never a diagnosis):",
-      ...person.checks.map((c) => `- ${c.title} (${c.name}), ${ago(c.daysAgo)}: ${c.band}.`),
+      ...person.checks.map(
+        (c) =>
+          `- ${c.title} (${c.name}), ${ago(c.daysAgo)}: ${c.band}${c.support ? ", and in that same check they said they have had thoughts of being better off dead or of hurting themselves (question 9)" : ""}.`
+      ),
       "Use them only to tailor your pace, tone and suggestions. Never diagnose, name a condition or quote a score, and bring them up only when it truly helps. Where a band is high, gently suggesting a doctor or therapist fits your rules."
     );
+    if (person.checks.some((c) => c.support)) {
+      lines.push(
+        "Thoughts of being better off dead or of hurting themselves in a check matter more than its band: never call that check minimal or reassure them about it. In your first reply in this chat, gently ask how they are with those thoughts now and offer the support lines for their country, then follow their lead. If they show any risk now, follow rail 14 at once; if they say they are safe, you may keep coaching with care and need not ask again in this chat."
+      );
+    }
   }
   const styleLines = styleInstructions(style);
   if (styleLines.length > 0) {
@@ -254,7 +262,7 @@ export function weeklySessionInstructions(slot: BookedSlot | null): string {
   return [
     "WEEKLY SESSION",
     slot
-      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emailed them the calendar invite. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
+      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
       : "Nothing is booked. To offer a weekly session, ask the weekly question with its marker, [[ASK:weekly]]: the app shows a time picker that books it and emails the calendar invite. Only the picker books: never say a session is booked, or that an invite or reminder is coming, until this section says it is booked.",
   ].join("\n");
 }

@@ -90,7 +90,7 @@ export default function PicksCard() {
                       {p.reason}
                     </span>
                   </span>
-                  <ChevronIcon className="shrink-0 text-ap-quiet transition-transform group-hover:translate-x-0.5" />
+                  <ChevronIcon className="shrink-0 text-ap-muted transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </li>
             ))}

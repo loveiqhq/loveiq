@@ -4,9 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { SESSION_OPENING } from "@features/mira/server/calendar";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
+import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
@@ -30,10 +32,11 @@ import {
  * (21 Nov 2026, after Marcus asked for a less noisy phone version): no frame around the chat, a
  * welcome line in the middle, one pill-shaped composer, Mira's words as plain text and the
  * person's in a grey bubble. On phones the composer sits at the bottom from the start.
- * Decisions kept from 18 Nov: typing only (no voice yet), no invented numbers or quotes on the
- * page (so V2's "trained on 100M+ words" line and its review score are not shown), the 18+ and
- * sensitive-data consent before the first anonymous message (now a short step when it is sent),
- * and the sign-up card once an anonymous person's free message is answered. Board "01
+ * Since 22 Nov: Talk (voice, ui/voice) beside typing; V2's "trained on 100+ scientific papers &
+ * 100M+ words" line (Eman's call, 21 Nov); a rating line only from real ratings (ui/reviews,
+ * nothing below the threshold). Kept: the 18+ and sensitive-data consent before the first
+ * anonymous message (a short step when it is sent), and the sign-up card once an anonymous
+ * person's free message is answered. Board "01
  * Anonymous chat (embed) copy": the "Keep this chat" card after Mira's first reply.
  */
 
@@ -58,8 +61,7 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const SKIP_ANSWER = "I’d rather skip this one.";
-/** The line the weekly session's link sends for the person, so Mira opens the session. */
-export const SESSION_OPENING = "I’m here for my weekly session.";
+export { SESSION_OPENING };
 
 /**
  * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
@@ -87,13 +89,22 @@ export default function MiraChat({
 }: {
   signedIn: boolean;
   initialChatId: string | null;
-  /** The guide's "Ask Mira about this": the composer starts with it; only the person sends it. */
+  /**
+   * The words for `?ask=N` (the guide's "Ask Mira about this") or `?say=<check>`, which the page
+   * builds from the id: they wait in the composer while the address still asks for them, and only
+   * the person sends them.
+   */
   starter?: string | null;
-  /** Opened from the weekly session's link: a new chat that Mira opens as the session. */
-  session?: boolean;
+  /**
+   * Opened from the weekly session's link: a new chat that Mira opens as the session. With the
+   * session's key (app/mira/session), this browser opens each session once: Back can bring the
+   * page back from the router's cache, and without "Remember our conversations" there is no
+   * stored chat for the page to reopen instead.
+   */
+  session?: boolean | string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState(starter ?? "");
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
@@ -109,6 +120,8 @@ export default function MiraChat({
   // prompts may not belong on screen: they are left out rather than flashed.
   const [ready, setReady] = useState(signedIn && !initialChatId);
   const [style, setStyle] = useState<Style>({});
+  // "Mira replies in" (Settings): Talk listens and speaks in it too.
+  const [replyLanguage, setReplyLanguage] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
@@ -144,6 +157,7 @@ export default function MiraChat({
     onTurn: (text, o) => void send(text, { ...o, voice: true }),
     chatId: () => chatId,
     held: supportOpen || crisis !== null || styleOpen,
+    replyLanguage,
   });
   const voiceOn = voice.phase !== "off";
 
@@ -171,12 +185,13 @@ export default function MiraChat({
     void (async () => {
       const me = await miraApi<{
         chats: ChatSummary[];
-        profile: { style: Style };
+        profile: { style: Style; reply_language?: string | null };
         bodyCheck?: { due: BodyDue };
       }>("/api/mira/me");
       if (me.ok) {
         setChats(me.data.chats);
         setStyle(me.data.profile.style ?? {});
+        setReplyLanguage(me.data.profile.reply_language ?? null);
         setBodyDue(me.data.bodyCheck?.due ?? null);
       }
       if (initialChatId) {
@@ -240,14 +255,27 @@ export default function MiraChat({
     });
   }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
-  // "Ask Mira to help" on the goals card (/mira?prompt=goal): the question waits in the
-  // composer, unsent, and the address loses the parameter so a reload doesn't bring it back.
+  // A starter from the address waits in the composer, unsent: "Ask Mira to help" on the goals
+  // card (?prompt=goal), the guide's "Ask Mira about this" (?ask=N, counted once as guide_ask) and
+  // a check's "Talk to Mira" (?say=…). The address then loses it, so neither a reload nor Back
+  // (which can bring this page back from the router's cache, starter and all) puts it there
+  // again or counts it twice.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("prompt") !== "goal") return;
-    window.history.replaceState(null, "", "/mira");
-    setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
-    inputRef.current?.focus();
-  }, []);
+    const url = new URL(window.location.href);
+    const asked = url.searchParams;
+    const goal = asked.get("prompt") === "goal";
+    const practice = asked.get("ask");
+    if (!goal && practice === null && !asked.has("say")) return;
+    for (const key of ["prompt", "ask", "say"]) asked.delete(key);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    if (goal) {
+      setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
+      inputRef.current?.focus();
+    } else if (starter) {
+      setInput(starter);
+      if (practice !== null) track("guide_ask", practice);
+    }
+  }, [starter]);
 
   // The composer grows with what is typed, up to about six lines, then scrolls inside.
   useEffect(() => {
@@ -317,6 +345,7 @@ export default function MiraChat({
       return;
     }
     if (!res.ok || !res.data.reply) {
+      if (opts.session) local.saveSessionOpened(null); // not opened: a later visit tries again
       setMessages(messages);
       setInput(message);
       setError({
@@ -345,8 +374,9 @@ export default function MiraChat({
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
-    // composer stays, and the server answers a crisis message whatever the limits.
-    if (res.data.freeLeft === 0 && !res.data.crisis) setGate(true);
+    // composer stays, and the server answers a crisis message whatever the limits. Nor after an
+    // under-18 stop: nobody under 18 is asked to make an account.
+    if (res.data.freeLeft === 0 && !res.data.crisis && !res.data.minor) setGate(true);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (res.data.refer) referred.current = true;
     if (res.data.minor) {
@@ -425,9 +455,10 @@ export default function MiraChat({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  /** An answer button: answered out loud in voice mode, as typed otherwise. */
-  const reply = (text: string, o?: { skip?: boolean }) =>
-    voiceOn ? voice.say(text, o) : void send(text, o);
+  /** An answer button: answered out loud in voice mode, as typed when the session can't take it. */
+  const reply = (text: string, o?: { skip?: boolean }) => {
+    if (!voiceOn || !voice.say(text, o)) void send(text, o);
+  };
 
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
@@ -469,6 +500,7 @@ export default function MiraChat({
   /** Off while the sign-up card shows, so the chat it promises to bring along isn't wiped. */
   function newChat() {
     if (sending || voiceOn) return; // a reply on its way, or a voice session, belongs to this chat
+    voice.dismissEnded();
     setMessages([]);
     setChatId(null);
     setError(null);
@@ -579,6 +611,10 @@ export default function MiraChat({
   useEffect(() => {
     if (!session || !signedIn || sessionOpened.current) return;
     sessionOpened.current = true;
+    if (typeof session === "string") {
+      if (local.sessionOpened() === session) return;
+      local.saveSessionOpened(session);
+    }
     window.history.replaceState(null, "", "/mira");
     void send(SESSION_OPENING, { session: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
@@ -615,7 +651,7 @@ export default function MiraChat({
                     disabled={!ready}
                     aria-label="Coaching style"
                     title="How Mira coaches you"
-                    className={`${ICON_BUTTON} ${showTip ? "bg-ap-ground ring-2 ring-[#e7d8f8]" : ""}`}
+                    className={`${ICON_BUTTON} ${showTip ? "bg-ap-ground ring-2 ring-ap-mist" : ""}`}
                   >
                     <SlidersIcon />
                     <span className="hidden sm:inline">Coaching style</span>
@@ -699,7 +735,7 @@ export default function MiraChat({
               aria-label="Your chats"
               className="hidden w-[248px] shrink-0 flex-col gap-0.5 overflow-y-auto py-3 pl-5 pr-2 lg:flex"
             >
-              <p className="px-3 pb-1 text-[12px] font-semibold text-ap-quiet">Your chats</p>
+              <p className="px-3 pb-1 text-[12px] font-semibold text-ap-muted">Your chats</p>
               {chats.map((c) => (
                 <a
                   key={c.id}
@@ -713,7 +749,7 @@ export default function MiraChat({
             </nav>
           ) : null}
 
-          <main className="flex min-w-0 flex-1 flex-col">
+          <main id="main-content" className="flex min-w-0 flex-1 flex-col">
             {/* Wider screens: the welcome, the composer and the prompts sit together in the
                 middle (the board); the spacers give way to the chat once it starts. */}
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
@@ -724,7 +760,7 @@ export default function MiraChat({
               className={
                 empty
                   ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] outline-none sm:flex-initial sm:px-6 sm:pb-0"
-                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:#ddd7e6_transparent] [scrollbar-width:thin]"
+                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:rgb(var(--ap-mist))_transparent] [scrollbar-width:thin]"
               }
             >
               {showWelcome ? (
@@ -907,7 +943,7 @@ export default function MiraChat({
                                 type="button"
                                 onClick={() => answerNps(n)}
                                 aria-label={`${n} out of 10`}
-                                className="h-10 min-w-[40px] rounded-full border border-ap-line bg-white text-[14px] hover:border-[#d9d4e2] hover:bg-ap-ground"
+                                className="h-10 min-w-[40px] rounded-full border border-ap-line bg-white text-[14px] hover:border-ap-mist hover:bg-ap-ground"
                               >
                                 {n}
                               </button>
@@ -1150,10 +1186,10 @@ export default function MiraChat({
         </div>
       </div>
 
-      <div className="mx-auto max-w-[760px] px-4 pb-8 pt-4 sm:px-6">
+      <footer className="mx-auto max-w-[760px] px-4 pb-8 pt-4 sm:px-6">
         <p className="text-[12px] leading-relaxed text-ap-muted">{DISCLAIMER}</p>
         <LegalLinks className="mt-4" />
-      </div>
+      </footer>
 
       {pending !== null ? (
         <Modal label="Before your first message" onClose={() => setPending(null)}>
@@ -1170,7 +1206,7 @@ export default function MiraChat({
                 type="checkbox"
                 checked={tick}
                 onChange={(e) => setTick(e.target.checked)}
-                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-ap-purple"
               />
               <span>
                 I&apos;m 18 or older, and I agree that Mira may process what I share about my sex
@@ -1221,7 +1257,7 @@ const MIRA_INK =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
 const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const CHIP =
-  "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-[#d9d4e2] hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
+  "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-ap-mist hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
 const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
 const ICON_BUTTON =

@@ -11,15 +11,18 @@ const OUTLINE_PILL =
  * Settings' "Weekly session" section (board 08c's "Session reminders"): the booked time with a
  * way to change it, reminder emails on or off, and cancelling. Each control saves at once, apart
  * from the page's Save button. Fetches its own data; renders nothing for an account Mira stopped
- * as under 18. Its id is the anchor the session emails' "Change or cancel" link opens.
+ * as under 18. Settings mounts it in the anchor the session emails' "Change or cancel" link
+ * opens (#weekly).
  */
 export function WeeklySessionSettings() {
-  const { state, load, book, setPaused, cancel } = useWeeklySession();
+  const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
   const [sheet, setSheet] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A cancellation that couldn't be emailed: its calendar update, to open in a calendar instead.
+  const [file, setFile] = useState<string | null>(null);
 
   if (state.status === "signed-out" || state.status === "unavailable") return null;
   const slot = state.status === "ready" ? state.slot : null;
@@ -32,6 +35,22 @@ export function WeeklySessionSettings() {
     setBusy(false);
     if (failed) setError(failed);
     else setStatus(done);
+  }
+
+  async function cancelSession() {
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    const r = await cancel();
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    setConfirm(false);
+    setFile(r.emailed ? null : r.ics);
+    setStatus(
+      r.emailed
+        ? "Your weekly session is cancelled."
+        : "Your weekly session is cancelled, but we couldn’t email the update, so it may still be in your calendar. Delete it there, or open this file with Apple Calendar or Outlook."
+    );
   }
 
   return (
@@ -93,26 +112,20 @@ export function WeeklySessionSettings() {
                   e.target.checked ? "Reminders are on." : "Reminders are paused."
                 )
               }
-              className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
             />
           </label>
           {confirm ? (
             <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
               <p>
-                Cancel your weekly session? We’ll email an update that takes it out of your
-                calendar.
+                Cancel your weekly session? An update that takes it out of your calendar comes by
+                email, or here if the email can’t go.
               </p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const failed = await cancel();
-                      if (!failed) setConfirm(false);
-                      return failed;
-                    }, "Your weekly session is cancelled.")
-                  }
+                  onClick={() => void cancelSession()}
                   className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
                 >
                   Cancel session
@@ -151,9 +164,21 @@ export function WeeklySessionSettings() {
         </div>
       )}
 
-      <p role="status" className="min-h-[20px] text-[14px] text-ap-good-ink">
+      <p
+        role="status"
+        className={`min-h-[20px] text-[14px] ${file ? "text-ap-body" : "text-ap-good-ink"}`}
+      >
         {status}
       </p>
+      {file && !slot ? (
+        <a
+          href={`data:text/calendar;charset=utf-8,${encodeURIComponent(file)}`}
+          download="mira-weekly-session-cancelled.ics"
+          className={`${OUTLINE_PILL} w-fit`}
+        >
+          Download the cancellation
+        </a>
+      ) : null}
       {error ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           {error}

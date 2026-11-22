@@ -1,6 +1,13 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
-import { googleCalendarUrl, joinedOccurrence, nextOccurrence, type WeeklySlot } from "./calendar";
+import {
+  googleCalendarUrl,
+  joinedOccurrence,
+  nextOccurrence,
+  SESSION_OPENING,
+  sessionKey,
+  type WeeklySlot,
+} from "./calendar";
 import { logMiraEvent } from "./store";
 
 /**
@@ -153,9 +160,35 @@ export function calendarText() {
   };
 }
 
+/** A chat is stored once Mira's reply is in, up to about a minute after the visit that asked. */
+const REPLY_MS = 2 * 60_000;
+
 /**
- * Attendance: the session was opened within 30 minutes of a start its reminder went out for.
- * Marked once per start (joined_at), so opening it twice counts once. True when marked now.
+ * The chat this visit's session was opened in, if it was: the newest chat that starts with the
+ * session's line (its title) and belongs to the same session. A later visit (a reload, Back, the
+ * reminder's link again) reopens it, so Mira's opening is written once per session. Null for a
+ * new session, or without "Remember our conversations" (nothing is stored).
+ */
+export async function sessionChat(
+  userId: string,
+  slot: WeeklySlot | null,
+  at: Date
+): Promise<string | null> {
+  const since = new Date(at.getTime() - 8 * 86_400_000).toISOString();
+  const res = await supabaseFetch(
+    `/rest/v1/mira_chat?user_id=eq.${enc(userId)}&title=eq.${enc(SESSION_OPENING)}&created_at=gte.${enc(since)}&select=id,created_at&order=created_at.desc&limit=1`
+  );
+  if (!res.ok) throw new Error(`mira session chat read failed (${res.status})`);
+  const [chat] = (await res.json()) as Array<{ id: string; created_at: string }>;
+  if (!chat) return null;
+  const opened = new Date(Date.parse(chat.created_at) - REPLY_MS);
+  return sessionKey(slot, opened) === sessionKey(slot, at) ? chat.id : null;
+}
+
+/**
+ * Attendance: the session was opened while it was open (from its reminder, an hour before, to 30
+ * minutes after the start), for a start its reminder went out for. Marked once per start
+ * (joined_at), so opening it twice counts once. True when marked now.
  */
 export async function markJoined(slot: StoredSlot, userId: string, at: Date): Promise<boolean> {
   const start = joinedOccurrence(slot, at);

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   bandOf,
-  changeSince,
   checkById,
   nextTakeAt,
   type Check,
@@ -19,27 +18,35 @@ import { miraApi } from "../api";
 import { CheckRunner } from "./CheckRunner";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { TrendChart, trendSummary } from "./TrendChart";
-import { FRAME_TAB, drafts, shortDate, useChecks, type CheckResult, type ChecksData } from "./data";
+import {
+  FRAME_TAB,
+  bandText,
+  drafts,
+  shortDate,
+  sinceLastTime,
+  useChecks,
+  type CheckResult,
+  type ChecksData,
+} from "./data";
 
 /**
  * /mira/assessments/<check>: a self-check's own page. Before the first check ever, a plain note on
  * what is kept and who sees it; then the questions (CheckRunner); then the result as a person
  * would want to hear it (the band in plain words, what it can mean day to day and for body
- * confidence and intimacy, two or three next steps, the change since last time), and the history
- * with its trend. The mood check's question 9 opens the support lines the moment it is answered
- * above "Not at all", whatever the total.
+ * confidence and intimacy, two or three next steps, the points since last time and no verdict on
+ * them), and the history with its trend. The mood check's question 9 opens the support lines the
+ * moment it is answered above "Not at all", whatever the total.
  */
-
-/** "1 point", "4 points". */
-const points = (diff: number) => `${Math.abs(diff)} ${Math.abs(diff) === 1 ? "point" : "points"}`;
 
 export type Practice = { number: number; name: string; time: string; bestFor: string };
 
 type Saved = {
   result: CheckResult;
   previous: { at: string; score: number } | null;
-  support: boolean;
 };
+
+/** Under a result whose question 9 (the last) opened the support lines: the total is not the story. */
+const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
 
 const EYEBROW = "font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ap-muted";
 const PLUM_LINK =
@@ -53,7 +60,7 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -173,7 +180,10 @@ export default function CheckPage({
       </nav>
       {error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
       {!data && !error ? <Skeleton /> : null}
@@ -229,7 +239,7 @@ export default function CheckPage({
           practice={practice}
           headingRef={headingRef}
           onStart={begin}
-          onHelp={() => setPanel(saved?.support ? "q9" : "help")}
+          onHelp={() => setPanel(summary.results.at(-1)!.support ? "q9" : "help")}
           onUseChecks={(on) => setData((d) => d && { ...d, useChecks: on })}
         />
       ) : null}
@@ -249,7 +259,7 @@ function QuestionNineWords() {
       </p>
       <p className="mt-2">
         You can also{" "}
-        <Link href="/mira?say=support" className="font-semibold text-[#561dbd] underline">
+        <Link href="/mira?say=support" className="font-semibold text-ap-link underline">
           talk to Mira now
         </Link>
         .
@@ -319,7 +329,7 @@ function Intro({
 function PrivacyNote() {
   const items = [
     "Your answers are health information. We keep them in your account so you can follow how you’re doing over time.",
-    "Your results are for you. Mira sees only the band, like “mild”, and only if you allow it. Our own statistics count checks, never answers.",
+    "Your results are for you. Mira sees only the band, like “mild”, and whether the mood check opened the support lines, and only if you allow it. Our own statistics count checks, never answers.",
     "As on the rest of our site, our analytics tools record what’s on screen, so they see your answers here too.",
     "Delete your results whenever you like in Settings, or by deleting your account.",
   ];
@@ -340,11 +350,11 @@ function PrivacyNote() {
               height="16"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#795fc8"
+              stroke="currentColor"
               strokeWidth="2.4"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="mt-[3px] shrink-0"
+              className="mt-[3px] shrink-0 text-ap-purple"
             >
               <path d="M20 6L9 17l-5-5" />
             </svg>
@@ -400,8 +410,13 @@ function Result({
   const last = results.at(-1)!;
   const band = bandOf(check, last.score);
   const before = results.length > 1 ? results.at(-2)! : null;
-  const change = before ? changeSince(check, before.score, last.score) : null;
-  const help = band.professional || saved?.support;
+  const change = before ? sinceLastTime(before.score, last.score) : null;
+  // Question 9 above "Not at all", on this visit or any later one (the stored result says so).
+  const support = last.support;
+  const help = band.professional || support;
+  // Offered when the page opened with it off, and kept in view once ticked: its saved state and
+  // a failed save's message stay where the person made the change.
+  const [offerUse] = useState(!data.useChecks);
   const steps: ReactNode[] = [];
   if (help) {
     steps.push(
@@ -438,10 +453,10 @@ function Result({
   }
   return (
     <article className="mt-6">
-      {saved?.support ? (
+      {support ? (
         <section
           aria-labelledby="q9-h"
-          className="mb-6 max-w-[680px] rounded-3xl border border-[#d9c8f6] bg-ap-lilac p-5 motion-safe:animate-mira-in"
+          className="mb-6 max-w-[680px] rounded-3xl border border-ap-mist bg-ap-lilac p-5 motion-safe:animate-mira-in"
         >
           <h2 id="q9-h" className="font-serif text-[22px] font-medium">
             You don&rsquo;t have to carry this alone
@@ -482,30 +497,26 @@ function Result({
           <span className="tabular-nums">
             {last.score} of {check.max}
           </span>
-          {change && before ? (
-            <span>
-              {change.diff === 0
-                ? `Same score as on ${shortDate(before.at)}`
-                : `${points(change.diff)} ${change.diff < 0 ? "lower" : "higher"} than on ${shortDate(before.at)}`}
-              {change.diff !== 0 && change.reliable === true ? " · a real change" : ""}
-              {change.diff !== 0 && change.reliable === false
-                ? " · within the usual ups and downs"
-                : ""}
-            </span>
-          ) : null}
+          {change ? <span>{change[0]!.toUpperCase() + change.slice(1)}</span> : null}
         </p>
+        {support ? (
+          <p className="mt-3 text-[15px] font-semibold leading-snug text-ap-ink">{NOT_THE_SCORE}</p>
+        ) : null}
       </header>
 
-      <div className="mt-6 grid max-w-[680px] gap-5 sm:grid-cols-2">
-        <section>
-          <h2 className={EYEBROW}>In daily life</h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.daily}</p>
-        </section>
-        <section>
-          <h2 className={EYEBROW}>For body confidence and intimacy</h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.intimacy}</p>
-        </section>
-      </div>
+      {/* A low band's words are reassurance ("holding up"), which that answer outweighs. */}
+      {support && !band.professional ? null : (
+        <div className="mt-6 grid max-w-[680px] gap-5 sm:grid-cols-2">
+          <section>
+            <h2 className={EYEBROW}>In daily life</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.daily}</p>
+          </section>
+          <section>
+            <h2 className={EYEBROW}>For body confidence and intimacy</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ap-body">{band.intimacy}</p>
+          </section>
+        </div>
+      )}
 
       <section aria-labelledby="next-h" className="mt-10 max-w-[680px]">
         <h2 id="next-h" className="font-serif text-[22px] font-medium">
@@ -514,7 +525,7 @@ function Result({
         <ol className="mt-4 flex flex-col gap-3">{steps}</ol>
       </section>
 
-      {!data.useChecks ? (
+      {offerUse ? (
         <section aria-label="What Mira may use" className="mt-8 max-w-[680px]">
           <UseChecksSwitch on={data.useChecks} onChange={onUseChecks} />
         </section>
@@ -568,6 +579,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
       </h2>
       <p className="mt-2 text-[14px] leading-relaxed text-ap-body">
         {trendSummary(check, results)}
+        {results.at(-1)?.support ? ` ${NOT_THE_SCORE}` : ""}
       </p>
       <div className="mt-4 rounded-2xl border border-ap-line p-3">
         <TrendChart check={check} results={results} />
@@ -591,7 +603,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
           {[...results].reverse().map((r) => (
             <tr key={r.at} className="border-t border-ap-line">
               <td className="py-2.5">{shortDate(r.at)}</td>
-              <td className="py-2.5">{bandOf(check, r.score).label}</td>
+              <td className="py-2.5">{bandText(check, r)}</td>
               <td className="py-2.5 text-right tabular-nums">
                 {r.score} <span className="text-ap-muted">of {check.max}</span>
               </td>
@@ -610,7 +622,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  */
 export function BodyCheckPage() {
   const router = useRouter();
-  const { data, error } = useChecks();
+  const { data, error, retry } = useChecks();
   const body = data?.bodyCheck;
   return (
     <MiraAppFrame active={FRAME_TAB} email={data?.email} name={data?.name}>
@@ -623,14 +635,12 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {error ? (
+      {error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">
-          {error}
-        </p>
-      ) : null}
-      {data && !body ? (
-        <p role="alert" className="mt-4 text-ap-bad-ink">
-          Your body checks couldn&rsquo;t be loaded. Please try again.
+          {error ?? "Your body checks couldn’t be loaded."}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
       <div className="mt-6 max-w-[600px]">

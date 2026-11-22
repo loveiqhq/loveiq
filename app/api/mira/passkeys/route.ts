@@ -33,6 +33,7 @@ import { anonId } from "@features/mira/server/anon";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { deviceLabel, isRecentSignIn, recordSession } from "@features/mira/server/devices";
+import { loginEmail } from "@features/mira/server/email-change";
 import { isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
 import {
@@ -53,13 +54,18 @@ import {
   type ChallengePurpose,
 } from "@features/mira/server/passkeys";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
-import { mintSignInCode } from "@features/mira/server/sign-in";
+import {
+  mintSignInCode,
+  passkeyAddedNotice,
+  sendNeutralEmail,
+} from "@features/mira/server/sign-in";
 import {
   getProfile,
   logMiraEvent,
   updateProfile,
   upsertProfileAtSignIn,
 } from "@features/mira/server/store";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -253,6 +259,13 @@ export async function POST(request: Request) {
       { via: body.via, synced: info.credentialBackedUp }
     );
     if (body.via === "offer") logMiraEvent("passkey_offer_accepted", { userId: account.id });
+    // The owner hears of every new passkey, wherever it was added from (security review M1).
+    const label = passkey.label;
+    scheduleAfterResponse("mira-passkey-added-notice", async () => {
+      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label)))) {
+        logger.warn("mira: the new-passkey notice was not sent");
+      }
+    });
     return NextResponse.json({ passkey });
   } catch (err) {
     logger.error({ err }, "mira: a passkey step failed");
@@ -310,9 +323,15 @@ async function signIn(
   const userId = passkey.user_id;
   const profile = await getProfile(userId);
   if (!profile) return fail(DIDNT_WORK, 400);
+  // A browser or an account Mira stopped as under 18. A passkey's account already exists, so the
+  // browser's cookie alone never stops or wipes it (carryMinorStop); this browser stays stopped.
   if (await isMinor(userId)) return fail(ADULTS_ONLY, 403);
+  // The login's own address, never the profile's copy (which a change of email may have left
+  // behind): a code minted for an address no login has would make a new login.
+  const email = await loginEmail(userId);
+  if (!email) return fail("We couldn't sign you in. Please try again.", 500);
   // Staff sign in by emailed code only, as with Google (their session would also open admin).
-  if (await isStaffEmail(profile.email)) {
+  if (await isStaffEmail(email)) {
     return fail("Please sign in with your email for this address. We'll send you a code.", 403);
   }
   const t = body.ticks;
@@ -323,11 +342,11 @@ async function signIn(
     });
   }
 
-  const code = await mintSignInCode(profile.email);
+  const code = await mintSignInCode(email);
   if (!code) return fail("We couldn't sign you in. Please try again.", 500);
   const supabase = await createMiraSupabase();
   const { data, error } = await supabase.auth.verifyOtp({
-    email: profile.email,
+    email,
     token: code,
     type: "email",
   });
@@ -340,7 +359,7 @@ async function signIn(
     // The form's ticks, when given, are recorded like any sign-in's; otherwise the consent on
     // file is this wording's already and stays as it was given.
     if (ticked) {
-      await upsertProfileAtSignIn(userId, profile.email, CONSENT_VERSION, {
+      await upsertProfileAtSignIn(userId, email, CONSENT_VERSION, {
         useAssessment: t!.useAssessment,
       });
     } else if (await fromTeamBrowser()) {

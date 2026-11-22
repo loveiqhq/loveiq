@@ -43,6 +43,7 @@ import { logMiraEvent } from "@features/mira/server/store";
 import { isUndeliverable } from "@shared/emails/suppression";
 import { flushAfterResponse } from "@shared/http/after-response";
 import { checkCooldown, checkRateLimit, releaseCooldown } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests-only";
 const LEA = "6f2c4a1e-1111-4222-8333-944455556666";
@@ -255,6 +256,13 @@ describe("changing the email", () => {
     expect(sendNeutralEmail).toHaveBeenCalledTimes(1);
   });
 
+  it("shares the inbox's five codes a day with sign-in, so neither path can mail it more", async () => {
+    for (let i = 1; i <= 5; i++) cooldowns.add(`mira-code-day-${i}:day@example.com`);
+    expect((await start("day@example.com")).status).toBe(429);
+    expect(sendNeutralEmail).not.toHaveBeenCalled();
+    expect(cooldowns.has("mira-code-wait:day@example.com")).toBe(false); // given back
+  });
+
   it("answers as if sent to an address that bounced, and keeps nothing", async () => {
     vi.mocked(isUndeliverable).mockResolvedValue(true);
     expect(await start()).toEqual({ status: 200, body: { success: true } });
@@ -272,5 +280,70 @@ describe("changing the email", () => {
   it("needs a signed-in account", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue(null);
     expect((await start()).status).toBe(401);
+  });
+});
+
+describe("when a step of the change fails", () => {
+  /** supabaseFetch as the fake database answers it, except the calls `fails` picks: a 503. */
+  const failing = (fails: (path: string, method: string) => boolean) => {
+    const real = vi.mocked(supabaseFetch).getMockImplementation()!;
+    vi.mocked(supabaseFetch).mockImplementation(async (p, i) =>
+      fails(String(p), i?.method ?? "GET") ? new Response("{}", { status: 503 }) : real(p, i)
+    );
+    return () => vi.mocked(supabaseFetch).mockImplementation(real);
+  };
+  const profileWrite = (p: string, m: string) =>
+    p.startsWith("/rest/v1/mira_user?") && m === "PATCH";
+  const noticesToOld = () =>
+    vi.mocked(sendNeutralEmail).mock.calls.filter(([to]) => to === "lea@example.com");
+
+  it("moves nothing when the profile can't follow: the login goes back, and the code still works", async () => {
+    await start();
+    const code = sentCode();
+    const heal = failing(profileWrite);
+    const res = await post({ action: "confirm", code });
+    expect(res).toMatchObject({ status: 500 });
+    expect(logins[0]!.email).toBe("lea@example.com");
+    expect(db.tables.mira_user![0]).toMatchObject({
+      email: "lea@example.com",
+      google_connected_at: "2026-11-20",
+    });
+    await flushAfterResponse();
+    expect(noticesToOld()).toEqual([]); // nothing changed, so nothing to tell
+    heal();
+    expect(await post({ action: "confirm", code })).toEqual({
+      status: 200,
+      body: { success: true, email: "lea.new@example.com" },
+    });
+    expect([logins[0]!.email, db.tables.mira_user![0]!.email]).toEqual([
+      "lea.new@example.com",
+      "lea.new@example.com",
+    ]);
+  });
+
+  it("says it changed, and tells the old address, when the login moved and can't go back", async () => {
+    await start();
+    let puts = 0;
+    failing(
+      (p, m) => profileWrite(p, m) || (p.startsWith("/auth/v1/") && m === "PUT" && ++puts > 1)
+    );
+    const res = await post({ action: "confirm", code: sentCode() });
+    expect(res).toEqual({ status: 200, body: { success: true, email: "lea.new@example.com" } });
+    expect(logins[0]!.email).toBe("lea.new@example.com");
+    await flushAfterResponse();
+    expect(noticesToOld()).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringMatching(/kept the old address/)
+    );
+  });
+
+  it("gives the inbox's wait back when the waiting change can't be kept", async () => {
+    const heal = failing((p, m) => p.startsWith("/rest/v1/mira_email_change") && m === "POST");
+    expect((await start()).status).toBe(500);
+    expect(sendNeutralEmail).not.toHaveBeenCalled();
+    expect(cooldowns.size).toBe(0);
+    heal();
+    expect(await start()).toEqual({ status: 200, body: { success: true } });
   });
 });

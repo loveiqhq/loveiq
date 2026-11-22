@@ -1,5 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { bandOf, checkByScale, scoreOf } from "../content/checks";
+import { bandOf, checkByScale, scoreOf, supportNow } from "../content/checks";
 
 /**
  * The self-checks' storage (supabase/migrations/20261122090000_mira_checks.sql): every read and
@@ -69,24 +69,55 @@ export async function addCheck(
   return ((await res.json()) as Array<{ created_at: string }>)[0]!;
 }
 
-/** "Delete my check results", and an under-18 stop (server/minor.ts): every result goes. */
+/**
+ * "Delete my check results", and an under-18 stop (server/minor.ts): every result goes, and the
+ * account's own records of question 9's support panel, logged with the account before 22 Nov 2026
+ * (since then they name nobody).
+ */
 export async function deleteChecks(userId: string): Promise<void> {
-  const res = await supabaseFetch(`/rest/v1/mira_check?user_id=eq.${enc(userId)}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
+  for (const path of [
+    `/rest/v1/mira_check?user_id=eq.${enc(userId)}`,
+    `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=eq.check_support_shown`,
+  ]) {
+    const res = await supabaseFetch(path, { method: "DELETE" });
+    if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
+  }
 }
 
-export type CheckForMira = { title: string; name: string; band: string; daysAgo: number };
+/**
+ * Whether one of the account's results since `since` answered the mood check's question 9 above
+ * "Not at all" (supportNow): the nudge and journal emails keep the same quiet after it as after
+ * support lines in the chat (server/nudges.ts hadCrisis). Read from the results themselves, as the
+ * panel's own event carries no account.
+ */
+export async function supportSince(userId: string, since: Date): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/mira_check?user_id=eq.${enc(userId)}&created_at=gte.${enc(since.toISOString())}&select=scale,answers`
+  );
+  if (!res.ok) throw new Error(`mira check support read failed (${res.status})`);
+  return ((await res.json()) as CheckRow[]).some((r) => {
+    const check = checkByScale(r.scale);
+    return check !== undefined && supportNow(check, r.answers);
+  });
+}
+
+export type CheckForMira = {
+  title: string;
+  name: string;
+  band: string;
+  daysAgo: number;
+  /** The mood check's question 9 above "Not at all" (supportNow): never told as its band alone. */
+  support: boolean;
+};
 
 /** A band older than this no longer describes the person, so Mira isn't told it. */
 export const MIRA_CHECK_DAYS = 90;
 
 /**
  * What Mira's context may say about the self-checks (server/prompt.ts): each check's latest band
- * from the last 90 days, only when the person turned on "Mira may use my check results". Never
- * the answers or the score; none at all with the switch off (the filter is on the account row,
- * so no result is even read).
+ * from the last 90 days, and whether its question 9 opened the support lines, only when the person
+ * turned on "Mira may use my check results". Never the answers or the score; none at all with the
+ * switch off (the filter is on the account row, so no result is even read).
  */
 export async function checksForMira(userId: string, now = new Date()): Promise<CheckForMira[]> {
   const since = new Date(now.getTime() - MIRA_CHECK_DAYS * DAY_MS).toISOString();
@@ -106,6 +137,7 @@ export async function checksForMira(userId: string, now = new Date()): Promise<C
       name: check.name,
       band: bandOf(check, scoreOf(check, r.answers)).mira,
       daysAgo: Math.max(0, Math.floor((now.getTime() - Date.parse(r.created_at)) / DAY_MS)),
+      support: supportNow(check, r.answers),
     });
   }
   return out;

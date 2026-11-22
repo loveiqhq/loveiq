@@ -1,6 +1,7 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { NUDGE_PAUSE_DAYS, nextNudgeAt, type NudgeTime, type NudgeType } from "./nudges";
 import { logMiraEvent } from "./store";
+import { setPaused } from "./weekly-sessions";
 
 /** One person's nudge settings, read and changed through the signed link in every nudge. */
 export type NudgePrefs = {
@@ -60,7 +61,12 @@ export async function saveNudgeChoice(
   logMiraEvent("nudge_prefs_saved", { userId }, { choice: choice.kind });
 }
 
-/** Boards 3 and 4a: stop every nudge, with the optional one-tap reason and note. */
+/**
+ * Boards 3 and 4a and the email's one-click unsubscribe, with the optional one-tap reason and
+ * note: every email Mira sends on her own stops, as page 4a says ("Mira won't email you
+ * anymore"). Nudges and the journal reminder end, and the weekly session's reminders pause (the
+ * session and its calendar entry stay); each comes back in Settings › Notifications.
+ */
 export async function stopNudges(
   userId: string,
   reason: string | null,
@@ -70,7 +76,9 @@ export async function stopNudges(
     nudges_on: false,
     nudges_stopped_at: new Date().toISOString(),
     nudge_stop_reason: reason,
+    journal_reminder_time: null,
   });
+  await setPaused(userId, true);
   logMiraEvent("nudge_stopped", { userId }, { reason, source });
 }
 

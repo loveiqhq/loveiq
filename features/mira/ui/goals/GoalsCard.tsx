@@ -23,10 +23,12 @@ export default function GoalsCard() {
   const active = g.goals.filter(onTheGo);
   const today = g.today || localDay(new Date());
 
-  async function toggle(goal: Goal, done: boolean) {
+  async function toggle(goal: Goal) {
+    const t = g.tick(goal);
+    if (!t) return;
     setError(null);
-    setPopped(done ? goal.id : null);
-    setError(await g.tick(goal, done));
+    setPopped(t.done ? goal.id : null);
+    setError(await t.saved);
   }
 
   return (
@@ -107,7 +109,8 @@ export default function GoalsCard() {
                   goal={goal}
                   done={p.doneToday}
                   pop={popped === goal.id}
-                  onToggle={() => void toggle(goal, !p.doneToday)}
+                  busy={g.ticking.has(goal.id)}
+                  onToggle={() => void toggle(goal)}
                 />
               </li>
             );
@@ -135,7 +138,7 @@ export default function GoalsCard() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link
               href={ASK_MIRA_FOR_A_GOAL}
-              className={`inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-colors hover:bg-[#2b2338] ${FOCUS}`}
+              className={`inline-flex min-h-[44px] items-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-colors hover:bg-ap-ink/90 ${FOCUS}`}
             >
               Ask Mira to help
             </Link>

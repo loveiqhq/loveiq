@@ -57,7 +57,7 @@ const DATA: MiraData = {
   ],
   events: [
     ev("theme_changed", { user: "lea" }, "2026-11-10T10:00:00Z"),
-    ev("theme_changed", { anon: "visitor-9" }, "2026-11-17T10:00:00Z"),
+    ev("theme_changed", { user: "ben" }, "2026-11-17T10:00:00Z"),
     ev("text_size_changed", { user: "lea" }, "2026-11-17T11:00:00Z"),
     ev("reply_language_changed", { user: "ben" }, "2026-11-18T12:00:00Z"),
     ev("theme_changed", { user: "staff" }, "2026-11-17T10:00:00Z"),
@@ -101,7 +101,7 @@ describe("AP › Mira › Settings", () => {
     expect(settings.theme[2]!.share).toBeCloseTo(1 / 3);
   });
 
-  it("counts the changes in each of the 8 weeks to the range's end, signed-out themes too", () => {
+  it("counts the changes in each of the 8 weeks to the range's end", () => {
     const { weeks } = page().settings;
     expect(weeks.map((w) => w.week)).toEqual([
       "2026-09-28",

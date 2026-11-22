@@ -49,7 +49,7 @@ export function CoachFinder({
     <section
       id="finder"
       aria-labelledby="finder-h"
-      className="relative mt-5 scroll-mt-6 overflow-hidden rounded-[28px] border border-ap-line bg-[linear-gradient(165deg,#faf6ff_0%,#ffffff_60%)] p-5 motion-safe:animate-mira-in sm:p-7"
+      className="relative mt-5 scroll-mt-6 overflow-hidden rounded-[28px] border border-ap-line bg-[linear-gradient(165deg,rgb(var(--ap-lilac)/0.6)_0%,rgb(var(--ap-paper))_60%)] p-5 motion-safe:animate-mira-in sm:p-7"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -85,10 +85,10 @@ export function CoachFinder({
                 key={o.label}
                 type="button"
                 onClick={() => choose(o.to)}
-                className={`group flex min-h-[52px] items-center justify-between gap-3 rounded-2xl border border-ap-line bg-white px-4 py-3 text-left text-[15px] font-medium text-ap-ink transition-[background-color,border-color,transform] hover:border-ap-lavender hover:bg-[#fbf8ff] active:scale-[0.99] ${FOCUS}`}
+                className={`group flex min-h-[52px] items-center justify-between gap-3 rounded-2xl border border-ap-line bg-white px-4 py-3 text-left text-[15px] font-medium text-ap-ink transition-[background-color,border-color,transform] hover:border-ap-lavender hover:bg-ap-lilac/50 active:scale-[0.99] ${FOCUS}`}
               >
                 {o.label}
-                <ChevronIcon className="shrink-0 text-ap-quiet transition-transform group-hover:translate-x-0.5" />
+                <ChevronIcon className="shrink-0 text-ap-muted transition-transform group-hover:translate-x-0.5" />
               </button>
             ))}
           </div>

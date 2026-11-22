@@ -9,8 +9,8 @@
 --   calendar apps apply the newest; paused_at = reminder emails paused (the slot stays). Cancelling
 --   deletes the row after the cancellation email; a later booking is a new series (a new id).
 -- mira_session_reminder: one row per reminder email, claimed before it is sent, so each start gets
---   at most one (UNIQUE slot_id, starts_at); joined_at = the person opened that session within 30
---   minutes of its start (attendance). Deleted with its slot.
+--   at most one (UNIQUE slot_id, starts_at); joined_at = the person opened that session from an
+--   hour before its start to 30 minutes after (attendance). Deleted with its slot.
 --
 -- No words here: times only. Service role only, like every other Mira object.
 
@@ -54,6 +54,6 @@ CREATE POLICY "Service role only" ON public.mira_session_reminder FOR ALL TO ser
 COMMENT ON TABLE public.mira_session_slot IS
   'Mira weekly sessions (features/mira/server/weekly-sessions.ts): one slot per person, an ISO weekday, a local time and an IANA zone, 15 minutes; id = the invite''s UID, sequence = its update count, paused_at = reminders paused. Deleted on cancel, with the account, or when Mira stops someone as under 18.';
 COMMENT ON TABLE public.mira_session_reminder IS
-  'One reminder email per weekly-session start (claimed before sending); joined_at = the session opened within 30 minutes of starts_at.';
+  'One reminder email per weekly-session start (claimed before sending); joined_at = the session opened from an hour before starts_at to 30 minutes after.';
 
 COMMIT;

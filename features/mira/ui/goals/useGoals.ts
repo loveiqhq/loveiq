@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { localDay, type Day } from "../../server/goal-progress";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Goal, GoalPatch, GoalRow } from "../../server/goals";
 import { miraApi, type ApiResult } from "../api";
+import { useToday } from "../useToday";
 
 export type { Goal };
 
@@ -20,12 +20,13 @@ export function useGoals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [load, setLoad] = useState<Load>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Read with the goals, in the browser: the server's clock is not the person's.
-  const [today, setToday] = useState<Day>("");
-  const [ticking, setTicking] = useState<string | null>(null);
+  // In the browser: the server's clock is not the person's, and a tab may stay open overnight.
+  const { today, fresh } = useToday();
+  // The goals whose tick is saving: each one's own, so ticks of two goals never wait or cross.
+  const [ticking, setTicking] = useState<ReadonlySet<string>>(new Set());
+  const saving = useRef(new Set<string>());
 
   const show = useCallback((r: ApiResult<{ goals: Goal[] }>) => {
-    setToday(localDay(new Date()));
     if (r.status === 401) return setLoad("signed-out");
     if (!r.ok || !Array.isArray(r.data.goals)) {
       setLoadError(r.data.error ?? "Your goals didn't load.");
@@ -48,19 +49,31 @@ export function useGoals() {
   const swap = (id: string, change: (g: Goal) => Goal) =>
     setGoals((all) => all.map((g) => (g.id === id ? change(g) : g)));
 
-  /** "Did it today", or taking it back. One tick in flight at a time, so they can't cross. */
-  async function tick(goal: Goal, done: boolean): Promise<string | null> {
-    if (ticking) return null;
-    const day = localDay(new Date());
-    setToday(day);
+  /**
+   * "Did it today", or taking it back, for today as it is at the tap (a tab left open since
+   * yesterday ticks the new day). Shown at once and put back if it doesn't save. Null while this
+   * goal's last tick is still saving: the tap is ignored, so two can't cross; other goals tick
+   * meanwhile. Else what was done, and `saved`: null once saved, or the message to show.
+   */
+  function tick(goal: Goal): { done: boolean; saved: Promise<string | null> } | null {
+    if (saving.current.has(goal.id)) return null;
+    const day = fresh();
+    const done = !goal.days.includes(day);
     const without = goal.days.filter((d) => d !== day);
     swap(goal.id, (g) => ({ ...g, days: done ? [day, ...without] : without }));
-    setTicking(goal.id);
-    const r = await miraApi(`/api/mira/goals/${goal.id}/log`, { body: { day, done } });
-    setTicking(null);
-    if (r.ok) return null;
-    swap(goal.id, (g) => ({ ...g, days: goal.days }));
-    return r.data.error ?? "That didn't save. Please try again.";
+    const busy = (on: boolean) => {
+      if (on) saving.current.add(goal.id);
+      else saving.current.delete(goal.id);
+      setTicking(new Set(saving.current));
+    };
+    busy(true);
+    const saved = miraApi(`/api/mira/goals/${goal.id}/log`, { body: { day, done } }).then((r) => {
+      busy(false);
+      if (r.ok) return null;
+      swap(goal.id, (g) => ({ ...g, days: goal.days }));
+      return r.data.error ?? "That didn't save. Please try again.";
+    });
+    return { done, saved };
   }
 
   async function create(

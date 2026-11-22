@@ -14,6 +14,6 @@ export const dynamic = "force-dynamic";
 
 /** Board Coaches: Mira and the coaches on their way (features/mira/ui/coaches). */
 export default async function Page() {
-  if (!(await getMiraAccount())) redirect("/mira/start");
+  if (!(await getMiraAccount())) redirect("/mira/start?next=%2Fmira%2Fcoaches");
   return <CoachRoster />;
 }

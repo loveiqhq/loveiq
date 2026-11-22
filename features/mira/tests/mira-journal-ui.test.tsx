@@ -86,7 +86,7 @@ describe("the Home card", () => {
       target: { value: "  A long   walk " },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Saved privately.")).toBeInTheDocument();
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
     expect(sent("PUT")).toEqual([
       {
         url: "/api/mira/journal",

@@ -122,7 +122,7 @@ describe("nudge preference routes", () => {
       expect.anything()
     );
     await post({ action: "resume", t: t() });
-    expect(patches()[1]!.body).toMatchObject({ nudges_on: true, nudges_stopped_at: null });
+    expect(patches().at(-1)!.body).toMatchObject({ nudges_on: true, nudges_stopped_at: null });
   });
 
   it("need the CSRF check and a valid link to change anything", async () => {
@@ -140,15 +140,39 @@ describe("nudge preference routes", () => {
     );
     expect(res.status).toBe(200);
     expect(patches()[0]!.body).toMatchObject({ nudges_on: false });
+    const stopped = patches().length;
     const visit = await visitUnsub(
       new Request(`http://localhost/api/mira/nudges/unsubscribe?t=${encodeURIComponent(t())}`)
     );
     expect(visit.headers.get("location")).toContain("/mira/nudges?t=");
-    expect(patches()).toHaveLength(1);
+    expect(patches()).toHaveLength(stopped); // a visit changes nothing
     const forged = await oneClick(
       new Request("http://localhost/api/mira/nudges/unsubscribe?t=x", { method: "POST" })
     );
     expect(forged.status).toBe(403);
+  });
+
+  it("stopping, on the page or with one click, stops every email Mira sends on her own", async () => {
+    const stops = [
+      () => post({ action: "stop", t: t() }),
+      () =>
+        oneClick(
+          new Request(`http://localhost/api/mira/nudges/unsubscribe?t=${encodeURIComponent(t())}`, {
+            method: "POST",
+          })
+        ),
+    ];
+    for (const stop of stops) {
+      vi.mocked(supabaseFetch).mockClear();
+      expect((await stop()).status).toBe(200);
+      const person = patches().find((p) => p.path.startsWith("/rest/v1/mira_user?"))!;
+      // Nudges and the journal reminder end ("Mira won't email you anymore")...
+      expect(person.body).toMatchObject({ nudges_on: false, journal_reminder_time: null });
+      // ...and the weekly session's reminders pause; the session and its calendar entry stay.
+      const slot = patches().find((p) => p.path.startsWith("/rest/v1/mira_session_slot?"))!;
+      expect(slot.path).toContain(`user_id=eq.${USER_ID}`);
+      expect(Date.parse(slot.body.paused_at)).toBeGreaterThan(Date.now() - 60_000);
+    }
   });
 
   it("one-click unsubscribe allows a mail provider's shared servers many people a minute", async () => {

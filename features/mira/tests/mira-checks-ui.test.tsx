@@ -17,7 +17,8 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 import MiraPage from "@/app/mira/page";
 import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
-import CheckPage from "@features/mira/ui/checks/CheckPage";
+import AssessmentsPage from "@features/mira/ui/checks/AssessmentsPage";
+import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
 import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
 import type { ChecksData } from "@features/mira/ui/checks/data";
@@ -27,6 +28,7 @@ import type { ChecksData } from "@features/mira/ui/checks/data";
 const DAY = 24 * 60 * 60 * 1000;
 const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 const PRACTICE = { number: 2, name: "Body scan", time: "5–10 minutes", bestFor: "Overthinking" };
+const NOT_THE_SCORE = "Your answer to the last question matters more than this score.";
 
 let account: ChecksData;
 type Reply = { status?: number; body: unknown };
@@ -85,6 +87,8 @@ describe("taking a check", () => {
     const note = await screen.findByRole("region", { name: "Before your first check" });
     expect(note.textContent).toMatch(/health information/);
     expect(note.textContent).toMatch(/Mira sees only the band/);
+    // Mira's context also says when question 9 opened the support lines (server/checks.ts).
+    expect(note.textContent).toMatch(/whether the mood check opened the support lines/);
     expect(note.textContent).toMatch(/analytics tools record what’s on screen/);
     expect(note.textContent).toMatch(/Delete your results/);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
@@ -129,9 +133,8 @@ describe("taking a check", () => {
   it("sends only the answers and shows the result in words, with the next steps", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 12, band: "moderate" },
+        result: { at: new Date().toISOString(), score: 12, band: "moderate", support: false },
         previous: null,
-        support: false,
       },
     });
     sessionStorage.setItem(
@@ -162,13 +165,61 @@ describe("taking a check", () => {
   });
 });
 
+// EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
+// never a verdict on it ("a real change", "within the usual ups and downs").
+describe("the change since last time", () => {
+  const anxiety = (scores: number[], daysAgo: number[]) => {
+    account.checks[0] = {
+      id: "anxiety",
+      results: scores.map((score, i) => ({ at: ago(daysAgo[i]!), score, band: "x" })),
+      nextAt: new Date(Date.now() + DAY).toISOString(),
+    };
+  };
+  const verdict = /real change|ups and downs|reliabl/i;
+
+  it("is the points between the last two results, with no verdict, on the result and in its summary", async () => {
+    anxiety([16, 12, 8], [40, 20, 1]); // 4 lower than last time: "a real change" before
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText("4 points lower than last time")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /^3 results\. Your latest is mild \(8 of 21\) on .+, 4 points lower than last time\.$/
+      )
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(verdict);
+    expect(document.body.innerHTML).not.toMatch(verdict); // nor in a label or title
+  });
+
+  it("says when the score is the same, or one point higher", async () => {
+    anxiety([9, 9], [20, 1]);
+    const { unmount } = render(<CheckPage checkId="anxiety" practice={null} />);
+    expect(await screen.findByText("The same as last time")).toBeTruthy();
+    expect(screen.getByText(/, the same as last time\.$/)).toBeTruthy();
+    unmount();
+    anxiety([9, 10], [20, 1]);
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    expect(await screen.findByText("1 point higher than last time")).toBeTruthy();
+  });
+
+  it("is the same on the assessments page's card", async () => {
+    anxiety([16, 12, 8], [40, 20, 1]);
+    render(<AssessmentsPage />);
+    const card = (await screen.findByRole("heading", { name: "Anxiety check" })).closest(
+      "article"
+    )!;
+    expect(card.textContent).toMatch(/· 4 points lower than last time/);
+    expect(card.textContent).not.toMatch(/than your first/);
+    expect(document.body.innerHTML).not.toMatch(verdict);
+  });
+});
+
 describe("the mood check's question 9", () => {
   it("opens the support lines the moment it is answered above 'Not at all', whatever the total", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 1, band: "minimal" },
+        result: { at: new Date().toISOString(), score: 1, band: "minimal", support: true },
         previous: null,
-        support: true,
       },
     });
     sessionStorage.setItem(
@@ -190,14 +241,63 @@ describe("the mood check's question 9", () => {
     // Behind it, the result keeps the support at the top, with a minimal total.
     await screen.findByRole("region", { name: "You don’t have to carry this alone" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/minimal/);
+    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+  });
+
+  it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [
+        { at: ago(30), score: 2, band: "minimal", support: false },
+        { at: ago(2), score: 3, band: "minimal", support: true },
+      ],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="mood" practice={null} />);
+    // A reload or Home's link: no save response, the stored result alone carries it.
+    const top = await screen.findByRole("region", { name: "You don’t have to carry this alone" });
+    expect(top.compareDocumentPosition(screen.getByRole("heading", { level: 1 }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    // No "holding up" reassurance beside it, and the professional step comes first.
+    expect(screen.queryByText(checkById("mood")!.bands[0]!.daily)).toBeNull();
+    expect(screen.queryByText(checkById("mood")!.bands[0]!.intimacy)).toBeNull();
+    const steps = within(screen.getByRole("region", { name: "Next steps" }));
+    expect(steps.getAllByRole("listitem")[0]!.textContent).toMatch(/Talk to someone who can help/);
+    // The history says it too: the result's row, and the summary of the latest.
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows[1]!.textContent).toMatch(/Minimal · support for you/);
+    expect(rows[2]!.textContent).not.toMatch(/support/);
+    expect(screen.getByRole("region", { name: "Over time" }).textContent).toMatch(
+      /minimal \(3 of 27\).*Your answer to the last question/
+    );
+    // Its panel is question 9's, with the warm words and the way to Mira.
+    fireEvent.click(steps.getByRole("button", { name: /See support lines/ }));
+    expect(screen.getByRole("dialog", { name: "Support right now" }).textContent).toMatch(
+      /Thank you for answering honestly/
+    );
+  });
+
+  it("shows a calm result without any of it", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [{ at: ago(2), score: 3, band: "minimal", support: false }],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="mood" practice={null} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText(checkById("mood")!.bands[0]!.daily)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "You don’t have to carry this alone" })).toBeNull();
+    expect(screen.queryByText(NOT_THE_SCORE)).toBeNull();
+    expect(screen.queryByText("Talk to someone who can help")).toBeNull();
   });
 
   it("stays closed for 'Not at all'", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
-        result: { at: new Date().toISOString(), score: 0, band: "minimal" },
+        result: { at: new Date().toISOString(), score: 0, band: "minimal", support: false },
         previous: null,
-        support: false,
       },
     });
     sessionStorage.setItem(
@@ -213,16 +313,39 @@ describe("the mood check's question 9", () => {
   });
 });
 
+describe("a result whose question 9 opened the support lines, on the cards", () => {
+  it("never reads just 'Minimal' on Home or on the Assessments page", async () => {
+    account.checks[1] = {
+      id: "mood",
+      results: [{ at: ago(2), score: 3, band: "minimal", support: true }],
+      nextAt: new Date(Date.now() + 12 * DAY).toISOString(),
+    };
+    const home = render(<ChecksHomeCard />);
+    const card = within(await screen.findByRole("region", { name: "Your assessments" }));
+    expect(card.getByText(/^Mood check$/).closest("li")!.textContent).toMatch(
+      /Minimal · support for you · .*View/
+    );
+    home.unmount();
+    render(<AssessmentsPage />);
+    const mood = (await screen.findByRole("heading", { name: "Mood check" })).closest("article")!;
+    expect(mood.textContent).toMatch(/Minimal · support for you/);
+  });
+});
+
 describe("the Home card", () => {
   it("shows each assessment's state and where its link goes", async () => {
     account.assessment = { archetype: "Spark Seeker", takenAt: ago(40), reportPath: "/report/t" };
     account.checks = [
       {
         id: "anxiety",
-        results: [{ at: ago(3), score: 7, band: "mild" }],
+        results: [{ at: ago(3), score: 7, band: "mild", support: false }],
         nextAt: new Date(Date.now() + 11 * DAY).toISOString(),
       },
-      { id: "mood", results: [{ at: ago(20), score: 11, band: "moderate" }], nextAt: null },
+      {
+        id: "mood",
+        results: [{ at: ago(20), score: 11, band: "moderate", support: false }],
+        nextAt: null,
+      },
       { id: "loneliness", results: [], nextAt: null },
     ];
     account.bodyCheck = {
@@ -271,6 +394,9 @@ describe("Settings › Self-checks", () => {
   it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
     render(<ChecksSettings />);
     const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    expect(box.closest("label")!.textContent).toMatch(
+      /latest band.*whether your last mood check opened the support lines/
+    );
     fireEvent.click(box);
     await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
     expect(box).toBeChecked();
@@ -281,7 +407,7 @@ describe("Settings › Self-checks", () => {
   });
 
   it("deletes every check result after a confirmation", async () => {
-    account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild" }];
+    account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild", support: false }];
     render(<ChecksSettings />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete my check results" }));
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
@@ -291,6 +417,75 @@ describe("Settings › Self-checks", () => {
       fetchMock.mock.calls.some(([u, i]) => u === "/api/mira/checks" && i?.method === "DELETE")
     ).toBe(true);
     expect(screen.getByRole("button", { name: "No check results to delete" })).toBeDisabled();
+  });
+});
+
+describe("when the checks don't load", () => {
+  const failOnce = () => {
+    let calls = 0;
+    replies["GET /api/mira/checks"] = () =>
+      calls++ === 0
+        ? { status: 500, body: { error: "Unable to load your checks." } }
+        : { body: account };
+  };
+
+  it("the Assessments page stops its placeholders and offers Try again", async () => {
+    failOnce();
+    render(<AssessmentsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    const list = screen.getByRole("region", { name: "Self-checks" });
+    expect(list.querySelectorAll(".animate-pulse")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findAllByRole("link", { name: /^Take it: / })).toHaveLength(3);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("Settings says so and offers Try again, instead of showing nothing", async () => {
+    failOnce();
+    render(<ChecksSettings />);
+    const section = await screen.findByRole("region", { name: "Self-checks" });
+    expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+    ).not.toBeChecked();
+  });
+
+  it("every other check screen offers Try again too", async () => {
+    for (const ui of [
+      <ChecksHomeCard key="home" />,
+      <CheckPage key="check" checkId="anxiety" practice={null} />,
+      <BodyCheckPage key="body" />,
+    ]) {
+      failOnce();
+      const view = render(ui);
+      fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+      view.unmount();
+    }
+  });
+});
+
+describe("the result page's 'Mira may use my check results'", () => {
+  it("stays in view once ticked, and says why when the save fails", async () => {
+    account.checks[0] = {
+      id: "anxiety",
+      results: [{ at: ago(1), score: 7, band: "mild", support: false }],
+      nextAt: new Date(Date.now() + 13 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    fireEvent.click(box);
+    await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
+    // Saved: still there, ticked.
+    expect(
+      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+    ).toBeChecked();
+    replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Mira may use my check results/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
+    // Put back as it was before the failed change.
+    expect(screen.getByRole("checkbox", { name: /Mira may use my check results/ })).toBeChecked();
   });
 });
 

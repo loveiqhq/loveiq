@@ -5,9 +5,11 @@
  *           different people who are not the team's have rated Mira and a quote is approved,
  *           else { reviews: null }. Never an address; read through a short cache that a
  *           withdrawal or a decision clears at once.
- *   POST  { stars: 1..5, words?: { quote, name, ageRange?, consent } } → the signed-in person's
- *           one rating (409 for a second). Words only with the consent to show them, in the
- *           current wording; they wait for the team's approval.
+ *   POST  { stars: 1..5, via?: "settings" | "ask", words?: { quote, name, ageRange?, consent } }
+ *           → the signed-in person's one rating (409 for a second), from Settings or the chat's
+ *           ask, by an account that has talked with Mira (three messages of its own; 403
+ *           otherwise). Words only with the consent to show them, in the current wording; they
+ *           wait for the team's approval.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -17,11 +19,12 @@ import {
   NAME_PATTERN,
   QUOTE_MAX,
   REVIEW_CONSENT_VERSION,
+  REVIEW_VIA,
   forToday,
 } from "@features/mira/reviews";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { isMinor } from "@features/mira/server/minor";
-import { addReview, cachedPublicReviews } from "@features/mira/server/reviews";
+import { addReview, cachedPublicReviews, hasTalkedWithMira } from "@features/mira/server/reviews";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -55,6 +58,8 @@ export async function GET(request: Request) {
 const schema = z
   .object({
     stars: z.number().int().min(1).max(5),
+    // Settings, or the chat's ask (which pages from before Settings could rate never sent).
+    via: z.enum(REVIEW_VIA).default("ask"),
     words: z
       .object({
         quote: z
@@ -90,8 +95,17 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   try {
     // Stopped as under 18 (server/minor.ts): nothing is taken. A failed check takes nothing.
-    if (await isMinor(account.id)) {
-      return NextResponse.json({ error: "Not available." }, { status: 403 });
+    const [minor, talked] = await Promise.all([isMinor(account.id), hasTalkedWithMira(account.id)]);
+    if (minor) return NextResponse.json({ error: "Not available." }, { status: 403 });
+    // Only people who have talked with Mira can rate her (accounts are cheap).
+    if (!talked) {
+      return NextResponse.json(
+        {
+          error:
+            "You can rate Mira once you've talked with her a little: three messages of your own.",
+        },
+        { status: 403 }
+      );
     }
     if (!(await addReview(account.id, parsed.data, await fromTeamBrowser()))) {
       return NextResponse.json({ error: "You've already rated Mira." }, { status: 409 });

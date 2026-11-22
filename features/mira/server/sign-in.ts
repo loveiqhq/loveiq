@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { escapeHtml } from "@shared/emails/shared";
+import { checkCooldown } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 /**
@@ -93,6 +94,28 @@ export function emailChangedNotice(maskedNewAddress: string) {
 }
 
 /**
+ * The note to the account's address when a passkey is added (security review M1, 22 Nov 2026):
+ * someone with the browser for a few minutes could add a passkey that lives on their own phone,
+ * so the owner hears of every new one. Neutral like every Mira email (nothing about chats).
+ */
+export function passkeyAddedNotice(label: string) {
+  const subject = "A passkey was added to your account";
+  const text =
+    `A passkey (${label}) was just added for signing in to Mira.\n\n` +
+    `If you added it, there is nothing more to do.\n\nIf you didn't, open Mira's Settings, ` +
+    `Sign-in & security: remove it there, then use "Sign out everywhere" and remove your ` +
+    `passkeys. Write to hello@loveiq.org if you need help.\n\n${FOOTER}`;
+  const html = `
+  <div style="font-family: Arial, Helvetica, sans-serif; color:#161021; line-height:1.5;">
+    <p style="margin:0 0 16px 0;">A passkey (<strong>${escapeHtml(label)}</strong>) was just added for signing in to Mira.</p>
+    <p style="margin:0 0 16px 0;">If you added it, there is nothing more to do.</p>
+    <p style="margin:0 0 16px 0;">If you didn't, open Mira's Settings, Sign-in &amp; security: remove it there, then use &ldquo;Sign out everywhere&rdquo; and remove your passkeys. Write to <a href="mailto:hello@loveiq.org" style="color:#161021;">hello@loveiq.org</a> if you need help.</p>
+    <p style="margin:0; font-size:12px; color:#6b6678;">${FOOTER}</p>
+  </div>`;
+  return { subject, text, html };
+}
+
+/**
  * Marks the logins Mira's sign-in creates (app_metadata, which only the service role can
  * write), so the daily cleanup in app/api/cron/mira-memory removes only those whose sign-up
  * never finished. A login that already existed (admin, Jarvis) is never marked.
@@ -166,4 +189,22 @@ export async function sendNeutralEmail(
     return false;
   }
   return true;
+}
+
+/** Codes an inbox gets in 24 hours, sign-in and change of email together. */
+export const CODES_PER_ADDRESS_DAY = 5;
+
+/**
+ * One of the inbox's five codes for the next 24 hours, or null when they're used: shared by the
+ * sign-in code and the change-of-email code, so no one can mail an address more often through
+ * either. One cooldown per code rather than a counter, so a code that never went out is given
+ * back (a counter can't be). ponytail: without Redis (local, staging) cooldowns always pass, so
+ * only the per-IP caps hold.
+ */
+export async function claimDaySlot(inbox: string): Promise<string | null> {
+  for (let i = 1; i <= CODES_PER_ADDRESS_DAY; i++) {
+    const bucket = `mira-code-day-${i}`;
+    if ((await checkCooldown(inbox, bucket, 24 * 60 * 60 * 1000)).allowed) return bucket;
+  }
+  return null;
 }

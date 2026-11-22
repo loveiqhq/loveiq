@@ -42,7 +42,7 @@ import { goalsForPrompt } from "@features/mira/server/goals";
 import { journalContext } from "@features/mira/server/journal";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { askModel, type MiraTurn } from "@features/mira/server/model";
-import { lastChat } from "@features/mira/server/nudges";
+import { CRISIS_QUIET_DAYS, hadCrisis, lastChat } from "@features/mira/server/nudges";
 import {
   STABLE_INSTRUCTIONS,
   personalInstructions,
@@ -61,7 +61,7 @@ import {
   logMiraEvent,
   ownsChat,
 } from "@features/mira/server/store";
-import { getSlot, markJoined, type StoredSlot } from "@features/mira/server/weekly-sessions";
+import { getSlot, type StoredSlot } from "@features/mira/server/weekly-sessions";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -147,6 +147,18 @@ const everyoneMayAsk = async () => {
   if (!allowed) alertDailyCeiling();
   return allowed;
 };
+/**
+ * The last chat Mira remembers, for a weekly session's opening. None after the support lines
+ * showed in the last 14 days (as nudges and reminders pause then), none when that chat holds the
+ * crisis message, and none when either can't be read: she never reopens a crisis.
+ */
+async function sessionMemory(userId: string) {
+  const since = new Date(Date.now() - CRISIS_QUIET_DAYS * DAY_MS);
+  const [last, crisis] = await Promise.all([lastChat(userId), hadCrisis(userId, since)]);
+  if (crisis || last?.turns.some((t) => t.content === miraConfig.crisisMessage)) return null;
+  return last;
+}
+
 /** Crisis exchanges stored and counted a day per network: the reply itself is never limited. */
 const CRISIS_LOGGED_PER_DAY = 50;
 /** A paying-attention daily ceiling per account: model cost and abuse, not a product limit. */
@@ -319,7 +331,7 @@ export async function POST(request: Request) {
         // Self-check bands only with "Mira may use my check results"; a failed read adds none.
         checksForMira(account.id).catch(() => []),
         getSlot(account.id).catch(() => undefined),
-        opening && profile.remember_chats ? lastChat(account.id).catch(() => null) : null,
+        opening && profile.remember_chats ? sessionMemory(account.id).catch(() => null) : null,
       ]);
       weekly = slot;
       earlier = last?.turns.map(({ role, content }) => ({ role, content })) ?? null;
@@ -471,12 +483,6 @@ export async function POST(request: Request) {
   }
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
-  // Attendance: opened within 30 minutes of a start its reminder went out for (once per start).
-  if (opening && weekly && account && !minor) {
-    await markJoined(weekly, account.id, new Date()).catch((err) =>
-      logger.error({ err }, "mira: a weekly session's attendance was not recorded")
-    );
-  }
   if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
   if (answering && INTAKE_IDS.has(answering))
     logMiraEvent("intake_answered", who, { q: answering });

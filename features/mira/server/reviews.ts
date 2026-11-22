@@ -2,12 +2,14 @@ import { revalidateTag, unstable_cache } from "next/cache";
 import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import {
+  MESSAGES_TO_RATE,
   ageLabel,
   counts,
   publicReviews,
   redacted,
   type AgeRange,
   type PublicReviews,
+  type RejectReason,
   type ReviewRow,
 } from "../reviews";
 
@@ -57,6 +59,26 @@ export function refreshPublicReviews(): void {
   }
 }
 
+/**
+ * Whether the account has talked with Mira: MESSAGES_TO_RATE messages of its own in its saved
+ * chats or, as "Remember our conversations" off saves none, in the server's own message_sent
+ * events (the browser can't log those). Each read stops at that many rows. Every rating comes
+ * through this check, so the public threshold counts only such accounts. A failed read throws:
+ * nobody is let in on an error.
+ */
+export async function hasTalkedWithMira(userId: string): Promise<boolean> {
+  const id = enc(userId);
+  for (const path of [
+    `/rest/v1/mira_message?select=id,mira_chat!inner(user_id)&mira_chat.user_id=eq.${id}&role=eq.user`,
+    `/rest/v1/mira_event?user_id=eq.${id}&name=eq.message_sent&select=id`,
+  ]) {
+    const res = await supabaseFetch(`${path}&limit=${MESSAGES_TO_RATE}`);
+    if (!res.ok) throw new Error(`mira message count failed (${res.status})`);
+    if (((await res.json()) as unknown[]).length >= MESSAGES_TO_RATE) return true;
+  }
+  return false;
+}
+
 /** What a person shared, as Settings shows it. */
 export type MyReview = {
   stars: number;
@@ -65,13 +87,15 @@ export type MyReview = {
   quote: string | null;
   published: string | null;
   status: ReviewRow["quote_status"];
+  /** Why the team didn't show the words (status "rejected"); null otherwise. */
+  reason: RejectReason | null;
   name: string | null;
   age: string | null;
 };
 
 export async function getMyReview(userId: string): Promise<MyReview | null> {
   const res = await supabaseFetch(
-    `/rest/v1/mira_review?user_id=eq.${enc(userId)}&select=stars,created_at,quote,published_quote,quote_status,display_name,age_range&limit=1`
+    `/rest/v1/mira_review?user_id=eq.${enc(userId)}&select=stars,created_at,quote,published_quote,quote_status,reject_reason,display_name,age_range&limit=1`
   );
   if (!res.ok) throw new Error(`mira review read failed (${res.status})`);
   const [r] = (await res.json()) as Array<{
@@ -80,6 +104,7 @@ export async function getMyReview(userId: string): Promise<MyReview | null> {
     quote: string | null;
     published_quote: string | null;
     quote_status: ReviewRow["quote_status"];
+    reject_reason: RejectReason | null;
     display_name: string | null;
     age_range: string | null;
   }>;
@@ -90,6 +115,7 @@ export async function getMyReview(userId: string): Promise<MyReview | null> {
         quote: r.quote,
         published: r.published_quote,
         status: r.quote_status,
+        reason: r.reject_reason ?? null,
         name: r.display_name,
         age: ageLabel(r.age_range),
       }
@@ -98,6 +124,7 @@ export async function getMyReview(userId: string): Promise<MyReview | null> {
 
 export type NewReview = {
   stars: number;
+  via: "settings" | "ask";
   words?: { quote: string; name: string; ageRange?: AgeRange | null; consent: string };
 };
 
@@ -114,6 +141,7 @@ export async function addReview(
     body: JSON.stringify({
       user_id: userId,
       stars: review.stars,
+      via: review.via,
       from_team: fromTeam,
       ...(w
         ? {
@@ -196,12 +224,14 @@ export async function quotesToReview(): Promise<QuoteToReview[]> {
 }
 
 export type Decision =
-  { id: number; decision: "approve"; text: string } | { id: number; decision: "reject" };
+  | { id: number; decision: "approve"; text: string }
+  | { id: number; decision: "reject"; reason: RejectReason };
 
 /**
  * The team's decision on a quote: approve it (as written, or with identifying details replaced
- * by […], nothing else), or reject or take it down, which deletes the words. "gone": the person
- * took them back, or someone decided first; "edited": the text is not their words.
+ * by […], nothing else), or reject or take it down for one of REJECT_REASONS, which deletes the
+ * words and keeps the reason for the writer. "gone": the person took them back, or someone
+ * decided first; "edited": the text is not their words.
  */
 export async function decideQuote(
   d: Decision,
@@ -226,7 +256,12 @@ export async function decideQuote(
     res = await supabaseFetch(`${row}&quote_status=in.(pending,approved)`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ ...NO_WORDS, quote_status: "rejected", ...reviewed }),
+      body: JSON.stringify({
+        ...NO_WORDS,
+        quote_status: "rejected",
+        reject_reason: d.reason,
+        ...reviewed,
+      }),
     });
   }
   if (!res.ok) throw new Error(`mira quote decision failed (${res.status})`);

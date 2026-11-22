@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
+import { canRecognizeSpeech } from "../voice/speech";
 
 /**
  * Voice sessions with Mira (Mark's board "Home": "Session recordings"), kept as words, never
@@ -85,7 +86,7 @@ export function TalkShare({
       {you !== null ? (
         <span aria-hidden="true" className="flex h-1.5 overflow-hidden rounded-full bg-ap-track">
           <span className="bg-ap-purple" style={{ width: `${you}%` }} />
-          <span className="flex-1 bg-[#fe6839]/80" />
+          <span className="flex-1 bg-ap-orange/80" />
         </span>
       ) : null}
       <span className="text-[12px] text-ap-body">
@@ -125,10 +126,10 @@ export function SessionRowLink({ r }: { r: SessionRow }) {
   return (
     <Link
       href={`/mira/recordings/${r.id}`}
-      className="group flex items-start gap-4 rounded-[22px] border border-ap-line bg-white p-4 shadow-ap transition-[transform,box-shadow,border-color] hover:border-[#d9d4e2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple motion-safe:hover:-translate-y-px sm:items-center sm:gap-6 sm:px-6"
+      className="group flex items-start gap-4 rounded-[22px] border border-ap-line bg-white p-4 shadow-ap transition-[transform,box-shadow,border-color] hover:border-ap-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple motion-safe:hover:-translate-y-px sm:items-center sm:gap-6 sm:px-6"
     >
       <span className="flex w-12 shrink-0 flex-col items-center border-r border-ap-line pr-4 sm:w-[64px] sm:pr-6">
-        <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#d05976]">
+        <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ap-pii">
           {at.toLocaleDateString(LOCALE, { weekday: "short" })}
         </span>
         <span className="font-serif text-[26px] font-bold leading-none sm:text-[30px]">
@@ -188,13 +189,30 @@ export function SessionRowLink({ r }: { r: SessionRow }) {
 }
 
 export function StartVoiceLink({ quiet = false }: { quiet?: boolean }) {
+  // Talk needs the browser's speech recognition (Firefox has none): say so rather than open a
+  // chat without Talk. Read after mount; the link until then.
+  const [canTalk, setCanTalk] = useState(true);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser is known after mount
+  useEffect(() => setCanTalk(canRecognizeSpeech()), []);
+  if (!canTalk) {
+    return (
+      <p className="max-w-[36ch] text-[13px] leading-snug text-ap-muted">
+        Talking to Mira out loud needs Chrome, Safari or Edge: this browser can&apos;t turn speech
+        into text. You can{" "}
+        <Link href="/mira" className="font-semibold text-ap-plum underline underline-offset-4">
+          type to her in the chat
+        </Link>
+        .
+      </p>
+    );
+  }
   return (
     <Link
       href={START}
       className={
         quiet
           ? "inline-flex min-h-[44px] items-center gap-2 rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink hover:bg-ap-ground"
-          : "inline-flex min-h-[44px] items-center gap-2 rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-[#2b2338] active:scale-[0.98]"
+          : "inline-flex min-h-[44px] items-center gap-2 rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[background-color,transform] hover:bg-ap-ink/90 active:scale-[0.98]"
       }
     >
       <svg

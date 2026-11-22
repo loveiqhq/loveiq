@@ -239,6 +239,7 @@ describe("runNudges", () => {
   let users: NudgeUser[];
   let nudges: Row[];
   let crisis: Array<{ id: number }>;
+  let checks: Array<{ scale: string; answers: number[] }>;
   let lastSaid: string;
   let claims: Map<string, string>;
   let inserted: Array<Record<string, unknown>>;
@@ -256,6 +257,7 @@ describe("runNudges", () => {
     users = [user()];
     nudges = [];
     crisis = [];
+    checks = [];
     lastSaid = "2026-11-23T18:00:00Z"; // Monday 19:00 Berlin: yesterday, 13 h before
     claims = new Map();
     inserted = [];
@@ -278,6 +280,7 @@ describe("runNudges", () => {
         return json(found.slice(0, 1));
       }
       if (path.startsWith("/rest/v1/mira_event?")) return json(crisis);
+      if (path.startsWith("/rest/v1/mira_check?")) return json(checks);
       if (path.startsWith("/rest/v1/mira_message?select=created_at"))
         return json([{ created_at: lastSaid }]);
       if (path.startsWith("/rest/v1/mira_chat?")) return json([{ id: CHAT_ID }]);
@@ -363,6 +366,25 @@ describe("runNudges", () => {
     lastSaid = "2026-11-24T05:00:00Z";
     expect((await runNudges(TUESDAY_0810)).skipped.chatting).toBe(1);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("keeps the same 14 days' quiet after the mood check's question 9 opened the support lines", async () => {
+    // Read from the person's own results (the panel's event carries no account).
+    checks = [{ scale: "phq9", answers: [0, 0, 0, 0, 0, 0, 0, 0, 1] }];
+    expect((await runNudges(TUESDAY_0810)).skipped["recent-crisis"]).toBe(1);
+    const read = vi
+      .mocked(supabaseFetch)
+      .mock.calls.map(([p]) => String(p))
+      .find((p) => p.startsWith("/rest/v1/mira_check?"))!;
+    expect(read).toContain(`user_id=eq.${USER_ID}&`);
+    expect(decodeURIComponent(read)).toContain("created_at=gte.2026-11-10T07:10:00.000Z");
+    expect(send).not.toHaveBeenCalled();
+    // A high total without that answer is the professional step, not a crisis.
+    checks = [
+      { scale: "phq9", answers: [3, 3, 3, 3, 3, 3, 3, 3, 0] },
+      { scale: "gad7", answers: [3, 3, 3, 3, 3, 3, 3] },
+    ];
+    expect((await runNudges(TUESDAY_0810)).sent).toBe(1);
   });
 
   it("sends nothing when the model declines", async () => {

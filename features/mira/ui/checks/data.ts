@@ -2,14 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { bandOf, type Check, type CheckId } from "@features/mira/content/checks";
+import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
 import { miraApi } from "../api";
 
 /** The menu tab these pages mark (MiraAppFrame). */
 export const FRAME_TAB = "assessments" as const;
 
 /** What GET /api/mira/checks answers (app/api/mira/checks/route.ts). */
-export type CheckResult = { at: string; score: number; band: string };
+export type CheckResult = {
+  at: string;
+  score: number;
+  band: string;
+  /** The mood check's question 9 above "Not at all": its support goes wherever the result does. */
+  support: boolean;
+};
 export type CheckSummary = { id: CheckId; results: CheckResult[]; nextAt: string | null };
 export type ChecksData = {
   account: string;
@@ -27,12 +33,14 @@ export type ChecksData = {
 
 /**
  * The person's checks, loaded once per page; signed out goes to sign-in and back here. Someone
- * Mira stopped as under 18 gets the server's message (403) and nothing else.
+ * Mira stopped as under 18 gets the server's message (403) and nothing else. After a failed load,
+ * `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
  */
 export function useChecks() {
   const router = useRouter();
   const [data, setData] = useState<ChecksData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<ChecksData>("/api/mira/checks").then((r) => {
       if (r.status === 401) {
@@ -40,8 +48,12 @@ export function useChecks() {
       } else if (r.ok) setData(r.data);
       else setError(r.data.error ?? "Unable to load your checks.");
     });
-  }, [router]);
-  return { data, error, setData };
+  }, [router, attempt]);
+  const retry = () => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  };
+  return { data, error, setData, retry };
 }
 
 /**
@@ -87,6 +99,17 @@ export const drafts = {
   },
 };
 
+/**
+ * A result against the one before it, in points and nothing more ("4 points lower than last
+ * time"): a self-check helps the person reflect, it never judges whether a change is real.
+ */
+export function sinceLastTime(before: number, after: number): string {
+  const diff = after - before;
+  if (diff === 0) return "the same as last time";
+  const n = Math.abs(diff);
+  return `${n} ${n === 1 ? "point" : "points"} ${diff < 0 ? "lower" : "higher"} than last time`;
+}
+
 /** "21 Nov", or "21 Nov 2025" outside this year. */
 export function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -96,6 +119,10 @@ export function shortDate(iso: string): string {
     ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
   });
 }
+
+/** A result's band as a card or the history shows it, never without the support question 9 opened. */
+export const bandText = (check: Check, r: CheckResult): string =>
+  `${bandOf(check, r.score).label}${r.support ? ` · ${SUPPORT_NOTE}` : ""}`;
 
 /** A check as a card shows it: never taken, part done in this tab, taken (open again later), or open again. */
 export type CheckState =
@@ -124,12 +151,12 @@ export function checkLine(check: Check, state: CheckState): { status: string; ac
       };
     case "taken":
       return {
-        status: `${bandOf(check, state.last.score).label} · ${shortDate(state.last.at)}`,
+        status: `${bandText(check, state.last)} · ${shortDate(state.last.at)}`,
         action: "View",
       };
     case "due":
       return {
-        status: `${bandOf(check, state.last.score).label} · ${shortDate(state.last.at)} · ready to retake`,
+        status: `${bandText(check, state.last)} · ${shortDate(state.last.at)} · ready to retake`,
         action: "Retake",
       };
   }

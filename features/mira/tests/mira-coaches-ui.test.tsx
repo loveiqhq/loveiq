@@ -204,6 +204,9 @@ describe("Picked for you (Home)", () => {
       "/mira/coaches#coach-ana",
     ]);
     expect(links[0]).toHaveTextContent("Because you talked about hiding your body during intimacy");
+    // picks_shown is logged by an effect after the picks render: wait for it before the click,
+    // or a busy machine logs the click first.
+    await waitFor(() => expect(coachEvents()).toEqual(["picks_shown:chats"]));
     fireEvent.click(links[2]!);
     await waitFor(() =>
       expect(coachEvents()).toEqual(["picks_shown:chats", "pick_clicked:coach-ana"])
@@ -284,6 +287,12 @@ describe("Home search", () => {
     expect(box).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("isn't there for someone Mira stopped as under 18, like the coaches", async () => {
+    serve({}, 403);
+    render(<HomeSearch />);
+    await waitFor(() => expect(screen.queryByRole("combobox")).toBeNull());
+  });
+
   it("says when nothing is found, offers the finder, and counts it without the words", async () => {
     vi.useFakeTimers();
     render(<HomeSearch />);
@@ -322,11 +331,10 @@ describe("The guide with Mira inside", () => {
 
   it("opens the chat with the practice's starter in the composer, sent only by the person", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue(null);
-    const page = (await MiraPage({ searchParams: Promise.resolve({ ask: "4" }) })) as ReactElement<{
-      children: ReactElement<{ starter?: string | null }>[];
+    const chat = (await MiraPage({ searchParams: Promise.resolve({ ask: "4" }) })) as ReactElement<{
+      starter?: string | null;
     }>;
-    const [chat] = page.props.children;
-    expect(chat!.props.starter).toBe(
+    expect(chat.props.starter).toBe(
       "Can you help me with practice 4 from the guide, “Kindness for body worry”?"
     );
     for (const ask of ["9", "4; drop", "<b>"]) {
@@ -337,7 +345,8 @@ describe("The guide with Mira inside", () => {
     }
 
     replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [] } });
-    render(<MiraChat signedIn initialChatId={null} starter={chat!.props.starter} />);
+    window.history.replaceState(null, "", "/mira?ask=4"); // the address that asked for it
+    render(<MiraChat signedIn initialChatId={null} starter={chat.props.starter} />);
     expect(screen.getByLabelText("Message Mira")).toHaveValue(
       "Can you help me with practice 4 from the guide, “Kindness for body worry”?"
     );

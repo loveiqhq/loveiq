@@ -19,6 +19,13 @@ import { isStaffEmail } from "@shared/env/staff-email";
 export const REVIEWS_MIN_PEOPLE = 20;
 
 /**
+ * Only people who have talked with Mira can rate her: an account needs this many messages of
+ * its own (server/reviews.ts hasTalkedWithMira; the security review's L2, 22 Nov 2026). Accounts
+ * are cheap, so without it "rated by 20 people" could be one person with 20 email addresses.
+ */
+export const MESSAGES_TO_RATE = 3;
+
+/**
  * The version of the consent to show a person's words (ui/reviews/ReviewAsk.tsx has its text).
  * Bump it whenever that text changes; the table keeps the version each person agreed to.
  */
@@ -32,6 +39,22 @@ export const NAME_PATTERN = /^\p{L}[\p{L}\p{M} .'’-]*$/u;
 
 export const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"] as const;
 export type AgeRange = (typeof AGE_RANGES)[number];
+
+/** Where a rating was given: Settings › Your rating, or the thank-you ask in the chat. */
+export const REVIEW_VIA = ["settings", "ask"] as const;
+
+/**
+ * The only reasons the team may reject a quote or take one down, never because it is critical
+ * or negative (no selective publication: UWG Annex no. 23c). The writer sees it in Settings.
+ */
+export const REJECT_REASONS = ["identifying", "harmful", "off_topic", "spam"] as const;
+export type RejectReason = (typeof REJECT_REASONS)[number];
+export const REJECT_REASON_LABEL: Record<RejectReason, string> = {
+  identifying: "Can’t remove identifying details",
+  harmful: "Harmful or abusive",
+  off_topic: "Not about Mira",
+  spam: "Spam or duplicate",
+};
 
 /** A rating as the public figures read it (server/reviews.ts selects exactly these columns). */
 export type ReviewRow = {

@@ -26,6 +26,8 @@ export type MiraProfile = {
   use_assessment: boolean;
   consent_at: string;
   consent_version: string;
+  /** When the account's first sign-in made it (the database's clock); absent if a read left it out. */
+  created_at?: string;
   nudges_on: boolean;
   nudge_time: "08:00" | "19:00" | "21:30";
   time_zone: string;
@@ -287,8 +289,8 @@ export async function sharesLogin(email: string): Promise<boolean> {
 }
 
 /**
- * Deletes the account: first what the KPI log and the sign-in codes keep about the person, then
- * the account. Its login is a Supabase auth user, the same one the admin panel and Jarvis sign
+ * Deletes the account: first what the KPI log and the sign-in codes keep about the person, and a
+ * booked weekly session out of their calendar (a cancellation, best effort), then the account. Its login is a Supabase auth user, the same one the admin panel and Jarvis sign
  * in with, so for staff and Jarvis members only Mira's row goes (cascading to the chats,
  * messages and nudges) and the login stays. Everyone else's auth user goes, which cascades the
  * same way.
@@ -296,6 +298,8 @@ export async function sharesLogin(email: string): Promise<boolean> {
 export async function deleteAccount(account: { id: string; email: string }): Promise<void> {
   await forgetEventText(account.id, true);
   await consumeCode(account.email);
+  // Imported here: the sessions' emails import this module (their KPI events).
+  await import("./session-emails").then((m) => m.cancelSessionInvite(account, "account-deleted"));
   const res = (await sharesLogin(account.email))
     ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
     : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });
@@ -361,9 +365,11 @@ export type MiraEventName =
   | "review_prompt_not_now"
   | "review_given"
   | "review_withdrawn"
-  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only.
+  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only, and the
+  // agreement to the browser's speech service with its notice's version.
   | "voice_session_ended"
   | "voice_points_opened"
+  | "voice_notice_agreed"
   // Sign-in & security (22 Nov 2026): passkeys, the "Use Face ID next time?" offer, devices
   // signed out, email changes and Google connected (signup_completed's method "passkey" too).
   | "passkey_offer_shown"
@@ -385,6 +391,8 @@ export type MiraEventName =
   | "loneliness_check_done"
   | "check_support_shown"
   | "checks_deleted"
+  // A turn of "Mira may use my check results" ({ on, version }), from 22 Nov 2026.
+  | "use_checks_set"
   // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
   | "journal_saved"
   | "journal_deleted"

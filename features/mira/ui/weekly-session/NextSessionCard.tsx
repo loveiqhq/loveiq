@@ -2,23 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarLinks, ScheduleSheet } from "./ScheduleSheet";
+import { ScheduleSheet } from "./ScheduleSheet";
+import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const SECTION = "rounded-3xl border border-ap-line p-5";
 const OUTLINE_PILL =
   "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 disabled:opacity-50";
 const INK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-[#2b2338] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
 
 /**
  * Home's weekly session card: the next session's day and time with a way into a calendar and a
  * way to change it; while a session is under way (30 minutes either side of its start), a way
  * in. Before one is booked, an invitation to book. Fetches its own data; renders nothing for an
- * account Mira stopped as under 18, or signed out (Home sends those to sign-in anyway).
+ * account Mira stopped as under 18, and a sign-in that ran out goes to sign-in.
  */
 export function NextSessionCard() {
-  const { state, load, book, setPaused } = useWeeklySession();
+  const { state, load, book, setPaused } = useWeeklySession({ signIn: true });
   const [sheet, setSheet] = useState(false);
   const [calendar, setCalendar] = useState(false);
   const [error, setError] = useState<string | null>(null);

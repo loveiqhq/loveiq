@@ -46,7 +46,10 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
         <Wordmark />
         <span className="text-[12px] font-semibold text-ap-muted">Email preferences</span>
       </header>
-      <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-4 px-5 pb-10 pt-8">
+      <main
+        id="main-content"
+        className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-4 px-5 pb-10 pt-8"
+      >
         <h1
           ref={heading}
           tabIndex={-1}
@@ -66,7 +69,7 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
               </PrimaryButton>
               <Link
                 href="/mira/journal"
-                className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+                className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-ap-link underline-offset-4 hover:underline"
               >
                 Keep them
               </Link>
@@ -86,7 +89,7 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
             </p>
             <Link
               href="/mira/journal"
-              className="inline-flex min-h-[44px] w-fit items-center text-[15px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+              className="inline-flex min-h-[44px] w-fit items-center text-[15px] font-semibold text-ap-link underline-offset-4 hover:underline"
             >
               Open your journal
             </Link>

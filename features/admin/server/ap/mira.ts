@@ -122,7 +122,7 @@ const EVENT_NAMES = [
   // Coaches & picks: Notify me, the coaches page, the finder, Home's picks and search, the
   // guide's "Ask Mira about this" (22 Nov 2026, mira-coaches.ts).
   ...COACH_KPI_EVENTS,
-  // Settings (21 Nov 2026): a changed theme (signed in or out), text size or reply language.
+  // Settings (21 Nov 2026): a changed theme, text size or reply language (PATCH /api/mira/me).
   "theme_changed",
   "text_size_changed",
   "reply_language_changed",

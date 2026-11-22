@@ -6,6 +6,7 @@ import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { escapeHtml } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import nudgeConfig from "../content/nudges.json";
+import { supportSince } from "./checks";
 import { askModel, isModelConfigured } from "./model";
 import { addMessages, logMiraEvent } from "./store";
 
@@ -383,11 +384,12 @@ async function lastSent(userId: string, type?: NudgeType): Promise<SentNudge | n
   return found[0] ?? null;
 }
 
+/** Support lines shown in the chat or the journal, or opened by the mood check's question 9. */
 async function hadCrisis(userId: string, since: Date): Promise<boolean> {
   const found = await rows<{ id: number }>(
     `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=eq.crisis_shown&created_at=gte.${enc(since.toISOString())}&select=id&limit=1`
   );
-  return found.length > 0;
+  return found.length > 0 || (await supportSince(userId, since));
 }
 
 export type NudgeRunSummary = {

@@ -1,15 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { REJECT_REASON_LABEL } from "@features/mira/reviews";
 import type { MyReview } from "@features/mira/server/reviews";
 import { miraApi } from "../api";
+import { RatingForm } from "./ReviewAsk";
 
 /**
- * Settings › "Your rating of Mira" (mounted by the Settings page): what the person shared, where
- * their words stand, and taking either back. Taking back is as easy as giving: one tap, shown
- * nowhere from the next page view (features/mira/server/reviews.ts).
+ * Settings › "Your rating of Mira" (mounted by the Settings page): "Rate Mira" for anyone who has
+ * talked with her, at any time (the chat's ask is only a reminder, so the ratings aren't only
+ * from good moments); then what the person shared, where their words stand (with the team's
+ * reason if they weren't shown), and taking either back. Taking back is as easy as giving: one
+ * tap, shown nowhere from the next page view (features/mira/server/reviews.ts).
  */
-type Loaded = { review: MyReview | null };
+type Loaded = { review: MyReview | null; name: string; canRate: boolean };
 
 const BUTTON =
   "min-h-[44px] rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground disabled:cursor-not-allowed disabled:opacity-50";
@@ -23,8 +27,16 @@ export default function SharedReviewSettings() {
 
   const load = useCallback(async () => {
     setState("loading");
-    const r = await miraApi<Loaded>("/api/mira/reviews/mine");
-    setState(r.ok ? { review: r.data.review ?? null } : "failed");
+    const r = await miraApi<Partial<Loaded>>("/api/mira/reviews/mine");
+    setState(
+      r.ok
+        ? {
+            review: r.data.review ?? null,
+            name: r.data.name ?? "",
+            canRate: r.data.canRate === true,
+          }
+        : "failed"
+    );
   }, []);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the first load, after mount
@@ -47,20 +59,34 @@ export default function SharedReviewSettings() {
     setState((s) =>
       typeof s !== "object" || !s.review
         ? s
-        : {
-            review:
-              what === "all"
-                ? null
-                : {
-                    ...s.review,
-                    quote: null,
-                    published: null,
-                    status: "none",
-                    name: null,
-                    age: null,
-                  },
-          }
+        : what === "all"
+          ? // Rated before, so they have talked with Mira: open to rate again.
+            { ...s, review: null, canRate: true }
+          : {
+              ...s,
+              review: {
+                ...s.review,
+                quote: null,
+                published: null,
+                status: "none",
+                reason: null,
+                name: null,
+                age: null,
+              },
+            }
     );
+  }
+
+  /** Rated here: the form goes, so the heading takes the focus; then what they shared shows. */
+  function rated(sent: { words: boolean }) {
+    heading.current?.focus();
+    setError(null);
+    setDone(
+      sent.words
+        ? "Thank you. Your rating is in, and our team reads your words before they show."
+        : "Thank you. Your rating is in."
+    );
+    void load();
   }
 
   const review = typeof state === "object" ? state.review : null;
@@ -89,7 +115,7 @@ export default function SharedReviewSettings() {
           <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] text-ap-body">
             <span aria-hidden="true" className="tracking-[0.12em] text-ap-orange">
               {"★".repeat(review.stars)}
-              <span className="text-[#d9d4e2]">{"★".repeat(5 - review.stars)}</span>
+              <span className="text-ap-mist">{"★".repeat(5 - review.stars)}</span>
             </span>
             <span>
               You rated Mira {review.stars} out of 5 on{" "}
@@ -102,7 +128,7 @@ export default function SharedReviewSettings() {
             </span>
           </p>
           {review.status === "pending" || review.status === "approved" ? (
-            <figure className="m-0 flex flex-col gap-1.5 border-l-2 border-[#e7d8f8] pl-3">
+            <figure className="m-0 flex flex-col gap-1.5 border-l-2 border-ap-mist pl-3">
               <blockquote className="m-0 font-serif text-[15px] italic leading-relaxed text-ap-ink">
                 “{review.status === "approved" ? review.published : review.quote}”
               </blockquote>
@@ -121,7 +147,8 @@ export default function SharedReviewSettings() {
             </figure>
           ) : review.status === "rejected" ? (
             <p className="text-[13px] text-ap-muted">
-              Your words weren’t published, and we didn’t keep them.
+              Your words aren’t shown, and we didn’t keep them.
+              {review.reason ? ` Our team’s reason: ${REJECT_REASON_LABEL[review.reason]}.` : ""}
             </p>
           ) : (
             <p className="text-[13px] text-ap-muted">No words shared, only your stars.</p>
@@ -147,10 +174,25 @@ export default function SharedReviewSettings() {
             </button>
           </div>
         </div>
+      ) : state.canRate ? (
+        <div className="rounded-2xl border border-ap-line p-4">
+          <RatingForm
+            via="settings"
+            name={state.name}
+            onSent={rated}
+            head={
+              <>
+                <h3 className="text-[16px] font-bold">Rate Mira</h3>
+                <p className="mt-1 text-[14px] leading-normal text-ap-body">
+                  Every rating counts, high or low, and helps others decide whether to talk to her.
+                </p>
+              </>
+            }
+          />
+        </div>
       ) : (
         <p className="text-[14px] text-ap-body">
-          You haven’t rated Mira. When she asks, you can leave a rating and, if you like, a sentence
-          for others.
+          You can rate Mira once you’ve talked with her a little: three messages of your own.
         </p>
       )}
       <p role="status" className="text-[14px] text-ap-good-ink empty:hidden">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { miraApi } from "../api";
+import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
 /**
@@ -35,6 +36,8 @@ type Device = {
 };
 type Security = {
   email: string;
+  /** Mira stopped the account as under 18. */
+  minor?: boolean;
   recent: boolean;
   emailChange: { allowed: boolean };
   google: { allowed: boolean; connected: boolean };
@@ -95,6 +98,7 @@ export default function SecuritySettings() {
   const [failed, setFailed] = useState(false);
   const canPasskey = usePasskeysWork();
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const emailChanged = useContext(EmailChanged);
 
   const load = useCallback(async () => {
     const r = await miraApi<Security>("/api/mira/security");
@@ -139,7 +143,7 @@ export default function SecuritySettings() {
         <div role="status" aria-live="polite">
           {notice ? (
             <p
-              className={`mt-3 rounded-2xl px-4 py-3 text-[14px] motion-safe:animate-mira-in ${notice.ok ? "bg-[#eef7f2] text-ap-good-ink" : "bg-ap-ground text-ap-body"}`}
+              className={`mt-3 rounded-2xl px-4 py-3 text-[14px] motion-safe:animate-mira-in ${notice.ok ? "bg-ap-good/10 text-ap-good-ink" : "bg-ap-ground text-ap-body"}`}
             >
               {notice.text}
             </p>
@@ -162,6 +166,7 @@ export default function SecuritySettings() {
               data={data}
               onChanged={(email) => {
                 setData({ ...data, email, google: { ...data.google, connected: false } });
+                emailChanged(email); // the page's Account section and menu too
                 setNotice({
                   ok: true,
                   text: `Your email is now ${email}. We let your old address know.`,
@@ -278,7 +283,9 @@ function EmailRow({
     >
       {!data.emailChange.allowed ? (
         <p className="text-[13px] text-ap-muted">
-          This address is also a LoveIQ team login, so it can&apos;t be changed here.
+          {data.minor
+            ? "Mira is only for adults."
+            : "This address is also a LoveIQ team login, so it can't be changed here."}
         </p>
       ) : null}
       {open ? (
@@ -717,6 +724,8 @@ function Devices({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
+  // "Also remove my passkeys": a passkey someone else added would outlive every sign-out.
+  const [alsoKeys, setAlsoKeys] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
 
@@ -727,8 +736,9 @@ function Devices({
   async function signOut(id: string | "all") {
     setBusy(id);
     setError(null);
+    const keys = id === "all" && alsoKeys ? "&passkeys=1" : "";
     const r = await miraApi<{ signedOut?: boolean }>(
-      `/api/mira/security?device=${encodeURIComponent(id)}`,
+      `/api/mira/security?device=${encodeURIComponent(id)}${keys}`,
       { method: "DELETE" }
     );
     setBusy(null);
@@ -801,6 +811,20 @@ function Devices({
               Sign out on every device, this one too? You&apos;ll sign in again with a code, Google
               or a passkey.
             </p>
+            <label className="flex min-h-[44px] items-center gap-3 text-[14px]">
+              <input
+                type="checkbox"
+                checked={alsoKeys}
+                onChange={(e) => setAlsoKeys(e.target.checked)}
+                className="h-5 w-5 shrink-0 accent-ap-purple"
+              />
+              <span>
+                Also remove my passkeys{" "}
+                <span className="text-ap-muted">
+                  (if one isn&apos;t yours; you can add yours again)
+                </span>
+              </span>
+            </label>
             <div className="flex flex-wrap gap-3">
               <button
                 ref={confirmButton}

@@ -471,7 +471,7 @@ describe("Welcome", () => {
     typeAndSend("hi");
     await screen.findByText("Try this.");
     expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
-    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics, Mira beta" }));
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, Mira home" }));
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.queryByText("Try this.")).toBeNull();
   });
@@ -482,7 +482,7 @@ describe("Welcome", () => {
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("hi");
     await screen.findByText("Keep talking with Mira, for free");
-    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics, Mira beta" }));
+    fireEvent.click(screen.getByRole("link", { name: "Applied Psychometrics BETA, Mira home" }));
     expect(screen.getByRole("heading", { level: 1, name: /Talk to/ })).toBeInTheDocument();
     expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("mira.chat.v1")!).turns).toHaveLength(2);
@@ -571,10 +571,13 @@ describe("Free messages", () => {
     expect(screen.getByText("Try this.")).toBeInTheDocument();
     // New chat would wipe the chat the card promises to bring along.
     for (const b of screen.getAllByRole("button", { name: /New chat/ })) expect(b).toBeDisabled();
-    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({
-      gate: true,
-      freeLeft: 0,
-    });
+    // Saved by an effect after the card renders: on a busy machine it lands a moment later.
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({
+        gate: true,
+        freeLeft: 0,
+      })
+    );
   });
 
   it("isn't put beside a crisis reply: the person can still write", async () => {

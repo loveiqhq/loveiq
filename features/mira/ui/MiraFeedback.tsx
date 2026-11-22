@@ -119,7 +119,7 @@ export default function MiraFeedback() {
               type="checkbox"
               checked={mayEmail}
               onChange={(e) => setMayEmail(e.target.checked)}
-              className="h-4 w-4 accent-[#795fc8]"
+              className="h-4 w-4 accent-ap-purple"
             />
             You may email me with a follow-up question about my feedback
           </label>

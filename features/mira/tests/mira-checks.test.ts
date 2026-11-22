@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   CHECKS,
   bandOf,
-  changeSince,
   checkById,
   isValidAnswers,
   nextTakeAt,
@@ -15,8 +14,8 @@ import { safeNext } from "@features/mira/server/session";
 /**
  * The self-checks' content and maths (features/mira/content/checks.ts). Expected values come
  * from the published sources, not from the code: the official English forms at phqscreeners.com
- * (GAD-7, PHQ-9), Hughes et al. 2004 Table 1 (loneliness), the PHQ/GAD-7 instruction manual's
- * cut-points, and the NHS Talking Therapies manual v8, Table 9 (reliable change).
+ * (GAD-7, PHQ-9), Hughes et al. 2004 Table 1 (loneliness) and the PHQ/GAD-7 instruction manual's
+ * cut-points.
  */
 
 const anxiety = checkById("anxiety")!;
@@ -176,20 +175,6 @@ describe("the mood check's question 9", () => {
     expect(mood.items[mood.crisisItem!]).toMatch(/^Thoughts that you would be better off dead/);
     expect(supportNow(anxiety, [3, 3, 3, 3, 3, 3, 3])).toBe(false);
     expect(supportNow(loneliness, [3, 3, 3])).toBe(false);
-  });
-});
-
-describe("change between two results", () => {
-  it("is reliable from 4 points on the GAD-7 and 6 on the PHQ-9 (NHS Talking Therapies)", () => {
-    expect(changeSince(anxiety, 12, 8)).toEqual({ diff: -4, reliable: true });
-    expect(changeSince(anxiety, 12, 9)).toEqual({ diff: -3, reliable: false });
-    expect(changeSince(anxiety, 8, 12)).toEqual({ diff: 4, reliable: true });
-    expect(changeSince(mood, 16, 10)).toEqual({ diff: -6, reliable: true });
-    expect(changeSince(mood, 16, 11)).toEqual({ diff: -5, reliable: false });
-  });
-
-  it("makes no reliability claim for the loneliness scale, which has no published threshold", () => {
-    expect(changeSince(loneliness, 8, 4)).toEqual({ diff: -4, reliable: null });
   });
 });
 

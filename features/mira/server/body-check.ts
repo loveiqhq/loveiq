@@ -37,6 +37,14 @@ export async function listBodyChecks(
   return (await res.json()) as Array<{ score: number; created_at: string }>;
 }
 
+/** Every body check of the account (the under-18 stop: health answers a minor's account keeps no more). */
+export async function deleteBodyChecks(userId: string): Promise<void> {
+  const res = await supabaseFetch(`/rest/v1/mira_body_check?user_id=eq.${enc(userId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`mira body check delete failed (${res.status})`);
+}
+
 export async function addBodyCheck(userId: string, answers: number[]): Promise<void> {
   const res = await supabaseFetch("/rest/v1/mira_body_check", {
     method: "POST",

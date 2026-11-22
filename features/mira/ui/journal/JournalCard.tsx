@@ -34,6 +34,12 @@ export function JournalCard() {
   const run = streak(days, today);
   const recent = thisWeek(entries, today);
 
+  /** Today's check-in: today as it is at the tap, in a tab open since yesterday too. */
+  function checkIn() {
+    journal.freshToday();
+    setOpen(true);
+  }
+
   async function remind(on: boolean) {
     const time = on ? (settings?.reminderTime ?? DEFAULT_REMINDER) : null;
     setNote(null);
@@ -61,7 +67,7 @@ export function JournalCard() {
         </h2>
         <Link
           href="/mira/journal"
-          className="inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+          className="inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline"
         >
           Open journal <Icon path={ARROW} className="h-4 w-4" />
         </Link>
@@ -104,19 +110,19 @@ export function JournalCard() {
                   ? "Checked in for today. See how your week is shaping up in your journal."
                   : entries.length
                     ? "You haven’t checked in yet today. A few taps across the areas of your life, plus a line if you feel like writing one."
-                    : "A few taps across the areas of your life, plus a line if you feel like writing one. About 30 seconds, and private to you."}
+                    : "A few taps across the areas of your life, plus a line if you feel like writing one. About 30 seconds, and yours to look back on."}
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
                 {doneToday ? (
                   <button
                     type="button"
-                    onClick={() => setOpen(true)}
-                    className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-[#561dbd] transition-colors hover:bg-ap-lilac"
+                    onClick={checkIn}
+                    className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-ap-link transition-colors hover:bg-ap-lilac"
                   >
                     Edit today’s check-in <Icon path={CHECK} />
                   </button>
                 ) : (
-                  <PrimaryButton onClick={() => setOpen(true)}>
+                  <PrimaryButton onClick={checkIn}>
                     <span className="inline-flex items-center gap-2">
                       Do today’s check-in <Icon path={ARROW} />
                     </span>

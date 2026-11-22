@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { softwarePasskey } from "./authenticator";
-import { fakeDb, token, type Row } from "./fake-db";
+import { fakeDb, json, token, type Row } from "./fake-db";
 
 /** A browser's cookie jar: what the route sets is what the same browser sends next. */
 type Jar = Map<string, string>;
@@ -31,8 +31,11 @@ vi.mock("@features/mira/server/session", () => ({
   createMiraSupabase: vi.fn(async () => ({ auth: { verifyOtp, signOut } })),
   getMiraAccount: vi.fn(),
 }));
-vi.mock("@features/mira/server/sign-in", () => ({
+vi.mock("@features/mira/server/sign-in", async (importOriginal) => ({
+  passkeyAddedNotice: (await importOriginal<typeof import("@features/mira/server/sign-in")>())
+    .passkeyAddedNotice,
   mintSignInCode: vi.fn().mockResolvedValue("12345678"),
+  sendNeutralEmail: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@features/mira/server/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/mira/server/store")>()),
@@ -41,11 +44,14 @@ vi.mock("@features/mira/server/store", async (importOriginal) => ({
 }));
 
 import { DELETE, PATCH, POST } from "@/app/api/mira/passkeys/route";
+import { sendNeutralEmail } from "@features/mira/server/sign-in";
+import { flushAfterResponse } from "@shared/http/after-response";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { stopForMinor } from "@features/mira/server/minor";
 import { userHandleOf } from "@features/mira/server/passkeys";
 import { getMiraAccount } from "@features/mira/server/session";
+import { mintSignInCode } from "@features/mira/server/sign-in";
 import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -66,6 +72,8 @@ const profile = (id: string, email: string, over: Row = {}): Row => ({
   ...over,
 });
 let db: ReturnType<typeof fakeDb>;
+/** Auth's own record of a login's address, where a test moves it away from the profile's copy. */
+let logins: Map<string, string>;
 
 function call(method: string, body?: unknown, query = "", site = SITE) {
   const init: RequestInit = {
@@ -119,8 +127,16 @@ beforeEach(() => {
       ],
       admin_users: [{ email: "staff@loveiq.org" }],
     },
-    {}
+    {
+      // GET /auth/v1/admin/users/<id>: the login, on its profile's address unless moved.
+      auth: (_b, call) => {
+        const id = /^GET \/auth\/v1\/admin\/users\/([^/?]+)$/.exec(call)?.[1] ?? "";
+        const email = logins.get(id) ?? db.tables.mira_user?.find((u) => u.id === id)?.email;
+        return email ? json({ id, email }) : json({ msg: "User not found" }, 404);
+      },
+    }
   );
+  logins = new Map();
   vi.mocked(supabaseFetch).mockImplementation((p, i) => db.handle(p, i));
   verifyOtp.mockImplementation(async ({ email }: { email: string }) => {
     const id = (db.tables.mira_user ?? []).find((u) => u.email === email)?.id;
@@ -151,6 +167,13 @@ describe("adding a passkey", () => {
       { via: "offer", synced: true }
     );
     expect(logMiraEvent).toHaveBeenCalledWith("passkey_offer_accepted", { userId: LEA });
+    // The owner hears of every new passkey (security review M1), neutrally.
+    await flushAfterResponse();
+    const [to, notice] = vi.mocked(sendNeutralEmail).mock.calls.at(-1)!;
+    expect(to).toMatch(/@/);
+    expect(notice.subject).toBe("A passkey was added to your account");
+    expect(notice.text).toContain("iPhone · Safari");
+    expect(notice.text).not.toMatch(/chat|journal|goal/i);
     // Requires user verification and a discoverable passkey; never asks for attestation.
     const { body } = await read(await post({ action: "register-options", via: "settings" }));
     expect(body.options.authenticatorSelection).toMatchObject({
@@ -350,6 +373,49 @@ describe("signing in with a passkey", () => {
     expect(db.tables.mira_session ?? []).toEqual([]);
   });
 
+  it("signs in with the login's own address when the profile's copy is behind, making no other login", async () => {
+    const key = await addPasskey();
+    // A change of email moved the login, and the profile's copy didn't follow.
+    logins.set(LEA, "lea.new@example.com");
+    const made: string[] = [];
+    vi.mocked(mintSignInCode).mockImplementation(async (email: string) => {
+      // As Supabase does: a code for an address no login has makes a new login.
+      if (![...logins.values(), "kai@example.com"].includes(email)) made.push(email);
+      return "12345678";
+    });
+    verifyOtp.mockImplementation(async ({ email }: { email: string }) => ({
+      data: {
+        user: { id: email === "lea.new@example.com" ? LEA : crypto.randomUUID(), email },
+        session: { access_token: token({ sub: LEA, session_id: SID }) },
+      },
+      error: null,
+    }));
+    const ticks = { adult: true, terms: true, consent: true, useAssessment: false };
+    expect(await signInWith(key, {}, { ticks })).toMatchObject({ status: 200 });
+    expect(made).toEqual([]);
+    expect(verifyOtp).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "lea.new@example.com" })
+    );
+    // The ticks bring the profile's copy up to date, as a code sign-in does.
+    expect(upsertProfileAtSignIn).toHaveBeenCalledWith(
+      LEA,
+      "lea.new@example.com",
+      CONSENT_VERSION,
+      { useAssessment: false }
+    );
+  });
+
+  it("starts no session when the login's address can't be read", async () => {
+    const key = await addPasskey();
+    const real = vi.mocked(supabaseFetch).getMockImplementation()!;
+    vi.mocked(supabaseFetch).mockImplementation(async (p, i) =>
+      String(p).startsWith("/auth/v1/") ? new Response("{}", { status: 503 }) : real(p, i)
+    );
+    expect((await signInWith(key)).status).toBe(500);
+    expect(mintSignInCode).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
   it("asks for the ticks when the consent on file is an older wording's, then records them", async () => {
     const key = await addPasskey();
     db.tables.mira_user![0]!.consent_version = "mira-2026-11-18";
@@ -387,6 +453,21 @@ describe("signing in with a passkey", () => {
       resetAt: new Date(),
     });
     expect((await post({ action: "sign-in-options" })).status).toBe(429);
+  });
+});
+
+describe("a passkey from a browser Mira stopped as under 18", () => {
+  // A passkey's account always exists already: the browser's cookie alone never stops or wipes it.
+  it("is refused, and the account it belongs to is left as it was", async () => {
+    const key = await addPasskey();
+    browser = new Map([["mira_minor", "1"]]);
+    expect(await signInWith(key)).toMatchObject({
+      status: 403,
+      body: { error: "Mira is only for adults." },
+    });
+    expect(db.tables.mira_user![0]!.minor_at ?? null).toBeNull();
+    expect(db.tables.mira_passkey).toHaveLength(1);
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 });
 

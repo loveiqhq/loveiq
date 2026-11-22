@@ -1,0 +1,120 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  redirect: vi.fn((to: string) => {
+    throw new Error(`redirect:${to}`);
+  }),
+}));
+vi.mock("@features/mira/server/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/mira/server/session")>()),
+  getMiraAccount: vi.fn(),
+}));
+
+import JournalRoute from "@/app/mira/journal/page";
+import MiraSettings from "@features/mira/ui/MiraSettings";
+import { SessionStop } from "@features/mira/ui/weekly-session/SessionStop";
+import { sessionLinks } from "@features/mira/server/session-emails";
+import { getMiraAccount, safeNext } from "@features/mira/server/session";
+
+/** Links into Mira's pages from emails, Google's return and the stop page, and where they land. */
+
+const PROFILE = {
+  email: "lea@example.com",
+  name: "Lea",
+  country: null,
+  gender: null,
+  style: {},
+  remember_chats: true,
+  use_assessment: false,
+  nudges_on: true,
+  nudge_time: "08:00",
+  time_zone: "Europe/Berlin",
+  reply_language: null,
+};
+const scrolled = vi.fn();
+
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ profile: { ...PROFILE }, chats: [] }),
+    }))
+  );
+  // jsdom lays nothing out, so it has no scrollIntoView: the call itself is what's checked.
+  Element.prototype.scrollIntoView = scrolled;
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  scrolled.mockReset();
+  window.history.replaceState({}, "", "/");
+});
+
+/** Settings at `hash`, with each section other streams pass, as app/mira/settings/page.tsx does. */
+async function openAt(hash: string) {
+  window.history.replaceState({}, "", `/mira/settings${hash}`);
+  render(
+    <MiraSettings
+      security={<section id="security">Sign-in &amp; security</section>}
+      checks={<p>Self-checks</p>}
+      sharedReview={<p>Your rating</p>}
+      journal={<p>Daily journal</p>}
+      weeklySession={<p>Weekly session</p>}
+    />
+  );
+  await screen.findByRole("heading", { name: "Account" });
+}
+
+describe("a link into a Settings section", () => {
+  it("lands on that section once it has loaded (the browser's own jump found nothing)", async () => {
+    await openAt("#weekly");
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+    expect(scrolled.mock.contexts[0]).toBe(document.getElementById("weekly"));
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  });
+
+  it("jumps without the glide for someone who asked for less motion", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+    }));
+    await openAt("#security");
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+    expect(scrolled.mock.contexts[0]).toBe(document.getElementById("security"));
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+  });
+
+  it("does nothing without a section to go to", async () => {
+    await openAt("#nowhere");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it("is what the session emails and the stop page link to", async () => {
+    expect(new URL(sessionLinks("u1").manage).hash).toBe("#weekly");
+    render(<SessionStop token={null} />);
+    const link = screen.getByRole("link", { name: "Settings" }).getAttribute("href")!;
+    expect(link).toBe("/mira/settings#weekly");
+    cleanup();
+    await openAt("");
+    expect(document.getElementById("weekly")).not.toBeNull();
+  });
+});
+
+describe("the journal reminder's button, signed out", () => {
+  it("comes back to the check-in after sign-in", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    await expect(JournalRoute({ searchParams: Promise.resolve({ checkin: "1" }) })).rejects.toThrow(
+      `redirect:/mira/start?next=${encodeURIComponent("/mira/journal?checkin=1")}`
+    );
+    expect(safeNext("/mira/journal?checkin=1")).toBe("/mira/journal?checkin=1");
+    await expect(JournalRoute({ searchParams: Promise.resolve({}) })).rejects.toThrow(
+      `redirect:/mira/start?next=${encodeURIComponent("/mira/journal")}`
+    );
+  });
+});

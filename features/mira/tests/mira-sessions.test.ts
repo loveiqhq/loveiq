@@ -28,6 +28,7 @@ async function fakeFetch(path: string, init: RequestInit = {}): Promise<Response
       if (v === "is.null") return val === null || val === undefined;
       if (v === "not.is.null") return val !== null && val !== undefined;
       if (v.startsWith("eq.")) return String(val) === v.slice(3);
+      if (v.startsWith("gte.")) return String(val) >= v.slice(4); // ISO times compare as text
       throw new Error(`fake PostgREST: no filter ${k}=${v}`);
     });
   const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
@@ -124,7 +125,7 @@ import { runSessionReminders } from "@features/mira/server/session-emails";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, getProfile } from "@features/mira/server/store";
 import { markJoined, getSlot } from "@features/mira/server/weekly-sessions";
-import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
+import { isUndeliverable } from "@shared/emails/suppression";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import { verifyCsrfToken } from "@shared/http/csrf";
 
@@ -554,18 +555,45 @@ describe("the reminder run (every 15 minutes)", () => {
     expect(events("session_reminder_sent")).toHaveLength(1);
   });
 
-  it("sends nothing outside the window, to a suppressed address or to an under-18 stop", async () => {
+  it("sends nothing outside the window, to an undeliverable address or to an under-18 stop", async () => {
     candidates.rows = [candidate()];
     expect(await run("2026-11-24T16:55:00Z")).toMatchObject({ due: 0, sent: 0 });
     expect(await run("2026-11-24T17:35:00Z")).toMatchObject({ due: 0, sent: 0 });
-    vi.mocked(isEmailSuppressed).mockResolvedValueOnce(true);
+    vi.mocked(isUndeliverable).mockResolvedValueOnce(true);
     expect(await run("2026-11-24T17:02:00Z")).toMatchObject({
       sent: 0,
-      skipped: { suppressed: 1 },
+      skipped: { undeliverable: 1 },
     });
     candidates.rows = [candidate({}, { minor_at: "2026-11-20T10:00:00Z" })];
     expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 0, skipped: { minor: 1 } });
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // As the nudges and the journal's reminder: quiet for 14 days after the support lines showed.
+  it("sends none for 14 days after a crisis, then the next start's reminder goes", async () => {
+    candidates.rows = [candidate()];
+    db.tables.mira_event = [
+      { id: 1, user_id: LEA.id, name: "crisis_shown", created_at: "2026-11-11T09:00:00.000Z" },
+    ];
+    expect(await run("2026-11-24T17:02:00Z")).toMatchObject({
+      sent: 0,
+      skipped: { "recent-crisis": 1 },
+    });
+    expect(db.tables.mira_session_reminder ?? []).toEqual([]); // nothing claimed either
+    // Someone else's crisis, or one more than 14 days before, changes nothing.
+    db.tables.mira_event = [
+      {
+        id: 1,
+        user_id: "someone-else",
+        name: "crisis_shown",
+        created_at: "2026-11-20T09:00:00.000Z",
+      },
+      { id: 2, user_id: LEA.id, name: "crisis_shown", created_at: "2026-11-10T17:00:00.000Z" },
+    ];
+    expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 1 });
+    const asked = db.calls.find((c) => c.path.startsWith("/rest/v1/mira_event?"))!.path;
+    expect(asked).toContain(`user_id=eq.${LEA.id}`);
+    expect(asked).toContain("name=eq.crisis_shown");
   });
 
   it("gives a failed send back, so the window's second run tries again", async () => {

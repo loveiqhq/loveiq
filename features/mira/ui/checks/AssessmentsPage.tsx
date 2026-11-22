@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CHECKS, CHECK_IDS, bandOf, changeSince, type Check } from "@features/mira/content/checks";
+import { CHECKS, CHECK_IDS, bandOf, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
 import { UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
 import {
   FRAME_TAB,
+  bandText,
   bodyLine,
   checkLine,
   shortDate,
+  sinceLastTime,
   stateOf,
   useChecks,
   useDrafts,
@@ -25,7 +27,7 @@ import {
  * switches. The Assessments tab should point here (today: /mira/home#assessments).
  */
 export default function AssessmentsPage() {
-  const { data, error, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
   const body = bodyLine(data?.bodyCheck ?? null);
@@ -53,7 +55,10 @@ export default function AssessmentsPage() {
       </header>
       {error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
 
@@ -76,7 +81,7 @@ export default function AssessmentsPage() {
                     results={summary.results}
                     state={stateOf(summary, found[check.id] ?? null)}
                   />
-                ) : (
+                ) : error ? null : (
                   <div
                     aria-hidden="true"
                     className="h-[212px] animate-pulse rounded-3xl bg-ap-ground motion-reduce:animate-none"
@@ -177,7 +182,7 @@ export default function AssessmentsPage() {
               type="checkbox"
               checked={data.useAssessment}
               onChange={(e) => void toggleAssessment(e.target.checked)}
-              className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
             />
           </label>
           {useError ? (
@@ -206,9 +211,7 @@ function CheckCard({
 }) {
   const line = checkLine(check, state);
   const last = results.at(-1);
-  const first = results[0];
-  const change =
-    first && last && results.length > 1 ? changeSince(check, first.score, last.score) : null;
+  const before = results.length > 1 ? results.at(-2) : undefined;
   const primary = state.kind === "new" || state.kind === "due" || state.kind === "draft";
   return (
     <article className="flex h-full flex-col gap-3 rounded-3xl border border-ap-line p-5 transition-shadow duration-300 hover:shadow-[0_22px_54px_-20px_rgba(103,60,120,0.3)] motion-reduce:transition-none">
@@ -224,12 +227,10 @@ function CheckCard({
       {last ? (
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[18px] font-bold leading-tight">{bandOf(check, last.score).label}</p>
+            <p className="text-[18px] font-bold leading-tight">{bandText(check, last)}</p>
             <p className="text-[13px] text-ap-muted">
               {shortDate(last.at)}
-              {change && change.diff !== 0
-                ? ` · ${Math.abs(change.diff)} ${Math.abs(change.diff) === 1 ? "point" : "points"} ${change.diff < 0 ? "lower" : "higher"} than your first`
-                : ""}
+              {before ? ` · ${sinceLastTime(before.score, last.score)}` : ""}
             </p>
           </div>
           {results.length > 1 ? <Spark check={check} results={results} /> : null}
@@ -272,12 +273,12 @@ function Spark({ check, results }: { check: Check; results: CheckResult[] }) {
       <polyline
         points={pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
         fill="none"
-        stroke="#9d8ad7"
+        className="stroke-ap-lavender"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r={3.5} fill="#161021" />
+      <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r={3.5} className="fill-ap-ink" />
     </svg>
   );
 }

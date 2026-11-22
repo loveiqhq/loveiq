@@ -10,7 +10,12 @@
  *   POST   { check, answers } → scores and stores a finished check. Refused (409) before the
  *            check's retake date (14 days, 28 for loneliness), so a result covers its own two
  *            weeks; the browser never sends a score.
- *   DELETE → deletes every check result
+ *
+ * Every result carries `support`: the mood check's question 9 answered above "Not at all"
+ * (supportNow), read from its stored answers each time, so its support is shown with it on every
+ * later visit, not only in the save's response.
+ *   DELETE → deletes every check result, and the account's records of question 9's support panel
+ *            from before that panel was counted without anyone's id
  *
  * Someone Mira stopped as under 18 (server/minor.ts) gets 403 on every method, as their data is
  * gone. KPI events carry ids only: which check and whether it was a retake, never answers, scores
@@ -92,7 +97,8 @@ export async function GET(request: Request) {
         .filter((r) => r.scale === check.scale)
         .map((r) => {
           const score = scoreOf(check, r.answers);
-          return { at: r.created_at, score, band: bandOf(check, score).id };
+          const support = supportNow(check, r.answers);
+          return { at: r.created_at, score, band: bandOf(check, score).id, support };
         });
       const last = results.at(-1);
       const next = last ? nextTakeAt(check, last.at) : null;
@@ -159,9 +165,13 @@ export async function POST(request: Request) {
       { scale: check.scale, retake: last !== null }
     );
     return NextResponse.json({
-      result: { at: saved.created_at, score, band: bandOf(check, score).id },
+      result: {
+        at: saved.created_at,
+        score,
+        band: bandOf(check, score).id,
+        support: supportNow(check, answers),
+      },
       previous: last ? { at: last.created_at, score: scoreOf(check, last.answers) } : null,
-      support: supportNow(check, answers),
     });
   } catch (err) {
     return failed(err, "Your answers didn't save. Please try again.");

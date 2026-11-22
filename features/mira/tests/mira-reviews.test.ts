@@ -98,6 +98,19 @@ describe("what Mira's pages may show of her ratings", () => {
     ]);
   });
 
+  it("counts every rating, high or low, and rotates approved quotes whatever their stars", () => {
+    const pub = publicReviews([
+      approved(1, "It didn't help me.", "Bo"),
+      approved(5, "It helped me stop hiding.", "Lea"),
+      ...Array.from({ length: 18 }, () => row(3)),
+    ])!;
+    expect(pub.average).toBe(3); // (1 + 5 + 18 × 3) / 20
+    expect(pub.quotes.map((q) => q.name)).toEqual(["Bo", "Lea"]);
+    // Each takes its day in turn, the one-star quote as much as the five-star one.
+    const day = (n: number) => forToday(pub, new Date(Date.UTC(2026, 10, 22 + n, 12)));
+    expect(new Set([day(0).quote.name, day(1).quote.name])).toEqual(new Set(["Bo", "Lea"]));
+  });
+
   it("shows one quote a day, in turn, with up to three of the quoted people's initials", () => {
     const pub = {
       average: 4.8,

@@ -21,12 +21,14 @@ import { miraApi } from "../api";
 export type Ticks = { adult: boolean; terms: boolean; consent: boolean; useAssessment: boolean };
 type Failure = {
   ok: false;
-  /** What to tell the person; null when they closed the sheet themselves. */
+  /** What to tell the person; null when they closed the sheet, or nothing was asked of them. */
   error: string | null;
   /** Adding a passkey needs a fresh sign-in. */
   reauth?: boolean;
   /** The consent on file is an older wording's: tick the boxes, then try again. */
   needsConsent?: boolean;
+  /** Worth asking again: the person closed the sheet, or the challenge ran out. */
+  again?: boolean;
 };
 
 /** What the person calls their device's lock, for "Use Face ID next time?". */
@@ -68,19 +70,17 @@ export function markOffered(): void {
   }
 }
 
-/** The device's sheet closed or timed out, or another prompt replaced it: not an error. */
-function cancelled(err: unknown): boolean {
-  const e = err as { name?: string; code?: string } | null;
-  return (
-    e?.name === "NotAllowedError" ||
-    e?.name === "AbortError" ||
-    e?.code === "ERROR_CEREMONY_ABORTED"
-  );
-}
-
+/**
+ * Not errors: the device's sheet closed or timed out (worth asking again), or this page ended it
+ * for another prompt or on leaving (whoever ended it has taken over, so never asked again).
+ */
 function failure(err: unknown, fallback: string): Failure {
-  if (cancelled(err)) return { ok: false, error: null };
-  if ((err as { code?: string }).code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
+  const e = err as { name?: string; code?: string } | null;
+  if (e?.name === "NotAllowedError") return { ok: false, error: null, again: true };
+  if (e?.name === "AbortError" || e?.code === "ERROR_CEREMONY_ABORTED") {
+    return { ok: false, error: null };
+  }
+  if (e?.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
     return { ok: false, error: "This device already has a passkey for your account." };
   }
   return { ok: false, error: fallback };
@@ -130,21 +130,25 @@ export async function addPasskey(
 /**
  * Signs in with a passkey: from the button (the device's own picker) or, with `autofill`, from the
  * email field's suggestions, which wait until the person picks one. `ticks` is read when the
- * passkey answers, so boxes ticked meanwhile count.
+ * passkey answers, so boxes ticked meanwhile count. No ceremony starts once `live` says the caller
+ * has moved on (it would end the one that replaced it).
  */
 export async function signInWithPasskey(opts: {
   autofill?: boolean;
+  live?: () => boolean;
   ticks: () => Ticks;
-}): Promise<{ ok: true; needsProfile: boolean } | (Failure & { retry?: boolean })> {
+}): Promise<{ ok: true; needsProfile: boolean } | Failure> {
   const asked = await miraApi<{
     options?: Parameters<typeof startAuthentication>[0]["optionsJSON"];
   }>("/api/mira/passkeys", { body: { action: "sign-in-options" } });
   if (!asked.ok || !asked.data.options) {
+    // The suggestions end quietly: the person asked for nothing, and asking again won't help.
     return {
       ok: false,
       error: opts.autofill ? null : (asked.data.error ?? "Passkeys aren't working right now."),
     };
   }
+  if (opts.live && !opts.live()) return { ok: false, error: null };
   let response: Awaited<ReturnType<typeof startAuthentication>>;
   try {
     response = await startAuthentication({
@@ -178,7 +182,7 @@ export async function signInWithPasskey(opts: {
     ok: false,
     error: res.data.error ?? "That passkey didn't work. Please try again, or use your email.",
     needsConsent: res.data.needsConsent === true,
-    retry: res.data.retry === true,
+    again: res.data.retry === true,
   };
 }
 

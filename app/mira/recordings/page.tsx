@@ -14,6 +14,6 @@ export const dynamic = "force-dynamic";
 
 /** Talking to Mira, kept as words: every voice session of the account. */
 export default async function Page() {
-  if (!(await getMiraAccount())) redirect("/mira/start");
+  if (!(await getMiraAccount())) redirect("/mira/start?next=%2Fmira%2Frecordings");
   return <RecordingsPage />;
 }
