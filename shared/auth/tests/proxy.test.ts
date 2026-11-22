@@ -38,7 +38,7 @@ const {
   mockNextOpts: { value: null as { request?: { headers?: Headers } } | null },
   mockRedirect: vi.fn((url: URL) => ({
     redirectedTo: url.toString(),
-    cookies: { delete: vi.fn() },
+    cookies: { delete: vi.fn(), set: vi.fn() },
   })),
   mockJson: vi.fn((body: unknown, init?: { status?: number }) => ({
     status: init?.status ?? 200,
@@ -1270,5 +1270,71 @@ describe("short links", () => {
     await proxy(shortLinkRequest("/"));
     await proxy(shortLinkRequest("/k3x9p2a", { method: "POST" }));
     expect(mockFollowShortLink).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Decision 10 (22 Nov 2026): Mira's email links carry a signed token that stands for the person.
+ * It must never stay in a page's address, where PostHog, GA4 and Clarity read it.
+ */
+describe("Mira's email links", () => {
+  beforeEach(() => {
+    mockRedirect.mockClear();
+    mockNextOpts.value = null;
+  });
+
+  const cookieSet = () =>
+    (
+      mockRedirect.mock.results[0]!.value as {
+        cookies: { set: ReturnType<typeof vi.fn> };
+      }
+    ).cookies.set;
+
+  it("moves the token into an httpOnly cookie for its own page, and opens the page without it", async () => {
+    for (const path of ["/mira/session/stop", "/mira/nudges", "/mira/journal/reminder"]) {
+      mockRedirect.mockClear();
+      mockNextOpts.value = null;
+      const res = await proxy(makeNextRequest(`https://www.loveiq.org${path}?t=abc-123.sig_456`));
+      expect(mockRedirect, path).toHaveBeenCalledTimes(1);
+      // The redirect is the answer: the page itself never renders with the token in its address.
+      expect(res, path).toBe(mockRedirect.mock.results[0]!.value);
+      expect(mockNextOpts.value, path).toBeNull();
+      const [target, init] = mockRedirect.mock.calls[0] as unknown as [
+        URL,
+        { status: number; headers: Record<string, string> },
+      ];
+      expect(target.toString()).toBe(`https://www.loveiq.org${path}`);
+      expect(init.status).toBe(307);
+      expect(init.headers["Cache-Control"]).toBe("private, no-store");
+      expect(cookieSet()).toHaveBeenCalledWith("mira_link", "abc-123.sig_456", {
+        httpOnly: true,
+        secure: false, // NODE_ENV=test; production sets it
+        sameSite: "lax", // the link is opened from a mail app: a Strict cookie wouldn't come along
+        path,
+        maxAge: 3600,
+      });
+    }
+  });
+
+  it("keeps the link's other parameters, and every page without a token is left alone", async () => {
+    await proxy(makeNextRequest("https://www.loveiq.org/mira/nudges?utm_source=email&t=x.y"));
+    const [target] = mockRedirect.mock.calls[0] as unknown as [URL];
+    expect(target.toString()).toBe("https://www.loveiq.org/mira/nudges?utm_source=email");
+
+    mockRedirect.mockClear();
+    for (const url of [
+      "https://www.loveiq.org/mira/nudges",
+      "https://www.loveiq.org/mira?t=x.y",
+      "https://www.loveiq.org/mira/journal?t=x.y",
+      "https://www.loveiq.org/api/mira/nudges/unsubscribe?t=x.y",
+    ]) {
+      await proxy(makeNextRequest(url));
+    }
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it("caps what it keeps, so a pasted wall of text can't fill the cookie", async () => {
+    await proxy(makeNextRequest(`https://www.loveiq.org/mira/nudges?t=${"a".repeat(5000)}`));
+    expect(cookieSet().mock.calls[0]![1]).toHaveLength(200);
   });
 });

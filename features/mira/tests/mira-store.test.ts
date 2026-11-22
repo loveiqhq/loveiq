@@ -110,6 +110,26 @@ describe("deleting a Mira account", () => {
     }
   });
 
+  it("unlinks what stays in the log from her browsers too, so a new sign-up there can't re-link it (ID-16)", async () => {
+    // The notice: "the rest is no longer linked to you". The rows keep their user_id until the
+    // account goes (ON DELETE SET NULL); the browser id would link them again, so it goes too.
+    await deleteAccount(LEA);
+    const all = calls();
+    const at = (call: string) => all.findIndex((c) => c.call === call);
+    const login = all.findIndex((c) => c.call.startsWith("DELETE /auth/v1/admin/users/"));
+    const browser = `PATCH /rest/v1/mira_event?anon_id=in.(${BROWSER})&user_id=is.null`;
+    const own = `PATCH /rest/v1/mira_event?user_id=eq.${LEA.id}&anon_id=not.is.null`;
+    for (const call of [browser, own]) {
+      expect(at(call), call).toBeGreaterThanOrEqual(0);
+      expect(all[at(call)]!.body, call).toEqual({ anon_id: null });
+      expect(at(call), call).toBeLessThan(login);
+    }
+    // After the words were found and removed through that same browser id.
+    expect(at(browser)).toBeGreaterThan(
+      at(`DELETE /rest/v1/mira_event?anon_id=in.(${BROWSER})&name=eq.feedback`)
+    );
+  });
+
   it("deletes nothing more once a step fails, so a retry starts over", async () => {
     vi.mocked(supabaseFetch).mockImplementation(async (path: string) =>
       path.includes("name=eq.feedback")
@@ -130,6 +150,8 @@ describe("deleting all chats", () => {
     );
     expect(all).toContain(`DELETE /rest/v1/mira_chat?user_id=eq.${LEA.id}`);
     expect(all.some((c) => c.includes("feedback") || c.includes("mira_sign_in_code"))).toBe(false);
+    // The account stays, so its log stays linked to it.
+    expect(calls().some((c) => c.body?.anon_id === null)).toBe(false);
   });
 });
 

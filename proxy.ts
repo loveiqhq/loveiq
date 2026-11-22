@@ -26,6 +26,7 @@ import {
 } from "@features/pay-to-start/logic/offer";
 import { shortCodeOf, shortLinkTarget } from "@features/short-links/logic/shortLink";
 import { followShortLink } from "@features/short-links/server/shortLinks";
+import { LINK_COOKIE, LINK_COOKIE_MAX_AGE, LINK_PAGES } from "@features/mira/email-link";
 
 // Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
 // `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
@@ -407,6 +408,31 @@ async function answerShortLink(request: NextRequest, code: string): Promise<Next
 }
 
 /**
+ * Mira's email links (features/mira/email-link.ts): the signed token in `?t=` moves into an
+ * httpOnly cookie that only its own page receives, and the page opens again without it, before
+ * the page or any analytics tag reads the address. Capped: a token is about 80 characters.
+ */
+function moveMiraLinkToken(request: NextRequest): NextResponse | null {
+  const path = request.nextUrl.pathname;
+  const token = request.nextUrl.searchParams.get("t");
+  if (token === null || !LINK_PAGES.includes(path)) return null;
+  const url = new URL(request.url);
+  url.searchParams.delete("t");
+  const response = NextResponse.redirect(url, {
+    status: 307,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+  response.cookies.set(LINK_COOKIE, token.slice(0, 200), {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    path,
+    maxAge: LINK_COOKIE_MAX_AGE,
+  });
+  return response;
+}
+
+/**
  * No page may use the location, camera, payment or microphone, except that Mira's pages may use
  * the microphone themselves: talking to Mira (features/mira/ui/voice) runs on the browser's own
  * speech recognition, which the policy would otherwise refuse. All of Mira's pages, because a
@@ -475,6 +501,9 @@ export async function proxy(request: NextRequest) {
     const shortLink = await answerShortLink(request, shortCode);
     if (shortLink) return shortLink;
   }
+
+  const miraLink = moveMiraLinkToken(request);
+  if (miraLink) return miraLink;
 
   // Generate a random nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
