@@ -216,7 +216,8 @@ function Card({ title, id, children }: { title: string; id: string; children: Re
       aria-labelledby={id}
       className="flex flex-col rounded-[20px] border border-ap-line bg-white"
     >
-      <h3 id={id} className="px-5 pb-1 pt-5 text-[16px] font-bold">
+      {/* Focusable: where the focus goes when a control in the card goes away (R3-ACCT-6). */}
+      <h3 id={id} tabIndex={-1} className="px-5 pb-1 pt-5 text-[16px] font-bold outline-none">
         {title}
       </h3>
       <div className="flex flex-col divide-y divide-ap-line">{children}</div>
@@ -283,6 +284,18 @@ function keepChange(w: Changing | null): void {
   }
 }
 
+/**
+ * When what `shown` opened goes (Cancel, "Not now", done), the focus goes to `back`, the button
+ * that comes back in its place, never to the page (round-3 R3-ACCT-6).
+ */
+function useFocusBack(shown: boolean, back: { current: HTMLElement | null }) {
+  const was = useRef(shown);
+  useEffect(() => {
+    if (was.current && !shown) back.current?.focus();
+    was.current = shown;
+  }, [shown, back]);
+}
+
 function EmailRow({
   data,
   onChanged,
@@ -296,6 +309,8 @@ function EmailRow({
   const [open, setOpen] = useState(
     () => data.emailChange.allowed && waitingChange(data.email) !== null
   );
+  const change = useRef<HTMLButtonElement>(null);
+  useFocusBack(open, change);
   return (
     <Row
       icon={<MailIcon />}
@@ -311,6 +326,7 @@ function EmailRow({
       action={
         data.emailChange.allowed && !open ? (
           <button
+            ref={change}
             type="button"
             className={LINK}
             aria-label="Change email"
@@ -563,6 +579,8 @@ function Passkeys({
   const [error, setError] = useState<string | null>(null);
   const [reauth, setReauth] = useState(false);
   const [fresh, setFresh] = useState<string | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  useFocusBack(reauth, addButton);
 
   async function add() {
     if (!data.recent) return setReauth(true);
@@ -625,6 +643,8 @@ function Passkeys({
                   left ?? list.filter((x) => x.id !== p.id),
                   `Removed “${p.label}”. You can still sign in with a code.`
                 );
+                // The item (and the focused button) went: the focus stays in the card.
+                document.getElementById("sign-in-h")?.focus();
               }}
             />
           ))}
@@ -638,6 +658,7 @@ function Passkeys({
       ) : allowed && canPasskey ? (
         <div>
           <button
+            ref={addButton}
             type="button"
             className={PILL}
             aria-disabled={busy || undefined}
@@ -854,6 +875,7 @@ function Devices({
   const cancelAll = useRef<HTMLButtonElement>(null);
   const allOpener = useRef<HTMLButtonElement>(null);
   const asked = useRef(false);
+  const devicesHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     if (confirmAll) {
@@ -879,6 +901,8 @@ function Devices({
     if (r.data.signedOut) return onSignedOut();
     const gone = devices.find((d) => d.id === id);
     onGone(id);
+    // Its row (and the focused button) went: the focus stays in the card (R3-ACCT-6).
+    devicesHeading.current?.focus();
     if (gone) onNotice({ ok: true, text: `Signed out on ${gone.device}.` });
   }
 
@@ -889,7 +913,12 @@ function Devices({
       className="flex flex-col rounded-[20px] border border-ap-line bg-white"
     >
       <div className="px-5 pb-2 pt-5">
-        <h3 id="devices-h" className="text-[16px] font-bold">
+        <h3
+          id="devices-h"
+          ref={devicesHeading}
+          tabIndex={-1}
+          className="text-[16px] font-bold outline-none"
+        >
           Devices
         </h3>
         <p className="text-[14px] text-ap-body">
@@ -1004,9 +1033,12 @@ function Reauth({
   onReauth: () => void;
   onCancel: () => void;
 }) {
+  // It takes the place of the button that asked: the focus comes with what it says (R3-ACCT-6).
+  const said = useRef<HTMLParagraphElement>(null);
+  useEffect(() => said.current?.focus(), []);
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-ap-lilac p-4 text-[14px] motion-safe:animate-mira-rise">
-      <p role="alert">
+      <p ref={said} role="alert" tabIndex={-1} className="outline-none">
         For your security, please sign in again to {what}. You&apos;ll come straight back here.
       </p>
       <div className="flex flex-wrap gap-3">

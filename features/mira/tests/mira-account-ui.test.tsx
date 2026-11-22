@@ -601,6 +601,45 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("DELETE /api/mira/security")[1]!.url).toBe("/api/mira/security?device=all");
   });
 
+  // Round-3 R3-ACCT-6: when the control that had the focus went away, the focus fell to the page:
+  // signing out another device, removing a passkey, and the re-sign-in box (opening and Not now).
+  it("never drops the focus on the page when its control goes away", async () => {
+    const devices = await show({ recent: false });
+    const press = (b: HTMLElement) => {
+      b.focus();
+      fireEvent.click(b);
+    };
+    press(within(devices).getByRole("button", { name: "Sign out iPhone · Safari" }));
+    await waitFor(() =>
+      expect(within(devices).getByRole("heading", { name: "Devices" })).toHaveFocus()
+    );
+
+    const how = screen.getByRole("region", { name: "How you sign in" });
+    press(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    press(within(how).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("heading", { name: "How you sign in" })).toHaveFocus()
+    );
+
+    // The re-sign-in box takes the focus with what it says, and Not now gives it back.
+    press(within(how).getByRole("button", { name: "Change email" }));
+    await waitFor(() =>
+      expect(within(how).getByText(/please sign in again to change your email/)).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Not now" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("button", { name: "Change email" })).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Add a passkey" }));
+    await waitFor(() =>
+      expect(within(how).getByText(/please sign in again to add a passkey/)).toHaveFocus()
+    );
+    press(within(how).getByRole("button", { name: "Not now" }));
+    await waitFor(() =>
+      expect(within(how).getByRole("button", { name: "Add a passkey" })).toHaveFocus()
+    );
+  });
+
   it("renames and removes a passkey, and tells the passkey manager which still work", async () => {
     await show();
     const how = screen.getByRole("region", { name: "How you sign in" });
