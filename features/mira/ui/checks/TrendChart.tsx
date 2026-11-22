@@ -25,11 +25,17 @@ const TINTS = [
 const H = 196;
 const PAD = { left: 12, right: 92, top: 22, bottom: 30 };
 
-/** The plain-words summary of a check's results: how many, the latest, the points since last time. */
+/**
+ * The plain-words summary of a check's results: how many, the latest, the points since last time.
+ * A latest result with question 9 above "Not at all" is its score alone: the band's word
+ * ("minimal") is never the summary of it (round-2 HAB-9; the page adds SUPPORT_HEADLINE).
+ */
 export function trendSummary(check: Check, results: CheckResult[]): string {
   const last = results.at(-1);
   if (!last) return "No results yet.";
-  const latest = `${bandOf(check, last.score).label.toLowerCase()} (${last.score} of ${check.max}) on ${shortDate(last.at)}`;
+  const score = `${last.score} of ${check.max}`;
+  const band = bandOf(check, last.score).label.toLowerCase();
+  const latest = `${last.support ? score : `${band} (${score})`} on ${shortDate(last.at)}`;
   if (results.length === 1) return `One result so far: ${latest}.`;
   const since = sinceLastTime(results.at(-2)!.score, last.score);
   return `${results.length} results. Your latest is ${latest}, ${since}.`;

@@ -476,9 +476,13 @@ describe("the mood check's question 9", () => {
     const rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows[1]!.textContent).toMatch(/Minimal · support for you/);
     expect(rows[2]!.textContent).not.toMatch(/support/);
-    expect(screen.getByRole("region", { name: "Over time" }).textContent).toMatch(
-      /minimal \(3 of 27\).*Your answer to the last question/
+    // HAB-9's remainder: the summary names the score, never the band's reassuring word.
+    const overTime = within(screen.getByRole("region", { name: "Over time" }));
+    const sentence = overTime.getByText(/^2 results\./);
+    expect(sentence.textContent).toMatch(
+      /^2 results\. Your latest is 3 of 27 on \d+ \w+, 1 point higher than last time\. Your answer to the last question matters more than this score\.$/
     );
+    expect(sentence.textContent).not.toMatch(/minimal/i);
     // Its panel is question 9's, with the warm words and the way to Mira.
     fireEvent.click(steps.getByRole("button", { name: /See support lines/ }));
     expect(screen.getByRole("dialog", { name: "Support right now" }).textContent).toMatch(
