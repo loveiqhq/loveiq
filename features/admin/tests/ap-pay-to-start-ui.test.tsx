@@ -335,6 +335,20 @@ describe("ApPayToStart", () => {
     expect(within(card).getAllByRole("button", { name: /about pressed unlock/i }).length).toBe(1);
   });
 
+  it("says when a live funnel has no week in the range, rather than key a line drawn nowhere", () => {
+    view.payload = {
+      ...payload,
+      weeks: payload.weeks.map((w) => ({
+        ...w,
+        funnels: { ...w.funnels, full: { cac: null, cvr: null, roas: null } },
+      })),
+    };
+    render(<ApPayToStart />);
+    expect(screen.getByText("Pay to start · €29.99 · no week in this range")).toBeTruthy();
+    // A funnel with a line keeps its plain label.
+    expect(screen.queryByText("Pay after the report · no week in this range")).toBeNull();
+  });
+
   it("draws a line per funnel by week, the gate's legend saying it is off", () => {
     view.payload = payload;
     render(<ApPayToStart />);

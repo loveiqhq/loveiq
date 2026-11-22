@@ -8,7 +8,14 @@ import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
 import { Info } from "./field-info";
 import { IndexHover, type Tip } from "./hover";
 import { AllTraffic, Card, Pills, SectionHead } from "./kit";
-import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
+import {
+  SHEET_BADGE_BG,
+  SHEET_NAMES,
+  sheetBounce,
+  sheetConversion,
+  sheetSpots,
+  type SheetSpot,
+} from "./sheets";
 
 /**
  * Marcus's "Time and drop-out per question" (Survey copy board, 10 Nov 2026): each question in
@@ -158,14 +165,14 @@ export default function TimeDropSection({
           ],
         };
   const pinKey = chart.cols.some((c) => c.sheets.length > 0)
-    ? [{ label: "Sheet, numbered", color: PIN, pin: true, info: "survey.sheets" }]
+    ? [{ label: "Sheet, between questions", color: PIN, pin: true, info: "survey.sheets" }]
     : [];
   return (
     <Card id="time-drop" labelledBy="h-td">
       <SectionHead
         id="h-td"
         title="Time and drop-out per question"
-        description={`Every question in ${order === "test" ? "the new order (C13)" : "the old order"}. Hover a bar to see the question; click it to open it in Question detail.`}
+        description={`Every question in ${order === "test" ? "the new order (C13)" : "the old order"}${pinKey.length ? ", with the numbered sheets where they sit between questions" : ""}. Hover a bar to see the question; click it to open it in Question detail.`}
       />
       {order && q?.test && (
         <div className="flex flex-wrap items-center gap-2">
@@ -410,7 +417,7 @@ function Figure({
               {k.pin ? (
                 <span
                   aria-hidden="true"
-                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[8px] font-bold text-white"
+                  className={`flex h-3.5 w-3.5 items-center justify-center rounded-full ${SHEET_BADGE_BG} text-[8px] font-bold text-white`}
                 >
                   1
                 </span>
@@ -465,7 +472,7 @@ function Figure({
                               style={{ borderColor: PIN }}
                             />
                             <span
-                              className="absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]"
+                              className={`absolute -right-[10px] z-[3] flex h-[18px] w-[18px] items-center justify-center rounded-full ${SHEET_BADGE_BG} text-[10px] font-bold text-white shadow-[0_0_0_2px_#fff]`}
                               style={{ top: `${-28 - k * 20}px` }}
                             >
                               {sh.n}

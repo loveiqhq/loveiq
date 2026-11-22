@@ -240,6 +240,20 @@ describe("the sheets in the question funnel", () => {
       ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
       ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
     ]);
+    // Mark's board: the section says where the sheets are, and the key names them as between
+    // questions (the expert's opens before its question, so not "after").
+    expect(charts.textContent).toContain(
+      "with the numbered sheets where they sit between questions."
+    );
+    expect(within(charts).getAllByText("Sheet, between questions")).toHaveLength(2);
+  });
+
+  it("says nothing about sheets on the charts for a range before them", () => {
+    view.payload = page("2026-11-15");
+    render(<ApSurvey />);
+    const charts = document.getElementById("time-drop")!;
+    expect(charts.textContent).not.toContain("numbered sheets");
+    expect(within(charts).queryByText("Sheet, between questions")).toBeNull();
   });
 });
 
@@ -256,6 +270,21 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
     ).toBeTruthy();
     // The Sheets section still has them.
     expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(7);
+  });
+
+  it("says why the Sheets section counts all traffic under a filter (the true reason)", () => {
+    view.payload = page("2026-11-21", undefined, {
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-16", to: "2026-11-21", device: "phone" },
+        "2026-11-22"
+      ),
+    });
+    render(<ApSurvey />);
+    const sheets = document.getElementById("sheets")!;
+    expect(sheets.textContent).toContain(
+      "The sheets count all traffic whatever the filters: they are read from PostHog, while the filters narrow the survey runs in our database."
+    );
+    expect(sheets.textContent).not.toContain("carry no source or device");
   });
 
   it("says from when a sheet is counted, for a range that starts before the sheets", () => {

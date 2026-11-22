@@ -22,6 +22,12 @@ export const SHEET_NAMES: Record<SurveySheetId, { name: string; kind: string; ta
   reportMap: { name: "How to read your report", kind: "Report map" },
 };
 
+/**
+ * The sheets' badge colour: Mark's orange → orchid → violet (Survey copy board), each stop
+ * darkened until white numbers read at 5:1 or better (his #fe6839, #bf66d9, #958ef6 give 2.8–3.4).
+ */
+export const SHEET_BADGE_BG = "bg-[linear-gradient(135deg,#c2410c_0%,#8e3fa8_50%,#5b52d6_100%)]";
+
 /** A sheet's number, 1 to 6, as the page writes it. */
 export const sheetNumber = (id: SurveySheetId) => SURVEY_SHEETS.findIndex((s) => s.id === id) + 1;
 

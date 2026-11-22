@@ -673,7 +673,13 @@ function WeekChart({ weeks, funnels }: { weeks: PtsWeek[]; funnels: PtsFunnel[] 
         {funnels.map((f) => (
           <span key={f.key} className="inline-flex items-center gap-1.5">
             <LineKey k={f.key} />
-            {f.live ? f.label : `${f.label} · off, line starts when switched on`}
+            {!f.live
+              ? `${f.label} · off, line starts when switched on`
+              : // A funnel with no week in the range (the free report before the paywall, for a
+                // range after 22 Oct) is keyed but drawn nowhere: say so rather than leave it.
+                runs(f.key).length === 0
+                ? `${f.label} · no week in this range`
+                : f.label}
           </span>
         ))}
       </div>

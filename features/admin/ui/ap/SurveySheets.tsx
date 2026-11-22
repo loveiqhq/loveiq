@@ -7,7 +7,14 @@ import { SURVEY_SHEET_IDS } from "@features/survey/surveySheets";
 
 import { Info } from "./field-info";
 import { AllTraffic, Card, SectionHead, StatBox, TileGrid } from "./kit";
-import { SHEET_NAMES, sheetBounce, sheetConversion, sheetNumber, sheetSpots } from "./sheets";
+import {
+  SHEET_BADGE_BG,
+  SHEET_NAMES,
+  sheetBounce,
+  sheetConversion,
+  sheetNumber,
+  sheetSpots,
+} from "./sheets";
 import { overFive } from "./SurveyTimeDrop";
 
 /** The table's columns, as drawn: badge and name, where it sits, then the four figures. */
@@ -44,7 +51,7 @@ export default function SheetsSection({
       <AllTraffic
         note={
           data.narrowed &&
-          "The sheets are all traffic's whatever the filters: their events carry no source or device."
+          "The sheets count all traffic whatever the filters: they are read from PostHog, while the filters narrow the survey runs in our database."
         }
       />
       {seen === null ? (
@@ -133,7 +140,7 @@ export default function SheetsSection({
                       </span>
                     </span>
                     <span role="cell" className="flex flex-col gap-px px-3 py-2.5">
-                      <span className="text-[13px] font-semibold text-ap-ink">
+                      <span className="text-xs font-bold uppercase tracking-[0.06em] text-ap-plum">
                         {spot ? spot.where : placed ? "Not in this order" : "—"}
                       </span>
                       <span className="text-[11px] leading-snug text-ap-muted">
@@ -189,7 +196,7 @@ export function SheetBadge({ n }: { n: number }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#9b4fc4] to-[#5a42a6] text-[11px] font-bold text-white"
+      className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full ${SHEET_BADGE_BG} text-[11px] font-bold text-white`}
     >
       {n}
     </span>
