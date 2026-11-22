@@ -27,6 +27,7 @@ vi.mock("@features/mira/server/session", () => ({
 vi.mock("@features/mira/server/store", () => ({
   deleteAccount: vi.fn(),
   deleteChats: vi.fn().mockResolvedValue(undefined),
+  forgetEventText: vi.fn().mockResolvedValue(undefined),
   findAssessment: vi.fn().mockResolvedValue(null),
   getProfile: vi.fn(),
   listChats: vi.fn().mockResolvedValue([]),
@@ -34,7 +35,7 @@ vi.mock("@features/mira/server/store", () => ({
   updateProfile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { PATCH } from "@/app/api/mira/me/route";
+import { GET, PATCH } from "@/app/api/mira/me/route";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { MINOR_COOKIE } from "@features/mira/server/config";
 import { stopForMinor } from "@features/mira/server/minor";
@@ -45,7 +46,7 @@ import {
 } from "@features/mira/server/prompt";
 import { isCrisisMessage, parseReply } from "@features/mira/server/safety";
 import { getMiraAccount } from "@features/mira/server/session";
-import { logMiraEvent, updateProfile } from "@features/mira/server/store";
+import { getProfile, logMiraEvent, updateProfile } from "@features/mira/server/store";
 import { REPLY_LANGUAGES, type ReplyLanguage } from "@features/mira/reply-languages";
 import {
   accountLook,
@@ -188,12 +189,23 @@ describe("PATCH /api/mira/me (appearance and reply language)", () => {
     vi.mocked(supabaseFetch).mockResolvedValue(
       new Response(JSON.stringify([{ id: "u1" }]), { status: 200 })
     );
-    expect((await patch({ theme: "dark" })).status).toBe(403);
+    const refused = await patch({ theme: "dark" });
+    expect(refused.status).toBe(403);
+    // The flag every screen reads as "Mira is only for adults." (a CSRF refusal is a 403 too).
+    expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     cookieJar.set(MINOR_COOKIE, "1");
     notMinor();
     expect((await patch({ reply_language: "de" })).status).toBe(403);
     expect(updateProfile).not.toHaveBeenCalled();
     expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("tells Settings when this browser or the account was stopped as under 18 (GET)", async () => {
+    vi.mocked(getProfile).mockResolvedValue({ id: "u1", email: "lea@example.com" } as never);
+    const read = async () => (await GET(new Request("http://localhost/api/mira/me"))).json();
+    expect(await read()).toMatchObject({ minor: false });
+    cookieJar.set(MINOR_COOKIE, "1");
+    expect(await read()).toMatchObject({ minor: true, profile: { email: "lea@example.com" } });
   });
 });
 

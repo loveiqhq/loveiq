@@ -42,7 +42,7 @@ describe("the logo", () => {
     const link = html(<Wordmark />).querySelector("a")!;
     expect(link.getAttribute("aria-label")).toBeNull();
     expect(link.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      "Applied Psychometrics BETA, Mira home"
+      "Applied Psychometrics BETA, talk to Mira"
     );
   });
 });

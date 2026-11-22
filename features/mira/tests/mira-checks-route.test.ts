@@ -101,6 +101,10 @@ beforeEach(() => {
     if (method === "DELETE" && path.startsWith("/rest/v1/mira_event?")) {
       return new Response(null, { status: 204 });
     }
+    if (method === "DELETE" && path === "/rest/v1/mira_body_check?user_id=eq.u1") {
+      db.body = [];
+      return new Response(null, { status: 204 });
+    }
     if (method === "GET" && path.startsWith("/rest/v1/mira_body_check?user_id=eq.u1")) {
       return json(db.body);
     }
@@ -152,7 +156,8 @@ describe("every method", () => {
     ] as const) {
       const res = await call(h, m, m === "POST" ? { check: "anxiety", answers: GAD } : undefined);
       expect(res.status, m).toBe(403);
-      expect(await res.json()).toEqual({ error: "Mira is only for adults." });
+      // Decision 9: one sentence, marked so the screens show the kit's AdultsOnly.
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     }
     expect(isMinor).toHaveBeenCalledWith("u1");
     expect(db.checks).toEqual([]);
@@ -296,6 +301,12 @@ describe("DELETE", () => {
     expect((await call(DELETE, "DELETE")).status).toBe(200);
     expect(db.checks.map((r) => r.user_id)).toEqual(["someone-else"]);
     expect(events()).toEqual([["checks_deleted", { userId: "u1" }]]);
+  });
+
+  it("deletes the account's body checks too, so all its check answers can go without the account", async () => {
+    db.body = [{ score: 3.4, created_at: ago(3) }];
+    expect((await call(DELETE, "DELETE")).status).toBe(200);
+    expect(db.body).toEqual([]);
   });
 
   it("deletes the account's own records of question 9's support panel, from before they were counted without an id", async () => {

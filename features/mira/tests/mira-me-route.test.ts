@@ -147,6 +147,26 @@ describe("PATCH /api/mira/me", () => {
     ]);
   });
 
+  it("puts the coaching scales sent onto the newest saved style: no tab undoes another's (SET-3)", async () => {
+    // Tab A saved Guidance 2; tab B, still showing the old style, now sets Depth 4.
+    vi.mocked(getProfile).mockResolvedValue({ nudges_on: true, style: { guidance: 2 } } as never);
+    await PATCH(call("PATCH", "", { style: { depth: 4 } }));
+    expect(vi.mocked(updateProfile).mock.calls[0]![1]).toEqual({
+      style: { guidance: 2, depth: 4 },
+    });
+    // A point moved back to the middle is sent as 3, balanced, and kept as no entry.
+    vi.mocked(getProfile).mockResolvedValue({
+      nudges_on: false,
+      style: { guidance: 2, depth: 4 },
+    } as never);
+    await PATCH(call("PATCH", "", { style: { guidance: 3 } }));
+    expect(vi.mocked(updateProfile).mock.calls[1]![1]).toEqual({ style: { depth: 4 } });
+    // "Reset to balanced": every scale at 3, so nothing is left.
+    const all = { guidance: 3, challenge: 3, depth: 3, practical: 3, tone: 3 };
+    await PATCH(call("PATCH", "", { style: all }));
+    expect(vi.mocked(updateProfile).mock.calls[2]![1]).toEqual({ style: {} });
+  });
+
   it("doesn't read the profile when the switch isn't sent", async () => {
     await PATCH(call("PATCH", "", { name: "Lea" }));
     expect(getProfile).not.toHaveBeenCalled();

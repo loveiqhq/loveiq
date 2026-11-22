@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
+import { SwitchRow } from "../checks/ChecksSettings";
+import { AskFirst, refocus } from "../journal/parts";
+import { AdultsOnly } from "../kit";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const OUTLINE_PILL =
-  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50";
 
 /**
  * Settings' "Weekly session" section (board 08c's "Session reminders"): the booked time with a
@@ -17,14 +20,26 @@ const OUTLINE_PILL =
 export function WeeklySessionSettings() {
   const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
   const [sheet, setSheet] = useState(false);
-  const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A cancellation that couldn't be emailed: its calendar update, to open in a calendar instead.
   const [file, setFile] = useState<string | null>(null);
+  // Where focus goes when the sheet closes and its opener went with the booking.
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const id = useId();
 
-  if (state.status === "signed-out" || state.status === "unavailable") return null;
+  if (state.status === "signed-out") return null;
+  if (state.status === "unavailable") {
+    return (
+      <section aria-labelledby="weekly-session-h" className="flex flex-col gap-3">
+        <h2 id="weekly-session-h" className="font-serif text-[22px] font-medium">
+          Weekly session
+        </h2>
+        <AdultsOnly />
+      </section>
+    );
+  }
   const slot = state.status === "ready" ? state.slot : null;
 
   async function run(action: () => Promise<string | null>, done: string) {
@@ -37,20 +52,19 @@ export function WeeklySessionSettings() {
     else setStatus(done);
   }
 
-  async function cancelSession() {
-    setBusy(true);
+  /** "Cancel session" once asked: null, or the message the question shows. */
+  async function cancelSession(): Promise<string | null> {
     setError(null);
     setStatus(null);
     const r = await cancel();
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
-    setConfirm(false);
+    if (!r.ok) return r.error;
     setFile(r.emailed ? null : r.ics);
     setStatus(
       r.emailed
         ? "Your weekly session is cancelled."
         : "Your weekly session is cancelled, but we couldn’t email the update, so it may still be in your calendar. Delete it there, or open this file with Apple Calendar or Outlook."
     );
+    return null;
   }
 
   return (
@@ -91,66 +105,39 @@ export function WeeklySessionSettings() {
                 }).format(new Date(slot.next))}
               </span>
             </span>
-            <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+            <button
+              ref={opener}
+              type="button"
+              aria-label="Change your weekly session"
+              onClick={() => setSheet(true)}
+              className={OUTLINE_PILL}
+            >
               Change
             </button>
           </div>
-          <label className="flex items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
-            <span>
-              <span className="block text-[15px] font-bold">Reminder emails</span>
-              <span className="text-[14px] text-ap-body">
-                A short email 30 to 60 minutes before each session. Neutral subject line.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={!slot.paused}
-              disabled={busy}
-              onChange={(e) =>
-                void run(
-                  () => setPaused(!e.target.checked),
-                  e.target.checked ? "Reminders are on." : "Reminders are paused."
-                )
-              }
-              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
-            />
-          </label>
-          {confirm ? (
-            <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
-              <p>
-                Cancel your weekly session? An update that takes it out of your calendar comes by
-                email, or here if the email can’t go.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void cancelSession()}
-                  className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-                >
-                  Cancel session
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirm(false)}
-                  className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-                >
-                  Keep it
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setStatus(null);
-                setConfirm(true);
-              }}
-              className="w-fit min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline underline-offset-2"
-            >
-              Cancel weekly session
-            </button>
-          )}
+          <SwitchRow
+            id={id}
+            label="Reminder emails"
+            description="A short email 30 to 60 minutes before each session. Neutral subject line."
+            checked={!slot.paused}
+            busy={busy}
+            onChange={(on) =>
+              void run(() => setPaused(!on), on ? "Reminders are on." : "Reminders are paused.")
+            }
+          />
+          {slot.remindersOnHold && !slot.paused ? (
+            <p className="text-[14px] text-ap-body">
+              Reminder emails are on hold for up to two weeks after the support lines came up, so
+              none goes out for now. They start again on their own.
+            </p>
+          ) : null}
+          <AskFirst
+            label="Cancel weekly session"
+            question="Cancel your weekly session? An update that takes it out of your calendar comes by email, or here if the email can’t go."
+            action="Cancel session"
+            className="w-fit min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline underline-offset-2"
+            run={cancelSession}
+          />
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ap-line p-4">
@@ -158,7 +145,12 @@ export function WeeklySessionSettings() {
             No weekly session yet. Book 15 minutes a week with Mira: a calendar invite, and a short
             reminder before each session.
           </p>
-          <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+          <button
+            ref={opener}
+            type="button"
+            onClick={() => setSheet(true)}
+            className={OUTLINE_PILL}
+          >
             Choose a time
           </button>
         </div>
@@ -190,7 +182,10 @@ export function WeeklySessionSettings() {
           timeZone={state.timeZone}
           source="settings"
           book={book}
-          onClose={() => setSheet(false)}
+          onClose={() => {
+            setSheet(false);
+            refocus(() => opener.current);
+          }}
         />
       ) : null}
     </section>

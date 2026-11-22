@@ -1,13 +1,14 @@
 /**
  * /api/mira/me — the signed-in account (boards 06, 08, 08b, 08c).
  *
- *   GET            → profile, chats, the LoveIQ result matched on the verified email, and
- *                    which body check is due (features/mira/server/body-check.ts)
+ *   GET            → profile, chats, the LoveIQ result matched on the verified email, which
+ *                    body check is due (features/mira/server/body-check.ts), and `minor`: this
+ *                    browser or the account was stopped as under 18 (server/minor.ts)
  *   PATCH          → name, country, gender, coaching style, the "What Mira may use" switches
  *                    (memory, the LoveIQ result and, from 22 Nov 2026, the self-checks' bands,
  *                    each turn of which is recorded as use_checks_set with its wording's
  *                    version), the nudges, the reply language and the appearance (theme, text
- *                    size); never for an account stopped as under 18 (403, server/minor.ts)
+ *                    size); never for an account stopped as under 18 (403 `minor: true`)
  *   DELETE ?what=chats    → deletes every stored chat
  *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
  *       Jarvis login stays: see deleteAccount)
@@ -100,12 +101,16 @@ export async function GET(request: Request) {
   const g = await guard(request, false);
   if ("error" in g) return g.error;
   try {
-    const [profile, chats, assessment, checks] = await Promise.all([
+    const [profile, chats, assessment, checks, minor] = await Promise.all([
       getProfile(g.account.id),
       listChats(g.account.id),
       findAssessment(g.account.email).catch(() => null),
       // Only offers the check: a failed read offers nothing rather than failing the page.
       listBodyChecks(g.account.id).catch(() => null),
+      // This browser or the account was stopped as under 18: Settings then shows only what still
+      // works (signing out, deleting, taking a rating back). Unsure is not stopped: every write
+      // checks again and refuses.
+      isMinor(g.account.id).catch(() => false),
     ]);
     if (!profile) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     const bodyCheck = {
@@ -117,7 +122,7 @@ export async function GET(request: Request) {
         : null,
     };
     return NextResponse.json(
-      { profile, chats, assessment, bodyCheck },
+      { profile, chats, assessment, bodyCheck, minor },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
@@ -134,15 +139,28 @@ export async function PATCH(request: Request) {
   try {
     // Under 18 (rail 15): Mira keeps nothing new for the account, settings included.
     if (await isMinor(g.account.id)) {
-      return NextResponse.json({ error: "Mira is only for adults." }, { status: 403 });
+      return NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
     }
-    const { nudges_on, ...rest } = parsed.data;
+    const { nudges_on, style, ...rest } = parsed.data;
     // The switch in Settings is the same stop as the email's: on again clears the stop. Settings
     // sends nudges_on with every save, so only a real switch counts: the same value again must
     // not re-stamp the stop or wipe the reason given for it.
-    const stored = nudges_on === undefined ? null : await getProfile(g.account.id);
+    const stored =
+      nudges_on === undefined && style === undefined ? null : await getProfile(g.account.id);
+    // The coaching style: the scales sent, onto the newest saved style, so a stale tab, another
+    // device or the chat's panel never undoes another's change (round-2 SET-3). 3 is balanced and
+    // kept as no entry. ponytail: read, merge, write; two saves in the same instant could still
+    // race (a jsonb `||` in SQL would close that).
+    const styleNow =
+      style === undefined
+        ? {}
+        : {
+            style: Object.fromEntries(
+              Object.entries({ ...(stored?.style ?? {}), ...style }).filter(([, v]) => v !== 3)
+            ),
+          };
     const nudgeState =
-      !stored || nudges_on === stored.nudges_on
+      nudges_on === undefined || !stored || nudges_on === stored.nudges_on
         ? {}
         : nudges_on
           ? {
@@ -152,7 +170,7 @@ export async function PATCH(request: Request) {
               nudges_paused_until: null,
             }
           : { nudges_on, nudges_stopped_at: new Date().toISOString(), nudge_stop_reason: null };
-    await updateProfile(g.account.id, { ...rest, ...nudgeState });
+    await updateProfile(g.account.id, { ...rest, ...styleNow, ...nudgeState });
     logMiraEvent("settings_saved", { userId: g.account.id }, { fields: Object.keys(parsed.data) });
     for (const [field, name] of Object.entries(CHANGE_EVENTS)) {
       if (field in parsed.data) {

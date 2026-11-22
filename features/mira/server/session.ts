@@ -21,6 +21,8 @@ export async function createMiraSupabase() {
     {
       cookieOptions: {
         name: MIRA_AUTH_COOKIE,
+        // Read only on the server: no script on the page may read the tokens (round-2 DATA-6).
+        httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         path: "/",
@@ -73,6 +75,10 @@ const NEXT_PAGES = new Set([
   "/mira/recordings",
 ]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
+/** A section of Settings by its anchor (`#weekly`, where the session emails link), lower case. */
+const SETTINGS_SECTION = /^\/mira\/settings#[a-z]{2,20}$/;
+/** One voice session, the page a signed-out visit to it came from. */
+const RECORDING = /^\/mira\/recordings\/[0-9a-fA-F-]{36}$/;
 
 /**
  * Where a sign-in may send the person on to (`next`, e.g. the chat a nudge opened while they
@@ -81,7 +87,7 @@ const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
  */
 export function safeNext(next: unknown): string | null {
   if (typeof next !== "string") return null;
-  if (NEXT_PAGES.has(next)) return next;
+  if (NEXT_PAGES.has(next) || SETTINGS_SECTION.test(next) || RECORDING.test(next)) return next;
   const chat = next.startsWith("/mira?chat=") ? next.slice("/mira?chat=".length) : "";
   return CHAT_ID.test(chat) ? next : null;
 }

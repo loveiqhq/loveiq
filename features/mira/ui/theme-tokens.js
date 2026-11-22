@@ -20,6 +20,11 @@ const AP_LIGHT = {
   label: "#5f6675",
   quiet: "#9c95a3",
   line: "#e9e6ee",
+  /**
+   * The edge of a text field, select or answer circle (round-2 A11Y-8, WCAG 1.4.11): 3:1 or more
+   * on paper, ground and lilac. `line` (1.2:1) stays for cards and dividers.
+   */
+  field: "#8c8597",
   ground: "#f5f6f8",
   lilac: "#f3ecff",
   track: "#f0eef4",
@@ -46,6 +51,7 @@ const MIRA_DARK = {
   label: "#aab0bd",
   quiet: "#8e879b",
   line: "#2f2839",
+  field: "#756d85",
   ground: "#221b2d",
   lilac: "#2c2244",
   track: "#2a2335",

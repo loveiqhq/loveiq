@@ -56,34 +56,48 @@ const at = (site = "https://www.loveiq.org", query = "", method = "GET") =>
   new Request(`${site}/api/mira/security${query}`, { method });
 const read = async (res: Response) => ({ status: res.status, body: await res.json() });
 
+/** The Supabase sessions mira_end_auth_sessions was asked to end, per call. */
+let ended: Array<{ p_user: string; p_sessions: string[] }>;
+
 beforeEach(() => {
   vi.clearAllMocks();
   browser = new Map();
-  db = fakeDb({
-    mira_user: [{ id: LEA, email: "lea@example.com", minor_at: null, google_connected_at: null }],
-    mira_session: [
-      device(HERE, LEA, "2026-11-22T09:00:00.000Z"),
-      device(PHONE, LEA, "2026-11-21T09:00:00.000Z", {
-        device: "iPhone · Safari",
-        method: "passkey",
-      }),
-      device(KAIS, KAI, "2026-11-22T09:30:00.000Z"),
-    ],
-    mira_passkey: [
-      {
-        id: "credential-of-lea-iphone-xxxxxxxx",
-        user_id: LEA,
-        public_key: "pAQBAyYgASFYIG-secret-ish",
-        counter: 0,
-        transports: ["internal"],
-        backed_up: true,
-        label: "iPhone · Safari",
-        created_at: "2026-11-21T09:00:00.000Z",
-        last_used_at: null,
+  ended = [];
+  db = fakeDb(
+    {
+      mira_user: [{ id: LEA, email: "lea@example.com", minor_at: null, google_connected_at: null }],
+      mira_session: [
+        device(HERE, LEA, "2026-11-22T09:00:00.000Z"),
+        device(PHONE, LEA, "2026-11-21T09:00:00.000Z", {
+          device: "iPhone · Safari",
+          method: "passkey",
+        }),
+        device(KAIS, KAI, "2026-11-22T09:30:00.000Z"),
+      ],
+      mira_passkey: [
+        {
+          id: "credential-of-lea-iphone-xxxxxxxx",
+          user_id: LEA,
+          public_key: "pAQBAyYgASFYIG-secret-ish",
+          counter: 0,
+          transports: ["internal"],
+          backed_up: true,
+          label: "iPhone · Safari",
+          created_at: "2026-11-21T09:00:00.000Z",
+          last_used_at: null,
+        },
+      ],
+      admin_users: [],
+    },
+    {
+      rpc: {
+        mira_end_auth_sessions: (body) => {
+          ended.push(body as (typeof ended)[number]);
+          return new Response(JSON.stringify(1), { status: 200 });
+        },
       },
-    ],
-    admin_users: [],
-  });
+    }
+  );
   vi.mocked(supabaseFetch).mockImplementation((p, i) => db.handle(p, i));
   vi.mocked(memberByEmail).mockResolvedValue(null);
   vi.mocked(getMiraAccount).mockResolvedValue({
@@ -161,6 +175,8 @@ describe("DELETE /api/mira/security", () => {
     expect(res).toEqual({ status: 200, body: { success: true, signedOut: false } });
     expect(db.tables.mira_session!.map((s) => s.id)).toEqual([HERE, KAIS]);
     expect(signOut).not.toHaveBeenCalled();
+    // Its login ends at Supabase now, not at its next call to Mira (round-2 SEC-L1 / COR-9).
+    expect(ended).toEqual([{ p_user: LEA, p_sessions: [PHONE] }]);
     expect(logMiraEvent).toHaveBeenCalledWith(
       "device_signed_out",
       { userId: LEA },
@@ -193,10 +209,24 @@ describe("DELETE /api/mira/security", () => {
     );
   });
 
-  it("keeps a shared staff or Jarvis login's other sessions, which Mira refuses anyway", async () => {
+  it("keeps a shared staff or Jarvis login's own sessions, but ends every one Mira made", async () => {
     vi.mocked(memberByEmail).mockResolvedValueOnce({ email: "lea@example.com" } as never);
     await DELETE(at(undefined, "?device=all", "DELETE"));
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    // Mira's other recorded session ends at Supabase (this one by the local sign-out), so a
+    // stolen Mira session of a staff login can't open the admin panel afterwards.
+    expect(ended).toEqual([{ p_user: LEA, p_sessions: [PHONE] }]);
+  });
+
+  it("signs out all the same when Supabase can't end the sessions (Mira refuses them anyway)", async () => {
+    db = fakeDb(
+      { mira_session: [device(PHONE, LEA, "2026-11-21T09:00:00.000Z")] },
+      { rpc: { mira_end_auth_sessions: () => new Response("{}", { status: 404 }) } }
+    );
+    vi.mocked(supabaseFetch).mockImplementation((p, i) => db.handle(p, i));
+    const res = await read(await DELETE(at(undefined, `?device=${PHONE}`, "DELETE")));
+    expect(res).toEqual({ status: 200, body: { success: true, signedOut: false } });
+    expect(db.tables.mira_session).toEqual([]);
   });
 
   it("removes the passkeys too when asked, so one someone else added can't sign in (M1)", async () => {

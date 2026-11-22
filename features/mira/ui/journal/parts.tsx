@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { addDays } from "@features/admin/server/ap/days";
 import { longDate, week, type JournalEntry, type WeekDot } from "@features/mira/journal";
+import { ConfirmDelete } from "../kit";
 
 /** The pieces the journal's screens share: the switch, the week's dots, a day's name. */
 
@@ -28,6 +29,75 @@ export function Icon({ path, className = "" }: { path: string; className?: strin
 }
 
 export const ARROW = "M5 12h14M13 6l6 6-6 6";
+
+/**
+ * After a sheet closes, focus goes back to its opener (Modal does that). When a save replaced the
+ * opener ("Do today’s check-in" becomes "Edit today’s check-in", "Choose a time" becomes
+ * "Change"), focus would fall to the page: it goes to `to` instead, what replaced it.
+ */
+export function refocus(to: () => HTMLElement | null | undefined): void {
+  window.requestAnimationFrame(() => {
+    if (!document.activeElement || document.activeElement === document.body) to()?.focus();
+  });
+}
+
+/**
+ * A deletion asked first, as everywhere in Mira (kit ConfirmDelete, round-2 UX-9): the button,
+ * then the question opening on "Keep it", which puts focus back on the button (A11Y-5). `run`
+ * answers null when done, or the message to show.
+ */
+export function AskFirst({
+  label,
+  name,
+  question,
+  action,
+  className,
+  run,
+}: {
+  label: string;
+  /** The button's whole name, when its words alone don't say what goes. */
+  name?: string;
+  question: string;
+  action?: string;
+  className: string;
+  run: () => Promise<string | null>;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    const failed = await run();
+    setBusy(false);
+    if (failed) setError(failed);
+    else setAsking(false);
+  }
+  return asking ? (
+    <ConfirmDelete
+      question={question}
+      action={action}
+      busy={busy}
+      error={error}
+      onConfirm={() => void confirm()}
+      onKeep={() => {
+        setAsking(false);
+        refocus(() => opener.current);
+      }}
+    />
+  ) : (
+    <button
+      ref={opener}
+      type="button"
+      aria-label={name}
+      onClick={() => setAsking(true)}
+      className={className}
+    >
+      {label}
+    </button>
+  );
+}
 
 /** The reminder's time when it is first switched on: an evening check-in. */
 export const DEFAULT_REMINDER = "20:00";

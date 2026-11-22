@@ -902,6 +902,8 @@ describe("fetchMira", () => {
       "session_cancelled",
       "session_reminder_sent",
       "session_attended",
+      // One chat deleted (22 Nov 2026, DELETE /api/mira/chats/[id]): no id, no words.
+      "chat_deleted",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
@@ -929,11 +931,17 @@ describe("fetchMira", () => {
     });
     expect(out.events[150_001]).toMatchObject({ name: "chat_started", detail: "3" });
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
-    // The counted events, that is: the voice sessions (one row each) are read with their props.
+    // The counted events, that is: the voice sessions (one row each) are read with their props,
+    // and the Beta feedback list (mira-feedback.ts) with its words.
     const paged = mockFetchAllRows.mock.calls.map(([p]) => String(p));
-    expect(paged.some((p) => p.includes("mira_event") && !p.includes("name=in.(voice_"))).toBe(
-      false
-    );
+    expect(
+      paged.some(
+        (p) =>
+          p.includes("mira_event") &&
+          !p.includes("name=in.(voice_") &&
+          !p.includes("name=eq.feedback&")
+      )
+    ).toBe(false);
   });
 
   it("counts exactly what it counted from the rows themselves", async () => {

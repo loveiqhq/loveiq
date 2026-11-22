@@ -96,7 +96,9 @@ export async function POST(request: Request) {
   try {
     // Stopped as under 18 (server/minor.ts): nothing is taken. A failed check takes nothing.
     const [minor, talked] = await Promise.all([isMinor(account.id), hasTalkedWithMira(account.id)]);
-    if (minor) return NextResponse.json({ error: "Not available." }, { status: 403 });
+    if (minor) {
+      return NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
+    }
     // Only people who have talked with Mira can rate her (accounts are cheap).
     if (!talked) {
       return NextResponse.json(

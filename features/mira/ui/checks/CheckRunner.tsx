@@ -9,21 +9,27 @@ import { PrimaryButton } from "../MiraShell";
  * above its question, its answers as large pills, a quiet progress line. A tap answers and moves
  * on after a beat, so the choice is seen; the keyboard picks with the arrows (a native radio
  * group) and moves on with Enter or Next, so passing over an answer never commits it. Back keeps
- * every answer. Each answer goes to `onAnswer` at once, so the page can keep the draft and open
- * the support lines the moment the mood check's question 9 is answered.
+ * every answer. The last answer waits for "See my result", so it can be checked or changed
+ * before anything is saved (a retake is two weeks away). Each answer goes to `onAnswer` at once,
+ * so the page can keep the draft and open the support lines the moment the mood check's question 9
+ * is answered.
  */
 export function CheckRunner({
   check,
   initial,
   saving,
+  finishLabel = "See my result",
   onAnswer,
   onFinish,
   onStop,
 }: {
-  check: Check;
+  /** A self-check, or the body check on its own page (ui/BodyCheck.tsx BODY_CHECK). */
+  check: Pick<Check, "title" | "instructions" | "items" | "options"> & { id: string };
   /** The answers so far, in question order (a resumed check). */
   initial: number[];
   saving: boolean;
+  /** The last question's button. */
+  finishLabel?: string;
   onAnswer: (answers: number[], index: number) => void;
   onFinish: (answers: number[]) => void;
   onStop: () => void;
@@ -65,6 +71,14 @@ export function CheckRunner({
     }
     setIndex(index + 1);
     setPicked(next[index + 1]);
+  }
+
+  /** A tap on the last question: passed on at once, saved only with "See my result". */
+  function pickLast(value: number) {
+    const next = [...answers];
+    next[index] = value;
+    setAnswers(next);
+    onAnswer(next, index);
   }
 
   function back() {
@@ -110,7 +124,8 @@ export function CheckRunner({
         }}
         className="mt-7 motion-safe:animate-mira-reply"
       >
-        <fieldset disabled={saving}>
+        {/* Not disabled while it saves (decision 7: focus would drop); answers wait instead. */}
+        <fieldset aria-busy={saving}>
           <legend className="w-full">
             <span className="block text-[14px] leading-relaxed text-ap-muted">
               {check.instructions}
@@ -133,29 +148,29 @@ export function CheckRunner({
                 onPointerDown={() => {
                   tapped.current = true;
                 }}
-                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-line bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ap-purple has-[:focus-visible]:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-field bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ap-purple has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <input
                   type="radio"
                   name={`${check.id}-${index}`}
                   value={o.value}
                   checked={picked === o.value}
-                  onChange={() => setPicked(o.value)}
+                  onChange={() => !saving && setPicked(o.value)}
                   onClick={() => {
-                    if (!tapped.current) return;
+                    if (!tapped.current || saving) return;
                     tapped.current = false;
                     setPicked(o.value);
                     cancelPending();
-                    // A beat to see the choice land before the next question; the last one goes
-                    // at once (the mood check's question 9 must open the support lines with no wait).
-                    if (last) commit(o.value);
+                    // A beat to see the choice land before the next question. The last one stays
+                    // to be seen (its support lines, for the mood check's question 9, open now).
+                    if (last) pickLast(o.value);
                     else pending.current = window.setTimeout(() => commit(o.value), 240);
                   }}
                   className="peer sr-only"
                 />
                 <span
                   aria-hidden="true"
-                  className="h-5 w-5 shrink-0 rounded-full border-2 border-ap-quiet bg-white transition-[border-width,border-color] duration-200 peer-checked:border-[6px] peer-checked:border-ap-ink motion-reduce:transition-none"
+                  className="h-5 w-5 shrink-0 rounded-full border-2 border-ap-field bg-white transition-[border-width,border-color] duration-200 peer-checked:border-[6px] peer-checked:border-ap-ink motion-reduce:transition-none"
                 />
                 <span>{o.label}</span>
               </label>
@@ -166,9 +181,9 @@ export function CheckRunner({
           {index > 0 ? (
             <button
               type="button"
-              onClick={back}
-              disabled={saving}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-2 text-[15px] font-semibold text-ap-ink hover:text-ap-plum disabled:text-ap-quiet"
+              onClick={() => !saving && back()}
+              aria-disabled={saving || undefined}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-2 text-[15px] font-semibold text-ap-ink hover:text-ap-plum aria-disabled:text-ap-quiet"
             >
               <span aria-hidden="true">←</span> Back
             </button>
@@ -176,7 +191,7 @@ export function CheckRunner({
             <span />
           )}
           <PrimaryButton type="submit" disabled={picked === undefined || saving}>
-            {saving ? "Saving…" : last ? "See my result" : "Next"}
+            {saving ? "Saving…" : last ? finishLabel : "Next"}
           </PrimaryButton>
         </div>
       </form>

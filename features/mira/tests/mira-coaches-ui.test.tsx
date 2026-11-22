@@ -133,11 +133,15 @@ describe("The roster (/mira/coaches)", () => {
     serve({ notified: ["jonas"] });
     render(<CoachRoster />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Jonas/ })).toHaveTextContent("We’ll let you know")
+      expect(screen.getByRole("button", { name: /Jonas is ready/ })).toHaveTextContent(
+        "We’ll let you know"
+      )
     );
     fireEvent.click(screen.getByRole("button", { name: "Notify me when Theo is ready" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Theo/ })).toHaveTextContent("We’ll let you know")
+      expect(screen.getByRole("button", { name: /Theo is ready/ })).toHaveTextContent(
+        "We’ll let you know"
+      )
     );
     expect(events()).toContainEqual({ type: "notify", coach: "theo" });
 
@@ -145,6 +149,31 @@ describe("The roster (/mira/coaches)", () => {
     expect(await screen.findByText("That didn't go through.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notify me when Lena is ready" })).toHaveTextContent(
       "Notify me"
+    );
+  });
+
+  it("lets a Notify me be taken back, keeping the keyboard on the coach's button", async () => {
+    serve({ notified: ["jonas"] });
+    render(<CoachRoster />);
+    const stop = await screen.findByRole("button", { name: "Stop notifying me about Jonas" });
+    fireEvent.click(stop);
+    const ask = screen.getByRole("button", { name: "Notify me when Jonas is ready" });
+    expect(ask).toHaveTextContent("Notify me");
+    expect(ask).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE").map(([url]) => url)
+      ).toEqual(["/api/mira/coaches?notify=jonas"])
+    );
+    expect(await screen.findByText(/We won’t contact you about Jonas/)).toBeInTheDocument();
+
+    // A failed stop puts the request back and says why.
+    replies["DELETE /api/mira/coaches"] = () => ({ status: 500, body: { error: "Not now." } });
+    fireEvent.click(ask);
+    fireEvent.click(await screen.findByRole("button", { name: "Stop notifying me about Jonas" }));
+    expect(await screen.findByText("Not now.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jonas is ready/ })).toHaveTextContent(
+      "We’ll let you know"
     );
   });
 
@@ -170,12 +199,27 @@ describe("The roster (/mira/coaches)", () => {
     );
   });
 
-  it("offers no coach to someone Mira stopped as under 18", async () => {
-    serve({}, 403);
+  it("answers someone Mira stopped as under 18 on Home's cards with the one refusal", async () => {
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
+    render(<CoachesCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
+  });
+
+  it("sends a lost sign-in to sign in and back to the roster (HAB-16)", async () => {
+    window.history.replaceState(null, "", "/mira/coaches#finder");
+    serve({}, 401);
     render(<CoachRoster />);
-    expect(
-      await screen.findByText("Mira’s coaches are for adults, so they aren’t available here.")
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fcoaches%23finder")
+    );
+  });
+
+  it("offers no coach to someone Mira stopped as under 18", async () => {
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
+    render(<CoachRoster />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Notify me/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
   });
@@ -288,7 +332,7 @@ describe("Home search", () => {
   });
 
   it("isn't there for someone Mira stopped as under 18, like the coaches", async () => {
-    serve({}, 403);
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
     render(<HomeSearch />);
     await waitFor(() => expect(screen.queryByRole("combobox")).toBeNull());
   });

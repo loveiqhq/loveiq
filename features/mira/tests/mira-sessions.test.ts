@@ -194,6 +194,19 @@ describe("GET /api/mira/weekly-session", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ slot: null, timeZone: "Europe/Berlin" });
   });
+
+  it("says when reminder emails are on hold: for 14 days after support lines, as the job skips them", async () => {
+    const onHold = async () => ((await (await GET(call("GET"))).json()) as { slot: Row }).slot;
+    expect(((await (await book()).json()) as { slot: Row }).slot.remindersOnHold).toBe(false);
+    expect((await onHold()).remindersOnHold).toBe(false);
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    db.tables.mira_event = [
+      { id: 1, user_id: LEA.id, name: "crisis_shown", created_at: daysAgo(3) },
+    ];
+    expect((await onHold()).remindersOnHold).toBe(true);
+    db.tables.mira_event[0]!.created_at = daysAgo(15);
+    expect((await onHold()).remindersOnHold).toBe(false);
+  });
 });
 
 describe("booking a weekly session (PUT)", () => {
@@ -504,7 +517,10 @@ describe("the email's stop link (no sign-in)", () => {
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
     expect((await stop(t, asPage("pause"))).status).toBe(403);
     vi.mocked(isMinor).mockResolvedValueOnce(true);
-    expect((await stop(t, asPage("pause"))).status).toBe(403);
+    const refused = await stop(t, asPage("pause"));
+    expect(refused.status).toBe(403);
+    // Decision 9: the one refusal every page shows, never "didn't go through".
+    expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect(db.tables.mira_session_slot![0]!.paused_at).toBeNull();
     // A stop link can't cancel: that needs the sign-in.
     expect((await stop(t, asPage("cancel"))).status).toBe(400);

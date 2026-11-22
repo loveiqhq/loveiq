@@ -93,6 +93,19 @@ describe("Mira's text size", () => {
   });
 });
 
+describe("Mira's serif", () => {
+  it("is Lora wherever font-serif is set, a variant's too (UX-2: the guide's h2 in Georgia)", async () => {
+    const css = await compile("font-serif [&_h2]:font-serif sm:font-serif");
+    const families: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes("font-serif"))
+        rule.walkDecls("font-family", (d) => families.push(d.value));
+    });
+    expect(families).toHaveLength(3);
+    for (const f of families) expect(f).toBe('var(--font-serif, "Lora", "Times New Roman", serif)');
+  });
+});
+
 describe("Mira's colours", () => {
   it("are CSS variables with today's light values on :root, so AP and Mira's light look don't change", async () => {
     const css = await compile("bg-white text-ap-ink bg-ap-mist/40 border-ap-line");
@@ -189,6 +202,19 @@ describe("the dark palette", () => {
   it("keeps focus borders and filled controls at 3:1 against the page", () => {
     for (const ui of ["lavender", "purple", "orange", "bad", "good"] as const) {
       expect(contrast(d[ui], d.paper), ui).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe("field borders (A11Y-8, WCAG 1.4.11)", () => {
+  it("are 3:1 against every surface a field sits on, in both themes", () => {
+    for (const [theme, t] of [
+      ["light", tokens.AP_LIGHT],
+      ["dark", tokens.MIRA_DARK],
+    ] as const) {
+      for (const bg of ["paper", "ground", "lilac"] as const) {
+        expect(contrast(t.field, t[bg]), `${theme}: field on ${bg}`).toBeGreaterThanOrEqual(3);
+      }
     }
   });
 });

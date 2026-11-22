@@ -25,7 +25,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 import MiraSettings from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import SecuritySettings, { lastActive } from "@features/mira/ui/account/SecuritySettings";
-import { unlockName } from "@features/mira/ui/account/passkeys";
+import { unlockMark, unlockName } from "@features/mira/ui/account/passkeys";
 
 type Reply = { status?: number; body: unknown };
 let replies: Record<string, (body: Record<string, unknown>) => Reply>;
@@ -131,10 +131,21 @@ describe("Use Face ID next time?", () => {
     );
     await codeSignIn({ success: true, offerPasskey: true, needsProfile: true });
     fireEvent.click(await screen.findByRole("button", { name: "Use Touch ID" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Use Touch ID" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Use Touch ID" })).not.toHaveAttribute(
+        "aria-disabled"
+      )
+    );
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     await screen.findByRole("heading", { name: "About you" });
+  });
+
+  it("shows a fingerprint beside a fingerprint, and a face beside Face ID", () => {
+    expect(unlockMark("your fingerprint")).toBe("fingerprint"); // Android
+    expect(unlockMark("Touch ID")).toBe("fingerprint");
+    expect(unlockMark("Face ID")).toBe("face");
+    expect(unlockMark("Touch ID or Face ID")).toBe("face");
   });
 
   it("speaks the device's language", () => {
@@ -144,6 +155,223 @@ describe("Use Face ID next time?", () => {
     expect(unlockName("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("Windows Hello");
     expect(unlockName("Mozilla/5.0 (Linux; Android 14; Pixel 8)")).toBe("your fingerprint");
     expect(unlockName("Mozilla/5.0 (X11; Linux x86_64)")).toBe("your device");
+  });
+});
+
+describe("The sign-up form", () => {
+  it("says what is missing instead of a dead button, and marks the step it is on (A11Y-14)", async () => {
+    render(<SignUpFlow />);
+    const email = screen.getByLabelText("Email");
+    fireEvent.change(email, { target: { value: "lea@" } });
+    tickAll();
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Please enter your email address.");
+    expect(document.activeElement).toBe(email);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAttribute("aria-describedby", alert.id);
+    expect(calls("POST /api/mira/auth")).toEqual([]);
+    const steps = within(screen.getByRole("list", { name: "Sign-up progress" })).getAllByRole(
+      "listitem"
+    );
+    expect(steps.map((li) => li.getAttribute("aria-current"))).toEqual(["step", null, null]);
+  });
+
+  it("draws its fields' edges at 3:1 (ap-field, A11Y-8)", () => {
+    render(<SignUpFlow />);
+    expect(screen.getByLabelText("Email")).toHaveClass("border-ap-field");
+  });
+
+  it("keeps the passkey button in reach while it works, and a second tap does nothing", async () => {
+    let answer!: (r: { body: unknown }) => void;
+    replies["POST /api/mira/passkeys"] = () => ({ body: { options: { challenge: "c" } } });
+    webauthn.startAuthentication.mockImplementation(
+      () => new Promise((resolve) => (answer = () => resolve({ id: "a-key", rawId: "a-key" })))
+    );
+    render(<SignUpFlow />);
+    const button = screen.getByRole("button", { name: "Sign in with a passkey" });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    expect(button).not.toBeDisabled(); // focusable: a keyboard user isn't thrown out (decision 7)
+    fireEvent.click(button);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(webauthn.startAuthentication).toHaveBeenCalledTimes(1);
+    answer({ body: {} });
+  });
+});
+
+describe("A chat the account doesn't keep", () => {
+  // The sign-up card promised "this chat comes with you"; an account with "Remember our
+  // conversations" off keeps none, so the page says so before going on (round-2 ID-20).
+  const chat = () =>
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hello" }], freeLeft: 0 })
+    );
+
+  it("by code: says it wasn't kept and why, then goes on", async () => {
+    chat();
+    await codeSignIn({ success: true, chatId: null, memoryOff: true });
+    const heading = await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.getByText(/“Remember our conversations” is off/)).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+  });
+
+  it("with a passkey, and back from Google, the same", async () => {
+    chat();
+    replies["POST /api/mira/passkeys"] = (b) =>
+      b.action === "sign-in-options"
+        ? { body: { options: { challenge: "c" } } }
+        : { body: { success: true, needsProfile: false } };
+    replies["POST /api/mira/auth"] = () => ({
+      body: { success: true, chatId: null, memoryOff: true },
+    });
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    render(<SignUpFlow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+    await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    cleanup();
+    chat();
+    render(<SignUpFlow googleResult="done" needsAbout />);
+    await screen.findByRole("heading", { name: "Your earlier chat wasn't kept" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "About you" });
+  });
+});
+
+describe("The code step", () => {
+  afterEach(() => sessionStorage.clear());
+  const toCodeStep = async () => {
+    render(<SignUpFlow />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "lea@example.com" } });
+    tickAll();
+    fireEvent.click(screen.getAllByRole("checkbox")[3]!); // the optional LoveIQ result
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+  };
+
+  it("comes back after a reload, Back or a discarded tab, with its address", async () => {
+    await toCodeStep();
+    cleanup(); // the page goes; this tab's storage stays
+    render(<SignUpFlow />);
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    expect(screen.getByText("lea@example.com")).toBeInTheDocument();
+    replies["POST /api/mira/auth"] = (b) =>
+      b.action === "verify" ? { body: { success: true } } : { body: { success: true } };
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+    expect(calls("POST /api/mira/auth").at(-1)).toMatchObject({
+      action: "verify",
+      email: "lea@example.com",
+      useAssessment: true,
+    });
+    // Signed in: nothing waits any more.
+    cleanup();
+    render(<SignUpFlow />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("heading", { name: /Create your free account/ })).toBeVisible();
+  });
+
+  it("is left for good with Change email", async () => {
+    await toCodeStep();
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    cleanup();
+    render(<SignUpFlow />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("heading", { name: "Check your inbox" })).toBeNull();
+  });
+
+  it("opens when a code went out minutes ago, so the code in the inbox can still be used", async () => {
+    replies["POST /api/mira/auth"] = () => ({
+      status: 429,
+      body: {
+        error: "We just sent you a code. Check your inbox and spam, or try again in a few minutes.",
+        codeSent: true,
+      },
+    });
+    await toCodeStep();
+    expect(screen.getByRole("status")).toHaveTextContent("We just sent you a code.");
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+  });
+});
+
+describe("A sign-in Mira refuses as under 18", () => {
+  const adultsOnly = () => screen.findByRole("heading", { name: "Mira is only for adults." });
+
+  it("by code: says so at once, never asks About you or promises nudges", async () => {
+    localStorage.setItem("mira.chat.v1", JSON.stringify({ turns: [], freeLeft: 0 }));
+    await codeSignIn({ success: true, minor: true, needsProfile: false, chatId: null });
+    const heading = await adultsOnly();
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.queryByText(/daily nudge/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/mira/settings"
+    );
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(calls("PATCH /api/mira/me")).toEqual([]);
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull(); // the browser forgets its chat
+  });
+
+  it("with a passkey: the same refusal, not an error under the form", async () => {
+    replies["POST /api/mira/passkeys"] = (b) =>
+      b.action === "sign-in-options"
+        ? { body: { options: { challenge: "c" } } }
+        : { status: 403, body: { error: "Mira is only for adults.", minor: true } };
+    render(<SignUpFlow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+    await adultsOnly();
+    expect(screen.queryByRole("button", { name: "Send me a code" })).toBeNull();
+    // Not signed in: nothing to manage in Settings.
+    expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+  });
+
+  it("back from Google: the same refusal, and the browser's chat stays out of the account", async () => {
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hi" }], freeLeft: 0 })
+    );
+    render(<SignUpFlow googleResult="done" needsAbout minor />);
+    await adultsOnly();
+    expect(screen.queryByRole("heading", { name: "About you" })).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls("POST /api/mira/auth")).toEqual([]);
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull();
+  });
+});
+
+describe("Back to a Settings section after sign-in", () => {
+  // A session email's link, /mira/settings#weekly, signed out: the page's redirect can't see the
+  // hash, so it sends next=/mira/settings, and the browser keeps #weekly on the sign-in page.
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("goes back to the section the link named, by code and by Google", async () => {
+    window.history.replaceState(null, "", "/mira/start?next=%2Fmira%2Fsettings#weekly");
+    replies["POST /api/mira/auth"] = (b) =>
+      b.action === "verify" ? { body: { success: true } } : { body: { success: true } };
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    render(<SignUpFlow googleEnabled next="/mira/settings" />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    tickAll();
+    // Google leaves the page, so the section rides in its next.
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("&next=%2Fmira%2Fsettings%23weekly")
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/settings#weekly"));
   });
 });
 
@@ -295,6 +523,38 @@ describe("Settings › Sign-in & security", () => {
       within(how).getByText(label, { selector: "p" }).closest("li");
     expect(passkey("iPhone · Safari")).toHaveTextContent("Synced");
     expect(passkey("Work laptop")).toHaveTextContent("On this device only");
+    // True on every device, Android's screen lock included (not "Face ID, Touch ID or Windows Hello").
+    expect(how).toHaveTextContent(
+      "Sign in with your face, fingerprint or screen lock instead of a code."
+    );
+  });
+
+  it("lists this device first, and tells look-alike devices apart by when they signed in", async () => {
+    const phone = (id: string, current: boolean, created: string) => ({
+      id,
+      method: "passkey",
+      device: "Android phone · Chrome",
+      city: "Berlin",
+      created_at: created,
+      last_seen_at: current ? "2026-11-22T08:00:00Z" : "2026-11-22T09:00:00Z",
+      current,
+    });
+    const devices = await show({
+      devices: [
+        phone("old", false, "2026-11-22T08:05:00Z"),
+        phone("here", true, "2026-11-22T09:14:00Z"),
+      ],
+    });
+    const at = (iso: string) =>
+      new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const rows = within(devices).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("This device");
+    expect(rows[0]).toHaveTextContent(
+      `Signed in 22 Nov at ${at("2026-11-22T09:14:00Z")} with a passkey`
+    );
+    expect(rows[1]).toHaveTextContent(
+      `Signed in 22 Nov at ${at("2026-11-22T08:05:00Z")} with a passkey`
+    );
   });
 
   it("signs out another device in place, and this one out of the page", async () => {
@@ -306,9 +566,17 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("DELETE /api/mira/security")[0]!.url).toBe("/api/mira/security?device=d2");
     expect(screen.getByRole("status")).toHaveTextContent("Signed out on iPhone · Safari.");
     replies["DELETE /api/mira/security"] = () => ({ body: { success: true, signedOut: true } });
-    fireEvent.click(within(devices).getByRole("button", { name: "Sign out everywhere" }));
+    const opener = within(devices).getByRole("button", { name: "Sign out everywhere" });
+    fireEvent.click(opener);
+    // The question opens on its safe answer: its red button has the opener's name in the
+    // opener's place, so a double press or key repeat would sign every device out (A11Y-10).
+    const cancel = within(devices).getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
+    const reopened = within(devices).getByRole("button", { name: "Sign out everywhere" });
+    await waitFor(() => expect(document.activeElement).toBe(reopened));
+    fireEvent.click(reopened);
     const confirm = within(devices).getAllByRole("button", { name: "Sign out everywhere" })[0]!;
-    await waitFor(() => expect(document.activeElement).toBe(confirm));
     fireEvent.click(confirm);
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
     expect(calls("DELETE /api/mira/security")[1]!.url).toBe("/api/mira/security?device=all");
@@ -324,37 +592,115 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("PATCH /api/mira/passkeys")).toEqual([
       expect.objectContaining({ id: "k2", label: "Office PC" }),
     ]);
+    // The server answers with what is left, a passkey added on another device meanwhile too.
+    const phone = {
+      id: "k3",
+      label: "Pixel · Chrome",
+      backed_up: true,
+      created_at: "2026-11-22T09:30:00Z",
+      last_used_at: null,
+    };
+    replies["DELETE /api/mira/passkeys"] = () => ({
+      body: {
+        success: true,
+        passkeys: [{ ...SECURITY.passkeys.list[1], label: "Office PC" }, phone],
+      },
+    });
     fireEvent.click(within(how).getByRole("button", { name: "Remove iPhone · Safari" }));
     fireEvent.click(within(how).getByRole("button", { name: "Remove" }));
     await waitFor(() =>
       expect(within(how).queryByText("iPhone · Safari", { selector: "p" })).toBeNull()
     );
     expect(calls("DELETE /api/mira/passkeys")[0]!.url).toBe("/api/mira/passkeys?id=k1");
+    expect(within(how).getByText("Pixel · Chrome", { selector: "p" })).toBeInTheDocument();
+    // Never the page's own (stale) list: the new passkey would be hidden in the manager.
     expect(webauthn.sendSignal).toHaveBeenCalledWith({
       signalName: "allAcceptedCredentials",
       rpID: "loveiq.org",
       userID: "dXNlcg",
-      allAcceptedCredentialIDs: ["k2"],
+      allAcceptedCredentialIDs: ["k2", "k3"],
     });
+  });
+
+  it("keeps Add a passkey in reach while the device asks, and a second tap does nothing", async () => {
+    replies["POST /api/mira/passkeys"] = () => ({ body: { options: { challenge: "c" } } });
+    webauthn.startRegistration.mockImplementation(() => new Promise(() => undefined));
+    await show();
+    const add = screen.getByRole("button", { name: "Add a passkey" });
+    fireEvent.click(add);
+    const waiting = await screen.findByRole("button", { name: "Waiting for your device…" });
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    expect(waiting).not.toBeDisabled();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls("POST /api/mira/passkeys")).toHaveLength(1);
+  });
+
+  it("says what is missing in the change of email, instead of a dead button", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    fireEvent.change(screen.getByLabelText("New email"), { target: { value: "lea.new@" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Please enter the new email address."
+    );
+    expect(calls("POST /api/mira/email")).toEqual([]);
+    expect(screen.getByLabelText("New email")).toHaveClass("border-ap-field");
+  });
+
+  it("tells the passkey manager nothing it can't be sure of", async () => {
+    await show();
+    const how = screen.getByRole("region", { name: "How you sign in" });
+    replies["DELETE /api/mira/passkeys"] = () => ({ status: 404, body: { error: "Not found." } });
+    fireEvent.click(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    // Asked on its safe answer, and Cancel gives the focus back to what opened it.
+    const cancel = within(how).getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(how).getByRole("button", { name: "Remove Work laptop" })
+      )
+    );
+    fireEvent.click(within(how).getByRole("button", { name: "Remove Work laptop" }));
+    fireEvent.click(within(how).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(within(how).queryByText("Work laptop", { selector: "p" })).toBeNull()
+    );
+    expect(webauthn.sendSignal).not.toHaveBeenCalled();
   });
 
   it("changes the email with a code to the new address", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    // Before the change: the old address will start a new account (round-2 ID-17).
+    expect(
+      screen.getByText(/the old one, by code or with Google, would start a new, empty account/)
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("New email"), {
       target: { value: "lea.new@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send code" }));
     const code = await screen.findByLabelText("Code from the email");
+    fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    expect(
+      await screen.findByText("A new code is on its way. Only the newest code works.")
+    ).toHaveAttribute("role", "status");
     replies["POST /api/mira/email"] = () => ({
       body: { success: true, email: "lea.new@example.com" },
     });
     fireEvent.change(code, { target: { value: "12345678" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("Your email is now lea.new@example.com.")
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Your email is now lea.new@example.com. Sign in with it from now on: the old one would start a new account. We let your old address know."
+      )
     );
-    expect(calls("POST /api/mira/email").map((c) => c.action)).toEqual(["start", "confirm"]);
+    expect(calls("POST /api/mira/email").map((c) => c.action)).toEqual([
+      "start",
+      "start",
+      "confirm",
+    ]);
     expect(webauthn.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ signalName: "currentUserDetails", userName: "lea.new@example.com" })
     );
@@ -378,7 +724,7 @@ describe("Settings › Sign-in & security", () => {
     render(<MiraSettings security={<SecuritySettings />} />);
     await screen.findByRole("region", { name: "Devices" });
     expect(screen.getAllByText("lea@example.com").length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
     fireEvent.change(screen.getByLabelText("New email"), {
       target: { value: "lea.new@example.com" },
     });
@@ -390,11 +736,26 @@ describe("Settings › Sign-in & security", () => {
       body: { success: true, email: "lea.new@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await screen.findByText("Your email is now lea.new@example.com. We let your old address know.");
+    await screen.findByText(/^Your email is now lea\.new@example\.com\./);
     // The Account section and the menu's account line too, not only this card.
     const account = screen.getByRole("region", { name: "Account" });
     expect(within(account).getByText("lea.new@example.com")).toBeInTheDocument();
     expect(screen.queryByText("lea@example.com")).toBeNull();
+  });
+
+  it("is one #security anchor in Settings, landing below the sticky index like every section", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: {
+        profile: { email: "lea@example.com", style: {}, nudge_time: "08:00", time_zone: "UTC" },
+      },
+    });
+    replies["GET /api/mira/security"] = () => ({ body: SECURITY });
+    render(<MiraSettings security={<SecuritySettings />} />);
+    await screen.findByRole("region", { name: "Devices" });
+    const anchors = document.querySelectorAll("#security");
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]).toHaveClass("scroll-mt-16");
+    expect(anchors[0]).toHaveTextContent("Sign-in & security");
   });
 
   it("asks to sign in again before a passkey or a new address, long after signing in", async () => {
@@ -405,8 +766,9 @@ describe("Settings › Sign-in & security", () => {
     );
     expect(calls("POST /api/mira/passkeys")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    // "You'll come straight back here": to Sign-in & security, not the top of Settings.
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings%23security")
     );
     expect(calls("POST /api/mira/auth")).toEqual([expect.objectContaining({ action: "logout" })]);
   });
@@ -417,7 +779,7 @@ describe("Settings › Sign-in & security", () => {
       google: { allowed: false, connected: false },
       passkeys: { ...SECURITY.passkeys, allowed: false, list: [] },
     });
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change email" })).toBeNull();
     expect(screen.getByText(/also a LoveIQ team login/)).toBeInTheDocument();
     expect(screen.queryByText("Google")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add a passkey" })).toBeNull();
@@ -432,7 +794,9 @@ describe("Settings › Sign-in & security", () => {
     });
     expect(screen.getByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByText(/team login/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change email" })).toBeNull();
+    // Never a reason that isn't the reason ("Sign in with the emailed code").
+    expect(screen.queryByText(/Passkeys aren.t available/)).toBeNull();
   });
 
   it("says once how Connect Google went, then takes it out of the address", async () => {
@@ -443,10 +807,20 @@ describe("Settings › Sign-in & security", () => {
     );
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("#security");
-    expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Connect Google" })).toHaveAttribute(
       "href",
       "/api/mira/auth/google?connect=1"
     );
+  });
+
+  it("calls Google connected only for what it is: Google confirmed the address", async () => {
+    window.history.replaceState(null, "", "/mira/settings?google=connected#security");
+    await show({ google: { allowed: true, connected: true } });
+    // Continue with Google worked before connecting too: nothing promises a change (SIGN-F9).
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Google is connected: it confirmed this address."
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/now/);
   });
 
   it("can be loaded again after a failure", async () => {

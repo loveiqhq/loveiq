@@ -66,7 +66,7 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
   it("Home: a move refused by the CSRF check keeps the card and the sheet, and says so", async () => {
     replies["PUT /api/mira/weekly-session"] = CSRF;
     render(<NextSessionCard />);
-    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
     fireEvent.click(screen.getByRole("radio", { name: "Thursday" }));
     fireEvent.click(screen.getByRole("button", { name: "Move to Thursdays at 19:00" }));
     const sheet = await screen.findByRole("dialog", { name: "Your weekly session" });
@@ -79,22 +79,23 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
   it("Settings: a reminder switch refused by the CSRF check keeps the section, and says so", async () => {
     replies["PATCH /api/mira/weekly-session"] = CSRF;
     render(<WeeklySessionSettings />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Reminder emails/ }));
+    fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That didn’t go through. Please try again."
     );
     expect(screen.getByRole("heading", { name: "Weekly session" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Reminder emails/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Reminder emails" })).toBeChecked();
   });
 
-  it("only the under-18 stop (403 with `minor`) hides the card", async () => {
+  it("only the under-18 stop (403 with `minor`) turns the card into the one refusal", async () => {
     replies["GET /api/mira/weekly-session"] = () => ({
       status: 403,
-      body: { error: "Not available.", minor: true },
+      body: { error: "Mira is only for adults.", minor: true },
     });
-    const { container } = render(<NextSessionCard />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    render(<NextSessionCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    // Decision 9: never a "didn't load" or a Try again, and nothing to book.
+    expect(screen.queryByRole("button", { name: /Try again|Choose a time/ })).toBeNull();
   });
 
   it("a lapsed sign-in on a change goes to sign-in and back to the page", async () => {
@@ -104,7 +105,7 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     });
     window.history.replaceState(null, "", "/mira/settings");
     render(<WeeklySessionSettings />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Reminder emails/ }));
+    fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
     );
@@ -210,12 +211,15 @@ describe("a new time zone alone is a change", () => {
 
   it("on Home: the sheet's button says it moves to the new zone", async () => {
     render(<NextSessionCard />);
-    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
-    expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toBeDisabled();
+    fireEvent.click(await screen.findByRole("button", { name: "Change your weekly session" }));
+    expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Use New York time" }));
     expect(
       screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
-    ).toBeEnabled();
+    ).not.toHaveAttribute("aria-disabled");
   });
 });
 

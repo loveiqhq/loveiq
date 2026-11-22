@@ -90,6 +90,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // Lora, as globals.css gives `.font-serif` and the headings: without it a variant such as
+      // `[&_h2]:font-serif` (the guide, the privacy notice) fell back to Tailwind's Georgia stack.
+      fontFamily: { serif: ['var(--font-serif, "Lora", "Times New Roman", serif)'] },
       colors: {
         page: "var(--color-bg)",
         surface: "var(--color-surface)",
@@ -156,11 +159,6 @@ module.exports = {
           "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.35" },
           "30%": { transform: "translateY(-3px)", opacity: "1" },
         },
-        // Two identical runs of the prompts: moving by half the track loops without a seam.
-        "mira-marquee": {
-          "0%": { transform: "translateX(0)" },
-          "100%": { transform: "translateX(-50%)" },
-        },
         // "Use Face ID next time?" (features/mira/ui/account): a line sweeps the face mark.
         "mira-scan": {
           "0%, 100%": { transform: "translateY(10px)", opacity: "0" },
@@ -177,7 +175,6 @@ module.exports = {
         "mira-pop": "mira-pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both",
         "mira-rise": "mira-rise 0.26s cubic-bezier(0.16, 1, 0.3, 1) both",
         "mira-dot": "mira-dot 1.1s ease-in-out infinite",
-        "mira-marquee": "mira-marquee 60s linear infinite",
         // Talking to Mira (features/mira/ui/voice): her photo's halo breathes while she listens.
         "mira-listen": "mira-breathe 3.2s ease-in-out infinite",
         "mira-scan": "mira-scan 2.4s ease-in-out infinite",

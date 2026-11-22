@@ -236,6 +236,31 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     );
   });
 
+  // CHAT-15: a session held in German got English key points.
+  it("asks for the key points in the session's language: the one Mira replies in, else the one spoken", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    vi.mocked(getProfile).mockResolvedValueOnce({
+      id: LEA.id,
+      remember_chats: true,
+      reply_language: "de",
+    } as never);
+    await ended(request("/api/mira/recordings", "POST", END));
+    const german = vi.mocked(askModel).mock.calls[0]![1];
+    expect(german).toContain("Write them in German, the language Mira replies in.");
+    expect(german).not.toMatch(/English/);
+
+    vi.mocked(askModel).mockClear();
+    vi.mocked(getProfile).mockResolvedValueOnce({
+      id: LEA.id,
+      remember_chats: true,
+      reply_language: null,
+    } as never);
+    await ended(request("/api/mira/recordings", "POST", END));
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain(
+      "Write them in the language the session was held in (English when you can't tell)."
+    );
+  });
+
   it("writes no key points for a session where a stop rail fired, and asks no model", async () => {
     tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = [
       turn("user", "I want to kill myself", "2026-11-22T20:21:00Z"),
@@ -284,18 +309,30 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     expect(body).toMatchObject({ kept: true, recording: { keyPoints: null } });
   });
 
-  it("keeps nothing from a chat that isn't the person's, or with memory off", async () => {
-    for (const setup of [
-      () => vi.mocked(ownsChat).mockResolvedValueOnce(false),
-      () => vi.mocked(getProfile).mockResolvedValueOnce({ remember_chats: false } as never),
-    ]) {
+  it("keeps nothing from a chat that isn't the person's, or with memory off, and says which", async () => {
+    for (const [setup, answer] of [
+      [() => vi.mocked(ownsChat).mockResolvedValueOnce(false), { kept: false }],
+      [
+        () => vi.mocked(getProfile).mockResolvedValueOnce({ remember_chats: false } as never),
+        { kept: false, reason: "memory_off" },
+      ],
+    ] as const) {
       vi.mocked(supabaseFetch).mockClear();
       setup();
       tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
       const body = await (await ended(request("/api/mira/recordings", "POST", END))).json();
-      expect(body).toEqual({ kept: false });
+      expect(body).toEqual(answer);
       expect(called("POST /rest/v1/mira_voice_session")).toEqual([]);
       expect(called("GET /rest/v1/mira_message")).toEqual([]);
+    }
+  });
+
+  // VOI-V6b: memory on, but the first answer failed (no chat) or no turn was stored.
+  it("doesn't blame the memory setting when the session's words simply aren't in the chat", async () => {
+    for (const end of [{ ...END, chatId: null }, END]) {
+      tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = [];
+      const body = await (await ended(request("/api/mira/recordings", "POST", end))).json();
+      expect(body).toEqual({ kept: false });
     }
   });
 
@@ -325,6 +362,42 @@ describe("POST /api/mira/recordings (a voice session ended)", () => {
     const body = await (await ended(request("/api/mira/recordings", "POST", END))).json();
     expect(askModel).not.toHaveBeenCalled();
     expect(body.recording.keyPoints).toBeNull();
+  });
+
+  // VOI-V10: the end was the save's arrival, so time away before End, or a "Try again" an hour
+  // later, counted as talking (up to 3 h).
+  it("dates the end from the browser's End, never after the save nor before the last turn", async () => {
+    const saved = () => called("POST /rest/v1/mira_voice_session").at(-1)!.body;
+    for (const [endedAt, end, seconds] of [
+      ["2026-11-22T20:25:00Z", "2026-11-22T20:25:00.000Z", 300], // End, five minutes before the save
+      ["2026-11-22T21:00:00Z", "2026-11-22T20:30:00.000Z", 600], // a clock ahead: the save's time
+      ["2026-11-22T20:21:30Z", "2026-11-22T20:22:06.000Z", 126], // a clock behind: its last turn
+    ] as const) {
+      tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+      await ended(request("/api/mira/recordings", "POST", { ...END, endedAt }));
+      expect(saved()).toMatchObject({ ended_at: end, seconds });
+    }
+    // Signed out, only counted: the same clock.
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    await ended(
+      request("/api/mira/recordings", "POST", { ...END, endedAt: "2026-11-22T20:25:00Z" })
+    );
+    expect(vi.mocked(logMiraEvent).mock.calls.at(-1)![2]).toMatchObject({ seconds: 300 });
+  });
+
+  it("is counted, and kept without key points, when writing them fails after the save", async () => {
+    tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    tables[`PATCH /rest/v1/mira_voice_session?id=eq.${SESSION}`] = new Response("{}", {
+      status: 503,
+    });
+    const res = await ended(request("/api/mira/recordings", "POST", END));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ kept: true, recording: { keyPoints: null } });
+    expect(logMiraEvent).toHaveBeenCalledWith(
+      "voice_session_ended",
+      { userId: LEA.id },
+      expect.objectContaining({ kept: true, session: SESSION, points: 0 })
+    );
   });
 
   it("refuses what isn't a session's end", async () => {
@@ -370,6 +443,24 @@ describe("GET /api/mira/recordings", () => {
       ],
       more: true,
     });
+  });
+});
+
+describe("GET /api/mira/recordings, older pages (VOI-V9)", () => {
+  it("lists the sessions that began before the last one shown, so every session can be reached", async () => {
+    const before = "2026-11-22T20:20:00.000+00:00";
+    await list(
+      request(`/api/mira/recordings?limit=50&before=${encodeURIComponent(before)}`, "GET")
+    );
+    const path = called("GET /rest/v1/mira_voice_session")[0]!.call;
+    expect(path).toContain(`started_at=lt.${encodeURIComponent(before)}`);
+    expect(path).toContain(`user_id=eq.${LEA.id}`);
+    expect(path).toContain("limit=51");
+  });
+
+  it("ignores a 'before' that isn't a time", async () => {
+    await list(request("/api/mira/recordings?limit=50&before=yesterday", "GET"));
+    expect(called("GET /rest/v1/mira_voice_session")[0]!.call).not.toContain("started_at=lt.");
   });
 });
 
@@ -462,13 +553,15 @@ describe("/api/mira/recordings/[id]", () => {
     expect(askModel).not.toHaveBeenCalled();
   });
 
-  it("writes the key points again only when there are none", async () => {
+  it("writes the key points again only when there are none, in the session's language", async () => {
     tables[`GET /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`] = [
       { ...RECORDING, key_points: null },
     ];
     tables[`GET /rest/v1/mira_message?chat_id=eq.${CHAT}&voice_session=eq.${SESSION}`] = SPOKEN;
+    vi.mocked(getProfile).mockResolvedValueOnce({ id: LEA.id, reply_language: "fr" } as never);
     const body = await (await rewrite(request(url, "POST"), params(SESSION))).json();
     expect(body.keyPoints).toHaveLength(2);
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Write them in French");
     tables[`GET /rest/v1/mira_voice_session?id=eq.${SESSION}&user_id=eq.${LEA.id}`] = [RECORDING];
     expect((await rewrite(request(url, "POST"), params(SESSION))).status).toBe(409);
   });

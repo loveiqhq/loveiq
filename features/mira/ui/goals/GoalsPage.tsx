@@ -11,6 +11,11 @@ import {
 } from "../../server/goal-progress";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
+import { useSignedOut } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
+import { AdultsOnly } from "../kit";
+import { shortDate } from "../kit/dates";
+import { AskFirst } from "../journal/parts";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import {
   ChallengePills,
@@ -40,11 +45,10 @@ const TEXT_BUTTON = `${QUIET} text-ap-body hover:text-ap-ink`;
 const DANGER_BUTTON = `${QUIET} text-ap-bad-ink`;
 const H2 = "font-serif text-[22px] font-medium";
 
-const longDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-
 export default function GoalsPage() {
   const g = useGoals();
+  // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
+  const out = useSignedOut() || g.load === "signed-out";
   const [said, setSaid] = useState<string | null>(null);
   const [popped, setPopped] = useState<string | null>(null);
   const today = g.today || localDay(new Date());
@@ -69,15 +73,19 @@ export default function GoalsPage() {
           Small, doable steps in your own words. Tick the days you do one, and watch it build over
           the weeks. Mira can check in on them in the chat.
         </p>
-        <div className="mt-4">
-          <ChallengePills goals={g.goals} />
-        </div>
+        {g.load === "minor" ? null : (
+          <div className="mt-4">
+            <ChallengePills goals={g.goals} />
+          </div>
+        )}
 
         <p role="status" className="sr-only">
           {said}
         </p>
 
-        {g.load === "loading" ? (
+        {out ? (
+          <SignedOutNotice />
+        ) : g.load === "loading" ? (
           <div aria-hidden="true" className="mt-8 flex flex-col gap-3">
             {[0, 1].map((i) => (
               <div
@@ -86,25 +94,21 @@ export default function GoalsPage() {
               />
             ))}
           </div>
+        ) : g.load === "minor" ? (
+          <AdultsOnly className="mt-8" />
         ) : g.load !== "ready" ? (
           <div className="mt-8 rounded-3xl border border-ap-line p-5">
             <p role="alert" className="text-[15px] text-ap-body">
-              {g.load === "signed-out" ? "Please sign in to see your goals." : g.loadError}
+              {g.loadError}
             </p>
             <div className="mt-3">
-              {g.load === "signed-out" ? (
-                <Link href="/mira/start" className={`text-[14px] font-semibold underline ${FOCUS}`}>
-                  Sign in
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={g.reload}
-                  className={`${TEXT_BUTTON} border border-ap-line`}
-                >
-                  Try again
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={g.reload}
+                className={`${TEXT_BUTTON} border border-ap-line`}
+              >
+                Try again
+              </button>
             </div>
           </div>
         ) : (
@@ -175,7 +179,7 @@ export default function GoalsPage() {
                 title="Done"
                 goals={done}
                 note={(x) =>
-                  `Done ${longDate(x.completed_at!)} · ${x.days.length === 1 ? "1 day" : `${x.days.length} days`} ticked`
+                  `Done ${shortDate(x.completed_at!)} · ${x.days.length === 1 ? "1 day" : `${x.days.length} days`} ticked`
                 }
                 g={g}
                 say={setSaid}
@@ -186,7 +190,7 @@ export default function GoalsPage() {
                 id="away"
                 title="Put away"
                 goals={away}
-                note={(x) => `Put away ${longDate(x.archived_at!)}`}
+                note={(x) => `Put away ${shortDate(x.archived_at!)}`}
                 g={g}
                 say={setSaid}
               />
@@ -277,7 +281,7 @@ function GoalEntry({
           </p>
         </div>
         <div className="sm:col-start-1">
-          <WeekLine p={p} target={goal.weekly_target} pop={pop} />
+          <WeekLine p={p} target={goal.weekly_target} pop={pop} aimShown />
         </div>
         <TickButton
           goal={goal}
@@ -397,7 +401,7 @@ function GoalForm({
           placeholder="For example: leave a soft light on"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
-          className="min-h-[48px] rounded-2xl border border-ap-line bg-white px-4 text-[16px] font-normal caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
+          className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
         />
       </label>
       <DaysStepper value={target} onChange={setTarget} />
@@ -431,7 +435,8 @@ function DaysStepper({
 }) {
   const id = useId();
   const n = value ?? 0;
-  const round = `flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-ap-ink transition-colors hover:bg-ap-ground disabled:cursor-not-allowed disabled:text-ap-quiet disabled:hover:bg-white ${FOCUS}`;
+  // At an end the button says so (aria-disabled) and ignores the press, keeping keyboard focus.
+  const round = `flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-ap-ink transition-colors hover:bg-ap-ground aria-disabled:cursor-not-allowed aria-disabled:text-ap-quiet aria-disabled:hover:bg-white ${FOCUS}`;
   return (
     <div role="group" aria-labelledby={`${id}-label`} className="flex flex-col gap-2">
       <span id={`${id}-label`} className="text-[14px] font-semibold">
@@ -441,8 +446,8 @@ function DaysStepper({
         <button
           type="button"
           aria-label="Fewer days"
-          disabled={n === 0}
-          onClick={() => onChange(n - 1 || null)}
+          aria-disabled={n === 0 || undefined}
+          onClick={() => n > 0 && onChange(n - 1 || null)}
           className={round}
         >
           <MinusIcon />
@@ -456,8 +461,8 @@ function DaysStepper({
         <button
           type="button"
           aria-label="More days"
-          disabled={n === 7}
-          onClick={() => onChange(n + 1)}
+          aria-disabled={n === 7 || undefined}
+          onClick={() => n < 7 && onChange(n + 1)}
           className={round}
         >
           <PlusIcon />
@@ -469,44 +474,17 @@ function DaysStepper({
 
 /** Deleting one goal, with a word of warning first. */
 function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string) => void }) {
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  if (!asking) {
-    return (
-      <button
-        type="button"
-        onClick={() => setAsking(true)}
-        className={`${DANGER_BUTTON} sm:ml-auto`}
-      >
-        Delete goal
-      </button>
-    );
-  }
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 rounded-2xl border border-ap-bad p-3 text-[14px]">
-      <p className="flex-1 basis-[200px]">
-        Delete this goal and its ticks? This can&apos;t be undone.
-      </p>
-      <button
-        type="button"
-        onClick={async () => {
-          const err = await g.remove(goal);
-          if (err) setError(err);
-          else say("Goal deleted.");
-        }}
-        className={`min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white ${FOCUS}`}
-      >
-        Delete
-      </button>
-      <button type="button" onClick={() => setAsking(false)} className={TEXT_BUTTON}>
-        Keep it
-      </button>
-      {error ? (
-        <p role="alert" className="w-full text-[13px] text-ap-bad-ink">
-          {error}
-        </p>
-      ) : null}
-    </div>
+    <AskFirst
+      label="Delete goal"
+      question="Delete this goal and its ticks? This can't be undone."
+      className={`${DANGER_BUTTON} sm:ml-auto`}
+      run={async () => {
+        const err = await g.remove(goal);
+        if (!err) say("Goal deleted.");
+        return err;
+      }}
+    />
   );
 }
 
@@ -577,8 +555,6 @@ function PastGoals({
 
 /** Who sees the goals, and deleting all of them. */
 function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   return (
     <section aria-labelledby="your-goals-data-h" className="mt-12 border-t border-ap-line pt-6">
       <h2 id="your-goals-data-h" className="text-[14px] font-semibold">
@@ -594,41 +570,19 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
         </Link>
       </p>
       {g.goals.length > 0 ? (
-        asking ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-ap-bad p-3 text-[14px]">
-            <p className="flex-1 basis-[220px]">
-              Delete all your goals and their ticks? This can&apos;t be undone.
-            </p>
-            <button
-              type="button"
-              onClick={async () => {
-                const err = await g.removeAll();
-                setAsking(false);
-                if (err) setError(err);
-                else say("All your goals are deleted.");
-              }}
-              className={`min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white ${FOCUS}`}
-            >
-              Delete all
-            </button>
-            <button type="button" onClick={() => setAsking(false)} className={TEXT_BUTTON}>
-              Keep them
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAsking(true)}
-            className={`${DANGER_BUTTON} -ml-3 mt-1`}
-          >
-            Delete all goals
-          </button>
-        )
-      ) : null}
-      {error ? (
-        <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
-          {error}
-        </p>
+        <div className="mt-3">
+          <AskFirst
+            label="Delete all goals"
+            question="Delete all your goals and their ticks? This can't be undone."
+            action="Delete all"
+            className={`${DANGER_BUTTON} -ml-3`}
+            run={async () => {
+              const err = await g.removeAll();
+              if (!err) say("All your goals are deleted.");
+              return err;
+            }}
+          />
+        </div>
       ) : null}
     </section>
   );

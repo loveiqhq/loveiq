@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { useSignedOut } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
+import { AdultsOnly, ConfirmDelete } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
-import { ARROW, CHECK, Icon, Skeleton, WeekDots, dayName, thisWeek } from "./parts";
+import { ARROW, CHECK, Icon, Skeleton, WeekDots, dayName, refocus, thisWeek } from "./parts";
 import { useJournal } from "./useJournal";
 
 /** Shown at once, then more on request. */
@@ -21,12 +24,15 @@ const PAGE = 30;
 export default function JournalPage({ startCheckIn = false }: { startCheckIn?: boolean }) {
   const journal = useJournal();
   const { status, entries, today } = journal;
+  // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
+  const out = useSignedOut() || status === "signed-out";
   const [day, setDay] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [said, setSaid] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const checkInRef = useRef<HTMLDivElement | null>(null);
 
   const openDay = day ?? (startCheckIn && !dismissed && status === "ready" && today ? today : null);
   const doneToday = entries.some((e) => e.day === today);
@@ -74,7 +80,9 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
         can read.
       </p>
 
-      {status === "loading" ? (
+      {out ? (
+        <SignedOutNotice />
+      ) : status === "loading" ? (
         <div aria-busy="true" className="mt-8 flex flex-col gap-4">
           <span className="sr-only">Loading your journal</span>
           <Skeleton className="h-[132px] w-full rounded-[28px]" />
@@ -93,12 +101,12 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
             Try again
           </button>
         </div>
-      ) : status === "unavailable" ? (
-        <p className="mt-8 text-[15px] text-ap-body">The journal isn’t available here.</p>
+      ) : status === "minor" ? (
+        <AdultsOnly className="mt-8" />
       ) : (
         <>
           <div className="mt-7 flex flex-col gap-6 rounded-[28px] border border-ap-line p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+            <div ref={checkInRef}>
               {checkInButton}
               <p className="mt-3 text-[14px] text-ap-body">
                 {run >= 2
@@ -203,6 +211,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
           onClose={() => {
             setDay(null);
             setDismissed(true);
+            refocus(() => checkInRef.current?.querySelector("button"));
             // The email's ?checkin=1 has done its job: a reload shouldn't open the sheet again.
             if (startCheckIn) window.history.replaceState(null, "", "/mira/journal");
           }}
@@ -232,6 +241,7 @@ function Day({
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const askRef = useRef<HTMLButtonElement | null>(null);
   return (
     <li className="py-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4">
@@ -246,6 +256,7 @@ function Day({
             Edit
           </button>
           <button
+            ref={askRef}
             type="button"
             onClick={onAsk}
             aria-label={`Delete ${name}`}
@@ -269,25 +280,17 @@ function Day({
         </p>
       ) : null}
       {confirming ? (
-        <div className="mt-3 rounded-2xl border border-ap-bad p-4 text-[14px]">
-          <p>Delete this check-in? This can’t be undone.</p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onDelete}
-              className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-            >
-              Keep it
-            </button>
-          </div>
+        <div className="mt-3">
+          <ConfirmDelete
+            question="Delete this check-in? This can’t be undone."
+            busy={busy}
+            onConfirm={onDelete}
+            onKeep={() => {
+              // Back to the button that asked, which stays in place.
+              askRef.current?.focus();
+              onCancel();
+            }}
+          />
         </div>
       ) : null}
     </li>

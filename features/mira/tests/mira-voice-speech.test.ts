@@ -4,6 +4,7 @@ import {
   forSpeech,
   isEcho,
   pickVoice,
+  readAfterSpeaking,
   readWhileSpeaking,
   recognitionLang,
   sentences,
@@ -71,6 +72,62 @@ describe("barge-in: telling the person from Mira's own voice in the speakers", (
     expect(readWhileSpeaking([echo, own], 0, said)).toEqual({ floor: 1, bargeIn: true });
     // An earlier floor is kept: results before it belong to an earlier turn.
     expect(readWhileSpeaking([own, echo], 1, said)).toEqual({ floor: 2, bargeIn: false });
+  });
+
+  // Russian and Arabic are reply languages (and any browser language is heard): their words are
+  // words too, written with spaces or, in Japanese or Thai, without.
+  it.each([
+    [
+      "Russian",
+      "Это нормально. Хочешь следующий шаг?",
+      "Подожди, пожалуйста",
+      "хочешь следующий шаг",
+    ],
+    ["Arabic", "هذا طبيعي. هل تريدين الخطوة التالية؟", "انتظري قليلا من فضلك", "الخطوة التالية"],
+    [
+      "Bosnian",
+      "To je normalno. Želiš li sljedeći korak?",
+      "Čekaj malo",
+      "želiš li sljedeći korak",
+    ],
+    [
+      "Japanese",
+      "大丈夫です。次のステップに進みますか？",
+      "ちょっと待って",
+      "次のステップに進みますか",
+    ],
+    ["Thai", "ไม่เป็นไร คุณอยากไปขั้นต่อไปไหม", "รอเดี๋ยว", "อยากไปขั้นต่อไปไหม"],
+  ])("hears the person cut in, in %s, and still knows her own words", (_, hers, own, echo) => {
+    expect(readWhileSpeaking([{ text: own, final: false }], 0, hers)).toEqual({
+      floor: 0,
+      bargeIn: true,
+    });
+    expect(readWhileSpeaking([{ text: echo, final: true }], 0, hers)).toEqual({
+      floor: 1,
+      bargeIn: false,
+    });
+  });
+});
+
+describe("her last words, arriving late just after she stopped (VOI-V5)", () => {
+  const said = "That makes sense. Want the next step?";
+
+  it("waits while they settle, then skips them, keeping the person's words after them", () => {
+    const late = { text: "want the next step", final: false };
+    expect(readAfterSpeaking([late], 0, said)).toEqual({ floor: 0, settling: true });
+    const settled = { ...late, final: true };
+    const own = { text: "yes please", final: false };
+    expect(readAfterSpeaking([settled, own], 0, said)).toEqual({ floor: 1, settling: false });
+  });
+
+  it("leaves the person's answer alone, even a one-word one she also said", () => {
+    expect(readAfterSpeaking([{ text: "sure go on", final: true }], 0, said)).toEqual({
+      floor: 0,
+      settling: false,
+    });
+    expect(
+      readAfterSpeaking([{ text: "okay", final: true }], 0, "Okay. Want the next step?")
+    ).toEqual({ floor: 0, settling: false });
   });
 });
 

@@ -2,15 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { miraApi } from "../api";
+import { NEW_CODE, miraApi } from "../api";
 import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
 /**
  * Settings › Sign-in & security (Mark's board "HomeSettings", 22 Nov 2026), for MiraSettings to
- * mount right after "Account" (`<SecuritySettings />`, anchor #security). It loads and saves on its
- * own (/api/mira/security, /passkeys, /email, Google's connect link), so nothing in the page's Save
- * touches it.
+ * mount right after "Account" (`<SecuritySettings />`, in its slot `#security`, which carries the
+ * page's scroll margin like every section, so a link lands below the sticky index). It loads and
+ * saves on its own (/api/mira/security, /passkeys, /email, Google's connect link), so nothing in
+ * the page's Save touches it.
  *
  * Two cards. How you sign in: the emailed code (and changing the address), Google, passkeys (add,
  * rename, remove). Where you're signed in: each device, this one marked, signed out one at a time
@@ -47,7 +48,8 @@ type Security = {
 
 /** What Google's connect link came back with (`?google=` on /mira/settings). */
 const GOOGLE_RESULTS: Record<string, { ok: boolean; text: string }> = {
-  connected: { ok: true, text: "Google is connected. You can now continue with Google." },
+  // Only that Google confirmed the address: Continue with Google worked for it before too.
+  connected: { ok: true, text: "Google is connected: it confirmed this address." },
   mismatch: {
     ok: false,
     text: "That Google account has a different address. Choose the Google account with the same email as yours here.",
@@ -71,6 +73,9 @@ const METHOD: Record<Device["method"], string> = {
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** "09:14", in this browser's zone: two devices signed in the same day look the same without it. */
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 /** "Active today", "Active 3 days ago", "Active on 2 Nov". */
 export function lastActive(iso: string, now = Date.now()): string {
@@ -84,13 +89,13 @@ export function lastActive(iso: string, now = Date.now()): string {
 }
 
 const PILL =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-[border-color,transform] hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-[border-color,transform] hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple active:scale-[0.98] aria-disabled:cursor-wait aria-disabled:opacity-50";
 const LINK =
-  "min-h-[44px] rounded text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50";
+  "min-h-[44px] rounded text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-50";
 const DANGER =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-bad px-5 text-[14px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-bad aria-disabled:cursor-wait aria-disabled:opacity-50";
 const FIELD =
-  "min-h-[48px] w-full rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple";
 
 export default function SecuritySettings() {
   const router = useRouter();
@@ -123,15 +128,15 @@ export default function SecuritySettings() {
   }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  /** Signs out here and back to sign-in, to come straight back to Settings. */
+  /** Signs out here and back to sign-in, to come straight back to this section of Settings. */
   const signInAgain = useCallback(async () => {
     await miraApi("/api/mira/auth", { body: { action: "logout" } });
-    router.replace("/mira/start?next=%2Fmira%2Fsettings");
+    router.replace("/mira/start?next=%2Fmira%2Fsettings%23security");
     router.refresh();
   }, [router]);
 
   return (
-    <section id="security" aria-labelledby="security-h" className="flex scroll-mt-6 flex-col gap-4">
+    <section aria-labelledby="security-h" className="flex flex-col gap-4">
       <div>
         <h2 id="security-h" className="font-serif text-[22px] font-medium">
           Sign-in &amp; security
@@ -169,7 +174,7 @@ export default function SecuritySettings() {
                 emailChanged(email); // the page's Account section and menu too
                 setNotice({
                   ok: true,
-                  text: `Your email is now ${email}. We let your old address know.`,
+                  text: `Your email is now ${email}. Sign in with it from now on: the old one would start a new account. We let your old address know.`,
                 });
                 if (data.passkeys.rpID)
                   syncPasskeyName(data.passkeys.rpID, data.passkeys.userHandle, email);
@@ -275,7 +280,12 @@ function EmailRow({
       }
       action={
         data.emailChange.allowed && !open ? (
-          <button type="button" className={LINK} onClick={() => setOpen(true)}>
+          <button
+            type="button"
+            className={LINK}
+            aria-label="Change email"
+            onClick={() => setOpen(true)}
+          >
             Change
           </button>
         ) : null
@@ -319,6 +329,7 @@ function ChangeEmail({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [reauth, setReauth] = useState(!recent);
   const first = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
@@ -330,12 +341,15 @@ function ChangeEmail({
   async function send() {
     setBusy(true);
     setError(null);
+    setNotice(null);
     const r = await miraApi<{ reauth?: boolean }>("/api/mira/email", {
       body: { action: "start", email: address.trim() },
     });
     setBusy(false);
     if (r.data.reauth) return setReauth(true);
     if (!r.ok) return setError(r.data.error ?? "We couldn't send the code. Please try again.");
+    // A new code replaces the one before: say which one works.
+    if (step === "code") setNotice(NEW_CODE);
     setStep("code");
   }
 
@@ -354,8 +368,17 @@ function ChangeEmail({
   return (
     <form
       className="flex flex-col gap-3 rounded-2xl bg-ap-ground p-4 motion-safe:animate-mira-rise"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        if (busy) return;
+        // Said, never a silently dead button (A11Y-14, as on the sign-in page).
+        if (step === "address" && !/^\S+@\S+\.\S+$/.test(address.trim())) {
+          return setError("Please enter the new email address.");
+        }
+        if (step === "code" && code.length !== 8) {
+          return setError("Please enter the 8-digit code from the email.");
+        }
         void (step === "address" ? send() : confirm());
       }}
     >
@@ -374,8 +397,10 @@ function ChangeEmail({
             />
           </label>
           <p className="text-[13px] leading-relaxed text-ap-muted">
-            We&apos;ll send a code to the new address to confirm it. Your LoveIQ test result is
-            found by email, so Mira will then use the one taken with the new address.
+            We&apos;ll send a code to the new address to confirm it. Then sign in with the new
+            address: the old one, by code or with Google, would start a new, empty account. Your
+            LoveIQ test result is found by email, so Mira will then use the one taken with the new
+            address.
           </p>
         </>
       ) : (
@@ -398,6 +423,11 @@ function ChangeEmail({
           </label>
         </>
       )}
+      {notice ? (
+        <p role="status" className="text-[14px] text-ap-good-ink">
+          {notice}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           {error}
@@ -406,11 +436,9 @@ function ChangeEmail({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={
-            busy ||
-            (step === "address" ? !/^\S+@\S+\.\S+$/.test(address.trim()) : code.length !== 8)
-          }
-          className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted"
+          aria-disabled={busy || undefined}
+          onClick={(e) => (busy ? e.preventDefault() : undefined)}
+          className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-60"
         >
           {busy
             ? step === "address"
@@ -421,7 +449,12 @@ function ChangeEmail({
               : "Confirm"}
         </button>
         {step === "code" ? (
-          <button type="button" className={LINK} disabled={busy} onClick={() => void send()}>
+          <button
+            type="button"
+            className={LINK}
+            aria-disabled={busy || undefined}
+            onClick={() => (busy ? undefined : void send())}
+          >
             Send a new code
           </button>
         ) : null}
@@ -454,7 +487,11 @@ function GoogleRow({ google }: { google: Security["google"] }) {
       action={
         google.connected ? null : (
           // A full-page hand-over to Google, like "Continue with Google" on the sign-in page.
-          <a href="/api/mira/auth/google?connect=1" className={LINK + " inline-flex items-center"}>
+          <a
+            href="/api/mira/auth/google?connect=1"
+            aria-label="Connect Google"
+            className={LINK + " inline-flex items-center"}
+          >
             Connect
           </a>
         )
@@ -494,13 +531,16 @@ function Passkeys({
     if (r.error) setError(r.error);
   }
 
-  const note = !allowed
-    ? rpID
-      ? "Passkeys aren't available for this account. Sign in with the emailed code."
-      : "Passkeys work on loveiq.org."
-    : !canPasskey
-      ? "This browser can't make passkeys. Try Safari, Chrome or Edge on a recent device."
-      : null;
+  // Stopped as under 18: the page already says why (no other reason is given).
+  const note = data.minor
+    ? null
+    : !allowed
+      ? rpID
+        ? "Passkeys aren't available for this account. Sign in with the emailed code."
+        : "Passkeys work on loveiq.org."
+      : !canPasskey
+        ? "This browser can't make passkeys. Try Safari, Chrome or Edge on a recent device."
+        : null;
 
   return (
     <Row
@@ -508,7 +548,7 @@ function Passkeys({
       title="Passkeys"
       sub={
         <span className="block text-[13px] text-ap-muted">
-          Sign in with Face ID, Touch ID or Windows Hello instead of a code. Your face or
+          Sign in with your face, fingerprint or screen lock instead of a code. Your face or
           fingerprint never leaves your device.
         </span>
       }
@@ -523,15 +563,21 @@ function Passkeys({
               onRenamed={(label) =>
                 onChange(list.map((x) => (x.id === p.id ? { ...x, label } : x)))
               }
-              onRemoved={() => {
-                const rest = list.filter((x) => x.id !== p.id);
-                if (rpID)
+              onRemoved={(left) => {
+                // The server's list, so a passkey added on another device since this page loaded
+                // isn't hidden in the passkey manager; without it the manager hears nothing (a
+                // removed passkey it still offers is forgotten at its next use).
+                if (left && rpID) {
                   syncPasskeyList(
                     rpID,
                     userHandle,
-                    rest.map((x) => x.id)
+                    left.map((x) => x.id)
                   );
-                onChange(rest, `Removed “${p.label}”. You can still sign in with a code.`);
+                }
+                onChange(
+                  left ?? list.filter((x) => x.id !== p.id),
+                  `Removed “${p.label}”. You can still sign in with a code.`
+                );
               }}
             />
           ))}
@@ -544,7 +590,12 @@ function Passkeys({
         <Reauth what="add a passkey" onReauth={onReauth} onCancel={() => setReauth(false)} />
       ) : allowed && canPasskey ? (
         <div>
-          <button type="button" className={PILL} disabled={busy} onClick={() => void add()}>
+          <button
+            type="button"
+            className={PILL}
+            aria-disabled={busy || undefined}
+            onClick={() => (busy ? undefined : void add())}
+          >
             <PlusIcon />
             {busy ? "Waiting for your device…" : "Add a passkey"}
           </button>
@@ -568,18 +619,27 @@ function PasskeyItem({
   passkey: Passkey;
   fresh: boolean;
   onRenamed: (label: string) => void;
-  onRemoved: () => void;
+  /** With the passkeys the server has left, when it said. */
+  onRemoved: (left: Passkey[] | null) => void;
 }) {
   const [mode, setMode] = useState<"view" | "rename" | "remove">("view");
   const [label, setLabel] = useState(passkey.label);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
+  // The question opens on its safe answer (its red button has the opener's name in its place, so
+  // a double press would remove), and Cancel gives the focus back to what opened it.
+  const cancelRemove = useRef<HTMLButtonElement>(null);
+  const removeOpener = useRef<HTMLButtonElement>(null);
+  const backToOpener = useRef(false);
 
   useEffect(() => {
     if (mode === "rename") field.current?.select();
-    if (mode === "remove") confirmButton.current?.focus();
+    if (mode === "remove") cancelRemove.current?.focus();
+    if (mode === "view" && backToOpener.current) {
+      backToOpener.current = false;
+      removeOpener.current?.focus();
+    }
   }, [mode]);
 
   async function rename() {
@@ -599,13 +659,14 @@ function PasskeyItem({
 
   async function remove() {
     setBusy(true);
-    const r = await miraApi(`/api/mira/passkeys?id=${encodeURIComponent(passkey.id)}`, {
-      method: "DELETE",
-    });
+    const r = await miraApi<{ passkeys?: Passkey[] }>(
+      `/api/mira/passkeys?id=${encodeURIComponent(passkey.id)}`,
+      { method: "DELETE" }
+    );
     setBusy(false);
     if (!r.ok && r.status !== 404)
       return setError(r.data.error ?? "Unable to remove it right now.");
-    onRemoved();
+    onRemoved(r.data.passkeys ?? null);
   }
 
   const meta = [
@@ -639,7 +700,12 @@ function PasskeyItem({
             />
           </label>
           <div className="flex gap-3">
-            <button type="submit" className={LINK} disabled={busy}>
+            <button
+              type="submit"
+              className={LINK}
+              aria-disabled={busy || undefined}
+              onClick={(e) => (busy ? e.preventDefault() : undefined)}
+            >
               Save
             </button>
             <button
@@ -672,6 +738,7 @@ function PasskeyItem({
                 Rename
               </button>
               <button
+                ref={removeOpener}
                 type="button"
                 className={LINK}
                 aria-label={`Remove ${passkey.label}`}
@@ -688,15 +755,22 @@ function PasskeyItem({
           <p className="text-[14px]">Remove this passkey? You can still sign in with a code.</p>
           <div className="flex gap-3">
             <button
-              ref={confirmButton}
               type="button"
               className={DANGER}
-              disabled={busy}
-              onClick={() => void remove()}
+              aria-disabled={busy || undefined}
+              onClick={() => (busy ? undefined : void remove())}
             >
               {busy ? "Removing…" : "Remove"}
             </button>
-            <button type="button" className={PILL} onClick={() => setMode("view")}>
+            <button
+              ref={cancelRemove}
+              type="button"
+              className={PILL}
+              onClick={() => {
+                backToOpener.current = true;
+                setMode("view");
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -727,11 +801,21 @@ function Devices({
   // "Also remove my passkeys": a passkey someone else added would outlive every sign-out.
   const [alsoKeys, setAlsoKeys] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
+  // As for removing a passkey: the question opens on Cancel (the red "Sign out everywhere" sits
+  // where its opener was, so a double press would sign every device out), and Cancel gives the
+  // focus back to the opener.
+  const cancelAll = useRef<HTMLButtonElement>(null);
+  const allOpener = useRef<HTMLButtonElement>(null);
+  const asked = useRef(false);
 
   useEffect(() => {
-    if (confirmAll) confirmButton.current?.focus();
+    if (confirmAll) {
+      asked.current = true;
+      cancelAll.current?.focus();
+    } else if (asked.current) allOpener.current?.focus();
   }, [confirmAll]);
+  // This device first; then the rest, most recently seen first.
+  const listed = [...devices].sort((a, b) => Number(b.current) - Number(a.current));
 
   async function signOut(id: string | "all") {
     setBusy(id);
@@ -766,7 +850,7 @@ function Devices({
         </p>
       </div>
       <ul className="flex flex-col divide-y divide-ap-line border-t border-ap-line">
-        {devices.map((d) => (
+        {listed.map((d) => (
           <li key={d.id} className="flex items-start gap-3 px-5 py-4">
             <span
               aria-hidden="true"
@@ -789,15 +873,15 @@ function Devices({
                   .join(" · ")}
               </p>
               <p className="text-[12px] text-ap-muted">
-                Signed in {day(d.created_at)} with {METHOD[d.method]}
+                Signed in {day(d.created_at)} at {time(d.created_at)} with {METHOD[d.method]}
               </p>
             </div>
             <button
               type="button"
               className={LINK}
-              disabled={busy !== null}
+              aria-disabled={busy !== null || undefined}
               aria-label={`Sign out ${d.current ? "this device" : d.device}`}
-              onClick={() => void signOut(d.id)}
+              onClick={() => (busy !== null ? undefined : void signOut(d.id))}
             >
               {busy === d.id ? "Signing out…" : "Sign out"}
             </button>
@@ -827,21 +911,30 @@ function Devices({
             </label>
             <div className="flex flex-wrap gap-3">
               <button
-                ref={confirmButton}
                 type="button"
                 className={DANGER}
-                disabled={busy !== null}
-                onClick={() => void signOut("all")}
+                aria-disabled={busy !== null || undefined}
+                onClick={() => (busy !== null ? undefined : void signOut("all"))}
               >
                 {busy === "all" ? "Signing out…" : "Sign out everywhere"}
               </button>
-              <button type="button" className={PILL} onClick={() => setConfirmAll(false)}>
+              <button
+                ref={cancelAll}
+                type="button"
+                className={PILL}
+                onClick={() => setConfirmAll(false)}
+              >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <button type="button" className={PILL} onClick={() => setConfirmAll(true)}>
+          <button
+            ref={allOpener}
+            type="button"
+            className={PILL}
+            onClick={() => setConfirmAll(true)}
+          >
             Sign out everywhere
           </button>
         )}

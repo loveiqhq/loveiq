@@ -115,14 +115,26 @@ describe("the thank-you ask", () => {
     expect(reviewAskDue(Date.now() + 31 * DAY)).toBe(true);
   });
 
-  it("never asks someone who rated already, and logs nothing", async () => {
+  it("never asks someone who rated already, and logs nothing; this browser waits 30 days", async () => {
     replies["GET /api/mira/reviews/mine"] = () => ({ body: { review: { stars: 5 }, name: null } });
     const onClose = vi.fn();
-    render(<ReviewAsk from="nps" onClose={onClose} />);
+    render(<ReviewAsk from="thumbs" onClose={onClose} />);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(askCard()).toBeNull();
     expect(tracked()).toEqual([]);
-    expect(reviewAskDue()).toBe(true);
+    // Rated already: no need to ask the server again at every thumbs-up or 9.
+    expect(reviewAskDue()).toBe(false);
+  });
+
+  it("still thanks someone who rated already for their 9 or 10", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({ body: { review: { stars: 5 }, name: null } });
+    const onClose = vi.fn();
+    render(<ReviewAsk from="nps" onClose={onClose} />);
+    const thanks = await screen.findByText("Thank you, that helps us a lot.");
+    await waitFor(() => expect(document.activeElement).toBe(thanks)); // the pressed 9 is gone
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(tracked()).toEqual([]);
   });
 
   it("never asks someone who hasn't talked with Mira enough to rate, and logs nothing", async () => {
@@ -288,6 +300,16 @@ describe("Settings: what you shared", () => {
     age: "25–34",
   };
 
+  it("ends initials with one full stop, not two (SET-16)", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      body: { review: { ...mine, status: "pending", name: "R.", age: null }, name: "Lea" },
+    });
+    render(<SharedReviewSettings />);
+    expect(
+      await screen.findByText("Waiting for our team to read it. Once approved, it shows as R.")
+    ).toBeInTheDocument();
+  });
+
   it("shows the writer the team's reason when their words weren't shown", async () => {
     replies["GET /api/mira/reviews/mine"] = () => ({
       body: {
@@ -308,6 +330,10 @@ describe("Settings: what you shared", () => {
     expect(await screen.findByText(/You rated Mira 5 out of 5/)).toBeInTheDocument();
     expect(screen.getByText(/Shown on Mira’s pages as Lea, 25–34/)).toBeInTheDocument();
     expect(screen.getByText(/took out a detail that could identify someone/)).toBeInTheDocument();
+    // Round-2 CHAT-7: changing a rating is remove-and-rate-again, and the section says so.
+    expect(
+      screen.getByText("To change your stars or your words, remove this rating and rate again.")
+    ).toBeInTheDocument();
     // The writer sees exactly what changed.
     expect(
       screen.getByText(/You wrote: “My husband Tom noticed I stopped hiding\.”/)
@@ -375,6 +401,26 @@ describe("Settings: what you shared", () => {
     ]);
     // Not the chat's ask: nothing about an ask is counted.
     expect(tracked()).toEqual([]);
+  });
+
+  it("after an under-18 stop on this browser, offers taking a rating back, never a dead retry", async () => {
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      status: 403,
+      body: { error: "Not available.", minor: true },
+    });
+    render(<SharedReviewSettings />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText(/couldn’t load/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove my rating" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Nothing this account rated is kept or shown."
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([u, i]) => i?.method === "DELETE" && u === "/api/mira/reviews/mine?what=all"
+      )
+    ).toBe(true);
   });
 
   it("says when nothing is shared yet, and when it can't load", async () => {

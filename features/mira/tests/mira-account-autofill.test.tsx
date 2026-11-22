@@ -134,6 +134,22 @@ describe("the email field's passkey suggestions", () => {
     expect(gets).toHaveLength(1);
   });
 
+  it("end quietly when the browser can't make them, and leave Google's message alone", async () => {
+    replies["POST /api/mira/passkeys"] = () => OPTIONS;
+    // Chromium without a passkey provider says it can, then refuses the request at once.
+    credentialsGet.mockImplementation((opts) => {
+      gets.push({ mediation: opts.mediation, signal: opts.signal, answer: () => undefined });
+      return Promise.reject(
+        new DOMException("Resident credentials are not supported.", "NotSupportedError")
+      );
+    });
+    render(<SignUpFlow googleResult="cancelled" />);
+    await waitFor(() => expect(conditional()).toHaveLength(1));
+    await wait(200);
+    expect(conditional()).toHaveLength(1); // not asked again
+    expect(screen.getByRole("alert")).toHaveTextContent("Google sign-in was cancelled.");
+  });
+
   it("end quietly when the person goes on to the emailed code", async () => {
     replies["POST /api/mira/passkeys"] = () => OPTIONS;
     replies["POST /api/mira/auth"] = () => ({ body: { success: true } });

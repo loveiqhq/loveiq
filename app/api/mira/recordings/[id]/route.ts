@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
-import { logMiraEvent } from "@features/mira/server/store";
+import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import {
   deleteRecording,
   getRecording,
@@ -120,7 +120,8 @@ export async function POST(request: Request, context: Params) {
     const points = await writeKeyPoints(
       account.id,
       await sessionTurns(r.chat_id, r.id),
-      started + KEY_POINTS_MS
+      started + KEY_POINTS_MS,
+      (await getProfile(account.id))?.reply_language
     );
     if (!points) {
       return NextResponse.json(

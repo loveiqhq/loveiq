@@ -32,7 +32,9 @@
  *           - report_price_quote_arm_history (erased by its ON DELETE CASCADE from the quote)
  *   - Mira, the AI coach (features/mira): mira_user (by email; the account, every column: its
  *     settings too, such as the reply language and the appearance of 21 Nov 2026), its mira_chat +
- *     mira_message, mira_body_check, mira_check (the self-checks), mira_nudge and mira_event rows (by user_id), and a pending
+ *     mira_message, mira_body_check, mira_check (the self-checks), mira_nudge and mira_event rows (by user_id;
+ *     with, as mira_event_signed_out, what it did signed out in the browsers it signed in from, by
+ *     anon_id through signup_completed, the rows account deletion treats as its), and a pending
  *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
  *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Voice
  *     sessions (mira_voice_session, by user_id; their words are mira_message rows) from 22 Nov
@@ -284,6 +286,30 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
     // eslint-disable-next-line security/detect-object-injection -- one of the names above.
     result.exportData![table] = rows ?? [];
   }
+  // What the person did signed out in the browsers they signed in from: logged under the
+  // browser's id only, linked to the account by signup_completed. Account deletion treats these
+  // rows as theirs (store.ts forgetEventText, the same link and id check), so access does too.
+  const signIns = await fetchAllRows<{ anon_id: string | null }>(
+    `/rest/v1/mira_event?user_id=${ids}&name=eq.signup_completed&select=anon_id&order=id.asc`
+  );
+  const browsers = [
+    ...new Set(
+      (signIns ?? [])
+        .map((r) => r.anon_id)
+        .filter((id): id is string => typeof id === "string" && /^[\w-]{16,64}$/.test(id))
+    ),
+  ];
+  const signedOut =
+    signIns && browsers.length
+      ? await fetchAllRows<unknown>(
+          `/rest/v1/mira_event?anon_id=in.(${browsers.join(",")})&user_id=is.null&select=*&order=id.asc`
+        )
+      : signIns && [];
+  if (!signedOut) {
+    result.ok = false;
+    result.warnings.push("mira_event_signed_out: could not be read in full; run the export again");
+  }
+  result.exportData!.mira_event_signed_out = signedOut ?? [];
 }
 
 /**

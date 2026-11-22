@@ -249,10 +249,11 @@ are left out of Mira's statistics.
   challenge (§7.12), voice sessions with their key points (§7.15) and the daily journal (§7.17).
 - Account (`mira_user`): email, name, gender, country, coaching style, settings (memory, test
   result, nudge time, time zone, frequency, kinds, pause or stop with an optional reason; from
-  2026-11-21 the language Mira replies in, and light or dark and the text size), and each consent
-  with its time and wording version.
+  2026-11-21 the language Mira replies in, and light or dark and the text size), and the latest
+  sign-in's consent with its time and wording version.
 - Usage: the log of steps (`mira_event`: event names, times and small properties, never words
-  except the person's own feedback), nudge records
+  except the person's own feedback and the note they may add when stopping nudges), nudge
+  records
   (`mira_nudge`: kind, fixed subject, day, sent, delivered, first opened, clicked) and sign-in code
   rows (`mira_sign_in_code`: address, time, guesses).
 - Ratings and quotes (`mira_review`, from 2026-11-22; §7.14): an account's one rating (1 to 5)
@@ -545,7 +546,8 @@ are Art. 9 data.
 - Saved chats: until deleted in Settings, with the account, or 12 months after the person's last
   message (`mira_forget_old_memory`, daily). With "Remember our conversations" off, no new chats
   are saved; earlier ones stay until deleted or the 12-month limit.
-- Account, profile, body checks, nudge records: until the account is deleted.
+- Account, profile, nudge records: until the account is deleted. Body checks: until deleted in
+  Settings with the check results (22 Nov 2026), or with the account.
 - Self-check answers: until deleted in Settings ("Delete my check results"), with the account, or
   at an under-18 stop. A check not yet finished stays in that browser tab for up to a day.
 - Weekly session: until cancelled (the cancellation email takes it out of the calendar), the

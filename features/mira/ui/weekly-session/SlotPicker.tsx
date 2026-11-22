@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ANSWER_CHIP } from "../IntakeAnswers";
 import { PrimaryButton } from "../MiraShell";
 import {
@@ -45,11 +45,11 @@ function clocksDiffer(a: string, b: string): boolean {
 
 /** A radio styled as the chat's answer chip; selected in the multi-select's lilac. */
 const RADIO_CHIP =
-  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-line bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus-visible:ring-2 peer-focus-visible:ring-ap-purple peer-focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-field bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus-visible:ring-2 peer-focus-visible:ring-ap-purple peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white";
 const LEGEND = "text-[13px] font-semibold text-ap-ink";
 export const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const LINK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /** Add the session to a calendar: Google's own form, or the invite as a file (Apple, Outlook). */
 export function CalendarLinks({
@@ -90,7 +90,6 @@ export function SlotPicker({
 }) {
   const id = useId();
   const [other, setOther] = useState(value.time !== null && !SUGGESTED_TIMES.includes(value.time));
-  const timeRef = useRef<HTMLInputElement | null>(null);
   const [here, setHere] = useState<string | null>(null);
   // This device's zone is only known in the browser.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -143,11 +142,9 @@ export function SlotPicker({
               name={`${id}-time`}
               value="other"
               checked={other}
-              onChange={() => {
-                setOther(true);
-                // Keeps a picked time as the starting point; focus moves to the time itself.
-                window.requestAnimationFrame(() => timeRef.current?.focus());
-              }}
+              // Keeps a picked time as the starting point. Focus stays in the group (arrows
+              // only choose there); the time field is the next Tab stop.
+              onChange={() => setOther(true)}
               className="peer sr-only"
             />
             <span className={RADIO_CHIP}>Another time</span>
@@ -157,7 +154,6 @@ export function SlotPicker({
           <label className="mt-3 flex items-center gap-3 text-[14px] text-ap-body motion-safe:animate-mira-reply">
             Your time
             <input
-              ref={timeRef}
               type="time"
               step={300}
               required
@@ -168,7 +164,7 @@ export function SlotPicker({
                   time: /^([01]\d|2[0-3]):[0-5]\d$/.test(e.target.value) ? e.target.value : null,
                 })
               }
-              className="min-h-[44px] rounded-full border border-ap-line bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2"
+              className="min-h-[44px] rounded-full border border-ap-field bg-white px-4 text-[16px] tabular-nums text-ap-ink outline-none transition-colors focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             />
           </label>
         ) : null}

@@ -102,6 +102,18 @@ export async function loginEmail(userId: string): Promise<string | null> {
   return user?.email?.toLowerCase() ?? null;
 }
 
+/**
+ * Auth refusing an address another login has. Usually a 422 (email_exists), but on 22 Nov 2026
+ * staging's Auth answered the same case with a 500 carrying Postgres's unique violation (23505 on
+ * users_email_partial_key), which read as a failure instead of "taken".
+ */
+async function addressTaken(res: Response): Promise<boolean> {
+  if (res.status === 422) return true;
+  if (res.ok) return false;
+  const body = await res.text().catch(() => "");
+  return /23505|email_exists|users_email_partial_key|already (been )?registered/i.test(body);
+}
+
 const setLoginEmail = (userId: string, email: string) =>
   supabaseFetch(`/auth/v1/admin/users/${enc(userId)}`, {
     method: "PUT",
@@ -124,7 +136,7 @@ export async function changeAccountEmail(
   newEmail: string
 ): Promise<"changed" | "taken"> {
   const auth = await setLoginEmail(userId, newEmail);
-  if (auth.status === 422) return "taken";
+  if (await addressTaken(auth)) return "taken";
   if (!auth.ok) throw new Error(`mira login email change failed (${auth.status})`);
   const profile = await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(userId)}`, {
     method: "PATCH",

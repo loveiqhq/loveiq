@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
+import { useSignedOut } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
+import { AdultsOnly, SectionLink } from "../kit";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
 import { useGoals, type Goal } from "./useGoals";
@@ -18,6 +21,8 @@ const ON_HOME = 3;
  */
 export default function GoalsCard() {
   const g = useGoals();
+  // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
+  const out = useSignedOut() || g.load === "signed-out";
   const [popped, setPopped] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const active = g.goals.filter(onTheGo);
@@ -42,19 +47,18 @@ export default function GoalsCard() {
           Challenges &amp; goals
         </h2>
         {g.load === "ready" && g.goals.length > 0 ? (
-          <Link
-            href="/mira/goals"
-            className={`-mr-2 inline-flex min-h-[44px] items-center rounded-full px-2 text-[14px] font-semibold text-ap-plum hover:underline ${FOCUS}`}
-          >
-            All goals
-          </Link>
+          <SectionLink href="/mira/goals" what="goals" />
         ) : null}
       </div>
-      <div className="mt-3">
-        <ChallengePills goals={g.goals} />
-      </div>
+      {g.load === "minor" ? null : (
+        <div className="mt-3">
+          <ChallengePills goals={g.goals} />
+        </div>
+      )}
 
-      {g.load === "loading" ? (
+      {out ? (
+        <SignedOutNotice />
+      ) : g.load === "loading" ? (
         <div className="mt-5 flex flex-col gap-4" aria-hidden="true">
           {[0, 1].map((i) => (
             <div key={i} className="flex flex-col gap-2.5">
@@ -64,24 +68,18 @@ export default function GoalsCard() {
           ))}
           <span className="sr-only">Loading your goals</span>
         </div>
-      ) : g.load === "error" || g.load === "signed-out" ? (
+      ) : g.load === "minor" ? (
+        <AdultsOnly className="mt-4" />
+      ) : g.load === "error" ? (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <p className="text-[14px] text-ap-body">
-            {g.load === "signed-out" ? "Sign in to keep goals with Mira." : g.loadError}
-          </p>
-          {g.load === "signed-out" ? (
-            <Link href="/mira/start" className={`text-[14px] font-semibold underline ${FOCUS}`}>
-              Sign in
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={g.reload}
-              className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS}`}
-            >
-              Try again
-            </button>
-          )}
+          <p className="text-[14px] text-ap-body">{g.loadError}</p>
+          <button
+            type="button"
+            onClick={g.reload}
+            className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS}`}
+          >
+            Try again
+          </button>
         </div>
       ) : active.length > 0 ? (
         <ul className="mt-4 flex flex-col divide-y divide-ap-line">

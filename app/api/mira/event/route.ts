@@ -9,7 +9,8 @@
  *       wording's version
  *   { type: "voice_notice", version }  Talk's tick that the browser's speech service hears what
  *       the person says (22 Nov 2026), logged as voice_notice_agreed with its wording's version
- *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10
+ *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10: a challenge or some words
+ *       at least (400 for none); AP › Mira lists them for the team ("Beta feedback")
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
  *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
  *       id (one data model); an account only, or we couldn't tell them when the coach is ready
@@ -20,8 +21,9 @@
  *       and the guide's "Ask Mira about this" (features/mira/content/coaches.ts): each name with
  *       its own detail, an id or a number, never words (22 Nov 2026)
  *   { type: "track", name }        chat opened, gate shown (on "New chat", which the server never
- *       sees), the body check offered and started (its finish is the server's), the "Keep this
- *       chat" card shown, kept or put off, the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
+ *       sees), the body check offered and started (its finish is the server's), the retired "Keep
+ *       this chat" card's three (no page sends them since decision 2; an older open page still
+ *       may), the ask for a rating shown or put off, "Use Face ID next time?" shown (22 Nov 2026; its acceptance
  *       is the server's), a self-check started and the support lines its mood check opened (a
  *       pure count: logged without the account or the browser id); only these names, so the
  *       server's own KPI events can't be sent
@@ -43,8 +45,12 @@ export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
-/** Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. */
-const MINOR_REFUSED = () => NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
+/**
+ * Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. The
+ * one refusal every page shows for `minor: true` (decision 9, ui/kit ADULTS_ONLY).
+ */
+const MINOR_REFUSED = () =>
+  NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
 
 const schema = z.discriminatedUnion("type", [
   z.object({
@@ -52,13 +58,16 @@ const schema = z.discriminatedUnion("type", [
     rating: z.union([z.literal(1), z.literal(-1)]),
     messageId: z.number().int().positive().optional(),
   }),
-  z.object({
-    type: z.literal("feedback"),
-    challenges: z.array(z.string().max(60)).max(12),
-    wish: z.string().trim().max(2000).optional(),
-    other: z.string().trim().max(2000).optional(),
-    mayEmail: z.boolean(),
-  }),
+  z
+    .object({
+      type: z.literal("feedback"),
+      challenges: z.array(z.string().max(60)).max(12),
+      wish: z.string().trim().max(2000).optional(),
+      other: z.string().trim().max(2000).optional(),
+      mayEmail: z.boolean(),
+    })
+    // Every question is optional, but an answer to none of them says nothing (UX-16).
+    .refine((b) => b.challenges.length > 0 || Boolean(b.wish) || Boolean(b.other)),
   z.object({ type: z.literal("notify"), coach: z.string().max(60) }),
   z.object({
     type: z.literal("coaches"),

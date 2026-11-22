@@ -5,11 +5,14 @@ import type { ReactNode } from "react";
  * The Applied Psychometrics wordmark with a quiet beta mark (Marcus, 17 Nov: "beta above
  * Psychometrics"), on every Mira page: Mark's minimal board V2 (21 Nov 2026) has it, and Eman chose
  * it for all of Mira's pages the same day (it replaced the 18 Nov "LoveIQ for now").
+ *
+ * Its name says where it goes (round-2 SET-7): on the signed-in pages (`home`) to Home, as the
+ * menu's Home does; everywhere else to the chat's start, "Talk to Mira about your body confidence".
  */
-export function Wordmark({ onHome }: { onHome?: () => void }) {
+export function Wordmark({ home = false, onHome }: { home?: boolean; onHome?: () => void }) {
   return (
     <Link
-      href="/mira"
+      href={home ? "/mira/home" : "/mira"}
       className="no-underline"
       // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
       // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
@@ -37,7 +40,7 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
           BETA
         </span>
       </span>
-      <span className="sr-only">, Mira home</span>
+      <span className="sr-only">{home ? ", Mira home" : ", talk to Mira"}</span>
     </Link>
   );
 }
@@ -119,10 +122,16 @@ function LegalNav() {
   );
 }
 
-/** Mira's primary action: the board's ink pill (the same black as "Sign in"). */
+/**
+ * Mira's primary action: the board's ink pill (the same black as "Sign in"). Never natively
+ * disabled (round-2 decision 7): that drops keyboard focus to the page while a save runs and takes
+ * the button out of Tab's order. While `disabled` it is `aria-disabled`, keeps focus and its click
+ * does nothing; a submit button's click is cancelled too, which also stops Enter in a field
+ * (implicit submission is a click on the form's default button).
+ */
 export function PrimaryButton({
   children,
-  disabled,
+  disabled = false,
   onClick,
   type = "button",
 }: {
@@ -134,9 +143,16 @@ export function PrimaryButton({
   return (
     <button
       type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-ap-track disabled:text-ap-muted disabled:active:scale-100"
+      aria-disabled={disabled || undefined}
+      onClick={(e) => {
+        if (disabled) e.preventDefault();
+        else onClick?.();
+      }}
+      className={`inline-flex min-h-[48px] items-center justify-center rounded-full px-6 text-[15px] font-bold transition-[transform,background-color] ${
+        disabled
+          ? "cursor-not-allowed bg-ap-track text-ap-muted"
+          : "bg-ap-ink text-white hover:bg-ap-ink/90 active:scale-[0.98]"
+      }`}
     >
       {children}
     </button>
