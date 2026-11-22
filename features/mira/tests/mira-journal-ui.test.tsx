@@ -295,7 +295,8 @@ describe("the journal's settings", () => {
     replies = journalReply([], { reminderTime: "20:00" });
     render(<JournalSettings />);
     const time = await screen.findByRole("combobox", { name: /Time/ });
-    expect(screen.getByText("Europe/Berlin time")).toBeInTheDocument();
+    // The zone as the rest of Mira says it (sessions, their emails): "Berlin time".
+    expect(screen.getByText("Berlin time")).toBeInTheDocument();
     fireEvent.change(time, { target: { value: "07:30" } });
     await waitFor(() =>
       expect(sent("PATCH").map((p) => p.body)).toEqual([{ reminderTime: "07:30" }])

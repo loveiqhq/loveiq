@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
+import { zoneLabel } from "@features/mira/server/calendar";
 import { DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
@@ -167,7 +168,7 @@ export function JournalSettings({
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </span>
-                  <span className="text-ap-muted">{s.timeZone.replace(/_/g, " ")} time</span>
+                  <span className="text-ap-muted">{zoneLabel(s.timeZone)}</span>
                 </label>
               ) : null
             }
