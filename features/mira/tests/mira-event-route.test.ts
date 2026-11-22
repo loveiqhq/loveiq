@@ -9,6 +9,7 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
 vi.mock("@features/mira/server/store", () => ({
   logMiraEvent: vi.fn(),
   rateMessage: vi.fn().mockResolvedValue(true),
@@ -16,6 +17,7 @@ vi.mock("@features/mira/server/store", () => ({
 
 import { POST } from "@/app/api/mira/event/route";
 import { anonId } from "@features/mira/server/anon";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, rateMessage } from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
@@ -99,6 +101,42 @@ describe("POST /api/mira/event", () => {
     for (const score of [11, -1, 4.5, "9"]) {
       expect((await post({ type: "nps", score })).status).toBe(400);
     }
+  });
+
+  it("refuses feedback with no challenge and no words, which says nothing (UX-16)", async () => {
+    for (const body of [
+      { type: "feedback", challenges: [], mayEmail: false },
+      { type: "feedback", challenges: [], wish: "   ", other: "", mayEmail: true },
+    ]) {
+      expect((await post(body)).status).toBe(400);
+    }
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    expect(
+      (await post({ type: "feedback", challenges: [], other: "More voices", mayEmail: false }))
+        .status
+    ).toBe(200);
+    expect(loggedProps()).toEqual({
+      challenges: [],
+      wish: null,
+      other: "More voices",
+      mayEmail: false,
+      email: null,
+    });
+  });
+
+  it("refuses someone stopped as under 18 with the one refusal every page shows (decision 9)", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(isMinor).mockResolvedValue(true);
+    for (const body of [
+      { type: "notify", coach: "lena" },
+      { type: "coaches", name: "finder_done", detail: "lena" },
+    ]) {
+      const res = await post(body);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
+    }
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    vi.mocked(isMinor).mockResolvedValue(false);
   });
 
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {

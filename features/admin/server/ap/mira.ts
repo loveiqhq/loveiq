@@ -59,6 +59,12 @@ import {
 } from "./filters";
 import { fmt } from "./format";
 import { mean, median, ratio } from "./metrics";
+import {
+  feedbackOf,
+  fetchFeedback,
+  type FeedbackItem,
+  type MiraFeedbackRow,
+} from "./mira-feedback";
 import { fetchGoalRows, goalFigures, type GoalFigures, type MiraGoalRows } from "./mira-goals";
 import { REVIEW_SELECT, ratingsOf, type MiraReviewRow, type Ratings } from "./mira-ratings";
 import {
@@ -148,6 +154,9 @@ const EVENT_NAMES = [
   "session_cancelled",
   "session_reminder_sent",
   "session_attended",
+  // One chat deleted from the chat list (22 Nov 2026, DELETE /api/mira/chats/[id]): no id, no
+  // words. Read so a card can count it; none does yet.
+  "chat_deleted",
 ];
 
 /** A self-check event's check, and whether it is the finish. */
@@ -251,6 +260,8 @@ export interface MiraData {
   passkeyUsers?: string[] | null;
   /** The daily journal's days and settings (mira-journal.ts); null when they could not be read. */
   journal?: JournalRows | null;
+  /** Beta feedback, newest first (mira-feedback.ts); null when it could not be read. */
+  feedback?: MiraFeedbackRow[] | null;
 }
 
 /**
@@ -259,36 +270,39 @@ export interface MiraData {
  * answer (every event's time) nears tens of megabytes.
  */
 export async function fetchMira(): Promise<MiraData> {
-  const [users, events, nudges, bodyChecks, goals, reviews, voice, passkeys] = await Promise.all([
-    fetchAllRows<MiraUserRow>(
-      "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language,use_checks&order=id.asc"
-    ),
-    fetchEvents(),
-    fetchAllRows<MiraNudgeRow>(
-      "/rest/v1/mira_nudge?sent_at=not.is.null&select=user_id,type,sent_at,clicked_at,delivered_at,opened_at&order=created_at.asc"
-    ),
-    fetchAllRows<MiraBodyCheckRow>(
-      "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
-    ),
-    // Apart from the rest: the page still shows if these tables can't be read.
-    fetchGoalRows(),
-    // Only the Ratings card needs it: unreadable, that card says so and the page stays.
-    fetchAllRows<MiraReviewRow>(`/rest/v1/mira_review?select=${REVIEW_SELECT}&order=id.asc`),
-    // ponytail: one row per voice session, paged; into mira_ap_events if it ever nears 100,000.
-    fetchAllRows<{
-      name: MiraVoiceRow["name"];
-      anon_id: string | null;
-      user_id: string | null;
-      created_at: string;
-      props: Record<string, unknown> | null;
-    }>(
-      "/rest/v1/mira_event?name=in.(voice_session_ended,voice_points_opened)&select=name,anon_id,user_id,created_at,props&order=id.asc"
-    ),
-    // Only the Sign-in card's adoption: a failed read leaves it "not measured", not the page.
-    fetchAllRows<{ user_id: string }>("/rest/v1/mira_passkey?select=user_id&order=id.asc").catch(
-      () => null
-    ),
-  ]);
+  const [users, events, nudges, bodyChecks, goals, reviews, voice, passkeys, feedback] =
+    await Promise.all([
+      fetchAllRows<MiraUserRow>(
+        "/rest/v1/mira_user?select=id,email,created_at,style,use_assessment,is_team,theme,text_size,reply_language,use_checks&order=id.asc"
+      ),
+      fetchEvents(),
+      fetchAllRows<MiraNudgeRow>(
+        "/rest/v1/mira_nudge?sent_at=not.is.null&select=user_id,type,sent_at,clicked_at,delivered_at,opened_at&order=created_at.asc"
+      ),
+      fetchAllRows<MiraBodyCheckRow>(
+        "/rest/v1/mira_body_check?select=user_id,score,created_at&order=id.asc"
+      ),
+      // Apart from the rest: the page still shows if these tables can't be read.
+      fetchGoalRows(),
+      // Only the Ratings card needs it: unreadable, that card says so and the page stays.
+      fetchAllRows<MiraReviewRow>(`/rest/v1/mira_review?select=${REVIEW_SELECT}&order=id.asc`),
+      // ponytail: one row per voice session, paged; into mira_ap_events if it ever nears 100,000.
+      fetchAllRows<{
+        name: MiraVoiceRow["name"];
+        anon_id: string | null;
+        user_id: string | null;
+        created_at: string;
+        props: Record<string, unknown> | null;
+      }>(
+        "/rest/v1/mira_event?name=in.(voice_session_ended,voice_points_opened)&select=name,anon_id,user_id,created_at,props&order=id.asc"
+      ),
+      // Only the Sign-in card's adoption: a failed read leaves it "not measured", not the page.
+      fetchAllRows<{ user_id: string }>("/rest/v1/mira_passkey?select=user_id&order=id.asc").catch(
+        () => null
+      ),
+      // Only the Beta feedback card: unreadable, that card says so and the page stays.
+      fetchFeedback(),
+    ]);
   if (!users || !events || !nudges || !bodyChecks || !voice) {
     throw new Error("Mira's tables could not be read");
   }
@@ -317,6 +331,7 @@ export async function fetchMira(): Promise<MiraData> {
     passkeyUsers: passkeys ? passkeys.map((p) => p.user_id) : null,
     // Its own card: a failed read says so there and leaves the rest of the page standing.
     journal: await fetchJournal(),
+    feedback,
   };
 }
 
@@ -1529,6 +1544,8 @@ export interface MiraPayload extends PageHead {
   selfChecks: SelfChecks;
   /** The daily journal's KPI card (mira-journal.ts). */
   journal: JournalFigures;
+  /** Beta feedback in the range, newest first (mira-feedback.ts); null when it can't be read. */
+  feedback: FeedbackItem[] | null;
 }
 
 export function buildMiraPage(input: {
@@ -1814,5 +1831,6 @@ export function buildMiraPage(input: {
       f.from,
       f.to
     ),
+    feedback: feedbackOf(input.data.feedback, prep, w.since, w.until),
   };
 }

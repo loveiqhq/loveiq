@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { LINK_COOKIE } from "@features/mira/email-link";
 import { miraLinkPreview } from "@features/mira/link-preview";
-import { Suspense } from "react";
 import { readToken } from "@features/mira/server/nudges";
 import MiraNudges from "@features/mira/ui/MiraNudges";
 
@@ -13,20 +14,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * The page behind every nudge email's "Fewer nudges", "Pause" and "Unsubscribe" links. The link
- * is checked here, so one we did not sign shows "This link doesn't work" without a request that
- * could only fail.
+ * The page behind every nudge email's "Fewer nudges", "Pause" and "Unsubscribe" links. The link's
+ * token arrives in the `mira_link` cookie, never the address (proxy.ts,
+ * features/mira/email-link.ts), and is checked here, so one we did not sign shows "This link
+ * doesn't work" without a request that could only fail.
  */
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ t?: string | string[] }>;
-}) {
-  const { t } = await searchParams;
-  const signed = readToken("prefs", typeof t === "string" ? t : null) !== null;
-  return (
-    <Suspense fallback={null}>
-      <MiraNudges invalid={!signed} />
-    </Suspense>
-  );
+export default async function Page() {
+  const token = (await cookies()).get(LINK_COOKIE)?.value ?? "";
+  return <MiraNudges token={token} invalid={readToken("prefs", token) === null} />;
 }

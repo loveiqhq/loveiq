@@ -466,7 +466,7 @@ describe("the reminder's stop page", () => {
 
   it("says plainly when the link doesn't work, and asks nothing of the server", () => {
     render(<ReminderStop token="forged" valid={false} />);
-    expect(screen.getByRole("heading", { name: "This link doesn’t work." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This link doesn’t work" })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

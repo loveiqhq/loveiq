@@ -10,7 +10,7 @@
  *   POST, JSON { action: "pause" } → the stop page's button, CSRF-checked
  *   GET              → someone opening the address: the stop page, changing nothing
  *
- * Someone Mira stopped as under 18 is refused (403).
+ * Someone Mira stopped as under 18 is refused (403, `minor: true`).
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: "Invalid link." }, { status: 403 });
   try {
     if (await isMinor(userId)) {
-      return NextResponse.json({ error: "Not available." }, { status: 403 });
+      // Decision 9: the one refusal every page shows (ui/kit ADULTS_ONLY), never "try again".
+      return NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
     }
     const page = (request.headers.get("content-type") ?? "").includes("application/json");
     if (page) {
