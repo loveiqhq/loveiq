@@ -119,14 +119,13 @@ describe("nudge preference routes", () => {
 
   it("stop with the one-tap reason and note, and resume", async () => {
     await post({ action: "stop", t: t(), reason: "Too many emails", note: "nice though" });
-    expect(patches()[0]!.body).toMatchObject({
-      nudges_on: false,
-      nudge_stop_reason: "Too many emails · nice though",
-    });
+    // DATA-7: the reason and note are kept once, in the log (which a deleted account's cleanup
+    // empties), never a second time on the profile; a stop clears an older copy there.
+    expect(patches()[0]!.body).toMatchObject({ nudges_on: false, nudge_stop_reason: null });
     expect(logMiraEvent).toHaveBeenCalledWith(
       "nudge_stopped",
       { userId: USER_ID },
-      expect.anything()
+      { reason: "Too many emails · nice though", source: "page" }
     );
     await post({ action: "resume", t: t() });
     expect(patches().at(-1)!.body).toMatchObject({ nudges_on: true, nudges_stopped_at: null });
