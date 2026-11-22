@@ -44,7 +44,7 @@ export function UseChecksSwitch({
           checked={on}
           disabled={busy}
           onChange={(e) => void toggle(e.target.checked)}
-          className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+          className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
         />
       </label>
       {error ? (

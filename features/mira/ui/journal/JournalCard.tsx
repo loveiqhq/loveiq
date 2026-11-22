@@ -61,7 +61,7 @@ export function JournalCard() {
         </h2>
         <Link
           href="/mira/journal"
-          className="inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+          className="inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline"
         >
           Open journal <Icon path={ARROW} className="h-4 w-4" />
         </Link>
@@ -111,7 +111,7 @@ export function JournalCard() {
                   <button
                     type="button"
                     onClick={() => setOpen(true)}
-                    className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-[#561dbd] transition-colors hover:bg-ap-lilac"
+                    className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-ap-link transition-colors hover:bg-ap-lilac"
                   >
                     Edit today’s check-in <Icon path={CHECK} />
                   </button>

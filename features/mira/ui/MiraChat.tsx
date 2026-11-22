@@ -615,7 +615,7 @@ export default function MiraChat({
                     disabled={!ready}
                     aria-label="Coaching style"
                     title="How Mira coaches you"
-                    className={`${ICON_BUTTON} ${showTip ? "bg-ap-ground ring-2 ring-[#e7d8f8]" : ""}`}
+                    className={`${ICON_BUTTON} ${showTip ? "bg-ap-ground ring-2 ring-ap-mist" : ""}`}
                   >
                     <SlidersIcon />
                     <span className="hidden sm:inline">Coaching style</span>
@@ -699,7 +699,7 @@ export default function MiraChat({
               aria-label="Your chats"
               className="hidden w-[248px] shrink-0 flex-col gap-0.5 overflow-y-auto py-3 pl-5 pr-2 lg:flex"
             >
-              <p className="px-3 pb-1 text-[12px] font-semibold text-ap-quiet">Your chats</p>
+              <p className="px-3 pb-1 text-[12px] font-semibold text-ap-muted">Your chats</p>
               {chats.map((c) => (
                 <a
                   key={c.id}
@@ -724,7 +724,7 @@ export default function MiraChat({
               className={
                 empty
                   ? "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-5 pb-[6dvh] outline-none sm:flex-initial sm:px-6 sm:pb-0"
-                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:#ddd7e6_transparent] [scrollbar-width:thin]"
+                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:rgb(var(--ap-mist))_transparent] [scrollbar-width:thin]"
               }
             >
               {showWelcome ? (
@@ -907,7 +907,7 @@ export default function MiraChat({
                                 type="button"
                                 onClick={() => answerNps(n)}
                                 aria-label={`${n} out of 10`}
-                                className="h-10 min-w-[40px] rounded-full border border-ap-line bg-white text-[14px] hover:border-[#d9d4e2] hover:bg-ap-ground"
+                                className="h-10 min-w-[40px] rounded-full border border-ap-line bg-white text-[14px] hover:border-ap-mist hover:bg-ap-ground"
                               >
                                 {n}
                               </button>
@@ -1170,7 +1170,7 @@ export default function MiraChat({
                 type="checkbox"
                 checked={tick}
                 onChange={(e) => setTick(e.target.checked)}
-                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-[#795fc8]"
+                className="mt-[2px] h-[18px] w-[18px] shrink-0 accent-ap-purple"
               />
               <span>
                 I&apos;m 18 or older, and I agree that Mira may process what I share about my sex
@@ -1221,7 +1221,7 @@ const MIRA_INK =
   "bg-[linear-gradient(135deg,#fe6839_0%,#bf66d9_43%,#958ef6_100%)] bg-clip-text font-semibold text-transparent";
 const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const CHIP =
-  "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-[#d9d4e2] hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
+  "h-[34px] shrink-0 whitespace-nowrap rounded-full border border-ap-line bg-white px-[13px] text-[13px] font-medium text-ap-body transition-[background-color,border-color,transform] hover:border-ap-mist hover:bg-ap-ground active:scale-[0.97] motion-safe:animate-mira-in sm:h-[30px]";
 const FREE_LABEL =
   ANON_FREE_MESSAGES === 1 ? "free message" : `${ANON_FREE_MESSAGES} free messages`;
 const ICON_BUTTON =

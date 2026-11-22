@@ -262,7 +262,7 @@ function QuestionNineWords() {
       </p>
       <p className="mt-2">
         You can also{" "}
-        <Link href="/mira?say=support" className="font-semibold text-[#561dbd] underline">
+        <Link href="/mira?say=support" className="font-semibold text-ap-link underline">
           talk to Mira now
         </Link>
         .
@@ -353,11 +353,11 @@ function PrivacyNote() {
               height="16"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#795fc8"
+              stroke="currentColor"
               strokeWidth="2.4"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="mt-[3px] shrink-0"
+              className="mt-[3px] shrink-0 text-ap-purple"
             >
               <path d="M20 6L9 17l-5-5" />
             </svg>
@@ -459,7 +459,7 @@ function Result({
       {support ? (
         <section
           aria-labelledby="q9-h"
-          className="mb-6 max-w-[680px] rounded-3xl border border-[#d9c8f6] bg-ap-lilac p-5 motion-safe:animate-mira-in"
+          className="mb-6 max-w-[680px] rounded-3xl border border-ap-mist bg-ap-lilac p-5 motion-safe:animate-mira-in"
         >
           <h2 id="q9-h" className="font-serif text-[22px] font-medium">
             You don&rsquo;t have to carry this alone

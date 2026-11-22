@@ -27,7 +27,7 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
       <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink [--mira-fs:1] sm:text-[22px]">
         <span>
           Applied{" "}
-          <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
+          <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-muted">
             BETA
           </span>
         </span>

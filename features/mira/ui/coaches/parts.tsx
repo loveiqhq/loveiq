@@ -39,7 +39,7 @@ export function CoachPortrait({ coach, size }: { coach: Coach; size: number }) {
   return (
     <span
       aria-hidden="true"
-      className="flex shrink-0 select-none items-center justify-center rounded-full font-serif font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+      className="flex shrink-0 select-none items-center justify-center rounded-full font-serif font-semibold text-[#fff] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
       style={{
         width: size,
         height: size,

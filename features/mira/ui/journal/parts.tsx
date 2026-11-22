@@ -66,7 +66,7 @@ export function Switch({
     >
       <span
         aria-hidden="true"
-        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-[#857f8f]"}`}
+        className={`flex h-[30px] w-[52px] shrink-0 items-center rounded-full p-[3px] transition-colors duration-200 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ap-purple group-aria-disabled:opacity-60 ${checked ? "bg-ap-purple" : "bg-ap-muted/75"}`}
       >
         <span
           className={`h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none ${checked ? "translate-x-[22px]" : ""}`}
@@ -78,10 +78,10 @@ export function Switch({
 }
 
 const DOT: Record<WeekDot["state"], string> = {
-  done: "bg-[#795fc81a] text-ap-purple",
+  done: "bg-ap-purple/10 text-ap-purple",
   today: "bg-ap-purple text-white",
   open: "border-2 border-dashed border-ap-lavender bg-white",
-  none: "bg-ap-track text-ap-quiet",
+  none: "bg-ap-track text-ap-muted",
 };
 const SAID: Record<WeekDot["state"], string> = {
   done: "checked in",
@@ -123,7 +123,7 @@ export function WeekDots({
           </span>
           <span
             aria-hidden="true"
-            className={`whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[11px] ${d.day === today ? "text-[#561dbd]" : "text-ap-muted"}`}
+            className={`whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[11px] ${d.day === today ? "text-ap-link" : "text-ap-muted"}`}
           >
             {d.label}
           </span>

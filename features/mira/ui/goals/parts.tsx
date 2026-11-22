@@ -94,7 +94,7 @@ export function TickButton({
       className={`inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start justify-self-start rounded-full border pl-2 pr-4 sm:col-start-2 sm:justify-self-end sm:row-span-2 sm:row-start-1 sm:self-center text-[14px] font-semibold transition-[background-color,border-color,transform] duration-200 active:scale-[0.97] ${FOCUS} ${
         done
           ? "border-transparent bg-ap-lilac text-ap-ink"
-          : "border-ap-line bg-white text-ap-body hover:border-[#d9d4e2] hover:bg-ap-ground"
+          : "border-ap-line bg-white text-ap-body hover:border-ap-mist hover:bg-ap-ground"
       }`}
     >
       <CheckDot done={done} pop={pop} />

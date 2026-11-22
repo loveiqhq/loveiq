@@ -52,7 +52,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
     <button
       type="button"
       onClick={() => setDay(today)}
-      className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-[#561dbd] transition-colors hover:bg-ap-lilac"
+      className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-ap-link transition-colors hover:bg-ap-lilac"
     >
       Edit today’s check-in <Icon path={CHECK} />
     </button>
@@ -241,7 +241,7 @@ function Day({
             type="button"
             onClick={onEdit}
             aria-label={`Edit ${name}`}
-            className="min-h-[44px] px-2 text-[14px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+            className="min-h-[44px] px-2 text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline"
           >
             Edit
           </button>

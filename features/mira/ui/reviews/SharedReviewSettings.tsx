@@ -89,7 +89,7 @@ export default function SharedReviewSettings() {
           <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] text-ap-body">
             <span aria-hidden="true" className="tracking-[0.12em] text-ap-orange">
               {"★".repeat(review.stars)}
-              <span className="text-[#d9d4e2]">{"★".repeat(5 - review.stars)}</span>
+              <span className="text-ap-mist">{"★".repeat(5 - review.stars)}</span>
             </span>
             <span>
               You rated Mira {review.stars} out of 5 on{" "}
@@ -102,7 +102,7 @@ export default function SharedReviewSettings() {
             </span>
           </p>
           {review.status === "pending" || review.status === "approved" ? (
-            <figure className="m-0 flex flex-col gap-1.5 border-l-2 border-[#e7d8f8] pl-3">
+            <figure className="m-0 flex flex-col gap-1.5 border-l-2 border-ap-mist pl-3">
               <blockquote className="m-0 font-serif text-[15px] italic leading-relaxed text-ap-ink">
                 “{review.status === "approved" ? review.published : review.quote}”
               </blockquote>

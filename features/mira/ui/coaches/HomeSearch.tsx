@@ -118,7 +118,7 @@ export default function HomeSearch() {
                     </span>
                     <span className="block truncate text-[12px] text-ap-muted">{h.meta}</span>
                   </span>
-                  <ChevronIcon className="shrink-0 text-ap-quiet" />
+                  <ChevronIcon className="shrink-0 text-ap-muted" />
                 </li>
               ))}
             </ul>

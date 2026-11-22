@@ -33,7 +33,7 @@ export function StyleScales({ value, onChange }: { value: Style; onChange: (v: S
                   className="flex h-11 w-11 items-center justify-center"
                 >
                   <span
-                    className={`rounded-full border-2 ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-[#c9bfe6] bg-white"}`}
+                    className={`rounded-full border-2 ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-ap-mist bg-white"}`}
                   />
                 </button>
               ))}

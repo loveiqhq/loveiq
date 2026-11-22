@@ -93,7 +93,7 @@ export function WeeklySessionSettings() {
                   e.target.checked ? "Reminders are on." : "Reminders are paused."
                 )
               }
-              className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
             />
           </label>
           {confirm ? (

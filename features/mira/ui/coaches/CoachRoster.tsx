@@ -136,7 +136,7 @@ export default function CoachRoster() {
             className={`min-h-[44px] shrink-0 whitespace-nowrap rounded-full border px-4 text-[14px] transition-[background-color,border-color] ${
               area === id
                 ? "border-ap-purple bg-ap-lilac font-semibold text-ap-ink"
-                : "border-ap-line bg-white text-ap-body hover:border-[#d9d4e2] hover:bg-ap-ground"
+                : "border-ap-line bg-white text-ap-body hover:border-ap-mist hover:bg-ap-ground"
             } ${FOCUS}`}
           >
             {label}

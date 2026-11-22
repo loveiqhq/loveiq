@@ -129,7 +129,7 @@ function Row({
         <Link
           href={href}
           prefetch={false}
-          className="group -mx-2 flex min-h-[60px] items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-[#faf8ff] motion-reduce:transition-none"
+          className="group -mx-2 flex min-h-[60px] items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-ap-lilac/50 motion-reduce:transition-none"
         >
           {inner}
         </Link>

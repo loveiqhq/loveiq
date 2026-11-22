@@ -181,7 +181,7 @@ export default function AssessmentsPage() {
               type="checkbox"
               checked={data.useAssessment}
               onChange={(e) => void toggleAssessment(e.target.checked)}
-              className="mt-1 h-5 w-5 shrink-0 accent-[#795fc8]"
+              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
             />
           </label>
           {useError ? (
@@ -276,12 +276,12 @@ function Spark({ check, results }: { check: Check; results: CheckResult[] }) {
       <polyline
         points={pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
         fill="none"
-        stroke="#9d8ad7"
+        className="stroke-ap-lavender"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r={3.5} fill="#161021" />
+      <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r={3.5} className="fill-ap-ink" />
     </svg>
   );
 }

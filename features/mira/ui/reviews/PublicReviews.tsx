@@ -84,9 +84,9 @@ export function MiraRatingLine({ className = "" }: { className?: string }) {
 
 /** Soft tints for the initials, in Mira's coral, orchid and lavender. */
 const TINTS = [
-  "bg-[#f3ecff] text-ap-plum",
-  "bg-[#fde3d9] text-[#a8431f]",
-  "bg-[#e9e6fb] text-[#4f4a8c]",
+  "bg-ap-lilac text-ap-plum",
+  "bg-ap-orange/15 text-ap-pii",
+  "bg-ap-mist/50 text-ap-violet",
 ];
 
 function ReviewsBlock({ reviews: r, className }: { reviews: TodaysReviews; className: string }) {
@@ -130,8 +130,7 @@ function RatingLine({ reviews: r }: { reviews: TodaysReviews }) {
         width="13"
         height="13"
         viewBox="0 0 24 24"
-        fill="#fe6839"
-        className="shrink-0"
+        className="shrink-0 fill-ap-orange"
       >
         <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
       </svg>
@@ -151,7 +150,7 @@ function RatingLine({ reviews: r }: { reviews: TodaysReviews }) {
 export function HowWeCheck() {
   return (
     <details className="group text-[12px] text-ap-muted">
-      <summary className="inline-flex min-h-[32px] cursor-pointer list-none items-center gap-1 rounded-full px-2 underline decoration-[#c9c3d3] underline-offset-[3px] transition-colors hover:text-ap-body [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex min-h-[32px] cursor-pointer list-none items-center gap-1 rounded-full px-2 underline decoration-ap-mist underline-offset-[3px] transition-colors hover:text-ap-body [&::-webkit-details-marker]:hidden">
         How we check reviews
         <svg
           aria-hidden="true"

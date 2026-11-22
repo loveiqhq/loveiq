@@ -146,7 +146,7 @@ export function CheckIn({
                 <button
                   type="button"
                   onClick={() => setSupportOpen(true)}
-                  className="mt-3 min-h-[44px] text-[15px] font-semibold text-[#561dbd] underline"
+                  className="mt-3 min-h-[44px] text-[15px] font-semibold text-ap-link underline"
                 >
                   See support lines
                 </button>
@@ -167,7 +167,7 @@ export function CheckIn({
                 {journalLink ? (
                   <Link
                     href="/mira/journal"
-                    className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-[#561dbd] underline-offset-4 hover:underline"
+                    className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-ap-link underline-offset-4 hover:underline"
                   >
                     Open journal
                   </Link>
@@ -283,7 +283,7 @@ function Scale({
             {hint}
           </span>
         </p>
-        <span aria-hidden="true" className="shrink-0 text-[13px] font-semibold text-[#561dbd]">
+        <span aria-hidden="true" className="shrink-0 text-[13px] font-semibold text-ap-link">
           {value ? SCALE[value - 1] : ""}
         </span>
       </div>
@@ -301,7 +301,7 @@ function Scale({
               onClick={() => value === i + 1 && onChange(null)}
               className="peer sr-only"
             />
-            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-[#d9d4e2] hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
               {i + 1}
             </span>
           </label>
