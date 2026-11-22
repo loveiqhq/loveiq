@@ -243,6 +243,14 @@ describe("the signed-in frame", () => {
     expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
   });
 
+  it("closes More on a tap outside the sheet, as people expect of it", () => {
+    frame("home");
+    fireEvent.click(within(menu()).getByRole("button", { name: "More" }));
+    // The dimmed page around the sheet: a tap on the dialog element outside its box.
+    fireEvent.click(screen.getByRole("dialog", { name: "More" }), { clientX: 500, clientY: 900 });
+    expect(screen.queryByRole("dialog", { name: "More" })).toBeNull();
+  });
+
   it("closes More when one of its pages is chosen", () => {
     frame("home");
     fireEvent.click(within(menu()).getByRole("button", { name: "More" }));
