@@ -181,8 +181,12 @@ export function sentences(text: string): string[] {
   return out;
 }
 
+/** Words in any script, Japanese or Thai (written without spaces) too: the browser's own splitter. */
+const WORDS = new Intl.Segmenter(undefined, { granularity: "word" });
 const wordsOf = (s: string) =>
-  (s.toLowerCase().match(/[a-z0-9']+/g) ?? []).map((w) => w.replace(/'s$|s$/, ""));
+  Array.from(WORDS.segment(s.toLowerCase()))
+    .filter((w) => w.isWordLike)
+    .map((w) => w.segment.replace(/'s$|s$/, ""));
 
 /** Mostly Mira's own words, heard back through the speakers (allowing for mishearing). */
 export function isEcho(heard: string, said: string): boolean {
