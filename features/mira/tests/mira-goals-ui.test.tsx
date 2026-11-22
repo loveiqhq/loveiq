@@ -219,6 +219,30 @@ describe("Add as a goal, under a reply of Mira's", () => {
       "/mira/start"
     );
     expect(calls("POST /api/mira/goals")).toEqual([]);
+    expect(screen.getByText(/^Goals live in your free account/)).toHaveFocus();
+  });
+
+  // Round-3 R3-CHAT-6: the button went (natively disabled while saving, then replaced by
+  // "Added"), and the focus fell to the page.
+  it("keeps the focus while it saves, then hands it to what replaced the button", async () => {
+    let answer: (r: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((done) => (answer = done)));
+    render(<GoalSuggestion text={LIGHT.text} signedIn />);
+    const add = screen.getByRole("button", { name: "Add as a goal" });
+    add.focus();
+    fireEvent.click(add);
+    const saving = screen.getByRole("button", { name: "Adding…" });
+    expect(saving).toHaveFocus();
+    expect(saving).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(saving); // a second tap while it saves sends nothing more
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    answer({ ok: true, status: 200, json: async () => ({ goal: LIGHT }) } as Response);
+    await waitFor(() => expect(screen.getByText("Added to your goals")).toHaveFocus());
+  });
+
+  it("doesn't take the focus when a reopened chat shows it already added", () => {
+    render(<GoalSuggestion text={LIGHT.text} signedIn added />);
+    expect(screen.getByText("Added to your goals")).not.toHaveFocus();
   });
 
   it("says why when it can't be added, with the way to the goals", async () => {
