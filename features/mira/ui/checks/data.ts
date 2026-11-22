@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
 import { miraApi } from "../api";
+import { shortDate } from "../kit/dates";
 
 /** The menu tab these pages mark (MiraAppFrame). */
 export const FRAME_TAB = "assessments" as const;
@@ -110,15 +111,8 @@ export function sinceLastTime(before: number, after: number): string {
   return `${n} ${n === 1 ? "point" : "points"} ${diff < 0 ? "lower" : "higher"} than last time`;
 }
 
-/** "21 Nov", or "21 Nov 2025" outside this year. */
-export function shortDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
-  });
-}
+/** "21 Nov", or "21 Nov 2025" outside this year: Mira's one short date (kit/dates.ts, SET-12). */
+export { shortDate };
 
 /** A result's band as a card or the history shows it, never without the support question 9 opened. */
 export const bandText = (check: Check, r: CheckResult): string =>

@@ -574,6 +574,25 @@ describe("when the checks don't load", () => {
   });
 });
 
+describe("dates on the check screens", () => {
+  it("read day first, spelled as everywhere else in Mira, whatever the browser's language", async () => {
+    const year = new Date().getFullYear();
+    account.checks[0] = {
+      id: "anxiety",
+      results: [{ at: `${year}-03-15T12:00:00Z`, score: 7, band: "mild", support: false }],
+      nextAt: `${year + 1}-03-29T12:00:00Z`,
+    };
+    render(<AssessmentsPage />);
+    const card = (await screen.findByRole("heading", { name: "Anxiety check" })).closest(
+      "article"
+    )!;
+    expect(card.textContent).toMatch(/Mild15 Mar/); // the band, then its date
+    // Another year says so.
+    expect(card.textContent).toMatch(/Opens again on 29 Mar \d{4}/);
+    expect(card.textContent).not.toMatch(/Mar 15/);
+  });
+});
+
 describe("Assessments' 'Mira may use my LoveIQ result'", () => {
   it("is a switch, saved with the other choices and put back if the save fails", async () => {
     render(<AssessmentsPage />);

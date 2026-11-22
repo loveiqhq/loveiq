@@ -278,6 +278,8 @@ describe("the goals page", () => {
       expect(li.className).toMatch(/bg-ap-track/);
     }
     expect(within(entry).getByText("Last 8 weeks")).toBeTruthy();
+    // Spelled out, as the journal does: "Sep", never ICU's "Sept".
+    expect(within(weeks).getByText(/^Week of 28 Sep: /)).toBeTruthy();
   });
 
   it("keeps the days stepper focused at its ends, ignoring a press past them", async () => {

@@ -11,6 +11,7 @@ import {
 } from "../../server/goal-progress";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
+import { shortDate } from "../kit/dates";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import {
   ChallengePills,
@@ -39,9 +40,6 @@ const QUIET = `inline-flex min-h-[44px] items-center rounded-full px-3 text-[14p
 const TEXT_BUTTON = `${QUIET} text-ap-body hover:text-ap-ink`;
 const DANGER_BUTTON = `${QUIET} text-ap-bad-ink`;
 const H2 = "font-serif text-[22px] font-medium";
-
-const longDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 export default function GoalsPage() {
   const g = useGoals();
@@ -175,7 +173,7 @@ export default function GoalsPage() {
                 title="Done"
                 goals={done}
                 note={(x) =>
-                  `Done ${longDate(x.completed_at!)} · ${x.days.length === 1 ? "1 day" : `${x.days.length} days`} ticked`
+                  `Done ${shortDate(x.completed_at!)} · ${x.days.length === 1 ? "1 day" : `${x.days.length} days`} ticked`
                 }
                 g={g}
                 say={setSaid}
@@ -186,7 +184,7 @@ export default function GoalsPage() {
                 id="away"
                 title="Put away"
                 goals={away}
-                note={(x) => `Put away ${longDate(x.archived_at!)}`}
+                note={(x) => `Put away ${shortDate(x.archived_at!)}`}
                 g={g}
                 say={setSaid}
               />

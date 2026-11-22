@@ -1,5 +1,6 @@
 "use client";
 
+import { shortDate } from "@features/admin/server/ap/days";
 import { addDays, weekStart, type Day, type Progress } from "../../server/goal-progress";
 import type { Goal } from "./useGoals";
 
@@ -34,14 +35,6 @@ export function weekCaption(p: Progress, target: number | null, aimShown = false
   if (p.thisWeek > 0) return `${days(p.thisWeek)} this week`;
   return p.total > 0 ? "Not yet this week" : "Tick the days you do it";
 }
-
-/** "16 Nov", for a day as the person lives it. */
-const short = (day: Day) =>
-  new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
 
 export const FOCUS =
   "outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
@@ -192,7 +185,7 @@ export function WeekBars({ p, target, today }: { p: Progress; target: number | n
               className={`flex h-full w-[7px] items-end overflow-hidden rounded-full bg-ap-track ${n === null ? "opacity-50" : ""}`}
             >
               <span className="sr-only">
-                {`Week of ${short(week)}: ${n === null ? "before this goal" : days(n)}`}
+                {`Week of ${shortDate(week)}: ${n === null ? "before this goal" : days(n)}`}
               </span>
               <span
                 aria-hidden="true"
