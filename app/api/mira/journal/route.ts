@@ -10,10 +10,10 @@
  *             gives it, a save answers it as `updatedAt`). A new entry only for yesterday or today
  *             in the person's zone (the browser sends their today); an older day only where an
  *             entry exists (404), or with `restore: true` (a day another tab deleted while this
- *             one edited it, put back on the second Save; never a day still to come). Never over
- *             a day another tab or device changed meanwhile: 409 { conflict, current } with the
- *             day as it is now (null: deleted). A note with crisis words gets the chat's support
- *             lines (crisisLines), and is kept.
+ *             one edited it, put back on the second Save; within the days GET reads, never a day
+ *             still to come). Never over a day another tab or device changed meanwhile: 409
+ *             { conflict, current } with the day as it is now (null: deleted). A note with crisis
+ *             words gets the chat's support lines (crisisLines), and is kept.
  *   PATCH   → the settings: { share: "off" | "scores" | "notes" } (what Mira may read) and/or
  *             { reminderTime: "HH:00" | "HH:30" | null } (the daily reminder email)
  *   DELETE ?day=YYYY-MM-DD → one entry;  DELETE ?all=1 → every entry

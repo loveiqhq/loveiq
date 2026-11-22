@@ -552,9 +552,12 @@ describe("a new check-in is only for yesterday or today in the person's own zone
           body: expect.objectContaining({ user_id: LEA.id, day: "2026-11-18", note: "Kept" }),
         }),
       ]);
-      // Never a day still to come, and nothing but `true` asks for it.
+      // Never a day still to come, nor one older than the journal ever loads (a year and a bit),
+      // and nothing but `true` asks for it.
       const ahead = { day: "2026-11-27", mood: 2, base: null, restore: true };
       expect((await PUT(call("PUT", "", ahead))).status).toBe(404);
+      const ancient = { day: "2024-09-01", mood: 2, base: null, restore: true };
+      expect((await PUT(call("PUT", "", ancient))).status).toBe(404);
       const loose = { day: "2026-11-18", mood: 2, base: null, restore: "yes" };
       expect((await PUT(call("PUT", "", loose))).status).toBe(400);
       expect(writes()).toHaveLength(1);
