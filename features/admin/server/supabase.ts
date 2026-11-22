@@ -196,11 +196,14 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
    * (4 on 27 Oct 2026). Any other 422 from that endpoint still alerts.
    */
   const existingUser =
-    res.status === 422 &&
     path.startsWith("/auth/v1/admin/users") &&
-    (errorCode === "email_exists" ||
-      errorCode === "user_already_exists" ||
-      /already (been )?registered|already exists/i.test(message ?? ""));
+    ((res.status === 422 &&
+      (errorCode === "email_exists" ||
+        errorCode === "user_already_exists" ||
+        /already (been )?registered|already exists/i.test(message ?? ""))) ||
+      // The same refusal as Auth's database saw it (Mira's change of email, 22 Nov 2026): a 500
+      // carrying the unique violation on the users' email.
+      (code === "23505" && /users_email_partial_key/.test(message ?? "")));
   const level = res.status === 409 || existingUser ? "warn" : "error";
   /**
    * 57014 IS A TIMEOUT, NOT A REFUSAL: Postgres cancelled the statement at PostgREST's

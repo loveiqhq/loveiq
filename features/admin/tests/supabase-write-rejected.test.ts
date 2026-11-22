@@ -221,6 +221,28 @@ describe("what #prod-alerts says about the commonest posts (27 Oct 2026)", () =>
     expect(mockError).not.toHaveBeenCalled();
   });
 
+  /**
+   * Mira's change of email (22 Nov 2026): staging's Auth answered an address another login has
+   * with a 500 carrying Postgres's unique violation, not its 422. The person is told it's taken;
+   * nobody needs an alert.
+   */
+  it("an address another login has is a warn, even as Auth's 500 unique violation", async () => {
+    respond(
+      500,
+      JSON.stringify({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "users_email_partial_key"',
+      })
+    );
+    await supabaseFetch("/auth/v1/admin/users/abc", { method: "PUT", body: "{}" });
+    expect(mockError).not.toHaveBeenCalled();
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+
+    respond(500, JSON.stringify({ code: "23505", message: "duplicate key value" }));
+    await supabaseFetch("/rest/v1/survey_submission", { method: "POST", body: "{}" });
+    expect(mockError).toHaveBeenCalledTimes(1);
+  });
+
   it("still alerts on any other 422 from that endpoint, or a 422 anywhere else", async () => {
     respond(
       422,

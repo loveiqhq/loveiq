@@ -52,6 +52,8 @@ const KAI = "7a3d5b2f-2222-4333-8444-a55566667777";
 let db: ReturnType<typeof fakeDb>;
 /** Auth's users by address: an address another login has is taken. */
 let logins: Row[];
+/** How Auth refuses a taken address: its usual 422, or the 500 staging's Auth gave on 22 Nov 2026. */
+let takenAs: 422 | 500 = 422;
 const cooldowns = new Set<string>();
 const refuse = (...buckets: string[]) =>
   vi.mocked(checkRateLimit).mockImplementation(async (_k, cfg) => ({
@@ -101,6 +103,7 @@ beforeEach(() => {
   vi.mocked(isUndeliverable).mockResolvedValue(false);
   vi.mocked(memberByEmail).mockResolvedValue(null);
   vi.mocked(sendNeutralEmail).mockResolvedValue(true);
+  takenAs = 422;
   logins = [
     { id: LEA, email: "lea@example.com" },
     { id: KAI, email: "kai@example.com" },
@@ -132,7 +135,16 @@ beforeEach(() => {
       auth: (b, call) => {
         const id = /\/users\/([^/?]+)$/.exec(call)![1];
         if (logins.some((l) => l.email === b.email && l.id !== id)) {
-          return json({ error_code: "email_exists" }, 422);
+          return takenAs === 422
+            ? json({ error_code: "email_exists" }, 422)
+            : json(
+                {
+                  code: "23505",
+                  message:
+                    'duplicate key value violates unique constraint "users_email_partial_key"',
+                },
+                500
+              );
         }
         logins.find((l) => l.id === id)!.email = b.email;
         return json({ id, email: b.email });
@@ -218,6 +230,14 @@ describe("changing the email", () => {
     expect((await post({ action: "confirm", code: sentCode() })).status).toBe(409);
     expect(logins.map((l) => l.email)).toEqual(["lea@example.com", "kai@example.com"]);
     expect(db.tables.mira_email_change).toEqual([]);
+  });
+
+  it("says taken too when Auth refuses the address with a 500 and a unique violation", async () => {
+    takenAs = 500;
+    expect((await start("kai@example.com")).status).toBe(200);
+    expect((await post({ action: "confirm", code: sentCode() })).status).toBe(409);
+    expect(logins.map((l) => l.email)).toEqual(["lea@example.com", "kai@example.com"]);
+    takenAs = 422;
   });
 
   it("never moves an account onto a staff or Jarvis address", async () => {
