@@ -811,22 +811,45 @@ function useLandOnSection(ready: boolean) {
  * The section in view: the one crossing a line a quarter down the screen. Null until the
  * browser can tell (no IntersectionObserver: no highlight, the links still work).
  */
+/** Where a section becomes the one being read: just under where a link lands it (40 px from xl,
+ *  64 px under the phones' sticky row). */
+const READ_LINE = 120;
+
+/**
+ * The section the index marks: the last whose top has reached READ_LINE (the first before any
+ * has), and at the page's end the last section once its top is in view, as it can't scroll up to
+ * the line. Round-3 R3-ACCT-7: a band 25–30 % down the screen missed a short section a link had
+ * landed at the top, so the next one was marked, and "Your data" never was on a desktop.
+ */
 function useActiveSection(ids: SectionId[], ready: boolean): SectionId | null {
   const [active, setActive] = useState<SectionId | null>(null);
   const key = ids.join(" ");
   useEffect(() => {
-    if (!ready || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setActive(e.target.id as SectionId);
-      },
-      { rootMargin: "-25% 0px -70% 0px" }
-    );
-    for (const id of key.split(" ")) {
-      const el = document.getElementById(id);
-      if (el) io.observe(el);
-    }
-    return () => io.disconnect();
+    if (!ready) return;
+    const list = key.split(" ") as SectionId[];
+    const top = (id: SectionId) =>
+      document.getElementById(id)?.getBoundingClientRect().top ?? Infinity;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      let current = list[0] ?? null;
+      for (const id of list) if (top(id) <= READ_LINE) current = id;
+      const last = list.at(-1);
+      const end = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (last && end && top(last) < window.innerHeight) current = last;
+      setActive(current);
+    };
+    const later = () => {
+      frame ||= requestAnimationFrame(measure);
+    };
+    later();
+    window.addEventListener("scroll", later, { passive: true });
+    window.addEventListener("resize", later);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", later);
+      window.removeEventListener("resize", later);
+    };
   }, [key, ready]);
   return active;
 }
