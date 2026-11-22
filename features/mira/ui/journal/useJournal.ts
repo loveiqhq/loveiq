@@ -38,8 +38,11 @@ export type Journal = {
   today: string;
   freshToday: () => string;
   reload: () => void;
-  /** `base`: the version the sheet started from, null for a new check-in. */
-  save: (entry: JournalEntry, base: string | null) => Promise<SaveResult>;
+  /**
+   * `base`: the version the sheet started from, null for a new check-in. `restore`: puts back a
+   * day another tab deleted while the sheet was open, whatever its age (R3-HAB-1).
+   */
+  save: (entry: JournalEntry, base: string | null, restore?: boolean) => Promise<SaveResult>;
   remove: (day?: string) => Promise<boolean>;
   setSettings: (patch: { share?: JournalShare; reminderTime?: string | null }) => Promise<boolean>;
 };
@@ -100,7 +103,7 @@ export function useJournal(enabled = true): Journal {
   }, []);
 
   const save = useCallback(
-    async (entry: JournalEntry, base: string | null): Promise<SaveResult> => {
+    async (entry: JournalEntry, base: string | null, restore = false): Promise<SaveResult> => {
       const r = await miraApi<{
         success?: boolean;
         updatedAt?: string;
@@ -108,7 +111,10 @@ export function useJournal(enabled = true): Journal {
         current?: SavedEntry | null;
         crisis?: boolean;
         crisisLines?: SupportCountry;
-      }>("/api/mira/journal", { method: "PUT", body: { ...entry, base } });
+      }>("/api/mira/journal", {
+        method: "PUT",
+        body: { ...entry, base, ...(restore ? { restore } : {}) },
+      });
       const ok = r.ok && r.data.success !== false;
       const conflict = r.data.conflict ? { current: r.data.current ?? null } : undefined;
       if (ok)

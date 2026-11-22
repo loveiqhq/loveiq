@@ -38,9 +38,14 @@ const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * their zone (a check-in begun before their midnight), so a tab left open for days can't make one
  * for a day long gone, and no later than a day already begun somewhere (UTC+14: a traveller's
  * browser may be ahead of the zone on file). An existing entry can be edited on any day.
+ * `restore`: an entry another tab or device deleted while this one edited it, put back on the
+ * second Save the sheet asked for (R3-HAB-1), so any earlier day too.
  */
-export function canStart(day: string, now: Date, timeZone: string): boolean {
-  return day >= addDays(localDay(now, timeZone), -1) && day <= utcDay(now.getTime() + 14 * HOUR_MS);
+export function canStart(day: string, now: Date, timeZone: string, restore = false): boolean {
+  return (
+    (restore || day >= addDays(localDay(now, timeZone), -1)) &&
+    day <= utcDay(now.getTime() + 14 * HOUR_MS)
+  );
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

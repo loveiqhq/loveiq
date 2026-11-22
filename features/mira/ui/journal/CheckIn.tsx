@@ -70,6 +70,8 @@ export function CheckIn({
   const [note, setNote] = useState(existing?.note ?? "");
   // The version this sheet started from: a save never lands on one it hasn't seen (HAB-13).
   const [base, setBase] = useState<string | null>(existing?.updated_at ?? null);
+  // Deleted in another tab while open: the next Save puts this day back, an older one too.
+  const [restore, setRestore] = useState(false);
   // Read as the sheet opens: once saved, the journal holds this check-in too.
   const [firstEver] = useState(journal.entries.length === 0);
   const [phase, setPhase] = useState<"edit" | "saving" | "done">("edit");
@@ -100,7 +102,7 @@ export function CheckIn({
     setError(null);
     setPhase("saving");
     const entry: JournalEntry = { day, ...ratings, note: line };
-    const result = await journal.save(entry, base);
+    const result = await journal.save(entry, base, restore);
     // The support lines come first, whatever happened to the save.
     if (result.crisisLines) {
       setCrisis(result.crisisLines);
@@ -109,6 +111,7 @@ export function CheckIn({
     if (result.conflict) {
       // What is typed here stays; a second Save replaces the other one, knowingly.
       setBase(result.conflict.current?.updated_at ?? null);
+      setRestore(!result.conflict.current);
       setPhase("edit");
       setError(result.conflict.current ? CHANGED_ELSEWHERE : DELETED_ELSEWHERE);
       return;

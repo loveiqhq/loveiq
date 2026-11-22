@@ -494,4 +494,32 @@ describe("a new check-in is only for yesterday or today in the person's own zone
       vi.useRealTimers();
     }
   });
+
+  // R3-HAB-1: another tab deleted an older day while this one edited it. The sheet said "Save
+  // again to keep what's here", so a second Save that says so (`restore`) puts the day back.
+  it("puts back an older day another tab deleted, when the second Save says so", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-24T11:30:00Z") });
+    try {
+      vi.mocked(getProfile).mockResolvedValue({ time_zone: "Europe/Berlin" } as never);
+      answer = (_path, init) =>
+        init.method === "POST" ? json([{ day: "2026-11-18" }]) : undefined;
+      const back = { day: "2026-11-18", mood: 2, note: "Kept", base: null, restore: true };
+      const res = await PUT(call("PUT", "", back));
+      expect(res.status).toBe(200);
+      expect(writes()).toEqual([
+        expect.objectContaining({
+          method: "POST",
+          body: expect.objectContaining({ user_id: LEA.id, day: "2026-11-18", note: "Kept" }),
+        }),
+      ]);
+      // Never a day still to come, and nothing but `true` asks for it.
+      const ahead = { day: "2026-11-27", mood: 2, base: null, restore: true };
+      expect((await PUT(call("PUT", "", ahead))).status).toBe(404);
+      const loose = { day: "2026-11-18", mood: 2, base: null, restore: "yes" };
+      expect((await PUT(call("PUT", "", loose))).status).toBe(400);
+      expect(writes()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -209,6 +209,33 @@ describe("the Home card", () => {
     expect(sent("PUT").map((p) => p.body.base)).toEqual([null, "2026-11-22T09:00:00Z"]);
   });
 
+  // R3-HAB-1: an older day can't be started anew, so the second Save says it puts this one back.
+  it("puts back a day another tab deleted on the second Save, keeping what was typed", async () => {
+    const old = entry(day(-5), { mood: 3, note: "Before", updated_at: "2026-11-17T20:00:00Z" });
+    replies = journalReply([old]);
+    let puts = 0;
+    replies["PUT /api/mira/journal"] = () =>
+      ++puts === 1
+        ? { status: 409, body: { conflict: true, current: null, error: "x" } }
+        : { body: { success: true, updatedAt: "2026-11-22T09:05:00Z" } };
+    render(<JournalPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Edit (?!Today)/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/A line for the day/), {
+      target: { value: "Typed here" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /deleted in another tab or on another device\. Save again to keep what’s here/
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    const [first, second] = sent("PUT").map((p) => p.body);
+    expect(first).toMatchObject({ day: day(-5), note: "Typed here", base: old.updated_at });
+    expect(first).not.toHaveProperty("restore");
+    expect(second).toMatchObject({ day: day(-5), note: "Typed here", base: null, restore: true });
+  });
+
   it("opens the chat's support lines for a note with crisis words", async () => {
     replies["PUT /api/mira/journal"] = () => ({
       body: {
