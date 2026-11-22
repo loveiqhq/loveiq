@@ -136,6 +136,13 @@ describe("AP › Mira, 21 Nov 2026", () => {
         .getAllByRole("cell")
         .map((c) => c.textContent);
     expect(cells("Declined replies").slice(0, 2)).toEqual(["1", "500.0"]);
+    // Crises only: the support lines the question-9 check-in opens ([[SUPPORT]]) aren't counted.
+    expect(
+      within(safety).getByText("A crisis, with the support lines; the team reviews each")
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      "Support lines shown without a crisis (Mira’s check-in after a mood check, a declined reply) are not counted as one."
+    );
     expect(cells("Under-18 stops").slice(0, 2)).toEqual(["1", "500.0"]);
 
     const card = screen.getByRole("region", { name: "“Keep this chat” card (retired)" });

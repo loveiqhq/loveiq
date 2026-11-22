@@ -154,6 +154,9 @@ const EVENT_NAMES = [
   "session_cancelled",
   "session_reminder_sent",
   "session_attended",
+  // One chat deleted from the chat list (22 Nov 2026, DELETE /api/mira/chats/[id]): no id, no
+  // words. Read so a card can count it; none does yet.
+  "chat_deleted",
 ];
 
 /** A self-check event's check, and whether it is the finish. */

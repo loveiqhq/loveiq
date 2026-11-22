@@ -1453,7 +1453,7 @@ function Safety({ data }: { data: Data }) {
   const { conversations, crisis, declined, minorStops, notHelpful, referred } = data.safety;
   const per = (k: number) => (conversations ? fmt("count", (k / conversations) * 1000, 1) : EMPTY);
   const rows: Array<[string, number | null, string]> = [
-    ["Stopped coaching", crisis, "Crisis or support lines shown, the team reviews each case"],
+    ["Stopped coaching", crisis, "A crisis, with the support lines; the team reviews each"],
     ["Declined replies", declined, "Support lines shown instead of a reply"],
     ["Under-18 stops", minorStops, "Coaching stopped for someone under 18"],
     ["Referred on", referred, "Doctor or therapist suggested, coaching continues"],
@@ -1506,12 +1506,14 @@ function Safety({ data }: { data: Data }) {
         </div>
       </div>
       <p className={NOTE}>
-        Stopped coaching: the support lines shown in the range (a crisis message, or a reply that
-        raised the stop rail). Declined replies: replies Mira declined, with the support lines shown
-        instead; Under-18 stops: coaching stopped because the person is under 18 (both recorded from
-        21 Nov 2026). Referred on: Mira&rsquo;s replies that suggested a therapist, doctor or other
-        professional, at most one per person and conversation, from 20 Nov 2026. Per 1,000 of the
-        range&rsquo;s conversations (3 or more messages with no gap of more than 30 minutes).
+        Stopped coaching: the crises in the range (a crisis message, or a reply that raised the stop
+        rail), each with the support lines. Support lines shown without a crisis (Mira&rsquo;s
+        check-in after a mood check, a declined reply) are not counted as one. Declined replies:
+        replies Mira declined, with the support lines shown instead; Under-18 stops: coaching
+        stopped because the person is under 18 (both recorded from 21 Nov 2026). Referred on:
+        Mira&rsquo;s replies that suggested a therapist, doctor or other professional, at most one
+        per person and conversation, from 20 Nov 2026. Per 1,000 of the range&rsquo;s conversations
+        (3 or more messages with no gap of more than 30 minutes).
       </p>
     </Card>
   );

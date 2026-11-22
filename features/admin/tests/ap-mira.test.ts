@@ -902,6 +902,8 @@ describe("fetchMira", () => {
       "session_cancelled",
       "session_reminder_sent",
       "session_attended",
+      // One chat deleted (22 Nov 2026, DELETE /api/mira/chats/[id]): no id, no words.
+      "chat_deleted",
     ]);
     const paths = mockFetchAllRows.mock.calls.map((c) => c[0] as string);
     expect(paths.find((p) => p.startsWith("/rest/v1/mira_nudge"))).toContain(
