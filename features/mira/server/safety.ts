@@ -239,7 +239,10 @@ export function parseReply(raw: string): ParsedReply {
   }
   if (minor) topic = null;
   return {
+    // The chat shows plain text: markdown bold would show as asterisks (round-2 audit CHAT-10).
     text: text
+      .replace(/\*\*(?=\S)([^*\n]+?)(?<=\S)\*\*/g, "$1")
+      .replace(/__(?=\S)([^_\n]+?)(?<=\S)__/g, "$1")
       .replace(/[ \t]+$/gm, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim(),

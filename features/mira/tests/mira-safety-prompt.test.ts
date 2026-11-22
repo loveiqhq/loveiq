@@ -214,6 +214,17 @@ describe("parseReply", () => {
     });
   });
 
+  // Round-2 audit CHAT-10: the chat shows plain text, so bold came through as asterisks.
+  it("takes markdown bold out, keeping its words and any other asterisk", () => {
+    expect(
+      parseReply("**Übung 4, Freundlichkeit bei Körpersorgen**: try __one__ minute.").text
+    ).toBe("Übung 4, Freundlichkeit bei Körpersorgen: try one minute.");
+    expect(parseReply("Rate it 1 to 5 * no wrong answer").text).toBe(
+      "Rate it 1 to 5 * no wrong answer"
+    );
+    expect(parseReply("snake_case and a lone ** stay").text).toBe("snake_case and a lone ** stay");
+  });
+
   // Round-2 audit HAB-11: the gentle check-in after a mood check's question 9 had only [[CRISIS]]
   // to show the support lines, so it was counted as a crisis in the chat.
   it("reads [[SUPPORT]] as the support lines without a crisis, and never beside one", () => {
