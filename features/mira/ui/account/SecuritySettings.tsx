@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { miraApi } from "../api";
+import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
 
 /**
@@ -95,6 +96,7 @@ export default function SecuritySettings() {
   const [failed, setFailed] = useState(false);
   const canPasskey = usePasskeysWork();
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const emailChanged = useContext(EmailChanged);
 
   const load = useCallback(async () => {
     const r = await miraApi<Security>("/api/mira/security");
@@ -162,6 +164,7 @@ export default function SecuritySettings() {
               data={data}
               onChanged={(email) => {
                 setData({ ...data, email, google: { ...data.google, connected: false } });
+                emailChanged(email); // the page's Account section and menu too
                 setNotice({
                   ok: true,
                   text: `Your email is now ${email}. We let your old address know.`,

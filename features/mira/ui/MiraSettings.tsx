@@ -1,7 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
@@ -22,8 +30,12 @@ import tokens from "./theme-tokens.js";
  * `journal` (JournalSettings) and `weeklySession` (WeeklySessionSettings). Each brings its own
  * heading, styled like SettingsSection's, and gets an index entry and an anchor (`Slot`). `Switch`,
  * `Select`, `SettingsGroup` and `SettingsSection` are
- * exported for them, so every row looks the same.
+ * exported for them, so every row looks the same, and `EmailChanged`, so a new address shows
+ * all over the page at once.
  */
+
+/** Tells the page the account's address changed (Sign-in & security). */
+export const EmailChanged = createContext<(email: string) => void>(() => undefined);
 
 type Profile = {
   email: string;
@@ -278,6 +290,11 @@ export default function MiraSettings({
     router.refresh();
   }
 
+  const emailChanged = useCallback(
+    (email: string) => setP((cur) => (cur ? { ...cur, email } : cur)),
+    []
+  );
+
   const typed = (patch: Partial<Profile>) => {
     setStatus("account", null);
     setAccountDirty(true);
@@ -420,7 +437,11 @@ export default function MiraSettings({
                 </p>
               </SettingsSection>
 
-              {security ? <Slot id="security-slot">{security}</Slot> : null}
+              {security ? (
+                <Slot id="security-slot">
+                  <EmailChanged.Provider value={emailChanged}>{security}</EmailChanged.Provider>
+                </Slot>
+              ) : null}
 
               <SettingsSection
                 id="coaching"

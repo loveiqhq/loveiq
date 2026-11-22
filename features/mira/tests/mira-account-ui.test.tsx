@@ -22,6 +22,7 @@ vi.mock("@simplewebauthn/browser", () => ({
   WebAuthnAbortService: { cancelCeremony: vi.fn() },
 }));
 
+import MiraSettings from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import SecuritySettings, { lastActive } from "@features/mira/ui/account/SecuritySettings";
 import { unlockName } from "@features/mira/ui/account/passkeys";
@@ -357,6 +358,43 @@ describe("Settings › Sign-in & security", () => {
     expect(webauthn.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ signalName: "currentUserDetails", userName: "lea.new@example.com" })
     );
+  });
+
+  it("shows the new address all over Settings at once", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: {
+        profile: {
+          email: "lea@example.com",
+          name: "Lea",
+          style: {},
+          nudges_on: false,
+          nudge_time: "08:00",
+          time_zone: "Europe/Berlin",
+        },
+        chats: [],
+      },
+    });
+    replies["GET /api/mira/security"] = () => ({ body: SECURITY });
+    render(<MiraSettings security={<SecuritySettings />} />);
+    await screen.findByRole("region", { name: "Devices" });
+    expect(screen.getAllByText("lea@example.com").length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByLabelText("New email"), {
+      target: { value: "lea.new@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    fireEvent.change(await screen.findByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    replies["POST /api/mira/email"] = () => ({
+      body: { success: true, email: "lea.new@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await screen.findByText("Your email is now lea.new@example.com. We let your old address know.");
+    // The Account section and the menu's account line too, not only this card.
+    const account = screen.getByRole("region", { name: "Account" });
+    expect(within(account).getByText("lea.new@example.com")).toBeInTheDocument();
+    expect(screen.queryByText("lea@example.com")).toBeNull();
   });
 
   it("asks to sign in again before a passkey or a new address, long after signing in", async () => {
