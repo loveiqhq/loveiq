@@ -4,6 +4,7 @@ import {
   forSpeech,
   isEcho,
   pickVoice,
+  readAfterSpeaking,
   readWhileSpeaking,
   recognitionLang,
   sentences,
@@ -105,6 +106,28 @@ describe("barge-in: telling the person from Mira's own voice in the speakers", (
       floor: 1,
       bargeIn: false,
     });
+  });
+});
+
+describe("her last words, arriving late just after she stopped (VOI-V5)", () => {
+  const said = "That makes sense. Want the next step?";
+
+  it("waits while they settle, then skips them, keeping the person's words after them", () => {
+    const late = { text: "want the next step", final: false };
+    expect(readAfterSpeaking([late], 0, said)).toEqual({ floor: 0, settling: true });
+    const settled = { ...late, final: true };
+    const own = { text: "yes please", final: false };
+    expect(readAfterSpeaking([settled, own], 0, said)).toEqual({ floor: 1, settling: false });
+  });
+
+  it("leaves the person's answer alone, even a one-word one she also said", () => {
+    expect(readAfterSpeaking([{ text: "sure go on", final: true }], 0, said)).toEqual({
+      floor: 0,
+      settling: false,
+    });
+    expect(
+      readAfterSpeaking([{ text: "okay", final: true }], 0, "Okay. Want the next step?")
+    ).toEqual({ floor: 0, settling: false });
   });
 });
 

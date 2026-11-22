@@ -7,6 +7,7 @@ import {
   chooseMode,
   forSpeech,
   pickVoice,
+  readAfterSpeaking,
   readWhileSpeaking,
   recognitionLang,
   recognizerClass,
@@ -74,6 +75,11 @@ type SessionEnd = {
 
 /** The silence after the person's words that ends their turn: patient, people pause on this. */
 export const TURN_PAUSE_MS = 1600;
+/**
+ * How long after she stops her own words may still come back from the recognizer (VOI-V5).
+ * ponytail: a fixed window, not measured on real devices; tune it here if Chrome is later.
+ */
+const ECHO_TAIL_MS = 1500;
 /** A turn the chat never answers (the route gives up long before) is let go after this. */
 const THINKING_LIMIT_MS = 90_000;
 
@@ -118,6 +124,8 @@ export function useVoice(options: {
     seen: 0,
     heard: "",
     said: "",
+    /** Until then, her words heard late are skipped (readAfterSpeaking). */
+    echoUntil: 0,
     speech: 0,
     /**
      * The session is over once her reply is said: "end" (no free message left), or "forget"
@@ -219,6 +227,11 @@ export function useVoice(options: {
       set("listening");
     }
     if (m.phase !== "listening") return;
+    if (Date.now() < m.echoUntil) {
+      const late = readAfterSpeaking(results, m.floor, m.said);
+      m.floor = late.floor;
+      if (late.settling) return; // her words, still settling: not the person's turn
+    }
     const text = results
       .slice(m.floor)
       .map((r) => r.text)
@@ -357,6 +370,7 @@ export function useVoice(options: {
 
   function afterSpeaking() {
     setSaying("");
+    if (m.phase === "speaking") m.echoUntil = Date.now() + ECHO_TAIL_MS; // she did speak
     listen(); // which ends the session after her last reply
   }
 

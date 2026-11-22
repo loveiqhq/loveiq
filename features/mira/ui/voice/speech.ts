@@ -219,3 +219,22 @@ export function readWhileSpeaking(
   }
   return { floor: next, bargeIn: false };
 }
+
+/**
+ * Just after she stops: the recognizer can still bring back her last words (it runs behind the
+ * speakers). Results of two or more of her words are skipped once settled, and wait while not;
+ * anything else, a one-word "okay" too, is the person's.
+ */
+export function readAfterSpeaking(
+  results: ReadonlyArray<{ text: string; final: boolean }>,
+  floor: number,
+  said: string
+): { floor: number; settling: boolean } {
+  let next = floor;
+  for (; next < results.length; next++) {
+    const r = results[next]!;
+    if (wordsOf(r.text).length < 2 || !isEcho(r.text, said)) break;
+    if (!r.final) return { floor: next, settling: true };
+  }
+  return { floor: next, settling: false };
+}

@@ -334,6 +334,31 @@ describe("a spoken turn", () => {
     expect(screen.getByText("wait I have a question")).toBeTruthy();
   });
 
+  // VOI-V5: the recognizer that listened while she spoke can bring her last words back late.
+  it("doesn't send her own last words, arriving just after she stopped, as the person's turn", async () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    await sayToMira("It's the lights");
+    await waitFor(() => expect(spoken().length).toBeGreaterThan(0));
+    const rec = mic(); // listening while she speaks (Chrome), and on into the person's turn
+    rec.hear(["that makes sense", true]);
+    finishSpeaking();
+    await waitFor(() => expect(screen.getByText("Mira is listening")).toBeTruthy());
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const late = "wanting the lights off is a way of feeling safe";
+    rec.hear(["that makes sense", true], [late, false]);
+    rec.hear(["that makes sense", true], [late, true]);
+    act(() => vi.advanceTimersByTime(TURN_PAUSE_MS + 100));
+    expect(calls("POST /api/mira/chat")).toHaveLength(1);
+    expect(screen.queryByText(late)).toBeNull();
+    // The person's own words after them are their turn.
+    rec.hear(["that makes sense", true], [late, true], ["yes please go on", true]);
+    act(() => vi.advanceTimersByTime(TURN_PAUSE_MS + 100));
+    vi.useRealTimers();
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    expect(calls("POST /api/mira/chat")[1]!.message).toBe("yes please go on");
+  });
+
   it("keeps the microphone off while she speaks in Safari, and a tap on her photo stops her", async () => {
     vi.spyOn(navigator, "vendor", "get").mockReturnValue("Apple Computer, Inc.");
     render(<MiraChat signedIn={false} initialChatId={null} />);
