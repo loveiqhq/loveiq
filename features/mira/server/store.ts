@@ -385,6 +385,8 @@ export type MiraEventName =
   | "loneliness_check_done"
   | "check_support_shown"
   | "checks_deleted"
+  // A turn of "Mira may use my check results" ({ on, version }), from 22 Nov 2026.
+  | "use_checks_set"
   // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
   | "journal_saved"
   | "journal_deleted"

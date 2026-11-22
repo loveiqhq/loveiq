@@ -37,6 +37,12 @@ export const HISTORY_TURNS = 24;
  */
 export const CONSENT_VERSION = "mira-2026-11-21-2"; // the optional rating box went (21 Nov)
 
+/**
+ * The wording of "Mira may use my check results" (ui/checks/ChecksSettings.tsx), recorded with
+ * every turn of the switch (use_checks_set). Bump it when that wording changes.
+ */
+export const USE_CHECKS_VERSION = "mira-checks-2026-11-22";
+
 export const DEFAULT_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_FALLBACK_MODEL = "claude-haiku-5-5";
 export const MODEL_EFFORT = "low";
