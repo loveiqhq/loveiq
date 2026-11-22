@@ -10,7 +10,7 @@
  *   { type: "voice_notice", version }  Talk's tick that the browser's speech service hears what
  *       the person says (22 Nov 2026), logged as voice_notice_agreed with its wording's version
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10: a challenge or some words
- *       at least (400 for none)
+ *       at least (400 for none); AP › Mira lists them for the team ("Beta feedback")
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
  *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
  *       id (one data model); an account only, or we couldn't tell them when the coach is ready

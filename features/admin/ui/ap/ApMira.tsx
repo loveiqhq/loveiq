@@ -10,6 +10,7 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 
 import ApFilterBar from "./ApFilterBar";
 import ApMiraCoaches from "./ApMiraCoaches";
+import { ApMiraFeedback } from "./ApMiraFeedback";
 import { RatingsCard } from "./ApMiraRatings";
 import { ApMiraJournal } from "./ApMiraJournal";
 import { bucketTitles } from "./hover";
@@ -914,6 +915,7 @@ function Outcomes({ data }: { data: Data }) {
       <SelfChecks data={data} />
       <Satisfaction data={data} />
       <RatingsCard data={data} />
+      <ApMiraFeedback feedback={data.feedback ?? null} />
       <Knows data={data} />
       <SettingsCard data={data} />
       <Safety data={data} />
