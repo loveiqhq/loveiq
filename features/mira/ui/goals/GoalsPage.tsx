@@ -283,12 +283,12 @@ function GoalEntry({
           goal={goal}
           done={p.doneToday}
           pop={pop}
+          busy={g.ticking.has(goal.id)}
           onToggle={() => {
-            onTicked(!p.doneToday);
-            void act(
-              () => g.tick(goal, !p.doneToday),
-              p.doneToday ? "Tick taken back." : "Ticked for today."
-            );
+            const t = g.tick(goal);
+            if (!t) return;
+            onTicked(t.done);
+            void act(() => t.saved, t.done ? "Ticked for today." : "Tick taken back.");
           }}
         />
       </div>

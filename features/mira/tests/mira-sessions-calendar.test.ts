@@ -112,18 +112,18 @@ describe("reminderDue: the reminder goes 30 to 60 minutes before a start", () =>
   });
 });
 
-describe("joinedOccurrence: opening the session within 30 minutes of its start", () => {
+describe("joinedOccurrence: opening the session from its reminder to 30 minutes after its start", () => {
   const slot = { weekday: 2, time: "19:00", timeZone: "Europe/Berlin" };
   const start = "2026-11-24T18:00:00.000Z";
 
-  it("is that start when opened up to 30 minutes before or after it", () => {
-    for (const t of ["17:30:00", "17:59:00", "18:00:00", "18:29:00", "18:30:00"]) {
+  it("is that start when opened from an hour before (the reminder) to 30 minutes after it", () => {
+    for (const t of ["17:00:00", "17:04:00", "17:30:00", "18:00:00", "18:29:00", "18:30:00"]) {
       expect(joinedOccurrence(slot, at(`2026-11-24T${t}Z`))?.toISOString(), t).toBe(start);
     }
   });
 
   it("is nothing further away, on another day, or for another weekday", () => {
-    for (const t of ["2026-11-24T17:29:00Z", "2026-11-24T18:31:00Z", "2026-11-23T18:00:00Z"]) {
+    for (const t of ["2026-11-24T16:59:00Z", "2026-11-24T18:31:00Z", "2026-11-23T18:00:00Z"]) {
       expect(joinedOccurrence(slot, at(t)), t).toBeNull();
     }
   });

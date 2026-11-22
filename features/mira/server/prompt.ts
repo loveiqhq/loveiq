@@ -262,7 +262,7 @@ export function weeklySessionInstructions(slot: BookedSlot | null): string {
   return [
     "WEEKLY SESSION",
     slot
-      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emailed them the calendar invite. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
+      ? `They have a weekly 15-minute session with you, booked in the app: ${slotLabel(slot)} (${zoneLabel(slot.timeZone)}), reminder emails ${slot.paused ? "paused" : "on"}. The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox. Don't ask the weekly question again; they can change or cancel it on Home or in Settings.`
       : "Nothing is booked. To offer a weekly session, ask the weekly question with its marker, [[ASK:weekly]]: the app shows a time picker that books it and emails the calendar invite. Only the picker books: never say a session is booked, or that an invite or reminder is coming, until this section says it is booked.",
   ].join("\n");
 }

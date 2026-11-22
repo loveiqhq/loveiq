@@ -3,38 +3,8 @@
 import { useState } from "react";
 import { PrimaryButton } from "../MiraShell";
 import { Modal } from "../SupportPanel";
-import { SlotPicker, bookLabel, type Pick } from "./SlotPicker";
-import {
-  ICS_URL,
-  browserZone,
-  slotLabel,
-  zoneLabel,
-  type Booked,
-  type SlotView,
-} from "./useWeeklySession";
-
-const LINK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
-
-/** Add the session to a calendar: Google's own form, or the invite as a file (Apple, Outlook). */
-export function CalendarLinks({
-  googleUrl,
-  center = false,
-}: {
-  googleUrl: string;
-  center?: boolean;
-}) {
-  return (
-    <div className={`flex flex-wrap gap-2 ${center ? "justify-center" : ""}`}>
-      <a href={googleUrl} target="_blank" rel="noopener noreferrer" className={LINK_PILL}>
-        Google Calendar
-      </a>
-      <a href={ICS_URL} download className={LINK_PILL}>
-        Apple or Outlook
-      </a>
-    </div>
-  );
-}
+import { CalendarLinks, SlotPicker, bookLabel, type Pick } from "./SlotPicker";
+import { browserZone, slotLabel, zoneLabel, type Booked, type SlotView } from "./useWeeklySession";
 
 /**
  * "Schedule a weekly session" from Home or Settings: the picker in Mira's sheet (a bottom sheet on
@@ -70,8 +40,8 @@ export function ScheduleSheet({
   const [done, setDone] = useState<{ emailed: boolean; moved: boolean; slot: SlotView } | null>(
     null
   );
-  const label = bookLabel(pick, slot);
-  const unchanged = label.startsWith("Keep ") && zone === slot?.timeZone;
+  const label = bookLabel(pick, slot, zone);
+  const unchanged = label.startsWith("Keep ");
   const ready = pick.weekday !== null && pick.time !== null && !unchanged;
 
   async function submit() {

@@ -4,9 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { SESSION_OPENING } from "@features/mira/server/calendar";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
+import { track } from "./coaches/data";
 import { GOAL_STARTER, GoalSuggestion } from "./goals/GoalSuggestion";
 import { ANSWER_CHIP, IntakeAnswers } from "./IntakeAnswers";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
@@ -59,8 +61,7 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const SKIP_ANSWER = "I’d rather skip this one.";
-/** The line the weekly session's link sends for the person, so Mira opens the session. */
-export const SESSION_OPENING = "I’m here for my weekly session.";
+export { SESSION_OPENING };
 
 /**
  * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
@@ -88,13 +89,22 @@ export default function MiraChat({
 }: {
   signedIn: boolean;
   initialChatId: string | null;
-  /** The guide's "Ask Mira about this": the composer starts with it; only the person sends it. */
+  /**
+   * The words for `?ask=N` (the guide's "Ask Mira about this") or `?say=<check>`, which the page
+   * builds from the id: they wait in the composer while the address still asks for them, and only
+   * the person sends them.
+   */
   starter?: string | null;
-  /** Opened from the weekly session's link: a new chat that Mira opens as the session. */
-  session?: boolean;
+  /**
+   * Opened from the weekly session's link: a new chat that Mira opens as the session. With the
+   * session's key (app/mira/session), this browser opens each session once: Back can bring the
+   * page back from the router's cache, and without "Remember our conversations" there is no
+   * stored chat for the page to reopen instead.
+   */
+  session?: boolean | string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState(starter ?? "");
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
@@ -245,14 +255,27 @@ export default function MiraChat({
     });
   }, [ready, signedIn, minor, messages, freeLeft, gate, keepOff]);
 
-  // "Ask Mira to help" on the goals card (/mira?prompt=goal): the question waits in the
-  // composer, unsent, and the address loses the parameter so a reload doesn't bring it back.
+  // A starter from the address waits in the composer, unsent: "Ask Mira to help" on the goals
+  // card (?prompt=goal), the guide's "Ask Mira about this" (?ask=N, counted once as guide_ask) and
+  // a check's "Talk to Mira" (?say=…). The address then loses it, so neither a reload nor Back
+  // (which can bring this page back from the router's cache, starter and all) puts it there
+  // again or counts it twice.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("prompt") !== "goal") return;
-    window.history.replaceState(null, "", "/mira");
-    setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
-    inputRef.current?.focus();
-  }, []);
+    const url = new URL(window.location.href);
+    const asked = url.searchParams;
+    const goal = asked.get("prompt") === "goal";
+    const practice = asked.get("ask");
+    if (!goal && practice === null && !asked.has("say")) return;
+    for (const key of ["prompt", "ask", "say"]) asked.delete(key);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    if (goal) {
+      setInput(GOAL_STARTER); // eslint-disable-line react-hooks/set-state-in-effect
+      inputRef.current?.focus();
+    } else if (starter) {
+      setInput(starter);
+      if (practice !== null) track("guide_ask", practice);
+    }
+  }, [starter]);
 
   // The composer grows with what is typed, up to about six lines, then scrolls inside.
   useEffect(() => {
@@ -322,6 +345,7 @@ export default function MiraChat({
       return;
     }
     if (!res.ok || !res.data.reply) {
+      if (opts.session) local.saveSessionOpened(null); // not opened: a later visit tries again
       setMessages(messages);
       setInput(message);
       setError({
@@ -587,6 +611,10 @@ export default function MiraChat({
   useEffect(() => {
     if (!session || !signedIn || sessionOpened.current) return;
     sessionOpened.current = true;
+    if (typeof session === "string") {
+      if (local.sessionOpened() === session) return;
+      local.saveSessionOpened(session);
+    }
     window.history.replaceState(null, "", "/mira");
     void send(SESSION_OPENING, { session: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival

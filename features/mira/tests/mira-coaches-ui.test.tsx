@@ -325,11 +325,10 @@ describe("The guide with Mira inside", () => {
 
   it("opens the chat with the practice's starter in the composer, sent only by the person", async () => {
     vi.mocked(getMiraAccount).mockResolvedValue(null);
-    const page = (await MiraPage({ searchParams: Promise.resolve({ ask: "4" }) })) as ReactElement<{
-      children: ReactElement<{ starter?: string | null }>[];
+    const chat = (await MiraPage({ searchParams: Promise.resolve({ ask: "4" }) })) as ReactElement<{
+      starter?: string | null;
     }>;
-    const [chat] = page.props.children;
-    expect(chat!.props.starter).toBe(
+    expect(chat.props.starter).toBe(
       "Can you help me with practice 4 from the guide, “Kindness for body worry”?"
     );
     for (const ask of ["9", "4; drop", "<b>"]) {
@@ -340,7 +339,8 @@ describe("The guide with Mira inside", () => {
     }
 
     replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [] } });
-    render(<MiraChat signedIn initialChatId={null} starter={chat!.props.starter} />);
+    window.history.replaceState(null, "", "/mira?ask=4"); // the address that asked for it
+    render(<MiraChat signedIn initialChatId={null} starter={chat.props.starter} />);
     expect(screen.getByLabelText("Message Mira")).toHaveValue(
       "Can you help me with practice 4 from the guide, “Kindness for body worry”?"
     );

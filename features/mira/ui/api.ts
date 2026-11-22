@@ -108,6 +108,8 @@ const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
 const LOCAL_STYLE_TIP = "mira.tip.style.v1";
 /** The version of the notice about the browser's speech service this browser's person agreed to. */
 const LOCAL_VOICE_NOTICE = "mira.voice.notice.v1";
+/** The weekly session this browser last opened (its key): each one's opening is sent once. */
+const LOCAL_SESSION = "mira.session.v1";
 /** "Not now" on the body check offer waits this long before it is offered again. */
 const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -175,4 +177,6 @@ export const local = {
   voiceNoticeSeen: () =>
     read<{ version?: unknown }>(LOCAL_VOICE_NOTICE)?.version === VOICE_NOTICE_VERSION,
   saveVoiceNoticeSeen: () => write(LOCAL_VOICE_NOTICE, { version: VOICE_NOTICE_VERSION }),
+  sessionOpened: () => read<string>(LOCAL_SESSION),
+  saveSessionOpened: (key: string | null) => write(LOCAL_SESSION, key),
 };

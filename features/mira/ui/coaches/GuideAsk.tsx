@@ -6,8 +6,8 @@ import { QUIET_PILL } from "./styles";
 /**
  * "Ask Mira about this" after each of the guide's practices (board ReportEmbed, calmer): the
  * chat opens with a starter naming the practice in the composer, for the person to send or
- * change (app/mira/page.tsx, `?ask=`). The guide itself still keeps nothing: the chat page counts
- * the open (GuideAskCount).
+ * change (app/mira/page.tsx, `?ask=`). The guide itself still keeps nothing: the chat counts the
+ * open once (guide_ask) and takes `?ask=` out of the address (MiraChat).
  */
 export function AskMiraAbout({ practice }: { practice: GuidePractice }) {
   return (

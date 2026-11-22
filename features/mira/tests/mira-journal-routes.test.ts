@@ -336,3 +336,26 @@ describe("the reminder email's stop link", () => {
     expect(supabaseFetch).not.toHaveBeenCalled();
   });
 });
+
+describe("a new check-in is only for yesterday or today in the person's own zone", () => {
+  it("is refused for an older day nobody has an entry for, though it is today somewhere", async () => {
+    // 11:30 UTC on Tuesday the 24th: 00:30 on Wednesday the 25th in Auckland.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-24T11:30:00Z") });
+    try {
+      answer = (_path, init) => (init.method === "PATCH" ? json([]) : undefined);
+      vi.mocked(getProfile).mockResolvedValueOnce({ time_zone: "Pacific/Auckland" } as never);
+      // Monday the 23rd is two days ago there (still today on Baker Island): an edit only.
+      expect((await PUT(call("PUT", "", { day: "2026-11-23", mood: 3 }))).status).toBe(404);
+      expect(writes().map((w) => w.method)).toEqual(["PATCH"]);
+      // Tuesday, their yesterday: a check-in begun before their midnight is still kept.
+      vi.mocked(getProfile).mockResolvedValueOnce({ time_zone: "Pacific/Auckland" } as never);
+      expect((await PUT(call("PUT", "", { day: "2026-11-24", mood: 3 }))).status).toBe(200);
+      expect(writes().at(-1)).toMatchObject({
+        method: "POST",
+        path: "/rest/v1/mira_journal_entry?on_conflict=user_id,day",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -287,8 +287,8 @@ export async function sharesLogin(email: string): Promise<boolean> {
 }
 
 /**
- * Deletes the account: first what the KPI log and the sign-in codes keep about the person, then
- * the account. Its login is a Supabase auth user, the same one the admin panel and Jarvis sign
+ * Deletes the account: first what the KPI log and the sign-in codes keep about the person, and a
+ * booked weekly session out of their calendar (a cancellation, best effort), then the account. Its login is a Supabase auth user, the same one the admin panel and Jarvis sign
  * in with, so for staff and Jarvis members only Mira's row goes (cascading to the chats,
  * messages and nudges) and the login stays. Everyone else's auth user goes, which cascades the
  * same way.
@@ -296,6 +296,8 @@ export async function sharesLogin(email: string): Promise<boolean> {
 export async function deleteAccount(account: { id: string; email: string }): Promise<void> {
   await forgetEventText(account.id, true);
   await consumeCode(account.email);
+  // Imported here: the sessions' emails import this module (their KPI events).
+  await import("./session-emails").then((m) => m.cancelSessionInvite(account, "account-deleted"));
   const res = (await sharesLogin(account.email))
     ? await supabaseFetch(`/rest/v1/mira_user?id=eq.${enc(account.id)}`, { method: "DELETE" })
     : await supabaseFetch(`/auth/v1/admin/users/${enc(account.id)}`, { method: "DELETE" });

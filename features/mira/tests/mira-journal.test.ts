@@ -75,17 +75,29 @@ describe("the weekly patterns", () => {
 });
 
 describe("the day a new check-in may be for", () => {
-  it("is a day someone, somewhere, is living right now (UTC−12 to UTC+14)", () => {
-    // 23:30 UTC on the 21st: Auckland is on the 22nd, Honolulu still on the 21st.
+  it("is yesterday or today in their zone, or a day already begun somewhere (a traveller)", () => {
+    // 23:30 UTC on the 21st: 00:30 on the 22nd in Berlin.
     const late = new Date("2026-11-21T23:30:00Z");
     expect(
-      ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23"].map((d) => canStart(d, late))
+      ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23"].map((d) =>
+        canStart(d, late, "Europe/Berlin")
+      )
     ).toEqual([false, true, true, false]);
-    // 11:00 UTC on the 22nd: Baker Island is on the 21st, Kiribati on the 23rd.
-    const midday = new Date("2026-11-22T11:00:00Z");
+    // 14:00 on the 24th in Berlin: yesterday still takes a new check-in (one started before
+    // midnight), the day before that doesn't; Kiribati is already on the 25th.
+    const afternoon = new Date("2026-11-24T13:00:00Z");
     expect(
-      ["2026-11-20", "2026-11-21", "2026-11-23", "2026-11-24"].map((d) => canStart(d, midday))
-    ).toEqual([false, true, true, false]);
+      ["2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25"].map((d) =>
+        canStart(d, afternoon, "Europe/Berlin")
+      )
+    ).toEqual([false, true, true, true]);
+  });
+
+  it("never a day older than yesterday in their zone, though it is today somewhere", () => {
+    // 11:30 UTC on the 24th: 00:30 on the 25th in Auckland, the 23rd still in Baker Island.
+    const now = new Date("2026-11-24T11:30:00Z");
+    expect(canStart("2026-11-23", now, "Pacific/Auckland")).toBe(false);
+    expect(canStart("2026-11-24", now, "Pacific/Auckland")).toBe(true);
   });
 });
 

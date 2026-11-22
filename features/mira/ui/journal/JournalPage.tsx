@@ -51,13 +51,13 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   const checkInButton = doneToday ? (
     <button
       type="button"
-      onClick={() => setDay(today)}
+      onClick={() => setDay(journal.freshToday())}
       className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-ap-lavender bg-white px-6 text-[15px] font-bold text-ap-link transition-colors hover:bg-ap-lilac"
     >
       Edit today’s check-in <Icon path={CHECK} />
     </button>
   ) : (
-    <PrimaryButton onClick={() => setDay(today)}>
+    <PrimaryButton onClick={() => setDay(journal.freshToday())}>
       <span className="inline-flex items-center gap-2">
         {entries.length ? "Do today’s check-in" : "Do your first check-in"} <Icon path={ARROW} />
       </span>

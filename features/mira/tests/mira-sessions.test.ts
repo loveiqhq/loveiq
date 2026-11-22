@@ -125,7 +125,7 @@ import { runSessionReminders } from "@features/mira/server/session-emails";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, getProfile } from "@features/mira/server/store";
 import { markJoined, getSlot } from "@features/mira/server/weekly-sessions";
-import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
+import { isUndeliverable } from "@shared/emails/suppression";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import { verifyCsrfToken } from "@shared/http/csrf";
 
@@ -555,14 +555,14 @@ describe("the reminder run (every 15 minutes)", () => {
     expect(events("session_reminder_sent")).toHaveLength(1);
   });
 
-  it("sends nothing outside the window, to a suppressed address or to an under-18 stop", async () => {
+  it("sends nothing outside the window, to an undeliverable address or to an under-18 stop", async () => {
     candidates.rows = [candidate()];
     expect(await run("2026-11-24T16:55:00Z")).toMatchObject({ due: 0, sent: 0 });
     expect(await run("2026-11-24T17:35:00Z")).toMatchObject({ due: 0, sent: 0 });
-    vi.mocked(isEmailSuppressed).mockResolvedValueOnce(true);
+    vi.mocked(isUndeliverable).mockResolvedValueOnce(true);
     expect(await run("2026-11-24T17:02:00Z")).toMatchObject({
       sent: 0,
-      skipped: { suppressed: 1 },
+      skipped: { undeliverable: 1 },
     });
     candidates.rows = [candidate({}, { minor_at: "2026-11-20T10:00:00Z" })];
     expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 0, skipped: { minor: 1 } });

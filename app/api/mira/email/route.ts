@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       await dropPendingChange(account.id);
       return fail("We can't use that address here. Please choose another.", 403);
     }
-    if ((await changeAccountEmail(account.id, newEmail)) === "taken") {
+    if ((await changeAccountEmail(account.id, newEmail, account.email)) === "taken") {
       await dropPendingChange(account.id);
       return fail(
         "That address already has an account. Sign in with it instead, or choose another.",
