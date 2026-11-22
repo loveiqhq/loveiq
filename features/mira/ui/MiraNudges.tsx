@@ -295,6 +295,10 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
                 className="resize-none rounded-lg border border-ap-line px-3 py-2.5 text-[16px] font-normal"
               />
             </label>
+            <p className="text-[13px] leading-normal text-ap-body">
+              Stopping also turns off your journal reminder and pauses your weekly session’s
+              reminders.
+            </p>
             <div className="mt-2 flex flex-col items-center gap-1.5">
               <button
                 type="button"
@@ -327,8 +331,17 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
                 Mira won’t email you anymore
               </h1>
               <p className="text-[15px] leading-relaxed text-ap-body">
-                You’ve stopped all nudges.
-                {reason || note.trim() ? " Thank you for telling us why." : ""}
+                You’ve stopped all nudges. Your journal reminder is off and your weekly session’s
+                reminders are paused too.
+                {reason || note.trim() ? " Thank you for telling us why." : ""} Turn any of them
+                back on in{" "}
+                <Link
+                  href="/mira/settings#notifications"
+                  className="font-semibold text-ap-plum underline underline-offset-2"
+                >
+                  Settings › Notifications
+                </Link>
+                .
               </p>
             </div>
             <div className="flex flex-col gap-1.5 rounded-[20px] bg-ap-mist/40 p-[18px]">

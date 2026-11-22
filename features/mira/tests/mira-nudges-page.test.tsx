@@ -75,4 +75,26 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
     expect(screen.getByText(/You’ve stopped all nudges\./).textContent).not.toContain("Thank you");
     expect(screen.getByRole("link", { name: "Talk to Mira" })).toHaveAttribute("href", "/mira");
   });
+
+  it("says that journal and session reminders stop too, before and after, and where they come back", async () => {
+    const user = userEvent.setup();
+    render(<MiraNudges />);
+    await user.click(await screen.findByRole("button", { name: "Stop all nudges" }));
+    expect(
+      screen.getByText(
+        "Stopping also turns off your journal reminder and pauses your weekly session’s reminders."
+      )
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Stop nudges" }));
+    await screen.findByRole("heading", { name: "Mira won’t email you anymore" });
+    expect(
+      screen.getByText(
+        /Your journal reminder is off and your weekly session’s reminders are paused too\./
+      )
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Settings › Notifications" })).toHaveAttribute(
+      "href",
+      "/mira/settings#notifications"
+    );
+  });
 });
