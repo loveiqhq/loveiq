@@ -87,6 +87,8 @@ describe("taking a check", () => {
     const note = await screen.findByRole("region", { name: "Before your first check" });
     expect(note.textContent).toMatch(/health information/);
     expect(note.textContent).toMatch(/Mira sees only the band/);
+    // Mira's context also says when question 9 opened the support lines (server/checks.ts).
+    expect(note.textContent).toMatch(/whether the mood check opened the support lines/);
     expect(note.textContent).toMatch(/analytics tools record what’s on screen/);
     expect(note.textContent).toMatch(/Delete your results/);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
@@ -343,6 +345,9 @@ describe("Settings › Self-checks", () => {
   it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
     render(<ChecksSettings />);
     const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    expect(box.closest("label")!.textContent).toMatch(
+      /latest band.*whether your last mood check opened the support lines/
+    );
     fireEvent.click(box);
     await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
     expect(box).toBeChecked();

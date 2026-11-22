@@ -332,7 +332,7 @@ function Intro({
 function PrivacyNote() {
   const items = [
     "Your answers are health information. We keep them in your account so you can follow how you’re doing over time.",
-    "Your results are for you. Mira sees only the band, like “mild”, and only if you allow it. Our own statistics count checks, never answers.",
+    "Your results are for you. Mira sees only the band, like “mild”, and whether the mood check opened the support lines, and only if you allow it. Our own statistics count checks, never answers.",
     "As on the rest of our site, our analytics tools record what’s on screen, so they see your answers here too.",
     "Delete your results whenever you like in Settings, or by deleting your account.",
   ];

@@ -7,7 +7,8 @@ import { useChecks } from "./data";
 /**
  * "Mira may use my check results" (mira_user.use_checks, off by default), one of the "What Mira
  * may use" switches (PATCH /api/mira/me): saved on change, put back if the save fails. Mira then
- * sees each check's latest band, never answers or scores.
+ * sees each check's latest band and whether the mood check's question 9 opened the support lines
+ * (server/checks.ts checksForMira), never scores or other answers.
  */
 export function UseChecksSwitch({
   on,
@@ -35,8 +36,8 @@ export function UseChecksSwitch({
         <span>
           <span className="block text-[15px] font-bold">Mira may use my check results</span>
           <span className="text-[14px] text-ap-body">
-            She sees only each check&rsquo;s latest band, like &ldquo;mild&rdquo;, to tailor her
-            coaching. Never your answers.
+            She sees each check&rsquo;s latest band, like &ldquo;mild&rdquo;, and whether your last
+            mood check opened the support lines. Never your scores or other answers.
           </span>
         </span>
         <input
