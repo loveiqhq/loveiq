@@ -255,7 +255,7 @@ export async function rateMessage(
  * staff page counts stays (a rating keeps its thumb). Run before the account goes: its events
  * then lose their user link and can't be found any more.
  */
-async function forgetEventText(userId: string, all: boolean): Promise<void> {
+export async function forgetEventText(userId: string, all: boolean): Promise<void> {
   const mine = `/rest/v1/mira_event?user_id=eq.${enc(userId)}`;
   // The browsers the person signed up or in from: what they rated or wrote there before
   // signing in was logged under the browser id only (sign-in links the two).

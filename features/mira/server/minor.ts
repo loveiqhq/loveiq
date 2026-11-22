@@ -8,7 +8,7 @@ import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { removePasskeys } from "./passkeys";
 import { forgetJournal } from "./journal";
-import { deleteChats, updateProfile } from "./store";
+import { deleteChats, forgetEventText, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 import { deleteSlot } from "./weekly-sessions";
 import { deleteBodyChecks } from "./body-check";
@@ -74,36 +74,42 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     maxAge: 60 * 60 * 24 * 365,
   });
   if (!userId) return;
-  const done = await Promise.allSettled([
-    updateProfile(userId, {
-      minor_at: new Date().toISOString(),
-      nudges_on: false,
-      remember_chats: false,
-      // Settings' choices go too (21 Nov 2026): an under-18 stop keeps nothing it needn't.
-      reply_language: null,
-      theme: null,
-      text_size: null,
-    }),
-    deleteChats(userId),
-    forgetNotify(userId),
+  // Each step on its own, so one that fails, even at once, never stops the others.
+  const steps: Array<() => Promise<unknown>> = [
+    () =>
+      updateProfile(userId, {
+        minor_at: new Date().toISOString(),
+        nudges_on: false,
+        remember_chats: false,
+        // Settings' choices go too (21 Nov 2026): an under-18 stop keeps nothing it needn't.
+        reply_language: null,
+        theme: null,
+        text_size: null,
+      }),
+    () => deleteChats(userId),
+    // Their beta feedback (its words, and their address if they allowed a follow-up) and the
+    // note on their nudge stop, as account deletion removes them (round-2 DATA-5).
+    () => forgetEventText(userId, true),
+    () => forgetNotify(userId),
     // Challenges & goals: their goals and ticks go too.
-    deleteGoals(userId),
+    () => deleteGoals(userId),
     // Their rating and words go too, approved or not: a minor's words are never shown.
-    withdrawReview(userId, "all"),
+    () => withdrawReview(userId, "all"),
     // Voice sessions (22 Nov 2026): their key points too, not only their words.
-    deleteRecordings(userId),
-    removePasskeys(userId),
+    () => deleteRecordings(userId),
+    () => removePasskeys(userId),
     // Its self-check results too (health data a minor's account must not keep); the check
     // routes refuse it from then on (403).
-    deleteChecks(userId),
+    () => deleteChecks(userId),
     // The daily journal goes too, with Mira's reading of it and its reminder (server/journal.ts).
-    forgetJournal(userId),
+    () => forgetJournal(userId),
     // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
-    deleteSlot(userId),
+    () => deleteSlot(userId),
     // The body check too, as the other self-checks, and any change of email still pending.
-    deleteBodyChecks(userId),
-    dropPendingChange(userId),
-  ]);
+    () => deleteBodyChecks(userId),
+    () => dropPendingChange(userId),
+  ];
+  const done = await Promise.allSettled(steps.map(async (step) => step()));
   for (const r of done) {
     if (r.status === "rejected") {
       logger.error({ err: r.reason }, "mira: an under-18 stop was not saved in full");

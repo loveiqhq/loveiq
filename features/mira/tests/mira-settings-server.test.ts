@@ -27,6 +27,7 @@ vi.mock("@features/mira/server/session", () => ({
 vi.mock("@features/mira/server/store", () => ({
   deleteAccount: vi.fn(),
   deleteChats: vi.fn().mockResolvedValue(undefined),
+  forgetEventText: vi.fn().mockResolvedValue(undefined),
   findAssessment: vi.fn().mockResolvedValue(null),
   getProfile: vi.fn(),
   listChats: vi.fn().mockResolvedValue([]),
