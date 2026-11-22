@@ -40,7 +40,9 @@ import MiraLayout from "@/app/mira/layout";
 import { MiraLookRoot } from "@features/mira/ui/MiraLook";
 import { DEFAULT_LOOK } from "@features/mira/ui/prefs";
 import MissingPage from "@/app/mira/[...missing]/page";
-import MiraNotFound from "@/app/mira/not-found";
+import MiraNotFound, { metadata as notFoundMetadata } from "@/app/mira/not-found";
+import { generateMetadata as checkMetadata } from "@/app/mira/assessments/[check]/page";
+import { generateMetadata as recordingMetadata } from "@/app/mira/recordings/[id]/page";
 import GuideLayout from "@/app/mira/guide/layout";
 import MiraHome from "@features/mira/ui/MiraHome";
 import { MiraAppFrame } from "@features/mira/ui/MiraAppFrame";
@@ -634,6 +636,32 @@ describe("Mira's own not-found page (SET-5)", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page isn't here");
     expect(screen.getByRole("navigation", { name: "Mira" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/mira/home");
+  });
+
+  // R3-UXA-11: /mira/assessments/Anxiety said "Assessment | LoveIQ", a page that isn't there.
+  it("names the tab for what it is, not for the address asked for", async () => {
+    expect(notFoundMetadata.title).toBe("Page not found | LoveIQ");
+    // Next.js shows not-found.tsx's metadata only when generateMetadata itself throws notFound().
+    await expect(checkMetadata({ params: Promise.resolve({ check: "Anxiety" }) })).rejects.toThrow(
+      "not found"
+    );
+    await expect(
+      recordingMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) })
+    ).rejects.toThrow("not found");
+    // Real addresses keep their own titles.
+    expect((await checkMetadata({ params: Promise.resolve({ check: "anxiety" }) })).title).toMatch(
+      / \| LoveIQ$/
+    );
+    expect((await checkMetadata({ params: Promise.resolve({ check: "body" }) })).title).toBe(
+      "Body check | LoveIQ"
+    );
+    expect(
+      (
+        await recordingMetadata({
+          params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+        })
+      ).title
+    ).toBe("Voice session | LoveIQ");
   });
 
   it("signed out, says so in the open frame, with the way to Mira", async () => {
