@@ -30,6 +30,7 @@ import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import {
   addressKey,
+  claimDaySlot,
   emailChangedNotice,
   sendNeutralEmail,
   signInCodeEmail,
@@ -116,13 +117,26 @@ export async function POST(request: Request) {
           429
         );
       }
+      // And one of the inbox's five codes a day, shared with sign-in (sign-in.ts claimDaySlot).
+      const daySlot = await claimDaySlot(inbox);
+      if (!daySlot) {
+        await releaseCooldown(inbox, "mira-code-wait");
+        return fail(
+          "We've sent several codes to that address today. Check its inbox and spam, or try again tomorrow.",
+          429
+        );
+      }
+      const giveBack = async () => {
+        await releaseCooldown(inbox, "mira-code-wait");
+        await releaseCooldown(inbox, daySlot);
+      };
       const all = await checkRateLimit("all", {
         bucket: "mira-code-all",
         limit: 60,
         windowMs: HOUR_MS,
       });
       if (!all.allowed) {
-        await releaseCooldown(inbox, "mira-code-wait");
+        await giveBack();
         alertCodeCap(60);
         return tryLater();
       }
@@ -134,7 +148,7 @@ export async function POST(request: Request) {
       await savePendingChange(account.id, body.email, code);
       if (!(await sendNeutralEmail(body.email, signInCodeEmail(code, "new-address")))) {
         await dropPendingChange(account.id).catch(() => undefined);
-        await releaseCooldown(inbox, "mira-code-wait");
+        await giveBack();
         return fail("We couldn't send the code. Please try again.", 500);
       }
       return NextResponse.json({ success: true });

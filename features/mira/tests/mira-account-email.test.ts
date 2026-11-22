@@ -255,6 +255,13 @@ describe("changing the email", () => {
     expect(sendNeutralEmail).toHaveBeenCalledTimes(1);
   });
 
+  it("shares the inbox's five codes a day with sign-in, so neither path can mail it more", async () => {
+    for (let i = 1; i <= 5; i++) cooldowns.add(`mira-code-day-${i}:day@example.com`);
+    expect((await start("day@example.com")).status).toBe(429);
+    expect(sendNeutralEmail).not.toHaveBeenCalled();
+    expect(cooldowns.has("mira-code-wait:day@example.com")).toBe(false); // given back
+  });
+
   it("answers as if sent to an address that bounced, and keeps nothing", async () => {
     vi.mocked(isUndeliverable).mockResolvedValue(true);
     expect(await start()).toEqual({ status: 200, body: { success: true } });

@@ -13,6 +13,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  if (!(await getMiraAccount())) redirect("/mira/start");
+  if (!(await getMiraAccount())) redirect("/mira/start?next=%2Fmira%2Fgoals");
   return <GoalsPage />;
 }

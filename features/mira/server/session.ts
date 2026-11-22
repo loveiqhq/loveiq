@@ -66,6 +66,10 @@ const NEXT_PAGES = new Set([
   "/mira/journal",
   // The weekly session's link (calendar invite, reminder): back to it after sign-in.
   "/mira/session",
+  // The pages past the MVP (22 Nov 2026): back to the one that sent the person to sign in.
+  "/mira/coaches",
+  "/mira/goals",
+  "/mira/recordings",
 ]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
 

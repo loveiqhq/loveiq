@@ -20,12 +20,14 @@ vi.mock("@features/mira/server/store", () => ({
   logMiraEvent: vi.fn(),
 }));
 vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch: vi.fn() }));
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { POST } from "@/app/api/mira/body-check/route";
 import { GET } from "@/app/api/mira/me/route";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { FOLLOW_UP_DAYS, bodyCheckDue } from "@features/mira/server/body-check";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -88,6 +90,15 @@ describe("the body check's statements", () => {
 });
 
 describe("POST /api/mira/body-check", () => {
+  it("refuses an account stopped as under 18 and stores nothing, as the other self-checks", async () => {
+    vi.mocked(isMinor).mockResolvedValueOnce(true);
+    const res = await post({ answers: Array(10).fill(3) });
+    expect(res.status).toBe(403);
+    expect(vi.mocked(supabaseFetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+      false
+    );
+  });
+
   it("needs the CSRF token and a signed-in person", async () => {
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
     expect((await post({ answers: TEN })).status).toBe(403);

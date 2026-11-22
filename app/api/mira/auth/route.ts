@@ -23,7 +23,12 @@ import { isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
 import { MAX_PASSKEYS, listPasskeys } from "@features/mira/server/passkeys";
 import { createMiraSupabase, getMiraAccount } from "@features/mira/server/session";
-import { SIGN_IN_CODE, addressKey, sendSignInCode } from "@features/mira/server/sign-in";
+import {
+  SIGN_IN_CODE,
+  addressKey,
+  claimDaySlot,
+  sendSignInCode,
+} from "@features/mira/server/sign-in";
 import {
   addMessages,
   claimCodeAttempt,
@@ -56,7 +61,6 @@ const DAY_MS = 24 * HOUR_MS;
  * per inbox per 10 minutes and five a day, ten an hour per network, sixty an hour in all.
  */
 const CODE_WAIT = "mira-code-wait";
-const CODES_PER_ADDRESS_DAY = 5;
 const CODES_PER_IP_HOUR = 10;
 const CODES_PER_HOUR = 60;
 /** Code guesses per address and network per 10 minutes. */
@@ -105,20 +109,6 @@ const codeSent = () => NextResponse.json({ success: true });
 async function sentNothing(): Promise<NextResponse> {
   await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 600));
   return codeSent();
-}
-
-/**
- * One of the inbox's five codes for the next 24 hours, or null when they're used. One cooldown
- * per code rather than a counter, so a code that never went out is given back (a counter can't
- * be). ponytail: without Redis (local, staging) cooldowns always pass, so only the per-IP caps
- * hold.
- */
-async function claimDaySlot(inbox: string): Promise<string | null> {
-  for (let i = 1; i <= CODES_PER_ADDRESS_DAY; i++) {
-    const bucket = `mira-code-day-${i}`;
-    if ((await checkCooldown(inbox, bucket, DAY_MS)).allowed) return bucket;
-  }
-  return null;
 }
 
 /**

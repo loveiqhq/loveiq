@@ -11,6 +11,8 @@ import { forgetJournal } from "./journal";
 import { deleteChats, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 import { deleteSlot } from "./weekly-sessions";
+import { deleteBodyChecks } from "./body-check";
+import { dropPendingChange } from "./email-change";
 
 /**
  * Rail 15 (under 18), kept by the app once it fires. When Mira ends a reply with [[MINOR]]
@@ -77,6 +79,9 @@ export async function stopForMinor(userId: string | null): Promise<void> {
     forgetJournal(userId),
     // A weekly session goes too, silently: no cancellation, reminder or invite is ever sent.
     deleteSlot(userId),
+    // The body check too, as the other self-checks, and any change of email still pending.
+    deleteBodyChecks(userId),
+    dropPendingChange(userId),
   ]);
   for (const r of done) {
     if (r.status === "rejected") {

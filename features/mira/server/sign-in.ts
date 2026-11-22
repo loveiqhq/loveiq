@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { escapeHtml } from "@shared/emails/shared";
+import { checkCooldown } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 /**
@@ -166,4 +167,22 @@ export async function sendNeutralEmail(
     return false;
   }
   return true;
+}
+
+/** Codes an inbox gets in 24 hours, sign-in and change of email together. */
+export const CODES_PER_ADDRESS_DAY = 5;
+
+/**
+ * One of the inbox's five codes for the next 24 hours, or null when they're used: shared by the
+ * sign-in code and the change-of-email code, so no one can mail an address more often through
+ * either. One cooldown per code rather than a counter, so a code that never went out is given
+ * back (a counter can't be). ponytail: without Redis (local, staging) cooldowns always pass, so
+ * only the per-IP caps hold.
+ */
+export async function claimDaySlot(inbox: string): Promise<string | null> {
+  for (let i = 1; i <= CODES_PER_ADDRESS_DAY; i++) {
+    const bucket = `mira-code-day-${i}`;
+    if ((await checkCooldown(inbox, bucket, 24 * 60 * 60 * 1000)).allowed) return bucket;
+  }
+  return null;
 }
