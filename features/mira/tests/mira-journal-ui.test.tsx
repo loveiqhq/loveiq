@@ -289,14 +289,14 @@ describe("the Home card", () => {
     expect(document.body.textContent).not.toMatch(/\btaps?\b/i);
   });
 
-  it("says a lost sign-in the one way, with the way back to this page (HAB-16)", async () => {
+  // HAB-16: Home says a lost sign-in once, above its cards (mira-frame.test.tsx); the card goes
+  // quiet rather than show what can no longer be read or saved, or a second notice.
+  it("goes quiet on a lost sign-in: no check-in, no Try again, no notice of its own", async () => {
     replies = { "GET /api/mira/journal": () => ({ status: 401, body: { error: "x" } }) };
     render(<JournalCard />);
-    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toMatch(
-      /^\/mira\/start\?next=/
-    );
-    expect(screen.queryByRole("button", { name: /check-in|Try again/ })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Daily journal" })).toBeNull());
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("You were signed out.")).toBeNull();
   });
 });
 

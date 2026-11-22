@@ -357,6 +357,33 @@ describe("Home", () => {
     expect(await screen.findByRole("heading", { name: "Start with Mira" })).toBeInTheDocument();
   });
 
+  // HAB-16 on Home: the journal and goals cards each said it, so Home said it twice.
+  it("says a lost sign-in once, above the cards, when the cards' own reads find it gone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const path = url.split("?")[0];
+        if (path === "/api/mira/me") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ profile: { name: "Robin", email: "r@example.com" }, chats: [] }),
+          } as Response;
+        }
+        if (path === "/api/mira/journal" || path === "/api/mira/goals") {
+          return { ok: false, status: 401, json: async () => ({ error: "x" }) } as Response;
+        }
+        return new Promise<Response>(() => undefined); // the other cards: never answered
+      })
+    );
+    render(<MiraHome hour={8} name="Robin" />);
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Daily journal" })).toBeNull());
+    expect(screen.queryByRole("region", { name: "Challenges & goals" })).toBeNull();
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Sign in again" })).toHaveLength(1);
+  });
+
   it("sends a lost sign-in back to Home after signing in again", async () => {
     // The way back is the page's own address (signInHref), as on every Mira page.
     window.history.replaceState(null, "", "/mira/home");

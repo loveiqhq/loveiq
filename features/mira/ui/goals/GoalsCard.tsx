@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
 import { useSignedOut } from "../api";
-import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly, SectionLink } from "../kit";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
@@ -36,6 +35,9 @@ export default function GoalsCard() {
     setError(await t.saved);
   }
 
+  // Home says a lost sign-in once, above its cards (HAB-16): the card goes quiet.
+  if (out) return null;
+
   return (
     <section
       aria-labelledby="goals-card-h"
@@ -56,9 +58,7 @@ export default function GoalsCard() {
         </div>
       )}
 
-      {out ? (
-        <SignedOutNotice />
-      ) : g.load === "loading" ? (
+      {g.load === "loading" ? (
         <div className="mt-5 flex flex-col gap-4" aria-hidden="true">
           {[0, 1].map((i) => (
             <div key={i} className="flex flex-col gap-2.5">
