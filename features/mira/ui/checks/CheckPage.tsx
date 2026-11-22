@@ -12,6 +12,7 @@ import {
 } from "@features/mira/content/checks";
 import { BODY_CHECK, OFFER, THANKS } from "../BodyCheck";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { SignedOutNotice } from "../account/SignedOut";
 import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
@@ -59,7 +60,7 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, minor, setData, retry } = useChecks();
+  const { data, error, minor, signedOut, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -193,7 +194,15 @@ export default function CheckPage({
         </Link>{" "}
         <span aria-hidden="true">/</span> {check.title}
       </nav>
-      {minor ? (
+      {signedOut ? (
+        // A lost sign-in: said here, with the way back, never a move of the page's own.
+        <>
+          <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+            {check.title}
+          </h1>
+          <SignedOutNotice />
+        </>
+      ) : minor ? (
         <>
           {/* The page keeps its heading in this state too (round-3 R3-ACCT-8). */}
           <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
@@ -209,7 +218,7 @@ export default function CheckPage({
           </button>
         </p>
       ) : null}
-      {!data && !error ? <Skeleton /> : null}
+      {!data && !error && !signedOut ? <Skeleton /> : null}
 
       {data && mode === "intro" ? (
         <Intro
@@ -646,7 +655,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  * it doesn't judge. It ends on a thank-you that takes focus and stays until the person moves on.
  */
 export function BodyCheckPage() {
-  const { data, error, minor, retry } = useChecks();
+  const { data, error, minor, signedOut, retry } = useChecks();
   const body = data?.bodyCheck;
   const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
   const [answers, setAnswers] = useState<number[]>([]);
@@ -692,7 +701,9 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {minor ? (
+      {signedOut ? (
+        <SignedOutNotice />
+      ) : minor ? (
         <AdultsOnly className="mt-4" />
       ) : error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">

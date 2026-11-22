@@ -284,13 +284,19 @@ describe("The roster (/mira/coaches)", () => {
     expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
   });
 
-  it("sends a lost sign-in to sign in and back to the roster (HAB-16)", async () => {
+  // HAB-16, and round 3's 401 loop: said in place with the way back, never a move of its own (the
+  // sign-in page may still see the session and send the person straight back).
+  it("says a lost sign-in in place, with the way back to the roster, and never navigates", async () => {
     window.history.replaceState(null, "", "/mira/coaches#finder");
     serve({}, 401);
     render(<CoachRoster />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fcoaches%23finder")
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fcoaches%23finder"
     );
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it("offers no coach to someone Mira stopped as under 18", async () => {

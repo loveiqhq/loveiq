@@ -648,6 +648,46 @@ describe("Settings › Self-checks", () => {
   });
 });
 
+// Round 3 (the 401 loop): after a 401 nothing moves to sign-in on its own, as the sign-in page may
+// still see the session and send the person straight back. The pages say it in place, with the
+// way back; Home's card and Settings' section step aside for their page's own notice.
+describe("a sign-in lost before the checks load", () => {
+  beforeEach(() => {
+    replies["GET /api/mira/checks"] = () => ({ status: 401, body: { error: "Please sign in." } });
+  });
+
+  it("is said in place on each check page, with the way back to it, and never navigates", async () => {
+    for (const [path, page] of [
+      ["/mira/assessments", <AssessmentsPage key="a" />],
+      ["/mira/assessments/mood", <CheckPage key="m" checkId="mood" practice={null} />],
+      ["/mira/assessments/body", <BodyCheckPage key="b" />],
+    ] as const) {
+      window.history.replaceState(null, "", path);
+      const view = render(page);
+      expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+        "href",
+        `/mira/start?next=${encodeURIComponent(path)}`
+      );
+      expect(screen.queryByRole("button", { name: /Try again|Start/ })).toBeNull();
+      view.unmount();
+    }
+    expect(router.replace).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("leaves Home's card and Settings' section to their page's notice", async () => {
+    for (const card of [<ChecksHomeCard key="h" />, <ChecksSettings key="s" />]) {
+      const view = render(card);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await waitFor(() => expect(view.container).toBeEmptyDOMElement());
+      view.unmount();
+      fetchMock.mockClear();
+    }
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+});
+
 describe("when the checks don't load", () => {
   const failOnce = () => {
     let calls = 0;

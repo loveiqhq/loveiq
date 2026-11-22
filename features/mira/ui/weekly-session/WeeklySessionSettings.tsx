@@ -18,7 +18,7 @@ const OUTLINE_PILL =
  * opens (#weekly).
  */
 export function WeeklySessionSettings() {
-  const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
+  const { state, load, book, setPaused, cancel } = useWeeklySession();
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);

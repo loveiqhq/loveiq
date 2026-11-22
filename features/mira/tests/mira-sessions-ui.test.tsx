@@ -269,6 +269,8 @@ describe("Home's weekly session card", () => {
     replies["GET /api/mira/weekly-session"] = () => ({ status: 401, body: {} });
     const { container } = render(<NextSessionCard />);
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+    // Home says it once, above its cards; nothing moves to sign-in on its own (round 3).
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 

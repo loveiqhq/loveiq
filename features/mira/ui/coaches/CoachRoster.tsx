@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { MiraRatingLine } from "../reviews/PublicReviews";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   AREAS,
@@ -13,7 +12,7 @@ import {
   type CoachId,
 } from "@features/mira/content/coaches";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { signInHref } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
 import { CoachFinder } from "./CoachFinder";
 import { track, useCoachData, useEmptySearchCount } from "./data";
 import { AdultsOnly } from "../kit";
@@ -29,7 +28,6 @@ const FILTERS: Array<[AreaId | "all", string]> = [["all", "All areas"], ...AREAS
  * person's own words, areas, and "Find my challenge" when they aren't sure.
  */
 export default function CoachRoster() {
-  const router = useRouter();
   const { state } = useCoachData();
   const data = state.status === "ready" ? state.data : null;
   const [query, setQuery] = useState("");
@@ -56,10 +54,6 @@ export default function CoachRoster() {
     }
   }, []);
 
-  useEffect(() => {
-    if (state.status === "out") router.replace(signInHref());
-  }, [state.status, router]);
-
   function setNotified(id: CoachId, on: boolean) {
     setAsked((a) => {
       const base = a ?? data?.notified ?? [];
@@ -71,6 +65,16 @@ export default function CoachRoster() {
     setFinder(true);
   }
 
+  // A lost sign-in: said here, with the way back, never a move to sign-in of the page's own (the
+  // sign-in page may still see the session and send the person straight back).
+  if (state.status === "out") {
+    return (
+      <MiraAppFrame active="coaches">
+        <h1 className="font-serif text-[32px] font-medium leading-tight">Coaches</h1>
+        <SignedOutNotice />
+      </MiraAppFrame>
+    );
+  }
   if (state.status === "closed") {
     return (
       <MiraAppFrame active="coaches">

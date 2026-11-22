@@ -98,17 +98,18 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     expect(screen.queryByRole("button", { name: /Try again|Choose a time/ })).toBeNull();
   });
 
-  it("a lapsed sign-in on a change goes to sign-in and back to the page", async () => {
+  // Round 3's 401 loop: never a move to sign-in of its own (the sign-in page may still see the
+  // session and send the person straight back); the section steps aside for Settings' notice.
+  it("a lapsed sign-in on a change never navigates: the section steps aside", async () => {
     replies["PATCH /api/mira/weekly-session"] = () => ({
       status: 401,
       body: { error: "Please sign in." },
     });
     window.history.replaceState(null, "", "/mira/settings");
-    render(<WeeklySessionSettings />);
+    const { container } = render(<WeeklySessionSettings />);
     fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
-    );
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 

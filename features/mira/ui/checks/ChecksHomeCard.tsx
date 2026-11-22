@@ -15,9 +15,11 @@ import { bodyLine, checkLine, shortDate, stateOf, useChecks, useDrafts } from ".
  * lead mounts it in MiraHome in place of the Assessments section.
  */
 export default function ChecksHomeCard() {
-  const { data, error, minor, retry } = useChecks();
+  const { data, error, minor, signedOut, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const body = bodyLine(data?.bodyCheck ?? null);
+  // Home says a lost sign-in once, above its cards (HAB-16): the card steps aside.
+  if (signedOut) return null;
   return (
     <section
       id="assessments"
