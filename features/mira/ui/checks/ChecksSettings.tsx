@@ -62,11 +62,25 @@ export function UseChecksSwitch({
  * stop). Loads its own data.
  */
 export default function ChecksSettings() {
-  const { data, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  if (!data) return null;
+  if (!data) {
+    return error ? (
+      <section aria-labelledby="checks-settings-h" className="flex flex-col gap-3">
+        <h2 id="checks-settings-h" className="font-serif text-[22px] font-medium">
+          Self-checks
+        </h2>
+        <p role="alert" className="text-[14px] text-ap-bad-ink">
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
+        </p>
+      </section>
+    ) : null;
+  }
   const count = data.checks.reduce((n, c) => n + c.results.length, 0);
 
   async function remove() {

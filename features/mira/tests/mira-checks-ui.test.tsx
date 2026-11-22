@@ -18,7 +18,7 @@ import MiraPage from "@/app/mira/page";
 import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
 import AssessmentsPage from "@features/mira/ui/checks/AssessmentsPage";
-import CheckPage from "@features/mira/ui/checks/CheckPage";
+import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
 import ChecksSettings from "@features/mira/ui/checks/ChecksSettings";
 import type { ChecksData } from "@features/mira/ui/checks/data";
@@ -363,6 +363,75 @@ describe("Settings › Self-checks", () => {
       fetchMock.mock.calls.some(([u, i]) => u === "/api/mira/checks" && i?.method === "DELETE")
     ).toBe(true);
     expect(screen.getByRole("button", { name: "No check results to delete" })).toBeDisabled();
+  });
+});
+
+describe("when the checks don't load", () => {
+  const failOnce = () => {
+    let calls = 0;
+    replies["GET /api/mira/checks"] = () =>
+      calls++ === 0
+        ? { status: 500, body: { error: "Unable to load your checks." } }
+        : { body: account };
+  };
+
+  it("the Assessments page stops its placeholders and offers Try again", async () => {
+    failOnce();
+    render(<AssessmentsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    const list = screen.getByRole("region", { name: "Self-checks" });
+    expect(list.querySelectorAll(".animate-pulse")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findAllByRole("link", { name: /^Take it: / })).toHaveLength(3);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("Settings says so and offers Try again, instead of showing nothing", async () => {
+    failOnce();
+    render(<ChecksSettings />);
+    const section = await screen.findByRole("region", { name: "Self-checks" });
+    expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+    ).not.toBeChecked();
+  });
+
+  it("every other check screen offers Try again too", async () => {
+    for (const ui of [
+      <ChecksHomeCard key="home" />,
+      <CheckPage key="check" checkId="anxiety" practice={null} />,
+      <BodyCheckPage key="body" />,
+    ]) {
+      failOnce();
+      const view = render(ui);
+      fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+      view.unmount();
+    }
+  });
+});
+
+describe("the result page's 'Mira may use my check results'", () => {
+  it("stays in view once ticked, and says why when the save fails", async () => {
+    account.checks[0] = {
+      id: "anxiety",
+      results: [{ at: ago(1), score: 7, band: "mild", support: false }],
+      nextAt: new Date(Date.now() + 13 * DAY).toISOString(),
+    };
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    fireEvent.click(box);
+    await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
+    // Saved: still there, ticked.
+    expect(
+      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+    ).toBeChecked();
+    replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Mira may use my check results/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
+    // Put back as it was before the failed change.
+    expect(screen.getByRole("checkbox", { name: /Mira may use my check results/ })).toBeChecked();
   });
 });
 

@@ -33,12 +33,14 @@ export type ChecksData = {
 
 /**
  * The person's checks, loaded once per page; signed out goes to sign-in and back here. Someone
- * Mira stopped as under 18 gets the server's message (403) and nothing else.
+ * Mira stopped as under 18 gets the server's message (403) and nothing else. After a failed load,
+ * `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
  */
 export function useChecks() {
   const router = useRouter();
   const [data, setData] = useState<ChecksData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<ChecksData>("/api/mira/checks").then((r) => {
       if (r.status === 401) {
@@ -46,8 +48,12 @@ export function useChecks() {
       } else if (r.ok) setData(r.data);
       else setError(r.data.error ?? "Unable to load your checks.");
     });
-  }, [router]);
-  return { data, error, setData };
+  }, [router, attempt]);
+  const retry = () => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  };
+  return { data, error, setData, retry };
 }
 
 /**

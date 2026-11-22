@@ -26,7 +26,7 @@ import {
  * switches. The Assessments tab should point here (today: /mira/home#assessments).
  */
 export default function AssessmentsPage() {
-  const { data, error, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
   const body = bodyLine(data?.bodyCheck ?? null);
@@ -54,7 +54,10 @@ export default function AssessmentsPage() {
       </header>
       {error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
 
@@ -77,7 +80,7 @@ export default function AssessmentsPage() {
                     results={summary.results}
                     state={stateOf(summary, found[check.id] ?? null)}
                   />
-                ) : (
+                ) : error ? null : (
                   <div
                     aria-hidden="true"
                     className="h-[212px] animate-pulse rounded-3xl bg-ap-ground motion-reduce:animate-none"

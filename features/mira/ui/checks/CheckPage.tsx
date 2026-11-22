@@ -63,7 +63,7 @@ export default function CheckPage({
   practice: Practice | null;
 }) {
   const check = checkById(checkId)!;
-  const { data, error, setData } = useChecks();
+  const { data, error, setData, retry } = useChecks();
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -183,7 +183,10 @@ export default function CheckPage({
       </nav>
       {error ? (
         <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}
+          {error}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
       {!data && !error ? <Skeleton /> : null}
@@ -414,6 +417,9 @@ function Result({
   // Question 9 above "Not at all", on this visit or any later one (the stored result says so).
   const support = last.support;
   const help = band.professional || support;
+  // Offered when the page opened with it off, and kept in view once ticked: its saved state and
+  // a failed save's message stay where the person made the change.
+  const [offerUse] = useState(!data.useChecks);
   const steps: ReactNode[] = [];
   if (help) {
     steps.push(
@@ -532,7 +538,7 @@ function Result({
         <ol className="mt-4 flex flex-col gap-3">{steps}</ol>
       </section>
 
-      {!data.useChecks ? (
+      {offerUse ? (
         <section aria-label="What Mira may use" className="mt-8 max-w-[680px]">
           <UseChecksSwitch on={data.useChecks} onChange={onUseChecks} />
         </section>
@@ -629,7 +635,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  */
 export function BodyCheckPage() {
   const router = useRouter();
-  const { data, error } = useChecks();
+  const { data, error, retry } = useChecks();
   const body = data?.bodyCheck;
   return (
     <MiraAppFrame active={FRAME_TAB} email={data?.email} name={data?.name}>
@@ -642,14 +648,12 @@ export function BodyCheckPage() {
       <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
         Body check
       </h1>
-      {error ? (
+      {error || (data && !body) ? (
         <p role="alert" className="mt-4 text-ap-bad-ink">
-          {error}
-        </p>
-      ) : null}
-      {data && !body ? (
-        <p role="alert" className="mt-4 text-ap-bad-ink">
-          Your body checks couldn&rsquo;t be loaded. Please try again.
+          {error ?? "Your body checks couldn’t be loaded."}{" "}
+          <button type="button" onClick={retry} className="font-semibold underline">
+            Try again
+          </button>
         </p>
       ) : null}
       <div className="mt-6 max-w-[600px]">
