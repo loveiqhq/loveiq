@@ -929,6 +929,32 @@ describe("POST /api/mira/chat", () => {
     expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("Reply in German");
   });
 
+  // Round-3 R3-DATA-1: the topic carries its chat's id, so the picks forget it with that chat.
+  it("logs a saved chat's topic with the chat's id", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: true,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-18",
+    });
+    vi.mocked(askModel).mockResolvedValue({
+      ok: true,
+      text: "That sounds hard.\n[[TOPIC:hiding]]",
+      refused: false,
+    });
+    await post({ message: "I only feel okay with the lights off", consent: true });
+    expect(events("chat_topic")).toEqual([
+      { topic: "hiding", chat: "6f2c4a1e-1111-4222-8333-944455556666" },
+    ]);
+  });
+
   it("logs a new chat's topic as its id, never the words, and never for a starter chip", async () => {
     vi.mocked(askModel).mockResolvedValue({
       ok: true,

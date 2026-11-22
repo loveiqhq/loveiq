@@ -531,7 +531,10 @@ export async function POST(request: Request) {
   }
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
-  if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
+  // With its chat's id, so the picks forget it when that chat is deleted (round-3 R3-DATA-1).
+  if (chip === -1 && out?.topic && !crisis) {
+    logMiraEvent("chat_topic", who, { topic: out.topic, ...(chatId ? { chat: chatId } : {}) });
+  }
   if (answering && INTAKE_IDS.has(answering))
     logMiraEvent("intake_answered", who, { q: answering });
   // A reply that was only markers gets the refusal message: it referred nobody.
