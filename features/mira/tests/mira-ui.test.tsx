@@ -131,6 +131,40 @@ describe("Support panel", () => {
   });
 });
 
+// Round-2 audit SET-9, the chat's side: "Need support right now?" listed the United States first
+// whatever the account's "Where you're based", whose hint promises that country's lines first.
+describe("Need support right now? in the chat", () => {
+  const firstListed = () =>
+    within(screen.getByRole("dialog", { name: "Support right now" }))
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent)[0];
+
+  it("lists the country the account is based in first", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: { profile: { style: {}, country: "DE" }, chats: [] },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
+    expect(firstListed()).toMatch(/^Germany/);
+  });
+
+  it("lists somewhere else first for an account based elsewhere, and the usual order without one", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: { profile: { style: {}, country: "OTHER" }, chats: [] },
+    });
+    const first = render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
+    const elsewhere = firstListed();
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
+    expect(elsewhere).not.toBe(firstListed());
+    expect(firstListed()).toMatch(/^United States/);
+  });
+});
+
 describe("Sign-up", () => {
   it("says a new code is coming only when one went out, and can't send twice at once", async () => {
     render(<SignUpFlow />);

@@ -129,6 +129,8 @@ export default function MiraChat({
   const [style, setStyle] = useState<Style>({});
   // "Mira replies in" (Settings): Talk listens and speaks in it too.
   const [replyLanguage, setReplyLanguage] = useState<string | null>(null);
+  // Settings' "Where you're based": "Need support right now?" lists its lines first (SET-9).
+  const [country, setCountry] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
@@ -226,13 +228,14 @@ export default function MiraChat({
     void (async () => {
       const me = await miraApi<{
         chats: ChatSummary[];
-        profile: { style: Style; reply_language?: string | null };
+        profile: { style: Style; reply_language?: string | null; country?: string | null };
         bodyCheck?: { due: BodyDue };
       }>("/api/mira/me");
       if (me.ok) {
         setChats(me.data.chats);
         setStyle(me.data.profile.style ?? {});
         setReplyLanguage(me.data.profile.reply_language ?? null);
+        setCountry(me.data.profile.country ?? null);
         setBodyDue(me.data.bodyCheck?.due ?? null);
       }
       if (initialChatId) await openChat(initialChatId);
@@ -1314,7 +1317,7 @@ export default function MiraChat({
       ) : null}
       {supportOpen || crisis ? (
         <SupportPanel
-          highlight={crisis}
+          highlight={crisis ?? (country ? { code: country } : null)}
           onClose={() => {
             setSupportOpen(false);
             setCrisis(null);
