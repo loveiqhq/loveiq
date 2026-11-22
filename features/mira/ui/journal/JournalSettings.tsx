@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
 import { zoneLabel } from "@features/mira/server/calendar";
-import { DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
+import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
 /** On the hour or half hour, 6:00 to 23:00: the nudge cron runs twice an hour. */
@@ -31,7 +32,6 @@ export function JournalSettings({
   const id = useId();
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState(false);
   const s = j.settings;
 
   async function change(
@@ -45,16 +45,12 @@ export function JournalSettings({
     setStatus(ok ? { text: said } : { text: "That didn’t save. Please try again.", bad: true });
   }
 
-  async function deleteAll() {
-    setBusy(true);
+  /** "Delete my journal" once asked: null, or the message the question shows. */
+  async function deleteAll(): Promise<string | null> {
     const ok = await j.remove();
-    setBusy(false);
-    setConfirm(false);
-    setStatus(
-      ok
-        ? { text: "Your journal is deleted." }
-        : { text: "Unable to delete right now. Please try again.", bad: true }
-    );
+    if (!ok) return "Unable to delete right now. Please try again.";
+    setStatus({ text: "Your journal is deleted." });
+    return null;
   }
 
   return (
@@ -199,39 +195,18 @@ export function JournalSettings({
             reads them only while you let her. As on the rest of our site, our analytics tools
             record what’s on screen, so they see your ratings and notes here too. They stay until
             you delete them or your account.{" "}
-            <a href="/mira/privacy" className="underline">
+            <Link href="/mira/privacy" className="underline">
               How Mira handles your data
-            </a>
+            </Link>
           </p>
-          {confirm ? (
-            <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
-              <p>Delete every check-in in your journal? This can’t be undone.</p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={deleteAll}
-                  className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-                >
-                  Delete my journal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirm(false)}
-                  className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : j.entries.length ? (
-            <button
-              type="button"
-              onClick={() => setConfirm(true)}
+          {j.entries.length ? (
+            <AskFirst
+              label="Delete my journal"
+              question="Delete every check-in in your journal? This can’t be undone."
+              action="Delete my journal"
               className="min-h-[44px] w-fit rounded-full border border-ap-bad px-5 text-[14px] font-semibold text-ap-bad-ink"
-            >
-              Delete my journal
-            </button>
+              run={deleteAll}
+            />
           ) : null}
         </>
       )}

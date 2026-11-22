@@ -308,7 +308,14 @@ describe("Settings' weekly session section", () => {
     expect(screen.getByRole("switch", { name: "Reminder emails" })).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
-    expect(screen.getByText(/takes it out of your calendar/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /takes it out of your calendar/ })).toBeTruthy();
+    // "Keep it" first, as everywhere: it hands focus back, and nothing is cancelled.
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cancel weekly session" })).toHaveFocus()
+    );
+    expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Cancel session" }));
     expect(await screen.findByText("Your weekly session is cancelled.")).toBeInTheDocument();

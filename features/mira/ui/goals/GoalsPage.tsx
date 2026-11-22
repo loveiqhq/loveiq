@@ -12,6 +12,7 @@ import {
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
 import { shortDate } from "../kit/dates";
+import { AskFirst } from "../journal/parts";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import {
   ChallengePills,
@@ -466,81 +467,12 @@ function DaysStepper({
   );
 }
 
-/**
- * A deletion behind a question. The question opens on its way out (Keep), which takes focus;
- * Keep puts focus back on the button that asked. `run` answers null, or the message to show.
- */
-function Confirm({
-  label,
-  question,
-  action,
-  keep,
-  className,
-  run,
-}: {
-  label: string;
-  question: string;
-  action: string;
-  keep: string;
-  className: string;
-  run: () => Promise<string | null>;
-}) {
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const opener = useRef<HTMLButtonElement | null>(null);
-  const keepRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    if (asking) keepRef.current?.focus();
-  }, [asking]);
-  if (!asking) {
-    return (
-      <button ref={opener} type="button" onClick={() => setAsking(true)} className={className}>
-        {label}
-      </button>
-    );
-  }
-  return (
-    <div className="flex w-full flex-wrap items-center gap-2 rounded-2xl border border-ap-bad p-3 text-[14px]">
-      <p className="flex-1 basis-[200px]">{question}</p>
-      <button
-        type="button"
-        onClick={async () => {
-          setError(null);
-          const err = await run();
-          if (err) setError(err);
-        }}
-        className={`min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white ${FOCUS}`}
-      >
-        {action}
-      </button>
-      <button
-        ref={keepRef}
-        type="button"
-        onClick={() => {
-          setAsking(false);
-          requestAnimationFrame(() => opener.current?.focus());
-        }}
-        className={TEXT_BUTTON}
-      >
-        {keep}
-      </button>
-      {error ? (
-        <p role="alert" className="w-full text-[13px] text-ap-bad-ink">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 /** Deleting one goal, with a word of warning first. */
 function DeleteGoal({ goal, g, say }: { goal: Goal; g: Actions; say: (s: string) => void }) {
   return (
-    <Confirm
+    <AskFirst
       label="Delete goal"
       question="Delete this goal and its ticks? This can't be undone."
-      action="Delete"
-      keep="Keep it"
       className={`${DANGER_BUTTON} sm:ml-auto`}
       run={async () => {
         const err = await g.remove(goal);
@@ -634,11 +566,10 @@ function AboutYourGoals({ g, say }: { g: Actions; say: (s: string) => void }) {
       </p>
       {g.goals.length > 0 ? (
         <div className="mt-3">
-          <Confirm
+          <AskFirst
             label="Delete all goals"
             question="Delete all your goals and their ticks? This can't be undone."
             action="Delete all"
-            keep="Keep them"
             className={`${DANGER_BUTTON} -ml-3`}
             run={async () => {
               const err = await g.removeAll();

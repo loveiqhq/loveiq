@@ -309,6 +309,22 @@ describe("the journal's settings", () => {
     expect(options.every((t) => /:(00|30)$/.test(t!))).toBe(true);
   });
 
+  it("ask before deleting as everywhere in Mira, and Keep it hands focus back", async () => {
+    replies = journalReply([entry(day(0), { mood: 3 })]);
+    render(<JournalSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete my journal" }));
+    expect(
+      screen.getByRole("group", { name: /Delete every check-in in your journal\?/ })
+    ).toBeTruthy();
+    const keep = screen.getByRole("button", { name: "Keep it" });
+    await waitFor(() => expect(keep).toHaveFocus());
+    fireEvent.click(keep);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete my journal" })).toHaveFocus()
+    );
+    expect(sent("DELETE")).toEqual([]);
+  });
+
   it("delete the whole journal, after asking", async () => {
     replies = journalReply([entry(day(0), { mood: 3 })]);
     render(<JournalSettings />);
@@ -321,6 +337,18 @@ describe("the journal's settings", () => {
 });
 
 describe("the journal page", () => {
+  it("asks before deleting a day, and Keep it goes back to that day's Delete", async () => {
+    replies = journalReply([entry(day(0), { mood: 3 })]);
+    render(<JournalPage />);
+    const ask = await screen.findByRole("button", { name: "Delete Today" });
+    fireEvent.click(ask);
+    expect(screen.getByRole("group", { name: /Delete this check-in\?/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(ask).toHaveFocus();
+    expect(screen.queryByRole("group", { name: /Delete this check-in/ })).toBeNull();
+  });
+
   it("shows each area's pattern in words and every day's entry, to edit or delete", async () => {
     replies = journalReply([
       entry(day(0), { mood: 4, note: "Slept well" }),

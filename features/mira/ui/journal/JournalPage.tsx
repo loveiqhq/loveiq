@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { ConfirmDelete } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
@@ -234,6 +235,7 @@ function Day({
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const askRef = useRef<HTMLButtonElement | null>(null);
   return (
     <li className="py-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4">
@@ -248,6 +250,7 @@ function Day({
             Edit
           </button>
           <button
+            ref={askRef}
             type="button"
             onClick={onAsk}
             aria-label={`Delete ${name}`}
@@ -271,25 +274,17 @@ function Day({
         </p>
       ) : null}
       {confirming ? (
-        <div className="mt-3 rounded-2xl border border-ap-bad p-4 text-[14px]">
-          <p>Delete this check-in? This can’t be undone.</p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onDelete}
-              className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-            >
-              Keep it
-            </button>
-          </div>
+        <div className="mt-3">
+          <ConfirmDelete
+            question="Delete this check-in? This can’t be undone."
+            busy={busy}
+            onConfirm={onDelete}
+            onKeep={() => {
+              // Back to the button that asked, which stays in place.
+              askRef.current?.focus();
+              onCancel();
+            }}
+          />
         </div>
       ) : null}
     </li>

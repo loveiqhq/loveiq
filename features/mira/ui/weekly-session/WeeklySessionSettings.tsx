@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { SwitchRow } from "../checks/ChecksSettings";
-import { refocus } from "../journal/parts";
+import { AskFirst, refocus } from "../journal/parts";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
@@ -19,7 +19,6 @@ const OUTLINE_PILL =
 export function WeeklySessionSettings() {
   const { state, load, book, setPaused, cancel } = useWeeklySession({ signIn: true });
   const [sheet, setSheet] = useState(false);
-  const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,20 +41,19 @@ export function WeeklySessionSettings() {
     else setStatus(done);
   }
 
-  async function cancelSession() {
-    setBusy(true);
+  /** "Cancel session" once asked: null, or the message the question shows. */
+  async function cancelSession(): Promise<string | null> {
     setError(null);
     setStatus(null);
     const r = await cancel();
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
-    setConfirm(false);
+    if (!r.ok) return r.error;
     setFile(r.emailed ? null : r.ics);
     setStatus(
       r.emailed
         ? "Your weekly session is cancelled."
         : "Your weekly session is cancelled, but we couldn’t email the update, so it may still be in your calendar. Delete it there, or open this file with Apple Calendar or Outlook."
     );
+    return null;
   }
 
   return (
@@ -121,42 +119,13 @@ export function WeeklySessionSettings() {
               none goes out for now. They start again on their own.
             </p>
           ) : null}
-          {confirm ? (
-            <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
-              <p>
-                Cancel your weekly session? An update that takes it out of your calendar comes by
-                email, or here if the email can’t go.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void cancelSession()}
-                  className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-                >
-                  Cancel session
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirm(false)}
-                  className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-                >
-                  Keep it
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setStatus(null);
-                setConfirm(true);
-              }}
-              className="w-fit min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline underline-offset-2"
-            >
-              Cancel weekly session
-            </button>
-          )}
+          <AskFirst
+            label="Cancel weekly session"
+            question="Cancel your weekly session? An update that takes it out of your calendar comes by email, or here if the email can’t go."
+            action="Cancel session"
+            className="w-fit min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline underline-offset-2"
+            run={cancelSession}
+          />
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ap-line p-4">

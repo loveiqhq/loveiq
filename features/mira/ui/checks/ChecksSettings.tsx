@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { miraApi } from "../api";
-import { Switch } from "../journal/parts";
+import { AskFirst, Switch } from "../journal/parts";
 import { useChecks } from "./data";
 
 /**
@@ -98,8 +98,6 @@ export function SwitchRow({
  */
 export default function ChecksSettings() {
   const { data, error, setData, retry } = useChecks();
-  const [confirm, setConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   if (!data) {
     return error ? (
@@ -119,15 +117,11 @@ export default function ChecksSettings() {
   const bodyChecks = data.bodyCheck?.taken.length ?? 0;
   const count = data.checks.reduce((n, c) => n + c.results.length, 0) + bodyChecks;
 
-  async function remove() {
-    setBusy(true);
+  /** "Delete" once asked: null, or the message the question shows. */
+  async function remove(): Promise<string | null> {
+    setStatus(null);
     const r = await miraApi("/api/mira/checks", { method: "DELETE" });
-    setBusy(false);
-    setConfirm(false);
-    if (!r.ok) {
-      setStatus({ ok: false, text: r.data.error ?? "Unable to delete right now." });
-      return;
-    }
+    if (!r.ok) return r.data.error ?? "Unable to delete right now.";
     setData(
       (d) =>
         d && {
@@ -137,6 +131,7 @@ export default function ChecksSettings() {
         }
     );
     setStatus({ ok: true, text: "Your check results are deleted." });
+    return null;
   }
 
   return (
@@ -148,43 +143,21 @@ export default function ChecksSettings() {
         on={data.useChecks}
         onChange={(on) => setData((d) => d && { ...d, useChecks: on })}
       />
-      {confirm ? (
-        <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
-          <p>
-            {count === 1 ? "Delete your check result" : `Delete all ${count} of your check results`}
-            {bodyChecks ? ", your body check included" : ""}? Your history and trends go too. This
-            can&rsquo;t be undone.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void remove()}
-              className="min-h-[44px] rounded-full bg-ap-bad px-5 font-semibold text-white disabled:opacity-50"
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirm(false)}
-              className="min-h-[44px] rounded-full border border-ap-line px-5 font-semibold"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
+      {count === 0 ? (
         <button
           type="button"
-          disabled={count === 0}
-          onClick={() => {
-            setStatus(null);
-            setConfirm(true);
-          }}
-          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold disabled:text-ap-quiet"
+          disabled
+          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-quiet"
         >
-          {count === 0 ? "No check results to delete" : "Delete my check results"}
+          No check results to delete
         </button>
+      ) : (
+        <AskFirst
+          label="Delete my check results"
+          question={`${count === 1 ? "Delete your check result" : `Delete all ${count} of your check results`}${bodyChecks ? ", your body check included" : ""}? Your history and trends go too. This can’t be undone.`}
+          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold"
+          run={remove}
+        />
       )}
       <p
         role={status && !status.ok ? "alert" : "status"}
