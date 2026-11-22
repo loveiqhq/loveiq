@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AdultsOnly } from "../kit";
 import { INSTALL_WAIT_MS } from "./speech";
 import type { Voice, VoiceTrouble } from "./useVoice";
 
@@ -122,6 +123,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
   const speaking = phase === "speaking";
   const paused = phase === "paused";
   const preparing = phase === "preparing";
+  // "Select", never "tap" (A11Y-16): her photo is a button, chosen by a click, a key or a voice too.
   const [title, sub] =
     phase === "error" && trouble
       ? TROUBLE[trouble]
@@ -137,7 +139,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
           : speaking
             ? [
                 "Mira is speaking",
-                voice.duplex ? "Start talking to stop her." : "Tap her photo to stop her.",
+                voice.duplex ? "Start talking to stop her." : "Select her photo to stop her.",
               ]
             : paused
               ? pause === "muted"
@@ -146,7 +148,7 @@ export function VoicePanel({ voice, onType }: { voice: Voice; onType: () => void
                   ? ["Paused", "Mira stopped listening while you were away."]
                   : ["Paused", "Take your time. Resume when you're ready."]
               : heard
-                ? ["Mira is listening", "Pause when you're done, or tap her photo."]
+                ? ["Mira is listening", "Pause when you're done, or select her photo."]
                 : ["Mira is listening", "Speak whenever you're ready. She answers out loud."];
   const tapLabel =
     listening && heard
@@ -321,6 +323,13 @@ function EndCard({ voice }: { voice: Voice }) {
       <p role="status" className={`${CARD} text-ap-muted`}>
         Saving your voice session…
       </p>
+    );
+  }
+  if (ended.status === "minor") {
+    return (
+      <div role="status" className={CARD}>
+        <AdultsOnly />
+      </div>
     );
   }
   if (ended.status === "failed") {

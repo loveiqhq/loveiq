@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -14,7 +14,7 @@ import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
-import { SupportPanel } from "@features/mira/ui/SupportPanel";
+import { Modal, SupportPanel } from "@features/mira/ui/SupportPanel";
 import { Wordmark } from "@features/mira/ui/MiraShell";
 
 /** The audit fixes of 20 Nov 2026 on Mira's screens (the API routes are tested on their own). */
@@ -129,6 +129,90 @@ describe("Support panel", () => {
     expect(document.activeElement).toBe(opener);
     expect(document.documentElement.style.overflow).toBe("");
   });
+
+  it("stays open on a tap on the dimmed page: it carries the support lines", () => {
+    render(<Opener />);
+    fireEvent.click(screen.getByRole("button", { name: "Need support right now?" }));
+    const dialog = screen.getByRole("dialog", { name: "Support right now" });
+    fireEvent.click(dialog, { clientX: 1, clientY: 1 }); // jsdom's box is 0 × 0: outside it
+    expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
+  });
+});
+
+describe("Mira's dialogs (Modal)", () => {
+  /** A card whose dialog, once saved, swaps its opener for another button (as a check-in does). */
+  function Card({ backdrop }: { backdrop?: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [done, setDone] = useState(false);
+    return (
+      <section aria-label="Card">
+        <button type="button">Open journal</button>
+        {done ? (
+          <span>
+            <button type="button">Edit it</button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setOpen(true)}>
+            Do it
+          </button>
+        )}
+        <button type="button">Later</button>
+        {open ? (
+          <Modal label="Do it" closeOnBackdrop={backdrop} onClose={() => setOpen(false)}>
+            <h2 data-autofocus tabIndex={-1}>
+              Do it
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setDone(true);
+                setOpen(false);
+              }}
+            >
+              Save
+            </button>
+          </Modal>
+        ) : null}
+      </section>
+    );
+  }
+  const open = () => {
+    const opener = screen.getByRole("button", { name: "Do it" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Do it" });
+    // Its box on the screen, as a phone's sheet: the backdrop is everything outside it.
+    vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 16, y: 300, width: 360, height: 400 })
+    );
+    return dialog;
+  };
+
+  it("closes on a tap on the dimmed page only when asked (the phone's More sheet)", () => {
+    render(<Card backdrop />);
+    let dialog = open();
+    fireEvent.click(dialog, { clientX: 30, clientY: 320 }); // its own padding: inside its box
+    fireEvent.click(within(dialog).getByRole("heading"), { clientX: 2, clientY: 2 });
+    expect(screen.getByRole("dialog", { name: "Do it" })).toBeInTheDocument();
+    fireEvent.click(dialog, { clientX: 200, clientY: 120 }); // above it: the backdrop
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Do it" })).toHaveFocus();
+    cleanup();
+    // By default (a delete, a consent, answers not saved yet) a stray tap closes nothing.
+    render(<Card />);
+    dialog = open();
+    fireEvent.click(dialog, { clientX: 200, clientY: 120 });
+    expect(screen.getByRole("dialog", { name: "Do it" })).toBeInTheDocument();
+  });
+
+  // A11Y-2: closing after a save that replaced the opener dropped the focus on the page.
+  it("gives the focus to what took its opener's place when closing removed the opener", async () => {
+    render(<Card />);
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit it" })).toHaveFocus());
+  });
 });
 
 // Round-2 audit SET-9, the chat's side: "Need support right now?" listed the United States first
@@ -213,6 +297,17 @@ describe("Sign-up", () => {
 });
 
 describe("Chat", () => {
+  // A11Y-8 (WCAG 1.4.11): the pill's edge is the field's own token, 3:1 or more on the page in
+  // both themes, and so is its focused edge (lavender is 2.98:1 on white): pairs in
+  // mira-theme-contrast.test.ts.
+  it("draws the message box's edge in the field colour, and its focused edge in purple", () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    const box = screen.getByLabelText("Message Mira").closest("form")!;
+    const edges = box.className.split(/\s+/).filter((c) => /^(focus-within:)?border-ap-/.test(c));
+    expect(edges).toEqual(["border-ap-field", "focus-within:border-ap-purple"]);
+    expect(box).toHaveClass("rounded-[28px]");
+  });
+
   it("offers to sign in again on a 401, and the support panel under any error", async () => {
     replies["POST /api/mira/chat"] = () => ({
       status: 401,
@@ -608,6 +703,59 @@ describe("Body check", () => {
     expect(events()).toEqual(expect.arrayContaining(["body_check_offered", "body_check_started"]));
   });
 
+  // The card closed itself 4 s after its thank-you, and every way out left the focus on the page.
+  it("ends in the composer, and its thank-you stays until its own Close", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 0; i < 9; i++) {
+      await screen.findByText(`Body check · statement ${i + 1} of 10`);
+      fireEvent.click(screen.getByRole("button", { name: "Often" }));
+    }
+    await screen.findByText("Body check · statement 10 of 10");
+    const thanks = "Thank you. I’ll ask again in four weeks.";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Often" })));
+      await act(async () => undefined); // the save's answer
+      expect(screen.getByText(thanks)).toBeVisible();
+      await act(async () => vi.advanceTimersByTime(10_000));
+      expect(screen.getByText(thanks)).toBeVisible(); // no timer takes it away
+      expect(screen.getByLabelText("Message Mira")).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText(thanks)).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
+  });
+
+  it("puts the focus in the composer after Not now, and after Stop for now", async () => {
+    signedInDue("baseline");
+    reply();
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(1));
+    typeAndSend("hello");
+    const notNow = await screen.findByRole("button", { name: "Not now" });
+    notNow.focus();
+    fireEvent.click(notNow);
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
+    cleanup();
+    localStorage.clear(); // Not now's three days
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(2));
+    typeAndSend("hello");
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    const stop = await screen.findByRole("button", { name: "Stop for now" });
+    stop.focus();
+    fireEvent.click(stop);
+    expect(screen.queryByRole("dialog", { name: "Body check" })).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("Message Mira")).toHaveFocus());
+  });
+
   it("lets a statement be changed with Back", async () => {
     signedInDue("baseline");
     reply();
@@ -890,6 +1038,26 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem("mira.style.v1")!)).toEqual({ depth: 4, tone: 5 })
     );
+  });
+
+  // Decision 9: the account was stopped as under 18 (elsewhere) while this chat was open.
+  it("closes on a save refused as under 18, and the chat says Mira is only for adults", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    replies["PATCH /api/mira/me"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "How Mira coaches you" })).toBeNull()
+    );
+    expect(screen.getByText("Mira is only for adults.")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(tracked()).not.toContain("style_saved");
   });
 
   it("counts a saved style", async () => {

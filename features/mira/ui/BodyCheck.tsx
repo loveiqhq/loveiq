@@ -34,6 +34,12 @@ export const THANKS = {
 } as const;
 
 /**
+ * The chat's message box, once the dialog or the card has gone with the focused button: never the
+ * page itself. After the chat's own commit, so the dialog's closing can't take it back.
+ */
+const toComposer = () => window.setTimeout(() => document.getElementById("mira-input")?.focus(), 0);
+
+/**
  * The body check in the chat (Marcus's MVP success board, "Therapeutic success"): offered as a
  * card under Mira's reply, then the Body Appreciation Scale-2 one statement at a time in a dialog
  * (on a small phone the chat's message area is too short to show a statement and its answers),
@@ -62,6 +68,12 @@ export function BodyCheck({
     if (typeof step === "number") statementRef.current?.focus();
   }, [step]);
 
+  /** Not now, Stop for now, Escape or the thank-you's Close: the card goes, the composer has focus. */
+  function close(done: boolean) {
+    onClose(done);
+    toComposer();
+  }
+
   async function save(all: number[]) {
     setStep("saving");
     setError(null);
@@ -71,8 +83,9 @@ export function BodyCheck({
       setStep(items.length - 1);
       return;
     }
+    // The dialog goes; the thank-you stays until its own Close (no timer takes it away).
     setStep("done");
-    window.setTimeout(() => onClose(true), 4000);
+    toComposer();
   }
 
   function answer(value: number) {
@@ -91,9 +104,20 @@ export function BodyCheck({
     <>
       {/* There from the start, so the thank-you is read out when it comes (a region mounted with
           its text already in it is not); the visible card once the check is saved. */}
-      <p role="status" className={step === "done" ? `${card} text-[14px] text-ap-body` : "sr-only"}>
-        {step === "done" ? THANKS[due] : ""}
-      </p>
+      <div className={step === "done" ? `${card} flex flex-wrap items-center gap-x-3` : undefined}>
+        <p role="status" className={step === "done" ? "text-[14px] text-ap-body" : "sr-only"}>
+          {step === "done" ? THANKS[due] : ""}
+        </p>
+        {step === "done" ? (
+          <button
+            type="button"
+            onClick={() => close(true)}
+            className="min-h-[44px] text-[13px] text-ap-muted underline"
+          >
+            Close
+          </button>
+        ) : null}
+      </div>
       {step === "offer" ? (
         <div className={card}>
           <p className="text-[14px] font-semibold">{OFFER[due].title}</p>
@@ -114,7 +138,7 @@ export function BodyCheck({
             </button>
             <button
               type="button"
-              onClick={() => onClose(false)}
+              onClick={() => close(false)}
               className="min-h-[44px] px-3 text-[13px] text-ap-muted underline"
             >
               Not now
@@ -123,7 +147,7 @@ export function BodyCheck({
         </div>
       ) : null}
       {step === "offer" || step === "done" ? null : (
-        <Modal label="Body check" onClose={() => onClose(false)}>
+        <Modal label="Body check" onClose={() => close(false)}>
           {/* Not disabled while it saves (decision 7): answer() ignores taps till then. */}
           <fieldset aria-busy={step === "saving"}>
             <legend className="text-[12px] font-semibold uppercase tracking-wide text-ap-muted">
@@ -165,7 +189,7 @@ export function BodyCheck({
               )}
               <button
                 type="button"
-                onClick={() => onClose(false)}
+                onClick={() => close(false)}
                 className="min-h-[44px] text-[14px] text-ap-muted underline"
               >
                 Stop for now

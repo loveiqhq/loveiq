@@ -10,7 +10,8 @@
  *   { type: "voice_notice", version }  Talk's tick that the browser's speech service hears what
  *       the person says (22 Nov 2026), logged as voice_notice_agreed with its wording's version
  *   { type: "feedback", challenges, wish?, other?, mayEmail }  board 10: a challenge or some words
- *       at least (400 for none); AP › Mira lists them for the team ("Beta feedback")
+ *       at least (400 for none); AP › Mira lists them for the team ("Beta feedback"). Refused (403
+ *       `minor: true`) for someone stopped as under 18, and nothing of it is kept
  *   { type: "notify", coach }                                  "Notify me" on a coming-soon coach:
  *       its id, or its challenge as Home sent it before 22 Nov 2026, logged as notify_me with the
  *       id (one data model); an account only, or we couldn't tell them when the coach is ready
@@ -46,8 +47,9 @@ export const dynamic = "force-dynamic";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
 /**
- * Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. The
- * one refusal every page shows for `minor: true` (decision 9, ui/kit ADULTS_ONLY).
+ * Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them, and
+ * no feedback is kept. The one refusal every page shows for `minor: true` (decision 9, ui/kit
+ * ADULTS_ONLY).
  */
 const MINOR_REFUSED = () =>
   NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
@@ -157,6 +159,8 @@ export async function POST(request: Request) {
       break;
     }
     case "feedback":
+      // Its words and email address are never kept for someone stopped as under 18.
+      if (await isMinor(account?.id ?? null)) return MINOR_REFUSED();
       logMiraEvent("feedback", who, {
         challenges: body.challenges,
         wish: body.wish ?? null,

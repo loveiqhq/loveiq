@@ -17,7 +17,8 @@
  *        shown, gives the next, older page ("Show older sessions").
  *
  * Audio never reaches us: the browser turns speech into text before anything is sent. Someone
- * Mira stopped as under 18 (server/minor.ts) is refused (403), like on Mira's other routes.
+ * Mira stopped as under 18 (server/minor.ts) is refused (403 `minor: true`), like on Mira's
+ * other routes.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -49,8 +50,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const KEY_POINTS_MS = 40_000;
 
+/** Decision 9: the one refusal every page shows for `minor: true` (ui/kit `<AdultsOnly />`). */
 const ADULTS_ONLY = () =>
-  NextResponse.json({ error: "Mira is only for people aged 18 or older." }, { status: 403 });
+  NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
 
 const schema = z
   .object({

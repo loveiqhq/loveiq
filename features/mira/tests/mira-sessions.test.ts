@@ -117,7 +117,7 @@ vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({ set: vi.fn(), get
 import { DELETE, GET, PATCH, PUT } from "@/app/api/mira/weekly-session/route";
 import { GET as STOP_GET, POST as STOP } from "@/app/api/mira/weekly-session/stop/route";
 import { GET as NUDGE_OPEN } from "@/app/api/mira/nudge/route";
-import { GET as NUDGE_PREFS } from "@/app/api/mira/nudges/preferences/route";
+import { POST as NUDGE_PREFS } from "@/app/api/mira/nudges/preferences/route";
 import { POST as NUDGE_UNSUBSCRIBE } from "@/app/api/mira/nudges/unsubscribe/route";
 import { isMinor } from "@features/mira/server/minor";
 import { makeToken, readToken } from "@features/mira/server/nudges";
@@ -498,33 +498,44 @@ describe("the email's stop link (no sign-in)", () => {
     );
     expect(unsubscribe.status).toBe(403);
     const prefs = await NUDGE_PREFS(
-      new Request(`http://localhost/api/mira/nudges/preferences?t=${t}`)
+      new Request("http://localhost/api/mira/nudges/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "read", t: decodeURIComponent(t) }),
+      })
     );
     expect(prefs.status).toBe(403);
+    expect(await prefs.json()).toEqual({ error: "This link doesn't work." });
     const open = await NUDGE_OPEN(new Request(`http://localhost/api/mira/nudge?t=${t}`));
     expect(open.headers.get("location")).toBe("http://localhost/mira");
     // Nothing was read or changed for the account through them.
     expect(db.calls.filter((c) => /mira_user|mira_nudge/.test(c.path))).toEqual([]);
   });
 
+  // DATA-1: the page sends its token in the body, never in an address; only a mail app's
+  // one-click post carries it in the address, the one way it can.
   it("only pauses, from the page only with its CSRF token, and refuses an under-18 stop", async () => {
     await book();
     const t = makeToken("session-stop", LEA.id)!;
     const asPage = (action: string) => ({
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, t }),
     });
+    // A page's post with the token only in its address is refused.
+    expect(
+      (await stop(t, { headers: asPage("pause").headers, body: '{"action":"pause"}' })).status
+    ).toBe(400);
     vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
-    expect((await stop(t, asPage("pause"))).status).toBe(403);
+    expect((await stop(null, asPage("pause"))).status).toBe(403);
     vi.mocked(isMinor).mockResolvedValueOnce(true);
-    const refused = await stop(t, asPage("pause"));
+    const refused = await stop(null, asPage("pause"));
     expect(refused.status).toBe(403);
     // Decision 9: the one refusal every page shows, never "didn't go through".
     expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect(db.tables.mira_session_slot![0]!.paused_at).toBeNull();
     // A stop link can't cancel: that needs the sign-in.
-    expect((await stop(t, asPage("cancel"))).status).toBe(400);
-    expect((await stop(t, asPage("pause"))).status).toBe(200);
+    expect((await stop(null, asPage("cancel"))).status).toBe(400);
+    expect((await stop(null, asPage("pause"))).status).toBe(200);
     expect(db.tables.mira_session_slot).toHaveLength(1);
     expect(db.tables.mira_session_slot![0]!.paused_at).toEqual(expect.any(String));
     expect(events("session_paused").at(-1)?.props).toEqual({ source: "email" });

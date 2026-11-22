@@ -1,7 +1,9 @@
 /**
- * GET/POST /api/mira/nudges/preferences: the "Fewer nudges / Pause / Unsubscribe" pages behind
- * every nudge email (Marcus's boards 2 to 4b). The signed token in the email's link stands for
- * the person, so no sign-in is needed. POST is CSRF-checked and rate limited.
+ * POST /api/mira/nudges/preferences: the "Fewer nudges / Pause / Unsubscribe" pages behind every
+ * nudge email (Marcus's boards 2 to 4b): `read` the choices, `save`, `stop` or `resume`. The
+ * signed token in the email's link stands for the person, so no sign-in is needed; the page sends
+ * it in the body, never in an address (DATA-1: addresses reach logs and analytics), which is why
+ * reading is a POST too. CSRF-checked and rate limited.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -50,6 +52,7 @@ const schema = z.discriminatedUnion("action", [
     note: z.string().trim().max(500).nullish(),
   }),
   z.object({ action: z.literal("resume"), t: token }),
+  z.object({ action: z.literal("read"), t: token }),
 ]);
 
 async function limited(request: Request): Promise<boolean> {
@@ -59,22 +62,6 @@ async function limited(request: Request): Promise<boolean> {
     windowMs: 60_000,
   });
   return !r.allowed;
-}
-
-export async function GET(request: Request) {
-  if (await limited(request)) {
-    return NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
-  }
-  const userId = readToken("prefs", new URL(request.url).searchParams.get("t"));
-  if (!userId) return NextResponse.json({ error: "This link doesn't work." }, { status: 403 });
-  try {
-    const prefs = await getNudgePrefs(userId);
-    if (!prefs) return NextResponse.json({ error: "This link doesn't work." }, { status: 404 });
-    return NextResponse.json({ prefs: describePrefs(prefs), types: prefs.nudge_types });
-  } catch (err) {
-    logger.error({ err }, "mira: nudge prefs read failed");
-    return NextResponse.json({ error: "Unable to load your choices." }, { status: 500 });
-  }
 }
 
 export async function POST(request: Request) {
@@ -89,6 +76,16 @@ export async function POST(request: Request) {
   const body = parsed.data;
   const userId = readToken("prefs", body.t);
   if (!userId) return NextResponse.json({ error: "This link doesn't work." }, { status: 403 });
+  if (body.action === "read") {
+    try {
+      const prefs = await getNudgePrefs(userId);
+      if (!prefs) return NextResponse.json({ error: "This link doesn't work." }, { status: 404 });
+      return NextResponse.json({ prefs: describePrefs(prefs), types: prefs.nudge_types });
+    } catch (err) {
+      logger.error({ err }, "mira: nudge prefs read failed");
+      return NextResponse.json({ error: "Unable to load your choices." }, { status: 500 });
+    }
+  }
   try {
     if (body.action === "save") {
       await saveNudgeChoice(

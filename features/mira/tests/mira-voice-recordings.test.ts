@@ -579,10 +579,14 @@ describe("someone Mira stopped as under 18", () => {
       await remove(request(url, "DELETE"), params(SESSION)),
     ]) {
       expect(res.status).toBe(403);
+      // Decision 9: the one refusal, marked so a page shows <AdultsOnly />, never Try again.
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     }
     // Signed out too: the browser's own mark.
     vi.mocked(getMiraAccount).mockResolvedValue(null);
-    expect((await ended(request("/api/mira/recordings", "POST", END))).status).toBe(403);
+    const signedOut = await ended(request("/api/mira/recordings", "POST", END));
+    expect(signedOut.status).toBe(403);
+    expect(await signedOut.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect(supabaseFetch).not.toHaveBeenCalled();
     expect(logMiraEvent).not.toHaveBeenCalled();
     expect(askModel).not.toHaveBeenCalled();

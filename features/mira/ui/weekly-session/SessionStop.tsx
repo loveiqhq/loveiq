@@ -47,11 +47,11 @@ export function SessionStop({
 
   async function stop() {
     setState("busy");
-    const r = await miraApi<{ booked?: boolean; minor?: boolean }>(
-      `/api/mira/weekly-session/stop?t=${encodeURIComponent(token!)}`,
-      { body: { action: "pause" } }
-    );
-    if (r.status === 403 && r.data.minor) return setState("minor");
+    // The token in the body, never in an address (DATA-1).
+    const r = await miraApi<{ booked?: boolean }>("/api/mira/weekly-session/stop", {
+      body: { action: "pause", t: token },
+    });
+    if (r.minor) return setState("minor");
     setState(!r.ok ? "error" : r.data.booked ? "done" : "none");
   }
 

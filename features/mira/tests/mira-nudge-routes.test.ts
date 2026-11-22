@@ -45,7 +45,7 @@ import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { recordCronRun } from "@shared/observability/slack-alert-dedup";
 import { GET as openNudge } from "@/app/api/mira/nudge/route";
-import { GET as getPrefs, POST as postPrefs } from "@/app/api/mira/nudges/preferences/route";
+import * as prefsRoute from "@/app/api/mira/nudges/preferences/route";
 import { GET as visitUnsub, POST as oneClick } from "@/app/api/mira/nudges/unsubscribe/route";
 import { GET as nudgeCron } from "@/app/api/cron/mira-nudges/route";
 import { GET as memoryCron } from "@/app/api/cron/mira-memory/route";
@@ -73,7 +73,7 @@ const patches = () =>
     .map(([path, init]) => ({ path, body: JSON.parse(String(init!.body)) }));
 
 const post = (body: unknown) =>
-  postPrefs(
+  prefsRoute.POST(
     new Request("http://localhost/api/mira/nudges/preferences", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-csrf-token": "t" },
@@ -91,11 +91,18 @@ describe("nudge preference routes", () => {
     );
   });
 
-  it("read the person's choices only with a link we signed", async () => {
-    const bad = await getPrefs(new Request("http://localhost/x?t=nope"));
+  // DATA-1: the page sends the token in a POST's body, never in an address (logs, analytics), so
+  // there is no GET that takes one.
+  it("read the person's choices only with a link we signed, its token in the body", async () => {
+    expect("GET" in prefsRoute).toBe(false);
+    const bad = await post({ action: "read", t: `${USER_ID}.${"x".repeat(43)}` });
     expect(bad.status).toBe(403);
-    const ok = await getPrefs(new Request(`http://localhost/x?t=${encodeURIComponent(t())}`));
-    expect((await ok.json()).prefs).toMatchObject({ frequency: "Every day", kinds: "All kinds" });
+    const ok = await post({ action: "read", t: t() });
+    expect(await ok.json()).toEqual({
+      prefs: expect.objectContaining({ frequency: "Every day", kinds: "All kinds" }),
+      types: null,
+    });
+    expect(patches()).toHaveLength(0); // reading changes nothing
   });
 
   it("save twice a week, a 14-day pause or some kinds, each turning nudges on", async () => {
@@ -112,14 +119,13 @@ describe("nudge preference routes", () => {
 
   it("stop with the one-tap reason and note, and resume", async () => {
     await post({ action: "stop", t: t(), reason: "Too many emails", note: "nice though" });
-    expect(patches()[0]!.body).toMatchObject({
-      nudges_on: false,
-      nudge_stop_reason: "Too many emails · nice though",
-    });
+    // DATA-7: the reason and note are kept once, in the log (which a deleted account's cleanup
+    // empties), never a second time on the profile; a stop clears an older copy there.
+    expect(patches()[0]!.body).toMatchObject({ nudges_on: false, nudge_stop_reason: null });
     expect(logMiraEvent).toHaveBeenCalledWith(
       "nudge_stopped",
       { userId: USER_ID },
-      expect.anything()
+      { reason: "Too many emails · nice though", source: "page" }
     );
     await post({ action: "resume", t: t() });
     expect(patches().at(-1)!.body).toMatchObject({ nudges_on: true, nudges_stopped_at: null });

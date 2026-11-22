@@ -72,16 +72,26 @@ function LineItem({ line: l }: { line: SupportLine }) {
  * inert, Escape (or Android's back) closes it, the page can't scroll behind it, focus starts on
  * the element marked data-autofocus (the heading) and goes back to the opener on close. Shown
  * while mounted: the parent unmounts it to close.
+ *
+ * When closing removed the opener (a save swapped "Do today’s check-in" for "Edit today’s
+ * check-in", A11Y-2), focus goes to the control now in its place in its section, unless the caller
+ * placed it meanwhile: never to the page itself. `closeOnBackdrop`: a tap on the dimmed page closes
+ * it too, for a sheet that guards nothing (the phone's More); never a delete, a consent, answers
+ * not saved yet or the support lines.
  */
 let openDialogs = 0;
+const CONTROLS =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Modal({
   label,
   onClose,
+  closeOnBackdrop = false,
   children,
 }: {
   label: string;
   onClose: () => void;
+  closeOnBackdrop?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -89,6 +99,14 @@ export function Modal({
     const dialog = ref.current;
     if (!dialog) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Where the opener sits, should closing replace it: its section and its place among the
+    // section's controls (the dialog's own left out).
+    const home = opener?.closest<HTMLElement>("section, article, form, main") ?? null;
+    const controls = () =>
+      home
+        ? [...home.querySelectorAll<HTMLElement>(CONTROLS)].filter((c) => !dialog.contains(c))
+        : [];
+    const place = opener ? controls().indexOf(opener) : -1;
     // One lock for however many panels are open, released when the last one closes.
     const root = document.documentElement;
     if (openDialogs++ === 0) root.style.overflow = "hidden";
@@ -100,7 +118,14 @@ export function Modal({
     return () => {
       if (--openDialogs === 0) root.style.overflow = "";
       if (modal && dialog.open) dialog.close();
-      opener?.focus();
+      if (opener?.isConnected) return opener.focus();
+      // A frame later, so a caller that put the focus somewhere itself has had its say.
+      requestAnimationFrame(() => {
+        const now = document.activeElement;
+        if ((now && now !== document.body) || !home?.isConnected) return;
+        const left = controls();
+        left[Math.min(Math.max(place, 0), left.length - 1)]?.focus();
+      });
     };
   }, []);
   return (
@@ -115,6 +140,15 @@ export function Modal({
         if (e.key !== "Escape") return;
         e.preventDefault();
         onClose();
+      }}
+      onClick={(e) => {
+        // The backdrop's taps reach the dialog itself, outside its box (its padding is inside).
+        // ponytail: a text drag from inside that ends on the backdrop closes it too; check where
+        // the press began as well if that ever matters.
+        if (!closeOnBackdrop || e.target !== e.currentTarget) return;
+        const box = e.currentTarget.getBoundingClientRect();
+        const { clientX: x, clientY: y } = e;
+        if (x < box.left || x > box.right || y < box.top || y > box.bottom) onClose();
       }}
       className="mb-4 mt-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-[560px] overflow-y-auto rounded-3xl bg-white p-6 text-ap-ink shadow-xl backdrop:bg-black/30 sm:mb-auto"
     >

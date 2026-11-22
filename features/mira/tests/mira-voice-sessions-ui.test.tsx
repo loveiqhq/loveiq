@@ -3,8 +3,19 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const router = { replace: vi.fn(), push: vi.fn(), refresh: vi.fn() };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  redirect: (to: string) => {
+    throw new Error(`redirect ${to}`);
+  },
+  notFound: () => {
+    throw new Error("not found");
+  },
+}));
+// The session pages' sign-in check: signed out unless a test says otherwise.
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => null }));
 
+import RecordingPage from "@/app/mira/recordings/[id]/page";
 import RecordingDetail from "@features/mira/ui/recordings/RecordingDetail";
 import RecordingsPage, { RecordingsCard } from "@features/mira/ui/recordings/Recordings";
 
@@ -27,6 +38,14 @@ const rows = () => [
   ...document.querySelectorAll<HTMLAnchorElement>('a[href^="/mira/recordings/"]'),
 ];
 const asked = () => fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${url}`);
+/** The under-18 stop's refusal, as every Mira route gives it (decision 9). */
+const MINOR = () => ({ status: 403, body: { error: "Mira is only for adults.", minor: true } });
+/** Nothing of a failed load: no "didn't load", no Try again, no alert. */
+const noRetry = () => {
+  expect(screen.queryByText(/didn.t load/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+};
 
 const ID = "1c2d3e4f-3333-4444-8555-a66677778888";
 const CHAT = "0b8a7c6d-2222-4333-8444-955566667777";
@@ -94,12 +113,17 @@ describe("Home's voice sessions card", () => {
     expect(within(latest!).getByText("since the last").previousSibling?.textContent).toBe("2 days");
     expect(within(first!).getByText("first session")).toBeTruthy();
     expect(within(first!).getAllByText("<1 min").length).toBeGreaterThan(0);
-    expect(within(card).getByRole("link", { name: "See all" }).getAttribute("href")).toBe(
-      "/mira/recordings"
-    );
-    expect(
-      within(card).getByRole("link", { name: "Start a voice session" }).getAttribute("href")
-    ).toBe("/mira?talk=1");
+    // UX-10: every Home card's one "See all →", in its header before the sessions; the way to
+    // start one comes after them, no longer squeezed in beside it.
+    const seeAll = within(card).getByRole("link", { name: "See all voice sessions" });
+    expect(seeAll.getAttribute("href")).toBe("/mira/recordings");
+    expect(seeAll.textContent).toBe("See all voice sessions");
+    const start = within(card).getByRole("link", { name: "Start a voice session" });
+    expect(start.getAttribute("href")).toBe("/mira?talk=1");
+    const before = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(seeAll, latest!)).toBe(true);
+    expect(before(first!, start)).toBe(true);
   });
 
   it("has a next step when there are none yet", async () => {
@@ -107,7 +131,7 @@ describe("Home's voice sessions card", () => {
     render(<RecordingsCard />);
     expect(await screen.findByText("No voice sessions yet")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "Start a voice session" })).toHaveLength(1);
-    expect(screen.queryByRole("link", { name: "See all" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /See all/ })).toBeNull();
     // VOI-V8b: kept only with memory on, so the promise says so.
     expect(screen.getByText(/each session waits here as words/).textContent).toBe(
       "Talk to Mira out loud. While “Remember our conversations” is on in Settings, each session waits here as words, with up to three key points. Never as audio."
@@ -115,6 +139,35 @@ describe("Home's voice sessions card", () => {
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe(
       "/mira/settings"
     );
+  });
+
+  // Decision 9: an account Mira stopped as under 18 gets the one calm refusal, never "didn't
+  // load" or Try again. Only `minor: true` counts: a CSRF refusal is a 403 too.
+  it("says 'Mira is only for adults.' to an account stopped as under 18, here and on the page", async () => {
+    replies["GET /api/mira/recordings?limit=3"] = MINOR;
+    render(<RecordingsCard />);
+    const card = screen.getByRole("region", { name: "Voice sessions" });
+    expect(await within(card).findByText("Mira is only for adults.")).toBeTruthy();
+    expect(within(card).queryByRole("link")).toBeNull(); // nothing to start or to see
+    noRetry();
+    cleanup();
+    replies["GET /api/mira/recordings?limit=50"] = MINOR;
+    render(<RecordingsPage />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Start a voice session" })).toBeNull();
+    noRetry();
+    cleanup();
+    // Stopped while the page was open: "Show older sessions" ends the same way.
+    replies = {}; // the older page's key first: the fake answers the first key a request starts with
+    replies[`GET /api/mira/recordings?limit=50&before=`] = MINOR;
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: true },
+    });
+    render(<RecordingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show older sessions" }));
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(rows()).toHaveLength(0);
+    noRetry();
   });
 
   it("says when they didn't load, and tries again", async () => {
@@ -139,9 +192,23 @@ describe("the voice sessions page", () => {
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(screen.getByRole("button", { name: "Show older sessions" })).toBeTruthy();
     cleanup();
+    // A lost sign-in signs in again and comes back here (signInHref), not to Home.
+    window.history.replaceState(null, "", "/mira/recordings");
     replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 401, body: {} });
     render(<RecordingsPage />);
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Frecordings")
+    );
+    cleanup();
+    window.history.replaceState(null, "", `/mira/recordings/${ID}`);
+    replies[`GET /api/mira/recordings/${ID}`] = () => ({ status: 401, body: {} });
+    render(<RecordingDetail id={ID} />);
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenLastCalledWith(
+        `/mira/start?next=${encodeURIComponent(`/mira/recordings/${ID}`)}`
+      )
+    );
+    window.history.replaceState(null, "", "/");
   });
 
   // VOI-V9: only the 50 newest could be opened or deleted, though the notice says each can.
@@ -217,15 +284,93 @@ describe("one voice session", () => {
 
   it("deletes it only after a second, plain confirmation, and says what went", async () => {
     replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
-    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({ body: { success: true } });
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({
+      status: 500,
+      body: { error: "Unable to delete right now. Please try again." },
+    });
     render(<RecordingDetail id={ID} />);
     expect(await screen.findByText(/None for this session/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete this session" }));
     expect(asked().filter((a) => a.startsWith("DELETE"))).toEqual([]);
-    expect(screen.getByText(/Its key points and its words go, here and in the chat/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const ask = screen.getByRole("group", {
+      name: /^Delete this session\? Its key points and its words go, here and in the chat/,
+    });
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete" }));
+    // A delete that didn't go through is said inside the question, which stays to try again.
+    expect(await within(ask).findByRole("alert")).toHaveTextContent("Unable to delete right now");
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({ body: { success: true } });
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete" }));
     expect(await screen.findByRole("heading", { name: "Session deleted" })).toBeTruthy();
-    expect(asked()).toContain(`DELETE /api/mira/recordings/${ID}`);
+    expect(asked().filter((a) => a === `DELETE /api/mira/recordings/${ID}`)).toHaveLength(2);
+  });
+
+  // UX-9: one way to ask before a delete on every page (the kit's ConfirmDelete).
+  it("asks like the journal and goals: the red Delete, then Keep it, which has the focus", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
+    render(<RecordingDetail id={ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+    const ask = screen.getByRole("group", { name: /^Delete this session\?/ });
+    expect(
+      within(ask)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+    ).toEqual(["Delete", "Keep it"]);
+    expect(within(ask).getByRole("button", { name: "Delete" })).toHaveClass("bg-ap-bad");
+    expect(within(ask).getByRole("button", { name: "Keep it" })).toHaveFocus();
+    // Keep it puts the focus back where it was, never on the page itself.
+    fireEvent.click(within(ask).getByRole("button", { name: "Keep it" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete this session" })).toHaveFocus()
+    );
+    expect(asked().filter((a) => a.startsWith("DELETE"))).toEqual([]);
+  });
+
+  it("says 'Mira is only for adults.' to an account stopped as under 18, also once it was open", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = MINOR;
+    render(<RecordingDetail id={ID} />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Voice session" })).toBeTruthy();
+    noRetry();
+    cleanup();
+    // Stopped while the page was open: a refused delete or key points end the same way.
+    for (const method of ["DELETE", "POST"] as const) {
+      replies[`GET /api/mira/recordings/${ID}`] = () => detail(method === "POST" ? null : []);
+      replies[`${method} /api/mira/recordings/${ID}`] = MINOR;
+      render(<RecordingDetail id={ID} />);
+      if (method === "DELETE") {
+        fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      } else {
+        fireEvent.click(await screen.findByRole("button", { name: "Write them now" }));
+      }
+      expect(await screen.findByText("Mira is only for adults."), method).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Key points" })).toBeNull();
+      noRetry();
+      cleanup();
+    }
+  });
+
+  it("still says another refusal (a 403 without `minor`) as an error to try again", async () => {
+    replies[`GET /api/mira/recordings/${ID}`] = () => detail([]);
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({
+      status: 403,
+      body: { error: "Invalid request." },
+    });
+    render(<RecordingDetail id={ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid request.");
+    expect(screen.queryByText("Mira is only for adults.")).toBeNull();
+  });
+
+  it("sends a signed-out visit to sign in, then back to this session, not the list", async () => {
+    await expect(RecordingPage({ params: Promise.resolve({ id: ID }) })).rejects.toThrow(
+      `redirect /mira/start?next=${encodeURIComponent(`/mira/recordings/${ID}`)}`
+    );
+    // An address that can't be a session is no page, signed in or not.
+    await expect(RecordingPage({ params: Promise.resolve({ id: "x/../y" }) })).rejects.toThrow(
+      "not found"
+    );
   });
 
   it("says when it isn't there, with the way back", async () => {

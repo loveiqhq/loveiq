@@ -370,8 +370,9 @@ describe("the email's stop page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeInTheDocument();
     const [sent] = calls("POST /api/mira/weekly-session/stop");
-    expect(sent!.url).toBe("/api/mira/weekly-session/stop?t=abc.def");
-    expect(sent!.body).toEqual({ action: "pause" });
+    // DATA-1: the token goes in the body, never in an address.
+    expect(sent!.url).toBe("/api/mira/weekly-session/stop");
+    expect(sent!.body).toEqual({ action: "pause", t: "abc.def" });
   });
 
   it("offers a retry when the stop fails", async () => {

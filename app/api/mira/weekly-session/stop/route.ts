@@ -1,14 +1,16 @@
 /**
- * /api/mira/weekly-session/stop?t=… : the stop behind every weekly-session email. Its token is
- * signed for this one purpose ("session-stop", features/mira/server/nudges.ts LinkPurpose) and the
+ * /api/mira/weekly-session/stop : the stop behind every weekly-session email. Its token is signed
+ * for this one purpose ("session-stop", features/mira/server/nudges.ts LinkPurpose) and the
  * account, so no sign-in is needed, and it can only pause the reminders: never cancel, change or
  * open anything, and no other link's token works here (nor this one elsewhere). A forwarded email
  * can do no more than its own stop link. Changing or cancelling the session needs the sign-in.
  *
- *   POST, not JSON   → one-click unsubscribe (RFC 8058) from the List-Unsubscribe header. No CSRF
- *                      check by design: mail providers post it without cookies; the token is the gate.
- *   POST, JSON { action: "pause" } → the stop page's button, CSRF-checked
- *   GET              → someone opening the address: the stop page, changing nothing
+ *   POST ?t=…, not JSON → one-click unsubscribe (RFC 8058) from the List-Unsubscribe header, the
+ *                      one way a mail app can carry the token. No CSRF check by design: mail
+ *                      providers post it without cookies; the token is the gate.
+ *   POST, JSON { action: "pause", t } → the stop page's button, CSRF-checked. A page never puts
+ *                      the token in an address (DATA-1), and a JSON post's address is not read.
+ *   GET ?t=…         → someone opening the address: the stop page, changing nothing
  *
  * Someone Mira stopped as under 18 is refused (403, `minor: true`).
  */
@@ -24,7 +26,7 @@ import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({ action: z.literal("pause") }).strict();
+const schema = z.object({ action: z.literal("pause"), t: z.string().max(200) }).strict();
 
 export async function POST(request: Request) {
   // Mail providers post one-click stops from shared servers, so one address carries many people's;
@@ -35,20 +37,22 @@ export async function POST(request: Request) {
     windowMs: 60_000,
   });
   if (!r.allowed) return NextResponse.json({ error: "Please try again later." }, { status: 429 });
-  const userId = readToken("session-stop", new URL(request.url).searchParams.get("t"));
+  const page = (request.headers.get("content-type") ?? "").includes("application/json");
+  let t = new URL(request.url).searchParams.get("t");
+  if (page) {
+    if (!(await verifyCsrfToken(request))) {
+      return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+    }
+    const parsed = schema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    t = parsed.data.t;
+  }
+  const userId = readToken("session-stop", t);
   if (!userId) return NextResponse.json({ error: "Invalid link." }, { status: 403 });
   try {
     if (await isMinor(userId)) {
       // Decision 9: the one refusal every page shows (ui/kit ADULTS_ONLY), never "try again".
       return NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
-    }
-    const page = (request.headers.get("content-type") ?? "").includes("application/json");
-    if (page) {
-      if (!(await verifyCsrfToken(request))) {
-        return NextResponse.json({ error: "Invalid request." }, { status: 403 });
-      }
-      const parsed = schema.safeParse(await request.json().catch(() => ({})));
-      if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
     const slot = await setPaused(userId, true);
     if (slot) logMiraEvent("session_paused", { userId }, { source: page ? "email" : "one-click" });

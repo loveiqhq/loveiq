@@ -130,11 +130,19 @@ describe("POST /api/mira/event", () => {
     for (const body of [
       { type: "notify", coach: "lena" },
       { type: "coaches", name: "finder_done", detail: "lena" },
+      // Beta feedback too: its words and the email address are never kept for them.
+      { type: "feedback", challenges: ["Libido challenges"], wish: "Remember me", mayEmail: true },
     ]) {
       const res = await post(body);
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     }
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    // Signed out, the browser's own stop counts the same.
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    const anonymous = await post({ type: "feedback", challenges: [], other: "x", mayEmail: false });
+    expect(anonymous.status).toBe(403);
+    expect(isMinor).toHaveBeenLastCalledWith(null);
     expect(logMiraEvent).not.toHaveBeenCalled();
     vi.mocked(isMinor).mockResolvedValue(false);
   });

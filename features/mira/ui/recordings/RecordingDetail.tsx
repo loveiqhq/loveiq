@@ -3,9 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
+import { AdultsOnly, ConfirmDelete } from "../kit";
 import { DurationChip, TalkShare } from "./Recordings";
 
 /**
@@ -31,7 +32,9 @@ type Load =
   | { state: "missing" }
   | { state: "failed" }
   | ({ state: "ready" } & Detail)
-  | { state: "deleted" };
+  | { state: "deleted" }
+  /** Stopped as under 18, for good: the kit's one refusal, never Try again (decision 9). */
+  | { state: "minor" };
 
 const BACK = "/mira/recordings";
 
@@ -42,17 +45,22 @@ export default function RecordingDetail({ id }: { id: string }) {
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const opener = useRef<HTMLButtonElement>(null);
 
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<Detail>(`/api/mira/recordings/${id}`).then((res) => {
-      if (res.status === 401) return router.replace("/mira/start");
+      // A lost sign-in comes back to this session after signing in again.
+      if (res.status === 401) return router.replace(signInHref());
       setLoad(
         res.ok
           ? { state: "ready", ...res.data }
-          : res.status === 404
-            ? { state: "missing" }
-            : { state: "failed" }
+          : res.minor
+            ? { state: "minor" }
+            : res.status === 404
+              ? { state: "missing" }
+              : { state: "failed" }
       );
     });
   }, [id, router, attempt]);
@@ -65,6 +73,7 @@ export default function RecordingDetail({ id }: { id: string }) {
       body: {},
     });
     setWriting(false);
+    if (res.minor) return setLoad({ state: "minor" });
     if (!res.ok) return setError(res.data.error ?? "That didn't work. Please try again.");
     setLoad((l) =>
       l.state === "ready"
@@ -75,10 +84,13 @@ export default function RecordingDetail({ id }: { id: string }) {
 
   async function remove() {
     setDeleting(true);
-    setError(null);
+    setDeleteError(null);
     const res = await miraApi(`/api/mira/recordings/${id}`, { method: "DELETE" });
     setDeleting(false);
-    if (!res.ok) return setError(res.data.error ?? "Unable to delete right now. Please try again.");
+    if (res.minor) return setLoad({ state: "minor" });
+    if (!res.ok) {
+      return setDeleteError(res.data.error ?? "Unable to delete right now. Please try again.");
+    }
     setLoad({ state: "deleted" });
   }
 
@@ -95,6 +107,13 @@ export default function RecordingDetail({ id }: { id: string }) {
         <div aria-hidden="true" className="mt-4 flex flex-col gap-4">
           <div className="h-10 w-2/3 rounded-xl bg-ap-ground motion-safe:animate-pulse" />
           <div className="h-32 rounded-[22px] bg-ap-ground motion-safe:animate-pulse" />
+        </div>
+      ) : null}
+
+      {load.state === "minor" ? (
+        <div role="status" className="mt-6 max-w-[560px]">
+          <h1 className="font-serif text-[28px] font-medium">Voice session</h1>
+          <AdultsOnly className="mt-2" />
         </div>
       ) : null}
 
@@ -239,27 +258,21 @@ export default function RecordingDetail({ id }: { id: string }) {
 
           <section aria-label="Delete this session" className="mt-8 border-t border-ap-line pt-5">
             {confirm ? (
-              <div className="rounded-[20px] border border-ap-line bg-white p-4">
-                <p className="text-[14px] leading-snug text-ap-body">
-                  Delete this session? Its key points and its words go, here and in the chat. This
-                  can&apos;t be undone.
-                </p>
-                <div className="mt-3 flex justify-end gap-2">
-                  <button type="button" onClick={() => setConfirm(false)} className={GHOST}>
-                    Keep it
-                  </button>
-                  <button
-                    type="button"
-                    onClick={remove}
-                    disabled={deleting}
-                    className="inline-flex min-h-[44px] items-center rounded-full bg-ap-bad-ink px-5 text-[14px] font-bold text-white disabled:opacity-60"
-                  >
-                    {deleting ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
-              </div>
+              // Asked as on every Mira page (UX-9); Keep it gives the focus back to the button.
+              <ConfirmDelete
+                question="Delete this session? Its key points and its words go, here and in the chat. This can’t be undone."
+                busy={deleting}
+                error={deleteError}
+                onConfirm={() => void remove()}
+                onKeep={() => {
+                  setConfirm(false);
+                  setDeleteError(null);
+                  requestAnimationFrame(() => opener.current?.focus());
+                }}
+              />
             ) : (
               <button
+                ref={opener}
                 type="button"
                 onClick={() => setConfirm(true)}
                 className="min-h-[44px] text-[14px] font-semibold text-ap-bad-ink underline-offset-4 hover:underline"

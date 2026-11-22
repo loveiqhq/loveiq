@@ -31,9 +31,13 @@ const PREFS = {
 beforeEach(() => {
   vi.mocked(miraApi).mockReset();
   vi.mocked(miraApi).mockImplementation((async (_url: string, init?: { body?: unknown }) =>
-    init?.body
-      ? { ok: true, status: 200, data: { prefs: { ...PREFS, next: null, stopped: true } } }
-      : { ok: true, status: 200, data: { prefs: PREFS, types: null } }) as never);
+    (init?.body as { action?: string } | undefined)?.action === "read"
+      ? { ok: true, status: 200, data: { prefs: PREFS, types: null } }
+      : {
+          ok: true,
+          status: 200,
+          data: { prefs: { ...PREFS, next: null, stopped: true } },
+        }) as never);
 });
 afterEach(cleanup);
 
@@ -59,9 +63,11 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
     await open(signed);
     expect(await screen.findByRole("heading", { name: "Fewer nudges, not none?" })).toBeVisible();
     expect(miraApi).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(miraApi).mock.calls[0]![0]).toBe(
-      `/api/mira/nudges/preferences?t=${encodeURIComponent(signed)}`
-    );
+    // DATA-1: the token goes in the body, never in an address (logs, analytics).
+    expect(vi.mocked(miraApi).mock.calls[0]).toEqual([
+      "/api/mira/nudges/preferences",
+      { body: { action: "read", t: signed } },
+    ]);
   });
 
   it("moves focus to each new screen's heading, and the reason screen has a way back", async () => {
