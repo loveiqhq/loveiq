@@ -6,6 +6,7 @@ import { COACHES } from "@features/mira/content/coaches";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
+import { AdultsOnly } from "./kit";
 
 /**
  * Board 10, "Help us shape what comes next": challenges, wishes and open feedback. Each coach's
@@ -28,6 +29,8 @@ export default function MiraFeedback() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Refused as under 18: the one refusal in place of the form, for good (decision 9).
+  const [minor, setMinor] = useState(false);
 
   async function submit() {
     if (busy) return;
@@ -48,6 +51,7 @@ export default function MiraFeedback() {
       },
     });
     if (r.ok) return setSent(true);
+    if (r.minor) return setMinor(true);
     setBusy(false);
     setError(r.data.error ?? "We couldn't send that. Please try again.");
   }
@@ -68,8 +72,9 @@ export default function MiraFeedback() {
             Thank you. Your feedback is with the team.
           </p>
         ) : null}
+        {minor ? <AdultsOnly className="mt-8" /> : null}
       </div>
-      {sent ? null : (
+      {sent || minor ? null : (
         <form
           className="mt-6 flex flex-col gap-6"
           onSubmit={(e) => {

@@ -58,6 +58,25 @@ describe("the beta feedback form", () => {
     });
   });
 
+  // Decision 9: refused as under 18 (the route keeps nothing of it), it says the one refusal in
+  // place of the form, never an error inviting another send.
+  it("says 'Mira is only for adults.' in place of the form when the send is refused as under 18", async () => {
+    const user = userEvent.setup();
+    vi.mocked(miraApi).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      minor: true,
+      data: { error: "Mira is only for adults.", minor: true },
+    } as never);
+    render(<MiraFeedback />);
+    await user.click(screen.getByRole("button", { name: "Libido challenges" }));
+    await user.click(screen.getByRole("button", { name: "Send feedback" }));
+    expect(await screen.findByText("Mira is only for adults.")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(screen.queryByText("Thank you. Your feedback is with the team.")).toBeNull();
+  });
+
   it("draws its fields on the paper colour with a visible edge, never the browser's grey (UX-7, A11Y-8)", () => {
     render(<MiraFeedback />);
     for (const box of screen.getAllByRole("textbox")) {
