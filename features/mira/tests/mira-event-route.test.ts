@@ -9,6 +9,7 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn().mockResolvedValue(false) }));
 vi.mock("@features/mira/server/store", () => ({
   logMiraEvent: vi.fn(),
   rateMessage: vi.fn().mockResolvedValue(true),
@@ -16,6 +17,7 @@ vi.mock("@features/mira/server/store", () => ({
 
 import { POST } from "@/app/api/mira/event/route";
 import { anonId } from "@features/mira/server/anon";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent, rateMessage } from "@features/mira/server/store";
 import { checkRateLimit } from "@shared/http/ratelimit";
@@ -120,6 +122,21 @@ describe("POST /api/mira/event", () => {
       mayEmail: false,
       email: null,
     });
+  });
+
+  it("refuses someone stopped as under 18 with the one refusal every page shows (decision 9)", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(isMinor).mockResolvedValue(true);
+    for (const body of [
+      { type: "notify", coach: "lena" },
+      { type: "coaches", name: "finder_done", detail: "lena" },
+    ]) {
+      const res = await post(body);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
+    }
+    expect(logMiraEvent).not.toHaveBeenCalled();
+    vi.mocked(isMinor).mockResolvedValue(false);
   });
 
   it("takes only the moments the browser sees, never the server's own KPI events", async () => {

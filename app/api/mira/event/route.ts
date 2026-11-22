@@ -45,8 +45,12 @@ export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_EVENTS = 300;
-/** Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. */
-const MINOR_REFUSED = () => NextResponse.json({ error: "Mira isn't available." }, { status: 403 });
+/**
+ * Someone Mira stopped as under 18 (server/minor.ts): no coach is offered or counted for them. The
+ * one refusal every page shows for `minor: true` (decision 9, ui/kit ADULTS_ONLY).
+ */
+const MINOR_REFUSED = () =>
+  NextResponse.json({ error: "Mira is only for adults.", minor: true }, { status: 403 });
 
 const schema = z.discriminatedUnion("type", [
   z.object({

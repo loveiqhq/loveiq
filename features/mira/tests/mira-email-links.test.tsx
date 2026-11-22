@@ -68,6 +68,20 @@ describe("a weekly session's stop page", () => {
     );
   });
 
+  it("says Mira is only for adults when the stop is refused as under 18, never 'try again'", async () => {
+    jar.set("mira_link", makeToken("session-stop", ID)!);
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: "Mira is only for adults.", minor: true }),
+    } as Response);
+    await open(SessionStopPage);
+    fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
+    expect(await screen.findByText("Mira is only for adults.")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop reminder emails" })).toBeNull();
+  });
+
   it("ignores a token in the address: without the cookie the link doesn't work", async () => {
     await open(SessionStopPage, makeToken("session-stop", ID)!);
     expect(screen.queryByRole("button", { name: "Stop reminder emails" })).toBeNull();

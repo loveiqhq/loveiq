@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { miraApi } from "../api";
 import { EmailLinkPage, HEADING, LINK, LinkDoesNotWork } from "../EmailLinkPage";
+import { AdultsOnly } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 
 const SETTINGS = "/mira/settings#weekly";
@@ -22,7 +23,7 @@ export function SessionStop({
   token: string | null;
   already?: "done" | "none";
 }) {
-  const [state, setState] = useState<"idle" | "busy" | "done" | "none" | "error">(
+  const [state, setState] = useState<"idle" | "busy" | "done" | "none" | "error" | "minor">(
     already ?? "idle"
   );
 
@@ -46,11 +47,22 @@ export function SessionStop({
 
   async function stop() {
     setState("busy");
-    const r = await miraApi<{ booked?: boolean }>(
+    const r = await miraApi<{ booked?: boolean; minor?: boolean }>(
       `/api/mira/weekly-session/stop?t=${encodeURIComponent(token!)}`,
       { body: { action: "pause" } }
     );
+    if (r.status === 403 && r.data.minor) return setState("minor");
     setState(!r.ok ? "error" : r.data.booked ? "done" : "none");
+  }
+
+  // Decision 9: a stop refused as under 18 gets the one refusal, never an error to retry.
+  if (state === "minor") {
+    return (
+      <EmailLinkPage>
+        <h1 className={HEADING}>Reminder emails</h1>
+        <AdultsOnly />
+      </EmailLinkPage>
+    );
   }
 
   if (state === "done" || state === "none") {
