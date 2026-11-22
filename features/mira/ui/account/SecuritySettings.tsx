@@ -259,6 +259,30 @@ function Row({
   );
 }
 
+/**
+ * A change of email waiting for its code, kept in this tab for the code's hour with the address
+ * of the account that asked, so a reload or a tab the phone discarded while the person read the
+ * mail comes back to the code field, as the sign-in's code step does (round-3 R3-ACCT-5).
+ */
+const CHANGING = "mira.email.code.v1";
+type Changing = { from: string; address: string; at: number };
+function waitingChange(from: string): string | null {
+  try {
+    const w = JSON.parse(sessionStorage.getItem(CHANGING) ?? "null") as Changing | null;
+    return w?.from === from && Date.now() - w.at < 60 * 60_000 ? w.address : null;
+  } catch {
+    return null;
+  }
+}
+function keepChange(w: Changing | null): void {
+  try {
+    if (w) sessionStorage.setItem(CHANGING, JSON.stringify(w));
+    else sessionStorage.removeItem(CHANGING);
+  } catch {
+    // Blocked storage: a reload starts over, as before.
+  }
+}
+
 function EmailRow({
   data,
   onChanged,
@@ -268,7 +292,10 @@ function EmailRow({
   onChanged: (email: string) => void;
   onReauth: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Rendered only once the account has loaded in the browser, so this tab's storage is there.
+  const [open, setOpen] = useState(
+    () => data.emailChange.allowed && waitingChange(data.email) !== null
+  );
   return (
     <Row
       icon={<MailIcon />}
@@ -303,8 +330,12 @@ function EmailRow({
       ) : null}
       {open ? (
         <ChangeEmail
+          from={data.email}
           recent={data.recent}
-          onCancel={() => setOpen(false)}
+          onCancel={() => {
+            keepChange(null);
+            setOpen(false);
+          }}
           onReauth={onReauth}
           onChanged={(email) => {
             setOpen(false);
@@ -317,27 +348,38 @@ function EmailRow({
 }
 
 function ChangeEmail({
+  from,
   recent,
   onCancel,
   onChanged,
   onReauth,
 }: {
+  from: string;
   recent: boolean;
   onCancel: () => void;
   onChanged: (email: string) => void;
   onReauth: () => void;
 }) {
-  const [step, setStep] = useState<"address" | "code">("address");
-  const [address, setAddress] = useState("");
+  // Back after a reload: the code step, with the address the code went to (confirming needs no
+  // recent sign-in; a new code would ask for one).
+  const [kept] = useState(() => waitingChange(from));
+  const [step, setStep] = useState<"address" | "code">(kept ? "code" : "address");
+  const [address, setAddress] = useState(kept ?? "");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [reauth, setReauth] = useState(!recent);
+  const [reauth, setReauth] = useState(!recent && !kept);
   const first = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
+  // A step the person opened takes the focus; one that came back with the page doesn't.
+  const restored = useRef(kept !== null);
 
   useEffect(() => {
+    if (restored.current) {
+      restored.current = false;
+      return;
+    }
     (step === "address" ? first : codeField).current?.focus();
   }, [step]);
 
@@ -353,6 +395,7 @@ function ChangeEmail({
     if (!r.ok) return setError(r.data.error ?? "We couldn't send the code. Please try again.");
     // A new code replaces the one before: say which one works.
     if (step === "code") setNotice(NEW_CODE);
+    keepChange({ from, address: address.trim(), at: Date.now() });
     setStep("code");
   }
 
@@ -364,6 +407,7 @@ function ChangeEmail({
     });
     setBusy(false);
     if (!r.ok || !r.data.email) return setError(r.data.error ?? "That code didn't work.");
+    keepChange(null);
     onChanged(r.data.email);
   }
 

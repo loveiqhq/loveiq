@@ -59,6 +59,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   vi.unstubAllGlobals();
   fetchMock.mockClear();
   Object.values(router).forEach((f) => f.mockClear());
@@ -722,6 +723,54 @@ describe("Settings › Sign-in & security", () => {
     expect(webauthn.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ signalName: "currentUserDetails", userName: "lea.new@example.com" })
     );
+  });
+
+  // Round-3 R3-ACCT-5: the code step lived in the page only, so a reload or a tab the phone
+  // discarded while the person read the mail lost it; within production's 10-minute wait a new
+  // send then gets 429 with no field, leaving a working code nowhere to go.
+  it("keeps the change of email's code step through a reload until it is confirmed or cancelled", async () => {
+    const toCode = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+      fireEvent.change(screen.getByLabelText("New email"), {
+        target: { value: "lea.new@example.com" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+      await screen.findByLabelText("Code from the email");
+    };
+    const reload = async (over: Partial<typeof SECURITY> = {}) => {
+      cleanup();
+      await show(over);
+    };
+    await show();
+    await toCode();
+    await reload();
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+    expect(screen.getByText("lea.new@example.com")).toBeInTheDocument();
+    // Back with the page, it doesn't take the focus (the person may be elsewhere in Settings).
+    expect(screen.getByLabelText("Code from the email")).not.toHaveFocus();
+    // Confirming needs no recent sign-in, so an older one still gets the field.
+    await reload({ recent: false });
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+    // Not for another account signed in in this tab meanwhile.
+    await reload({ email: "kim@example.com" });
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
+    // Cancel leaves it for good.
+    await reload();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await reload();
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
+    // So does the change itself.
+    await toCode();
+    replies["POST /api/mira/email"] = () => ({
+      body: { success: true, email: "lea.new@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await screen.findByText(/^Your email is now lea\.new@example\.com\./);
+    await reload();
+    expect(screen.queryByLabelText("Code from the email")).toBeNull();
   });
 
   it("shows the new address all over Settings at once", async () => {
