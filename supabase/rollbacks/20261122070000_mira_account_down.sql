@@ -7,6 +7,8 @@
 -- or "everywhere" for a login shared with staff) is signed in again: the new code ended those
 -- sessions by deleting their mira_session rows, and the old code checks only Supabase Auth. If
 -- that matters, sign those people out in Supabase Auth too (production review, 22 Nov 2026).
+-- Since 20261122130000 (mira_end_auth_sessions) Settings also ends those sessions in Supabase
+-- Auth at once, so this only concerns a sign-out whose Auth call failed (it is logged).
 --
 -- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20261122070000_mira_account_down.sql
 
