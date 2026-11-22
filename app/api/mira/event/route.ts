@@ -72,7 +72,7 @@ const schema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("voice_notice"),
-    version: z.string().regex(/^mira-voice-\d{4}-\d{2}-\d{2}(-\d{1,2})?$/), // mira-voice-2026-11-22
+    version: z.string().regex(/^mira-voice-[\d-]{10,13}$/), // mira-voice-2026-11-22
   }),
   z.object({
     type: z.literal("track"),

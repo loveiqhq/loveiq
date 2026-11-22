@@ -582,7 +582,12 @@ describe("the reminder run (every 15 minutes)", () => {
     expect(db.tables.mira_session_reminder ?? []).toEqual([]); // nothing claimed either
     // Someone else's crisis, or one more than 14 days before, changes nothing.
     db.tables.mira_event = [
-      { id: 1, user_id: "someone-else", name: "crisis_shown", created_at: "2026-11-20T09:00:00.000Z" },
+      {
+        id: 1,
+        user_id: "someone-else",
+        name: "crisis_shown",
+        created_at: "2026-11-20T09:00:00.000Z",
+      },
       { id: 2, user_id: LEA.id, name: "crisis_shown", created_at: "2026-11-10T17:00:00.000Z" },
     ];
     expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 1 });

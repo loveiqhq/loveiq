@@ -454,9 +454,9 @@ describe("/api/mira/recordings/[id]", () => {
       turn("user", "Honestly I don't see why I should keep going", "2026-11-22T20:21:00Z"),
       turn("assistant", "I'm really worried about what you just said.", "2026-11-22T20:21:05Z"),
     ];
-    tables[
-      `GET /rest/v1/mira_event?user_id=eq.${LEA.id}&name=in.(crisis_shown,reply_declined)`
-    ] = [{ id: 9 }];
+    tables[`GET /rest/v1/mira_event?user_id=eq.${LEA.id}&name=in.(crisis_shown,reply_declined)`] = [
+      { id: 9 },
+    ];
     const body = await (await rewrite(request(url, "POST"), params(SESSION))).json();
     expect(body.keyPoints).toEqual([]);
     expect(askModel).not.toHaveBeenCalled();
