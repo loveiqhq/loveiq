@@ -46,7 +46,10 @@ export function ReminderStop({ token, valid }: { token: string; valid: boolean }
         <Wordmark />
         <span className="text-[12px] font-semibold text-ap-muted">Email preferences</span>
       </header>
-      <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-4 px-5 pb-10 pt-8">
+      <main
+        id="main-content"
+        className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-4 px-5 pb-10 pt-8"
+      >
         <h1
           ref={heading}
           tabIndex={-1}

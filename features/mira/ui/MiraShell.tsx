@@ -10,7 +10,6 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
   return (
     <Link
       href="/mira"
-      aria-label="Applied Psychometrics, Mira beta"
       className="no-underline"
       // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
       // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
@@ -23,18 +22,22 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
           : undefined
       }
     >
-      {/* A logo keeps its size whatever the text size (--mira-fs, Settings › Appearance). */}
-      <span className="flex flex-col font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink [--mira-fs:1] sm:text-[22px]">
-        <span>
-          Applied{" "}
-          <span className="align-top font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
-            BETA
-          </span>
-        </span>
-        <span className="bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent">
+      {/*
+        A logo keeps its size whatever the text size (--mira-fs, Settings › Appearance). The
+        name comes from what's on screen, in reading order ("Applied Psychometrics BETA"), so a
+        voice-control user can say what they see (WCAG 2.5.3): BETA follows in the markup and the
+        grid lifts it beside "Applied".
+      */}
+      <span className="grid grid-cols-[auto_1fr] items-start font-serif text-[18px] font-bold leading-[1.05] tracking-[-0.01em] text-ap-ink [--mira-fs:1] sm:text-[22px]">
+        <span className="col-start-1 row-start-1">Applied</span>{" "}
+        <span className="col-span-2 col-start-1 row-start-2 bg-[linear-gradient(105deg,#d05976_20.51%,#c167cf_48.14%,#8887f6_79.16%)] bg-clip-text text-transparent">
           Psychometrics
+        </span>{" "}
+        <span className="col-start-2 row-start-1 ml-1 justify-self-start font-sans text-[9px] font-normal tracking-[0.14em] text-ap-quiet">
+          BETA
         </span>
       </span>
+      <span className="sr-only">, Mira home</span>
     </Link>
   );
 }
@@ -63,7 +66,9 @@ export function MiraFrame({ children, right }: { children: ReactNode; right?: Re
         <Wordmark />
         <div className="flex items-center gap-3">{right}</div>
       </header>
-      <main className="mx-auto max-w-[1180px] px-4 pb-10 sm:px-8">{children}</main>
+      <main id="main-content" className="mx-auto max-w-[1180px] px-4 pb-10 sm:px-8">
+        {children}
+      </main>
       <footer className="mx-auto max-w-[1180px] px-4 pb-8 sm:px-8">
         <LegalLinks />
       </footer>

@@ -328,7 +328,7 @@ export default function SignUpFlow({
         </div>
       </aside>
 
-      <main className="flex flex-1 flex-col px-4 py-8 sm:px-12 lg:px-20">
+      <main id="main-content" className="flex flex-1 flex-col px-4 py-8 sm:px-12 lg:px-20">
         <div className="mb-8 md:hidden">
           <Wordmark />
         </div>

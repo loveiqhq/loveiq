@@ -713,7 +713,7 @@ export default function MiraChat({
             </nav>
           ) : null}
 
-          <main className="flex min-w-0 flex-1 flex-col">
+          <main id="main-content" className="flex min-w-0 flex-1 flex-col">
             {/* Wider screens: the welcome, the composer and the prompts sit together in the
                 middle (the board); the spacers give way to the chat once it starts. */}
             {empty ? <div aria-hidden="true" className="hidden min-h-0 flex-1 sm:block" /> : null}
@@ -1150,10 +1150,10 @@ export default function MiraChat({
         </div>
       </div>
 
-      <div className="mx-auto max-w-[760px] px-4 pb-8 pt-4 sm:px-6">
+      <footer className="mx-auto max-w-[760px] px-4 pb-8 pt-4 sm:px-6">
         <p className="text-[12px] leading-relaxed text-ap-muted">{DISCLAIMER}</p>
         <LegalLinks className="mt-4" />
-      </div>
+      </footer>
 
       {pending !== null ? (
         <Modal label="Before your first message" onClose={() => setPending(null)}>

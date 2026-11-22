@@ -121,7 +121,7 @@ export function MiraAppFrame({
           ) : null}
         </div>
       </aside>
-      <main className="flex-1 px-4 py-7 sm:px-10 lg:py-10">
+      <main id="main-content" className="flex-1 px-4 py-7 sm:px-10 lg:py-10">
         <div className="max-w-[860px]">{children}</div>
         <footer className="mt-12 max-w-[760px] text-[12px] leading-relaxed text-ap-muted">
           <p>

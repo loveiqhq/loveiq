@@ -133,7 +133,7 @@ export default function MiraNudges({ invalid = false }: { invalid?: boolean }) {
         <Wordmark />
         <span className="text-[12px] font-semibold text-ap-muted">Email preferences</span>
       </header>
-      <main className="mx-auto flex max-w-[480px] flex-col gap-5 px-5 pb-10 pt-7">
+      <main id="main-content" className="mx-auto flex max-w-[480px] flex-col gap-5 px-5 pb-10 pt-7">
         {screen === "loading" ? <p className="text-[15px] text-ap-muted">Loading…</p> : null}
 
         {screen === "invalid" ? (
