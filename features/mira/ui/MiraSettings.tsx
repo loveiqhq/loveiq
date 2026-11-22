@@ -1099,7 +1099,7 @@ export function Switch({
         />
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.3)] transition-transform duration-200 peer-checked:translate-x-5 motion-reduce:transition-none"
+          className="pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-ap transition-transform duration-200 peer-checked:translate-x-5 motion-reduce:transition-none"
         />
       </span>
     </label>
@@ -1208,7 +1208,7 @@ function Segmented<T extends string>({
             onChange={() => onChange(v)}
             className="peer sr-only"
           />
-          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color,box-shadow] duration-200 hover:text-ap-ink peer-checked:bg-white peer-checked:font-semibold peer-checked:text-ap-ink peer-checked:shadow-[0_1px_3px_rgba(22,16,33,0.18)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
+          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
             <span
               aria-hidden="true"
               className="hidden font-serif sm:inline"

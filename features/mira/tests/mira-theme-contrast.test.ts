@@ -65,6 +65,10 @@ const pairs = (p: Palette): Array<[string, string, string, number]> => [
   ["Journal week: a checked-in day's tick on its tint", p.purple, over(p.purple, 0.1, p.paper), 3],
   // Recordings: the weekday over each voice session's date.
   ["Recordings: the weekday", p.pii, p.paper, 4.5],
+  // Settings › Appearance › Text size: the chosen size is the ink pill (round-2 SET-S1b; paper
+  // on the grey track was 1.1:1 in Dark), its label paper on ink.
+  ["Text size: the chosen pill on its track", p.ink, p.ground, 3],
+  ["Text size: the chosen size's label", p.paper, p.ink, 4.5],
   // The logo's BETA, "Your chats" and other small labels (muted, not quiet).
   ["Small labels (BETA, 'Your chats') on the page", p.muted, p.paper, 4.5],
   ["Small labels on a grey surface", p.muted, p.ground, 4.5],
