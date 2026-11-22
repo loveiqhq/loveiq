@@ -344,11 +344,12 @@ describe("Chat", () => {
     // Round-2 audit CHAT-20 / ID-4: the stop's reply also says freeLeft 0, and nobody under 18
     // is pointed at an account, not even by the line under the composer.
     expect(screen.queryByText(/free message|free account/)).toBeNull();
-    // The 18+ tick is gone with it: the next message asks for it again, unticked.
+    // Round-3 R3-CHAT-2: the 18+ tick is gone with it, but nobody who just said they are under 18
+    // is asked to tick "I'm 18 or older": the browser stays stopped (its cookie), so the next
+    // message goes straight to the fixed reply (or the crisis lines), never to the model.
     typeAndSend("hello");
-    const step = await screen.findByRole("dialog", { name: "Before your first message" });
-    for (const box of within(step).getAllByRole("checkbox")) expect(box).not.toBeChecked();
-    expect(calls("POST /api/mira/chat")).toHaveLength(1);
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+    expect(screen.queryByRole("dialog", { name: "Before your first message" })).toBeNull();
   });
 
   // Round-2 audit CHAT-16: a saved chat that couldn't load opened as an empty new chat, silently.
@@ -408,6 +409,28 @@ describe("Chat", () => {
         .getAllByRole("link")
         .map((a) => a.textContent)
     ).toEqual(["Chat on 22 Nov", "Lights off"]);
+  });
+
+  // Round-3 R3-CHAT-1 (CHAT-8's regression): a saved chat sent only its id, so with "Remember our
+  // conversations" off the server had nothing to go on. The page always sends what it shows; the
+  // server still reads its own copy while remembering is on.
+  it("sends the conversation on the page along with a saved chat's id", async () => {
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({
+      body: {
+        messages: [
+          { id: 1, role: "user", content: "The code word is lantern." },
+          { id: 2, role: "assistant", content: "Got it: lantern." },
+        ],
+      },
+    });
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "It was lantern.", chatId: null } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    expect(await screen.findByText("Got it: lantern.")).toBeInTheDocument();
+    typeAndSend("What was the code word?");
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
+    const sent = calls("POST /api/mira/chat")[0]!;
+    expect(sent.chatId).toBe(SAVED);
+    expect(JSON.stringify(sent.history)).toContain("The code word is lantern.");
   });
 
   // Round-2 audit CHAT-9, lead decision 3: a goal offer lived in its page view only, so after a

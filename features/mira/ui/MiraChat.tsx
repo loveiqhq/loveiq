@@ -358,8 +358,10 @@ export default function MiraChat({
     // An offer nobody started gives way to the conversation; a check in progress stays.
     if (bodyOpen && !bodyStarted.current) setBodyOpen(false);
     setReviewFrom(null); // so does the ask for a rating
-    // Nothing reaches Mira before the consent: the message waits for the consent step.
-    if (!consented && !opts.agreed) {
+    // Nothing reaches Mira before the consent: the message waits for the consent step. Not after
+    // an under-18 stop: that browser stays stopped, every message gets the fixed reply (or the
+    // crisis lines) and none reaches the model, so nobody under 18 is asked to tick 18+.
+    if (!consented && !opts.agreed && !minor) {
       setPending(message);
       return;
     }
@@ -394,7 +396,10 @@ export default function MiraChat({
       body: {
         message,
         consent: true,
-        ...(chatId ? { chatId } : { history }),
+        ...(chatId ? { chatId } : {}),
+        // Always what the page shows: with "Remember our conversations" off nothing new is stored,
+        // so a saved chat needs it too (round-3 R3-CHAT-1); the server reads its own copy while on.
+        history,
         // Signed in: a sign-in that ended meanwhile asks for a new one, never goes anonymous.
         ...(signedIn ? { signedIn: true } : { style }),
         ...(answering ? { answering } : {}),
