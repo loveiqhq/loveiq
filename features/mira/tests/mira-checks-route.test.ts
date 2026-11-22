@@ -98,6 +98,9 @@ beforeEach(() => {
       db.checks = db.checks.filter((r) => r.user_id !== "u1");
       return new Response(null, { status: 204 });
     }
+    if (method === "DELETE" && path.startsWith("/rest/v1/mira_event?")) {
+      return new Response(null, { status: 204 });
+    }
     if (method === "GET" && path.startsWith("/rest/v1/mira_body_check?user_id=eq.u1")) {
       return json(db.body);
     }
@@ -293,6 +296,15 @@ describe("DELETE", () => {
     expect((await call(DELETE, "DELETE")).status).toBe(200);
     expect(db.checks.map((r) => r.user_id)).toEqual(["someone-else"]);
     expect(events()).toEqual([["checks_deleted", { userId: "u1" }]]);
+  });
+
+  it("deletes the account's own records of question 9's support panel, from before they were counted without an id", async () => {
+    expect((await call(DELETE, "DELETE")).status).toBe(200);
+    const deletes = vi
+      .mocked(supabaseFetch)
+      .mock.calls.filter(([, init]) => init?.method === "DELETE")
+      .map(([path]) => path);
+    expect(deletes).toContain("/rest/v1/mira_event?user_id=eq.u1&name=eq.check_support_shown");
   });
 });
 

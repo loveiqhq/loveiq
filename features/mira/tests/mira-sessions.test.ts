@@ -28,6 +28,7 @@ async function fakeFetch(path: string, init: RequestInit = {}): Promise<Response
       if (v === "is.null") return val === null || val === undefined;
       if (v === "not.is.null") return val !== null && val !== undefined;
       if (v.startsWith("eq.")) return String(val) === v.slice(3);
+      if (v.startsWith("gte.")) return String(val) >= v.slice(4); // ISO times compare as text
       throw new Error(`fake PostgREST: no filter ${k}=${v}`);
     });
   const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
@@ -566,6 +567,33 @@ describe("the reminder run (every 15 minutes)", () => {
     candidates.rows = [candidate({}, { minor_at: "2026-11-20T10:00:00Z" })];
     expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 0, skipped: { minor: 1 } });
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // As the nudges and the journal's reminder: quiet for 14 days after the support lines showed.
+  it("sends none for 14 days after a crisis, then the next start's reminder goes", async () => {
+    candidates.rows = [candidate()];
+    db.tables.mira_event = [
+      { id: 1, user_id: LEA.id, name: "crisis_shown", created_at: "2026-11-11T09:00:00.000Z" },
+    ];
+    expect(await run("2026-11-24T17:02:00Z")).toMatchObject({
+      sent: 0,
+      skipped: { "recent-crisis": 1 },
+    });
+    expect(db.tables.mira_session_reminder ?? []).toEqual([]); // nothing claimed either
+    // Someone else's crisis, or one more than 14 days before, changes nothing.
+    db.tables.mira_event = [
+      {
+        id: 1,
+        user_id: "someone-else",
+        name: "crisis_shown",
+        created_at: "2026-11-20T09:00:00.000Z",
+      },
+      { id: 2, user_id: LEA.id, name: "crisis_shown", created_at: "2026-11-10T17:00:00.000Z" },
+    ];
+    expect(await run("2026-11-24T17:17:00Z")).toMatchObject({ sent: 1 });
+    const asked = db.calls.find((c) => c.path.startsWith("/rest/v1/mira_event?"))!.path;
+    expect(asked).toContain(`user_id=eq.${LEA.id}`);
+    expect(asked).toContain("name=eq.crisis_shown");
   });
 
   it("gives a failed send back, so the window's second run tries again", async () => {

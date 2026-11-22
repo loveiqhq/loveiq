@@ -6,6 +6,7 @@
  *
  * These are the text rules around those services; useVoice.ts runs them.
  */
+import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 
 /** Where speech can become text: the device itself, or the browser maker's service. */
 export type RecognitionMode = "device" | "service";
@@ -38,14 +39,22 @@ export interface RecognizerClass {
   install?: (o: RecognitionOptions) => Promise<boolean>;
 }
 
+/** The browser's own recognizer, wherever the page may use it; null where none exists (Firefox). */
+function browserRecognizer(): RecognizerClass | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as Record<string, RecognizerClass | undefined>;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/** Whether this browser can turn speech into text at all: Talk needs Chrome, Safari or Edge. */
+export const canRecognizeSpeech = (): boolean => browserRecognizer() !== null;
+
 /**
  * The browser's recognizer, or null where none exists (Firefox) or the page may not use the
  * microphone (its Permissions-Policy, see proxy.ts): then Talk is not offered at all.
  */
 export function recognizerClass(): RecognizerClass | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as Record<string, RecognizerClass | undefined>;
-  const found = w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  const found = browserRecognizer();
   const policy = (document as { featurePolicy?: { allowsFeature?: (f: string) => boolean } })
     .featurePolicy;
   if (!found || policy?.allowsFeature?.("microphone") === false) return null;
@@ -74,13 +83,21 @@ export async function chooseMode(
   }
 }
 
-/** English for now: Mira replies in English only (content/system-prompt.ts). */
-export function recognitionLang(languages: readonly string[]): string {
-  const english = languages.find((l) => /^en-[a-z]{2}$/i.test(l));
-  return english ?? "en-US";
+/**
+ * The language speech becomes text in, so crisis words are heard in the person's own language
+ * (server/safety.ts reads them in each reply language): the language Mira replies in when one is
+ * chosen (its tag in reply-languages.ts), else the browser's own, else US English.
+ */
+export function recognitionLang(
+  replyLanguage: string | null | undefined,
+  browser: string | undefined
+): string {
+  const chosen = REPLY_LANGUAGES.find((l) => l.code === replyLanguage);
+  if (chosen) return chosen.speech;
+  return browser && /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(browser) ? browser : "en-US";
 }
 
-/** Device voices that tend to sound calm, by name; any local English voice will do otherwise. */
+/** English device voices that tend to sound calm, by name; any local voice of the language will do. */
 const CALM = [
   "Samantha",
   "Ava",
@@ -98,19 +115,26 @@ const CALM = [
 
 /**
  * A voice on the device only (`localService`): a cloud voice would send Mira's words, and so what
- * the person told her, to another company. The listening language first, then the better quality
- * voices, then a calm one; the device's own order otherwise. None: she answers in writing.
+ * the person told her, to another company. Only voices of the listening language (her reply is in
+ * it); its own region first, then the better quality voices, then a calm one; the device's own
+ * order otherwise. None: she answers in writing.
  */
 export function pickVoice(
   voices: readonly SpeechSynthesisVoice[],
   lang: string
 ): SpeechSynthesisVoice | null {
   const norm = (l: string) => l.replace("_", "-").toLowerCase();
+  const language = (l: string) => norm(l).split("-")[0];
+  const region = (l: string) =>
+    norm(l)
+      .split("-")
+      .slice(1)
+      .find((part) => part.length === 2);
   const score = (v: SpeechSynthesisVoice) =>
-    (norm(v.lang) === norm(lang) ? 4 : 0) +
+    (region(v.lang) === region(lang) ? 4 : 0) +
     (/premium|enhanced/i.test(v.name) ? 2 : 0) +
     (CALM.some((n) => v.name.includes(n)) ? 1 : 0);
-  const local = voices.filter((v) => v.localService && /^en([-_]|$)/i.test(v.lang));
+  const local = voices.filter((v) => v.localService && language(v.lang) === language(lang));
   return [...local].sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 

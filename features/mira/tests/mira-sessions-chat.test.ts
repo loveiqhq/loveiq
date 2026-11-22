@@ -36,13 +36,17 @@ vi.mock("@features/mira/server/weekly-sessions", () => ({
   getSlot: vi.fn(),
   markJoined: vi.fn().mockResolvedValue(false),
 }));
-vi.mock("@features/mira/server/nudges", () => ({ lastChat: vi.fn() }));
+vi.mock("@features/mira/server/nudges", () => ({
+  lastChat: vi.fn(),
+  hadCrisis: vi.fn(),
+  CRISIS_QUIET_DAYS: 14,
+}));
 
 import { POST } from "@/app/api/mira/chat/route";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { askModel } from "@features/mira/server/model";
-import { lastChat } from "@features/mira/server/nudges";
+import { hadCrisis, lastChat } from "@features/mira/server/nudges";
 import { getMiraAccount } from "@features/mira/server/session";
 import { addMessages, getProfile, logMiraEvent } from "@features/mira/server/store";
 import { getSlot, markJoined } from "@features/mira/server/weekly-sessions";
@@ -86,6 +90,7 @@ beforeEach(() => {
   vi.mocked(askModel).mockResolvedValue({ ok: true, text: "Welcome back.", refused: false });
   vi.mocked(getSlot).mockResolvedValue(null);
   vi.mocked(lastChat).mockResolvedValue(null);
+  vi.mocked(hadCrisis).mockResolvedValue(false);
 });
 
 describe("what Mira is told about the weekly session", () => {
@@ -157,6 +162,50 @@ describe("opening the weekly session from its link", () => {
     await post({ message: "I’m here for my weekly session.", session: true });
     expect(lastChat).not.toHaveBeenCalled();
     expect(personal()).toContain("THIS IS THEIR WEEKLY SESSION");
+    expect(personal()).toContain("no earlier chat");
+    expect(personal()).not.toContain("soft lamp");
+  });
+
+  // Never reopening a crisis: after support lines in the last 14 days, or when that chat holds
+  // the crisis message, the opening stays generic (as nudges and reminders pause then).
+  it("leaves the last chat out after support lines in the last 14 days", async () => {
+    signedIn();
+    vi.mocked(lastChat).mockResolvedValue(LAST);
+    vi.mocked(hadCrisis).mockResolvedValue(true);
+    const before = Date.now();
+    await post({ message: "I’m here for my weekly session.", session: true });
+    expect(personal()).toContain("THIS IS THEIR WEEKLY SESSION");
+    expect(personal()).toContain("no earlier chat");
+    expect(personal()).not.toContain("soft lamp");
+    const [user, since] = vi.mocked(hadCrisis).mock.calls[0]!;
+    expect(user).toBe("u1");
+    // since = (the route's now) - 14 days, and the route's now is at or after `before`.
+    expect(before - since.getTime()).toBeLessThanOrEqual(14 * 24 * 60 * 60 * 1000);
+    expect(before - since.getTime()).toBeGreaterThan(14 * 24 * 60 * 60 * 1000 - 60_000);
+  });
+
+  it("leaves out a last chat that holds the crisis message, however old", async () => {
+    signedIn();
+    vi.mocked(lastChat).mockResolvedValue({
+      id: "c0",
+      turns: [
+        ...LAST.turns,
+        { role: "user" as const, content: "I can't do this any more", created_at: "" },
+        { role: "assistant" as const, content: miraConfig.crisisMessage, created_at: "" },
+      ],
+    });
+    await post({ message: "I’m here for my weekly session.", session: true });
+    expect(personal()).toContain("no earlier chat");
+    expect(personal()).not.toContain("soft lamp");
+    expect(personal()).not.toContain("any more");
+  });
+
+  it("leaves the last chat out when the crisis record can't be read", async () => {
+    signedIn();
+    vi.mocked(lastChat).mockResolvedValue(LAST);
+    vi.mocked(hadCrisis).mockRejectedValue(new Error("db down"));
+    const res = await post({ message: "I’m here for my weekly session.", session: true });
+    expect(res.status).toBe(200);
     expect(personal()).toContain("no earlier chat");
     expect(personal()).not.toContain("soft lamp");
   });

@@ -165,6 +165,55 @@ describe("taking a check", () => {
   });
 });
 
+// EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
+// never a verdict on it ("a real change", "within the usual ups and downs").
+describe("the change since last time", () => {
+  const anxiety = (scores: number[], daysAgo: number[]) => {
+    account.checks[0] = {
+      id: "anxiety",
+      results: scores.map((score, i) => ({ at: ago(daysAgo[i]!), score, band: "x" })),
+      nextAt: new Date(Date.now() + DAY).toISOString(),
+    };
+  };
+  const verdict = /real change|ups and downs|reliabl/i;
+
+  it("is the points between the last two results, with no verdict, on the result and in its summary", async () => {
+    anxiety([16, 12, 8], [40, 20, 1]); // 4 lower than last time: "a real change" before
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText("4 points lower than last time")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /^3 results\. Your latest is mild \(8 of 21\) on .+, 4 points lower than last time\.$/
+      )
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(verdict);
+    expect(document.body.innerHTML).not.toMatch(verdict); // nor in a label or title
+  });
+
+  it("says when the score is the same, or one point higher", async () => {
+    anxiety([9, 9], [20, 1]);
+    const { unmount } = render(<CheckPage checkId="anxiety" practice={null} />);
+    expect(await screen.findByText("The same as last time")).toBeTruthy();
+    expect(screen.getByText(/, the same as last time\.$/)).toBeTruthy();
+    unmount();
+    anxiety([9, 10], [20, 1]);
+    render(<CheckPage checkId="anxiety" practice={null} />);
+    expect(await screen.findByText("1 point higher than last time")).toBeTruthy();
+  });
+
+  it("is the same on the assessments page's card", async () => {
+    anxiety([16, 12, 8], [40, 20, 1]);
+    render(<AssessmentsPage />);
+    const card = (await screen.findByRole("heading", { name: "Anxiety check" })).closest(
+      "article"
+    )!;
+    expect(card.textContent).toMatch(/· 4 points lower than last time/);
+    expect(card.textContent).not.toMatch(/than your first/);
+    expect(document.body.innerHTML).not.toMatch(verdict);
+  });
+});
+
 describe("the mood check's question 9", () => {
   it("opens the support lines the moment it is answered above 'Not at all', whatever the total", async () => {
     replies["POST /api/mira/checks"] = () => ({

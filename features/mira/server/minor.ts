@@ -22,8 +22,8 @@ import { dropPendingChange } from "./email-change";
  * reads crisis words first. The account's nudges go off, its chats are deleted and no longer
  * kept, and its Settings choices (reply language, appearance) are cleared, as are its self-check results
  * (server/checks.ts); the browser forgets its
- * own chat (MiraChat). Its Notify me requests for coming-soon coaches go too (22 Nov 2026), so
- * nobody under 18 is told a coach for sex is ready.
+ * own chat (MiraChat). Its Notify me requests for coming-soon coaches and the coach finder's
+ * outcomes go too (22 Nov 2026), so nobody under 18 is told a coach for sex is ready.
  *
  * Sign-in & security (22 Nov 2026): the account's passkeys go too, like the nudges a way back in,
  * and none can be added again (the passkey, email and Google-connect routes answer 403). Its

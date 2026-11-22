@@ -69,12 +69,19 @@ export async function addCheck(
   return ((await res.json()) as Array<{ created_at: string }>)[0]!;
 }
 
-/** "Delete my check results", and an under-18 stop (server/minor.ts): every result goes. */
+/**
+ * "Delete my check results", and an under-18 stop (server/minor.ts): every result goes, and the
+ * account's own records of question 9's support panel, logged with the account before 22 Nov 2026
+ * (since then they name nobody).
+ */
 export async function deleteChecks(userId: string): Promise<void> {
-  const res = await supabaseFetch(`/rest/v1/mira_check?user_id=eq.${enc(userId)}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
+  for (const path of [
+    `/rest/v1/mira_check?user_id=eq.${enc(userId)}`,
+    `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=eq.check_support_shown`,
+  ]) {
+    const res = await supabaseFetch(path, { method: "DELETE" });
+    if (!res.ok) throw new Error(`mira check delete failed (${res.status})`);
+  }
 }
 
 /**

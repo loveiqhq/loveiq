@@ -109,6 +109,8 @@ export default function MiraChat({
   // prompts may not belong on screen: they are left out rather than flashed.
   const [ready, setReady] = useState(signedIn && !initialChatId);
   const [style, setStyle] = useState<Style>({});
+  // "Mira replies in" (Settings): Talk listens and speaks in it too.
+  const [replyLanguage, setReplyLanguage] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
@@ -144,6 +146,7 @@ export default function MiraChat({
     onTurn: (text, o) => void send(text, { ...o, voice: true }),
     chatId: () => chatId,
     held: supportOpen || crisis !== null || styleOpen,
+    replyLanguage,
   });
   const voiceOn = voice.phase !== "off";
 
@@ -171,12 +174,13 @@ export default function MiraChat({
     void (async () => {
       const me = await miraApi<{
         chats: ChatSummary[];
-        profile: { style: Style };
+        profile: { style: Style; reply_language?: string | null };
         bodyCheck?: { due: BodyDue };
       }>("/api/mira/me");
       if (me.ok) {
         setChats(me.data.chats);
         setStyle(me.data.profile.style ?? {});
+        setReplyLanguage(me.data.profile.reply_language ?? null);
         setBodyDue(me.data.bodyCheck?.due ?? null);
       }
       if (initialChatId) {
@@ -345,8 +349,9 @@ export default function MiraChat({
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
-    // composer stays, and the server answers a crisis message whatever the limits.
-    if (res.data.freeLeft === 0 && !res.data.crisis) setGate(true);
+    // composer stays, and the server answers a crisis message whatever the limits. Nor after an
+    // under-18 stop: nobody under 18 is asked to make an account.
+    if (res.data.freeLeft === 0 && !res.data.crisis && !res.data.minor) setGate(true);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (res.data.refer) referred.current = true;
     if (res.data.minor) {
@@ -425,9 +430,10 @@ export default function MiraChat({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  /** An answer button: answered out loud in voice mode, as typed otherwise. */
-  const reply = (text: string, o?: { skip?: boolean }) =>
-    voiceOn ? voice.say(text, o) : void send(text, o);
+  /** An answer button: answered out loud in voice mode, as typed when the session can't take it. */
+  const reply = (text: string, o?: { skip?: boolean }) => {
+    if (!voiceOn || !voice.say(text, o)) void send(text, o);
+  };
 
   function answerNps(score: number | null) {
     void miraApi("/api/mira/event", { body: { type: "nps", score } });
@@ -469,6 +475,7 @@ export default function MiraChat({
   /** Off while the sign-up card shows, so the chat it promises to bring along isn't wiped. */
   function newChat() {
     if (sending || voiceOn) return; // a reply on its way, or a voice session, belongs to this chat
+    voice.dismissEnded();
     setMessages([]);
     setChatId(null);
     setError(null);

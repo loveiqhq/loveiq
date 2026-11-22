@@ -108,6 +108,26 @@ describe("AP › Mira › Self-checks", () => {
     expect(page("2026-11-10", "2026-11-29").selfChecks.supportShown).toBe(0);
   });
 
+  // From 22 Nov 2026 the panel is logged with no account or browser id (a pure count); a team
+  // browser's still carries props.team and stays out.
+  it("counts question 9's panels logged without anyone's id, and leaves a team browser's out", () => {
+    const anonymous = (at: string, team = false): MiraEventRow => ({
+      ...ev("check_support_shown", "", at),
+      user_id: null,
+      ...(team ? { team: true as const } : {}),
+    });
+    const data = {
+      ...DATA,
+      events: [
+        ...DATA.events,
+        anonymous("2026-11-07T10:00:00Z"),
+        anonymous("2026-11-08T10:00:00Z"),
+        anonymous("2026-11-08T11:00:00Z", true),
+      ],
+    };
+    expect(page("2026-11-02", "2026-11-29", data).selfChecks.supportShown).toBe(3);
+  });
+
   it("reads the share who let Mira use their results from today's accounts that finished a check", () => {
     // u1, u2 and u3 finished one; u1 and u3 turned the switch on. u4 never finished one, and the
     // team's account is left out.

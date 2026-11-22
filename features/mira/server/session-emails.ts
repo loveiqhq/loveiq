@@ -5,7 +5,7 @@ import { isEmailSuppressed, isUndeliverable } from "@shared/emails/suppression";
 import { escapeHtml } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import { reminderDue, sessionIcs, slotLabel, zoneLabel, type WeeklySlot } from "./calendar";
-import { COMPANY_LINE, from, makeToken } from "./nudges";
+import { COMPANY_LINE, CRISIS_QUIET_DAYS, from, hadCrisis, makeToken } from "./nudges";
 import { logMiraEvent } from "./store";
 import { calendarText, SLOT_COLS, slotView, toSlot, type StoredSlot } from "./weekly-sessions";
 
@@ -254,8 +254,9 @@ export type ReminderRunSummary = {
 /**
  * One reminder per start, 30 to 60 minutes before it: every booked slot with reminders on, of a
  * person not stopped as under 18 (the read's filter, checked again here), not to suppressed
- * addresses. The start is claimed before the email goes (UNIQUE slot_id, starts_at), so the
- * window's two runs send it once; a failed send gives the claim back for the second run.
+ * addresses, and none for 14 days after the person was shown the support lines. The start is
+ * claimed before the email goes (UNIQUE slot_id, starts_at), so the window's two runs send it
+ * once; a failed send gives the claim back for the second run.
  */
 export async function runSessionReminders(
   now = new Date(),
@@ -307,6 +308,11 @@ export async function runSessionReminders(
     try {
       if (await isEmailSuppressed(person.email)) {
         skip("suppressed");
+        continue;
+      }
+      // Quiet for 14 days after the support lines showed, as the nudges and journal reminders.
+      if (await hadCrisis(row.user_id, new Date(now.getTime() - CRISIS_QUIET_DAYS * 86_400_000))) {
+        skip("recent-crisis");
         continue;
       }
       const claimed = await supabaseFetch(

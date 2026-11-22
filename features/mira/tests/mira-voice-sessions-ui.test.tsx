@@ -52,12 +52,29 @@ const SESSIONS = [
 beforeEach(() => {
   replies = {};
   vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("SpeechRecognition", class {}); // a browser that can listen (Chrome, Safari, Edge)
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   fetchMock.mockClear();
   Object.values(router).forEach((f) => f.mockClear());
+});
+
+describe("Start a voice session", () => {
+  it("explains that Talk needs Chrome, Safari or Edge where the browser can't listen", async () => {
+    vi.stubGlobal("SpeechRecognition", undefined);
+    replies["GET /api/mira/recordings?limit=3"] = () => ({ body: { recordings: [], more: false } });
+    render(<RecordingsCard />);
+    const card = await screen.findByRole("region", { name: "Voice sessions" });
+    await waitFor(() =>
+      expect(within(card).getByText(/needs Chrome, Safari or Edge/)).toBeTruthy()
+    );
+    expect(within(card).queryByRole("link", { name: "Start a voice session" })).toBeNull();
+    expect(
+      within(card).getByRole("link", { name: "type to her in the chat" }).getAttribute("href")
+    ).toBe("/mira");
+  });
 });
 
 describe("Home's voice sessions card", () => {

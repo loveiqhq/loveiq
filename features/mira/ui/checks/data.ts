@@ -99,6 +99,17 @@ export const drafts = {
   },
 };
 
+/**
+ * A result against the one before it, in points and nothing more ("4 points lower than last
+ * time"): a self-check helps the person reflect, it never judges whether a change is real.
+ */
+export function sinceLastTime(before: number, after: number): string {
+  const diff = after - before;
+  if (diff === 0) return "the same as last time";
+  const n = Math.abs(diff);
+  return `${n} ${n === 1 ? "point" : "points"} ${diff < 0 ? "lower" : "higher"} than last time`;
+}
+
 /** "21 Nov", or "21 Nov 2025" outside this year. */
 export function shortDate(iso: string): string {
   const d = new Date(iso);

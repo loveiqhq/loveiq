@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   bandOf,
-  changeSince,
   checkById,
   nextTakeAt,
   type Check,
@@ -24,6 +23,7 @@ import {
   bandText,
   drafts,
   shortDate,
+  sinceLastTime,
   useChecks,
   type CheckResult,
   type ChecksData,
@@ -33,13 +33,10 @@ import {
  * /mira/assessments/<check>: a self-check's own page. Before the first check ever, a plain note on
  * what is kept and who sees it; then the questions (CheckRunner); then the result as a person
  * would want to hear it (the band in plain words, what it can mean day to day and for body
- * confidence and intimacy, two or three next steps, the change since last time), and the history
- * with its trend. The mood check's question 9 opens the support lines the moment it is answered
- * above "Not at all", whatever the total.
+ * confidence and intimacy, two or three next steps, the points since last time and no verdict on
+ * them), and the history with its trend. The mood check's question 9 opens the support lines the
+ * moment it is answered above "Not at all", whatever the total.
  */
-
-/** "1 point", "4 points". */
-const points = (diff: number) => `${Math.abs(diff)} ${Math.abs(diff) === 1 ? "point" : "points"}`;
 
 export type Practice = { number: number; name: string; time: string; bestFor: string };
 
@@ -413,7 +410,7 @@ function Result({
   const last = results.at(-1)!;
   const band = bandOf(check, last.score);
   const before = results.length > 1 ? results.at(-2)! : null;
-  const change = before ? changeSince(check, before.score, last.score) : null;
+  const change = before ? sinceLastTime(before.score, last.score) : null;
   // Question 9 above "Not at all", on this visit or any later one (the stored result says so).
   const support = last.support;
   const help = band.professional || support;
@@ -500,17 +497,7 @@ function Result({
           <span className="tabular-nums">
             {last.score} of {check.max}
           </span>
-          {change && before ? (
-            <span>
-              {change.diff === 0
-                ? `Same score as on ${shortDate(before.at)}`
-                : `${points(change.diff)} ${change.diff < 0 ? "lower" : "higher"} than on ${shortDate(before.at)}`}
-              {change.diff !== 0 && change.reliable === true ? " · a real change" : ""}
-              {change.diff !== 0 && change.reliable === false
-                ? " · within the usual ups and downs"
-                : ""}
-            </span>
-          ) : null}
+          {change ? <span>{change[0]!.toUpperCase() + change.slice(1)}</span> : null}
         </p>
         {support ? (
           <p className="mt-3 text-[15px] font-semibold leading-snug text-ap-ink">{NOT_THE_SCORE}</p>

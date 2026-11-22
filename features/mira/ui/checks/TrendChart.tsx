@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { bandOf, changeSince, type Check } from "@features/mira/content/checks";
-import { bandText, shortDate, type CheckResult } from "./data";
+import { bandOf, type Check } from "@features/mira/content/checks";
+import { bandText, shortDate, sinceLastTime, type CheckResult } from "./data";
 
 /**
  * A check's results over time: one line across the scale's bands, shaded in one hue from light
@@ -25,25 +25,14 @@ const TINTS = [
 const H = 196;
 const PAD = { left: 12, right: 92, top: 22, bottom: 30 };
 
-/** The plain-words summary of a check's results: how many, the latest, the change since the first. */
+/** The plain-words summary of a check's results: how many, the latest, the points since last time. */
 export function trendSummary(check: Check, results: CheckResult[]): string {
   const last = results.at(-1);
   if (!last) return "No results yet.";
   const latest = `${bandOf(check, last.score).label.toLowerCase()} (${last.score} of ${check.max}) on ${shortDate(last.at)}`;
   if (results.length === 1) return `One result so far: ${latest}.`;
-  const first = results[0]!;
-  const { diff, reliable } = changeSince(check, first.score, last.score);
-  const way =
-    diff === 0
-      ? "the same score as your first"
-      : `${Math.abs(diff)} ${Math.abs(diff) === 1 ? "point" : "points"} ${diff < 0 ? "lower" : "higher"} than your first, on ${shortDate(first.at)}`;
-  const meaning =
-    reliable === null || diff === 0
-      ? ""
-      : reliable
-        ? ": a real change, bigger than this questionnaire’s usual ups and downs"
-        : ": within this questionnaire’s usual ups and downs";
-  return `${results.length} results. Your latest is ${latest}, ${way}${meaning}.`;
+  const since = sinceLastTime(results.at(-2)!.score, last.score);
+  return `${results.length} results. Your latest is ${latest}, ${since}.`;
 }
 
 /** The container's width, for drawing at 1:1 (600 until measured, and where nothing measures). */

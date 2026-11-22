@@ -4,9 +4,10 @@
  *   GET            → profile, chats, the LoveIQ result matched on the verified email, and
  *                    which body check is due (features/mira/server/body-check.ts)
  *   PATCH          → name, country, gender, coaching style, the "What Mira may use" switches
- *                    (memory, the LoveIQ result and, from 22 Nov 2026, the self-checks' bands),
- *                    the nudges, the reply language and the appearance (theme, text size); never
- *                    for an account stopped as under 18 (403, server/minor.ts)
+ *                    (memory, the LoveIQ result and, from 22 Nov 2026, the self-checks' bands,
+ *                    each turn of which is recorded as use_checks_set with its wording's
+ *                    version), the nudges, the reply language and the appearance (theme, text
+ *                    size); never for an account stopped as under 18 (403, server/minor.ts)
  *   DELETE ?what=chats    → deletes every stored chat
  *   DELETE ?what=account  → deletes the account, its profile, chats and messages (a staff or
  *       Jarvis login stays: see deleteAccount)
@@ -15,6 +16,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bodyCheckDue, listBodyChecks } from "@features/mira/server/body-check";
 import { REPLY_LANGUAGE_CODES } from "@features/mira/reply-languages";
+import { USE_CHECKS_VERSION } from "@features/mira/server/config";
 import { isMinor } from "@features/mira/server/minor";
 import { isValidTimeZone } from "@features/mira/server/nudges";
 import { getMiraAccount, createMiraSupabase } from "@features/mira/server/session";
@@ -157,6 +159,14 @@ export async function PATCH(request: Request) {
         const value = parsed.data[field as keyof typeof CHANGE_EVENTS] ?? null;
         logMiraEvent(name, { userId: g.account.id }, { value });
       }
+    }
+    // A record of each turn of "Mira may use my check results" (Art. 9 data), with its wording.
+    if (parsed.data.use_checks !== undefined) {
+      logMiraEvent(
+        "use_checks_set",
+        { userId: g.account.id },
+        { on: parsed.data.use_checks, version: USE_CHECKS_VERSION }
+      );
     }
     // The "Nudge emails" unsubscribe numbers count a stop wherever it happens, Settings included.
     if ("nudges_on" in nudgeState) {

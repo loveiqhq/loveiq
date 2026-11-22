@@ -118,6 +118,7 @@ export async function POST(request: Request, context: Params) {
       );
     }
     const points = await writeKeyPoints(
+      account.id,
       await sessionTurns(r.chat_id, r.id),
       started + KEY_POINTS_MS
     );

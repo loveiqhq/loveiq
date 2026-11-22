@@ -163,4 +163,45 @@ describe("POST /api/mira/event", () => {
     await post({ type: "rating", rating: 1 });
     expect(loggedProps()).toEqual({ rating: 1 });
   });
+
+  it("records the agreement to the browser's speech service with its notice's version, and only so", async () => {
+    await post({ type: "voice_notice", version: "mira-voice-2026-11-22" });
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    await post({ type: "voice_notice", version: "mira-voice-2026-11-22" });
+    expect(vi.mocked(logMiraEvent).mock.calls).toEqual([
+      [
+        "voice_notice_agreed",
+        { anonId: "anon_test_123456789" },
+        { version: "mira-voice-2026-11-22" },
+      ],
+      ["voice_notice_agreed", { userId: "u1" }, { version: "mira-voice-2026-11-22" }],
+    ]);
+    for (const bad of [
+      { type: "voice_notice" },
+      { type: "voice_notice", version: "I agree" },
+      { type: "track", name: "voice_notice_agreed" },
+    ]) {
+      expect((await post(bad)).status).toBe(400);
+    }
+    expect(logMiraEvent).toHaveBeenCalledTimes(2);
+  });
+
+  // Mira's privacy notice promises a count only: the panel the mood check's question 9 opened is
+  // logged with no account and no browser id, so it can never be tied to a person.
+  it("counts the mood check's support panel without anyone's id, signed in or not", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    expect((await post({ type: "track", name: "check_support_shown" })).status).toBe(200);
+    vi.mocked(getMiraAccount).mockResolvedValue(null);
+    expect((await post({ type: "track", name: "check_support_shown" })).status).toBe(200);
+    expect(vi.mocked(logMiraEvent).mock.calls).toEqual([
+      ["check_support_shown", {}],
+      ["check_support_shown", {}],
+    ]);
+    // Other moments keep their person.
+    await post({ type: "track", name: "mood_check_started" });
+    expect(vi.mocked(logMiraEvent).mock.calls[2]).toEqual([
+      "mood_check_started",
+      { anonId: "anon_test_123456789" },
+    ]);
+  });
 });

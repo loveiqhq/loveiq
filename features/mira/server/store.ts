@@ -361,9 +361,11 @@ export type MiraEventName =
   | "review_prompt_not_now"
   | "review_given"
   | "review_withdrawn"
-  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only.
+  // Talking to Mira by voice (22 Nov 2026, server/voice.ts): ids and numbers only, and the
+  // agreement to the browser's speech service with its notice's version.
   | "voice_session_ended"
   | "voice_points_opened"
+  | "voice_notice_agreed"
   // Sign-in & security (22 Nov 2026): passkeys, the "Use Face ID next time?" offer, devices
   // signed out, email changes and Google connected (signup_completed's method "passkey" too).
   | "passkey_offer_shown"
@@ -385,6 +387,8 @@ export type MiraEventName =
   | "loneliness_check_done"
   | "check_support_shown"
   | "checks_deleted"
+  // A turn of "Mira may use my check results" ({ on, version }), from 22 Nov 2026.
+  | "use_checks_set"
   // The daily journal (server/journal.ts): ids and numbers only, never ratings or words.
   | "journal_saved"
   | "journal_deleted"

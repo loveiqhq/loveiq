@@ -140,6 +140,17 @@ describe("the KPI log and the account", () => {
     ]);
   });
 
+  it("marks a team browser's event that names nobody (the question-9 count) as the team's too", async () => {
+    vi.mocked(supabaseFetch).mockResolvedValue(new Response(null, { status: 201 }));
+    request({ cookie: "mira_anon=x; loveiq_team=1" });
+    logMiraEvent("check_support_shown", {});
+    req.headers = null;
+    await flushAfterResponse();
+    expect(written()).toEqual([
+      { name: "check_support_shown", anon_id: null, user_id: null, props: { team: true } },
+    ]);
+  });
+
   it("makes an account the team's only when it signs in from a team browser", async () => {
     vi.mocked(supabaseFetch).mockImplementation(
       async () => new Response(JSON.stringify([{ id: "u1" }]), { status: 201 })

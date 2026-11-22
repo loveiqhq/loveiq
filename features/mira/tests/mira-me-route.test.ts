@@ -135,6 +135,18 @@ describe("PATCH /api/mira/me", () => {
     );
   });
 
+  it("records each turn of 'Mira may use my check results', on or off, with its wording's version", async () => {
+    await PATCH(call("PATCH", "", { use_checks: true }));
+    await PATCH(call("PATCH", "", { use_checks: false }));
+    await PATCH(call("PATCH", "", { name: "Lea" })); // not the switch: no record
+    vi.mocked(updateProfile).mockRejectedValueOnce(new Error("db down"));
+    expect((await PATCH(call("PATCH", "", { use_checks: true }))).status).toBe(500); // not saved
+    expect(vi.mocked(logMiraEvent).mock.calls.filter(([n]) => n === "use_checks_set")).toEqual([
+      ["use_checks_set", { userId: "u1" }, { on: true, version: "mira-checks-2026-11-22" }],
+      ["use_checks_set", { userId: "u1" }, { on: false, version: "mira-checks-2026-11-22" }],
+    ]);
+  });
+
   it("doesn't read the profile when the switch isn't sent", async () => {
     await PATCH(call("PATCH", "", { name: "Lea" }));
     expect(getProfile).not.toHaveBeenCalled();
