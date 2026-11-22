@@ -1,11 +1,29 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { captureUtmFromUrl, getStoredUtm } from "@shared/url/utm";
 import { SOURCE_COOKIE, SOURCE_HEADER, VOICE_NOTICE_VERSION } from "../server/config";
 
-export type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
+export type ApiResult<T> = {
+  ok: boolean;
+  status: number;
+  data: T & { error?: string };
+  /**
+   * Refused for good: the under-18 stop (a 403 with `minor: true`, rail 15). Show "Mira is only
+   * for adults." (ADULTS_ONLY, the shared component), never "didn't load" or Try again.
+   */
+  minor?: true;
+  /** The sign-in ran out (any 401): say so with a way back in (signInHref), never Try again. */
+  signedOut?: true;
+};
+
+/** The one refusal after the under-18 stop, whatever words the route used. */
+export const ADULTS_ONLY = "Mira is only for adults.";
+/** The one answer to a lost sign-in (another device's "Sign out everywhere", or expiry). */
+export const SIGNED_OUT = "You were signed out. Please sign in again.";
+/** Told on the window whenever a Mira route answers 401, so a page can say so once. */
+const SIGNED_OUT_EVENT = "mira:signed-out";
 
 /**
  * Where this browser's visit came from, from the site's campaign tracker (shared/url/utm.ts):
@@ -40,7 +58,8 @@ export function rememberSourceForGoogle(): void {
 
 /**
  * JSON call to a Mira API route, with the CSRF header every write needs. `keepalive`: the call
- * outlives the page (a voice session ending as the tab closes).
+ * outlives the page (a voice session ending as the tab closes). A 401 comes back `signedOut` and a
+ * 403 with `minor: true` comes back `minor`, each with its one wording (see ApiResult).
  */
 export async function miraApi<T = Record<string, unknown>>(
   url: string,
@@ -58,7 +77,14 @@ export async function miraApi<T = Record<string, unknown>>(
       credentials: "same-origin",
       ...(init.keepalive ? { keepalive: true } : {}),
     });
-    const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string; minor?: unknown };
+    if (res.status === 401) {
+      window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
+      return { ok: false, status: 401, signedOut: true, data: { ...data, error: SIGNED_OUT } };
+    }
+    if (res.status === 403 && data.minor === true) {
+      return { ok: false, status: 403, minor: true, data: { ...data, error: ADULTS_ONLY } };
+    }
     return { ok: res.ok, status: res.status, data };
   } catch {
     return {
@@ -76,8 +102,23 @@ export async function miraApi<T = Record<string, unknown>>(
  * (the sign-in page lets `next` through only where server/session.ts safeNext allows it).
  */
 export function signInHref(): string {
+  if (typeof window === "undefined") return "/mira/start";
   const { pathname, search, hash } = window.location;
   return `/mira/start?next=${encodeURIComponent(pathname + search + hash)}`;
+}
+
+/**
+ * True once a Mira route answered 401 on this page: the page can then show SignedOutNotice
+ * (ui/account/SignedOut.tsx) in place of what can no longer be read or saved.
+ */
+export function useSignedOut(): boolean {
+  const [out, setOut] = useState(false);
+  useEffect(() => {
+    const heard = () => setOut(true);
+    window.addEventListener(SIGNED_OUT_EVENT, heard);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, heard);
+  }, []);
+  return out;
 }
 
 export type Turn = { role: "user" | "assistant"; content: string };

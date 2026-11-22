@@ -16,7 +16,8 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, signInHref, type ApiResult } from "./api";
+import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
 
@@ -172,6 +173,7 @@ export default function MiraSettings({
     ["data", "Your data"],
   ];
   const ready = p !== null;
+  const signedOut = useSignedOut();
   const active = useActiveSection(
     sections.map(([id]) => id),
     ready
@@ -331,7 +333,11 @@ export default function MiraSettings({
         Changes save as you make them. Your account details have their own Save.
       </p>
 
-      {loadError ? (
+      {/* Any section's call that found the sign-in gone (another device's "Sign out everywhere"):
+          the page says so with a way back, instead of looking signed in and failing each save. */}
+      {signedOut ? <SignedOutNotice /> : null}
+
+      {loadError && !signedOut ? (
         <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
           <p className="text-[15px] font-semibold">{loadError}</p>
           <p className="mt-1 text-[14px] text-ap-body">
@@ -350,9 +356,9 @@ export default function MiraSettings({
         </div>
       ) : null}
 
-      {!p && !loadError ? <SettingsSkeleton /> : null}
+      {!p && !loadError && !signedOut ? <SettingsSkeleton /> : null}
 
-      {p ? (
+      {p && !signedOut ? (
         <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_176px] xl:gap-12">
           <div>
             <SectionIndex sections={sections} active={active} variant="row" />

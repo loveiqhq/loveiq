@@ -56,6 +56,8 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/mira/settings");
   document.cookie = "mira_look=; Path=/mira; Max-Age=0";
   cookieJar.clear();
+  // jsdom lays nothing out, so it has no scrollIntoView (a section link scrolls on arrival).
+  Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => {
   cleanup();
@@ -234,6 +236,22 @@ describe("Saving", () => {
       "Unable to save."
     );
     expect(select).toHaveValue("de");
+  });
+
+  it("says so when the sign-in ran out, with a way back here, instead of a page that can't save", async () => {
+    replies["PATCH /api/mira/me"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    window.history.replaceState({}, "", "/mira/settings#notifications");
+    await openSettings();
+    fireEvent.click(screen.getByRole("switch", { name: "Daily nudges by email" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fsettings%23notifications"
+    );
+    // Nothing left that looks signed in and can't save.
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
   });
 
   it("resets the coaching style to balanced in one save", async () => {
