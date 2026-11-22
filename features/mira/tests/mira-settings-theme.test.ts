@@ -277,6 +277,25 @@ describe("one focus style (round 3)", () => {
     );
   });
 
+  it("rings a focused text field, more than its edge turning purple (R3-UXA-5)", async () => {
+    const css = await compile("");
+    const fields = find(css, (s) => s.includes("textarea") && s.includes(".border"), "outline");
+    // Text fields with an edge, and the bordered box around a borderless one (the composer), each
+    // its own rule: a browser without :has() must still ring the fields.
+    expect(fields.map(([s]) => s)).toEqual([
+      expect.stringMatching(
+        /^\.mira-root :is\(input:not\(.*checkbox.*radio.*\), textarea, select\)\.border:focus-visible$/
+      ),
+      ".mira-root .border:has(> textarea:not(.border):focus-visible)",
+    ]);
+    for (const [, value] of fields) expect(value).toBe(RING);
+    // It must outweigh a field's outline-none and focus-visible:outline-offset-2.
+    expect(find(css, (s) => s.includes("textarea"), "outline-offset").map(([, v]) => v)).toEqual([
+      "0px",
+      "0px",
+    ]);
+  });
+
   it("is 3:1 or more on every surface a control sits on, in both themes", () => {
     for (const [theme, t] of [
       ["light", tokens.AP_LIGHT],

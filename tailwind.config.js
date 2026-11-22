@@ -61,6 +61,15 @@ const miraTheme = plugin(({ addBase }) => {
     // and theme, and all but vanished on the ink pill in Dark. No weight of its own, so
     // outline-none and a component's own focus classes still win.
     ":where(.mira-root) :focus-visible": { outline: RING, "outline-offset": "2px" },
+    // A text field (R3-UXA-5) gets the ring hugging its edge: its edge turning purple alone was a
+    // 1.4:1 change in Light. A borderless field in a bordered box (the chat's composer) rings the
+    // box, in a rule of its own so a browser without :has() still rings the fields.
+    ".mira-root :is(input:not([type=checkbox], [type=radio], [type=range]), textarea, select).border:focus-visible":
+      { outline: RING, "outline-offset": "0px" },
+    ".mira-root .border:has(> textarea:not(.border):focus-visible)": {
+      outline: RING,
+      "outline-offset": "0px",
+    },
   });
 });
 
