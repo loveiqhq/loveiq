@@ -463,7 +463,7 @@ describe("the reminder's stop page", () => {
   it("stops the reminder with one button, from the link alone", async () => {
     render(<ReminderStop token="abc.def" valid />);
     fireEvent.click(screen.getByRole("button", { name: "Stop reminders" }));
-    expect(await screen.findByRole("heading", { name: "Reminders are off." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeInTheDocument();
     expect(sent("POST").map((p) => p.url)).toEqual(["/api/mira/journal/unsubscribe?t=abc.def"]);
   });
 
