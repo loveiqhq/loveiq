@@ -6,7 +6,8 @@
  *                          what Settings may offer: passkeys and Google never for staff, a change
  *                          of email never for a login the admin panel or Jarvis shares, none of
  *                          them for anyone Mira stopped as under 18
- *   DELETE ?device=<id>  → signs out one of the account's devices (this one too, if it is)
+ *   DELETE ?device=<id>  → signs out one of the account's devices (this one too, if it is); its
+ *                          login ends at Supabase too, at once
  *   DELETE ?device=all   → signs out everywhere, this device included
  *
  * Signing out takes effect on the device's next request to any Mira page or route
@@ -14,7 +15,12 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isRecentSignIn, listDevices, signOutDevices } from "@features/mira/server/devices";
+import {
+  endAuthSessions,
+  isRecentSignIn,
+  listDevices,
+  signOutDevices,
+} from "@features/mira/server/devices";
 import { googleConnected, isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
 import {
@@ -103,8 +109,16 @@ export async function DELETE(request: Request) {
     // otherwise outlive every sign-out.
     const keys = all && new URL(request.url).searchParams.get("passkeys") === "1";
     const gone = await signOutDevices(account.id, all ? undefined : device.data);
-    if (!all && gone === 0) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    if (!all && gone.length === 0) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
     if (keys) await removePasskeys(account.id);
+    // The other devices' logins end at Supabase now, not at their next call to Mira: this one's
+    // ends below, by its own sign-out (round-2 SEC-L1 / COR-9).
+    await endAuthSessions(
+      account.id,
+      gone.filter((id) => id !== account.session?.id)
+    );
     const here = all || device.data === account.session?.id;
     if (here) {
       const supabase = await createMiraSupabase();
@@ -117,7 +131,7 @@ export async function DELETE(request: Request) {
       logMiraEvent(
         "signed_out_everywhere",
         { userId: account.id },
-        { devices: gone, passkeys: keys }
+        { devices: gone.length, passkeys: keys }
       );
     } else logMiraEvent("device_signed_out", { userId: account.id }, { thisDevice: here });
     return NextResponse.json({ success: true, signedOut: here });

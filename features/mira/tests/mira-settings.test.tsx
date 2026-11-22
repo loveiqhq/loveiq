@@ -56,6 +56,8 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/mira/settings");
   document.cookie = "mira_look=; Path=/mira; Max-Age=0";
   cookieJar.clear();
+  // jsdom lays nothing out, so it has no scrollIntoView (a section link scrolls on arrival).
+  Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => {
   cleanup();
@@ -121,7 +123,7 @@ describe("Settings sections", () => {
     });
     // Each brings its own heading; the page gives it an index entry and an anchor.
     const at = (id: string) => document.getElementById(id)!;
-    expect(at("security-slot")).toHaveTextContent("Passkeys here");
+    expect(at("security")).toHaveTextContent("Passkeys here");
     expect(at("checks")).toHaveTextContent("Self-checks here");
     expect(at("sharing")).toHaveTextContent("Shared review here");
     expect(at("journal")).toHaveTextContent("Journal settings here");
@@ -143,6 +145,100 @@ describe("Settings sections", () => {
       "#appearance",
       "#data",
     ]);
+    // Every entry lands below the sticky row of links: each target keeps the page's margin.
+    for (const href of links) {
+      expect(document.querySelector(href), href).toHaveClass("scroll-mt-16");
+    }
+  });
+
+  it("after an under-18 stop, says so once and keeps only what still works", async () => {
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { ...PROFILE }, minor: true } });
+    render(
+      <MiraSettings
+        security={<p>Devices here</p>}
+        checks={<p>Self-checks here</p>}
+        sharedReview={<p>Shared review here</p>}
+        journal={<p>Journal settings here</p>}
+        weeklySession={<p>Weekly session here</p>}
+      />
+    );
+    expect(await screen.findByText("Mira is only for adults.")).toBeVisible();
+    // Signing out, taking a rating back and deleting: every other section would only refuse.
+    const links = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["#security", "#sharing", "#data"]);
+    expect(screen.getByText("Devices here")).toBeInTheDocument();
+    expect(screen.getByText("Shared review here")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeInTheDocument();
+    for (const gone of ["Self-checks here", "Journal settings here", "Weekly session here"]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("names each index entry as its section and the menu do (SET-11)", async () => {
+    await openSettings({
+      security: <p>Passkeys here</p>,
+      checks: <p>Self-checks here</p>,
+      sharedReview: <p>Shared review here</p>,
+      journal: <p>Journal settings here</p>,
+      weeklySession: <p>Weekly session here</p>,
+    });
+    const labels = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
+      .getAllByRole("link")
+      .map((a) => a.textContent);
+    expect(labels).toEqual([
+      "Account",
+      "Language",
+      "Sign-in & security",
+      "How Mira coaches you",
+      "What Mira may use",
+      "Assessments",
+      "Your rating of Mira",
+      "Notifications",
+      "Daily journal",
+      "Weekly session",
+      "Appearance",
+      "Your data",
+    ]);
+    for (const name of ["How Mira coaches you", "What Mira may use"]) {
+      expect(screen.getByRole("heading", { name })).toBeInTheDocument();
+    }
+    // One name for the LoveIQ-result permission, here and on Assessments (decision 6).
+    expect(screen.getByRole("switch", { name: "Mira may use my LoveIQ result" })).toBeVisible();
+    // The text-size sample says what it is (UX-17); fields' edges are drawn at 3:1 (A11Y-8).
+    expect(within(section("Appearance")).getByText("Preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mira replies in")).toHaveClass("border-ap-field");
+    expect(screen.getByLabelText("Name or nickname")).toHaveClass("border-ap-field");
+  });
+
+  it("says the account is deleted, and what went, instead of the anonymous welcome (ID-18)", async () => {
+    replies["DELETE /api/mira/me"] = () => ({ body: { success: true } });
+    await openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const heading = await screen.findByRole("heading", { name: "Your account is deleted" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.getByText(/chats, journal, goals, check results, voice sessions/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Back to Mira" })).toHaveAttribute("href", "/mira");
+    expect(router.replace).not.toHaveBeenCalled();
+    // Nothing of the account is left on the page (its address, its sections).
+    expect(screen.queryByText("lea@example.com")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("refreshes the page after a change of country, so the support lines follow it", async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText("Where you’re based"), { target: { value: "GB" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(router.refresh).toHaveBeenCalledTimes(1));
+    expect(calls("PATCH /api/mira/me")).toEqual([{ country: "GB" }]);
+    fireEvent.change(screen.getByLabelText("Name or nickname"), { target: { value: "Lena" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")).toHaveLength(2));
+    expect(router.refresh).toHaveBeenCalledTimes(1); // a name alone needn't reload anything
   });
 
   it("shows the page's shape while loading, and a way to try again when loading fails", async () => {
@@ -232,10 +328,55 @@ describe("Saving", () => {
     expect(select).toHaveValue("de");
   });
 
+  it("says so when the sign-in ran out, with a way back here, instead of a page that can't save", async () => {
+    replies["PATCH /api/mira/me"] = () => ({ status: 401, body: { error: "Please sign in." } });
+    window.history.replaceState({}, "", "/mira/settings#notifications");
+    await openSettings();
+    fireEvent.click(screen.getByRole("switch", { name: "Daily nudges by email" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You were signed out.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Fsettings%23notifications"
+    );
+    // Nothing left that looks signed in and can't save.
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
+  });
+
+  it("asks before deleting on its safe answer, and Keep it gives the focus back", async () => {
+    await openSettings();
+    const opener = screen.getByRole("button", { name: "Delete all chats" });
+    fireEvent.click(opener);
+    // The kit's question (UX-9): named by its question, opening on "Keep it".
+    expect(screen.getByRole("group", { name: "Delete all your chats? This can't be undone." }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep it" }))
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete all chats" }))
+    );
+  });
+
+  it("saves only the coaching scale that changed, so another tab's change stays (SET-3)", async () => {
+    await openSettings(); // the style here: { tone: 2 }
+    fireEvent.click(screen.getByRole("radio", { name: "Depth 4 of 5" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")).toEqual([{ style: { depth: 4 } }]));
+    fireEvent.click(screen.getByRole("radio", { name: "Tone 3 of 5" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")[1]).toEqual({ style: { tone: 3 } }));
+  });
+
   it("resets the coaching style to balanced in one save", async () => {
     await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "Reset to balanced" }));
-    await waitFor(() => expect(calls("PATCH /api/mira/me")).toEqual([{ style: {} }]));
+    // Every scale at the middle (3), so the server's merge leaves nothing of the old style.
+    await waitFor(() =>
+      expect(calls("PATCH /api/mira/me")).toEqual([
+        { style: { guidance: 3, challenge: 3, depth: 3, practical: 3, tone: 3 } },
+      ])
+    );
+    expect(screen.getByRole("button", { name: "Reset to balanced" })).toBeDisabled();
   });
 });
 

@@ -3,11 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { useMiraLook } from "./MiraLook";
-import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import {
+  ADULTS_ONLY,
+  NEW_CODE,
+  local,
+  miraApi,
+  rememberSourceForGoogle,
+  useReloadWhenRestored,
+} from "./api";
 import { accountLook } from "./prefs";
 import { PasskeyOffer } from "./account/PasskeyOffer";
 import {
@@ -26,12 +33,15 @@ import {
  * code sign-in on a device that can make one, "Use Face ID next time?" once (account/).
  */
 
-type Step = "account" | "verify" | "passkey" | "about";
+type Step = "account" | "verify" | "passkey" | "kept" | "about" | "minor";
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: "account", label: "Account" },
   { key: "verify", label: "Verify" },
   { key: "about", label: "About you" },
 ];
+
+const ENTER_EMAIL = "Please enter your email address.";
+const TICK_THREE = "Please tick the three boxes to go on.";
 
 const GOOGLE_ERRORS: Record<string, string> = {
   cancelled: "Google sign-in was cancelled. Try again, or use your email.",
@@ -63,27 +73,73 @@ async function afterSignIn(adopt: (saved: SavedLook) => void) {
   }
 }
 
-/** The anonymous chat as the sign-in carries it: role and words only. */
+/**
+ * The anonymous chat as the sign-in carries it: role and words, and the mark of a reply that
+ * opened the support lines (the chat is then named by its date, never by those words).
+ */
 const carriedChat = () =>
-  (local.chat()?.turns ?? []).map(({ role, content }) => ({ role, content })).slice(-48);
+  (local.chat()?.turns ?? [])
+    .map(({ role, content, crisis }) => ({ role, content, ...(crisis ? { crisis: true } : {}) }))
+    .slice(-48);
+
+/**
+ * "Check your inbox", kept in this tab for the code's hour, so a reload, Back or a tab the phone
+ * discarded while the person read their mail comes back to the code field (round-2 ID-5).
+ */
+const WAITING = "mira.signin.code.v1";
+const CODE_LIFE_MS = 60 * 60_000;
+type Waiting = { email: string; useAssessment: boolean; at: number };
+function waitingCode(): Waiting | null {
+  try {
+    const w = JSON.parse(sessionStorage.getItem(WAITING) ?? "null") as Waiting | null;
+    return w && typeof w.email === "string" && Date.now() - w.at < CODE_LIFE_MS ? w : null;
+  } catch {
+    return null;
+  }
+}
+function keepWaiting(w: Waiting | null): void {
+  try {
+    if (w) sessionStorage.setItem(WAITING, JSON.stringify(w));
+    else sessionStorage.removeItem(WAITING);
+  } catch {
+    // Blocked storage: a reload starts over, as before.
+  }
+}
+
+const unchanging = () => () => {};
+/** A Settings section the sign-in page was opened at (`#weekly`), or ""; "" on the server. */
+const sectionHere = () => (/^#[a-z]{2,20}$/.test(window.location.hash) ? window.location.hash : "");
+const useSectionHere = () => useSyncExternalStore(unchanging, sectionHere, () => "");
 
 export default function SignUpFlow({
   googleEnabled = false,
   googleResult = null,
   needsAbout = false,
-  next = null,
+  minor = false,
+  next: asked = null,
 }: {
   googleEnabled?: boolean;
   googleResult?: string | null;
   needsAbout?: boolean;
+  /** Back from Google into an account this browser may not use: stopped as under 18 (rail 15). */
+  minor?: boolean;
   /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
   next?: string | null;
 }) {
+  // A link into a Settings section (a session email's #weekly) came here without it in `next`:
+  // the page's redirect can't see an anchor, but the browser keeps it in the address.
+  const section = useSectionHere();
+  const next = asked === "/mira/settings" ? asked + section : asked;
   const router = useRouter();
   const { look, adopt } = useMiraLook();
   const adoptSaved = (saved: SavedLook) => adopt(accountLook(saved, look));
   const backFromGoogle = googleResult === "done";
-  const [step, setStep] = useState<Step>(backFromGoogle && needsAbout ? "about" : "account");
+  const [step, setStep] = useState<Step>(
+    minor ? "minor" : backFromGoogle && needsAbout ? "about" : "account"
+  );
+  // On the under-18 refusal: whether a sign-in happened (a code or Google), so Settings can sign
+  // out or delete; a refused passkey signed nobody in.
+  const [minorSignedIn, setMinorSignedIn] = useState(minor);
   const [email, setEmail] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -102,10 +158,13 @@ export default function SignUpFlow({
   );
   const [notice, setNotice] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const emailField = useRef<HTMLInputElement>(null);
   const shownStep = useRef(step);
   // Passkeys: shown only where the browser has them; where the offer goes on to.
   const passkeys = usePasskeysWork();
   const afterOffer = useRef<"about" | "home">("home");
+  // Where "Continue" goes after "Your earlier chat wasn't kept".
+  const afterKept = useRef<() => unknown>(() => undefined);
   const ticks = useRef({ adult, terms, consent, useAssessment });
   // A passkey's answer reads the boxes as they are then (ticked while it waited).
   useEffect(() => {
@@ -128,18 +187,65 @@ export default function SignUpFlow({
     router.refresh();
   }
 
+  /**
+   * This browser or the account was stopped as under 18 (rail 15): "Mira is only for adults."
+   * instead of "About you" or Home, every route refusing from here on; the browser forgets its
+   * chat and its 18+ tick, as the chat does at the stop.
+   */
+  /**
+   * The sign-up card promised "this chat comes with you", but this account keeps no chats
+   * ("Remember our conversations" off): say so, then go on (round-2 ID-20).
+   */
+  function notKept(then: () => unknown) {
+    afterKept.current = then;
+    setBusy(false);
+    setStep("kept");
+  }
+
+  function refusedAsMinor(signedIn: boolean) {
+    local.forget();
+    setMinorSignedIn(signedIn);
+    setBusy(false);
+    setStep("minor");
+  }
+
+  // A reload, Back or a discarded tab on "Check your inbox": back to it, with its address and
+  // the optional tick (the verify records it). Once, after the first paint.
+  useEffect(() => {
+    if (step !== "account" || backFromGoogle) return;
+    const waiting = waitingCode();
+    if (!waiting) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- this tab's storage, read after hydration */
+    setEmail(waiting.email);
+    setUseAssessment(waiting.useAssessment);
+    setStep("verify");
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Back from Google, signed in: the chat in this browser comes along, as with the emailed code.
   useEffect(() => {
     if (!backFromGoogle) return;
+    if (minor) {
+      local.forget(); // its chat isn't kept (the page shows the refusal)
+      return;
+    }
     const carry = carriedChat();
     void (async () => {
+      const goOn = async () => {
+        if (needsAbout) return setStep("about");
+        await afterSignIn(adoptSaved);
+        goHome();
+      };
       if (carry.length) {
-        const res = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+        const res = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
+          body: { action: "carry", carry },
+        });
         if (res.ok) local.saveChat(null);
+        if (res.data.memoryOff) return notKept(goOn);
       }
       if (needsAbout) return;
-      await afterSignIn(adoptSaved);
-      goHome();
+      await goOn();
     })();
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,16 +256,20 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await miraApi("/api/mira/auth", {
+    const res = await miraApi<{ codeSent?: boolean }>("/api/mira/auth", {
       body: { action: "start", email, adult, terms, consent, website },
     });
     setBusy(false);
-    if (!res.ok) {
+    // One went out minutes ago (the inbox's 10-minute wait): it still works, so on to its field.
+    const sentBefore = res.status === 429 && res.data.codeSent === true && step === "account";
+    if (!res.ok && !sentBefore) {
       setError(res.data.error ?? "We couldn't send the code. Please try again.");
       return false;
     }
+    keepWaiting({ email, useAssessment, at: Date.now() });
+    if (sentBefore) setNotice(res.data.error ?? null);
     setStep("verify");
-    return true;
+    return res.ok;
   }
 
   // Each success below keeps `busy` on until the next page shows, so nothing can be sent twice.
@@ -172,6 +282,8 @@ export default function SignUpFlow({
       needsProfile?: boolean;
       chatId?: string | null;
       offerPasskey?: boolean;
+      minor?: boolean;
+      memoryOff?: boolean;
     }>("/api/mira/auth", {
       body: {
         action: "verify",
@@ -185,18 +297,25 @@ export default function SignUpFlow({
       setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
     }
+    keepWaiting(null);
+    if (res.data.minor) return refusedAsMinor(true);
     local.saveChat(null);
-    if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
-      afterOffer.current = res.data.needsProfile ? "about" : "home";
-      setBusy(false);
-      return setStep("passkey");
-    }
-    if (res.data.needsProfile) {
-      setBusy(false);
-      return setStep("about");
-    }
-    await afterSignIn(adoptSaved);
-    goHome();
+    const goOn = async () => {
+      if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
+        afterOffer.current = res.data.needsProfile ? "about" : "home";
+        setBusy(false);
+        return setStep("passkey");
+      }
+      if (res.data.needsProfile) {
+        setBusy(false);
+        return setStep("about");
+      }
+      setBusy(true);
+      await afterSignIn(adoptSaved);
+      goHome();
+    };
+    if (res.data.memoryOff) return notKept(goOn);
+    await goOn();
   }
 
   /** After the offer, wherever the sign-in was going. */
@@ -215,16 +334,23 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     const carry = carriedChat();
+    const goOn = async () => {
+      if (needsProfile) {
+        setBusy(false);
+        return setStep("about");
+      }
+      setBusy(true);
+      await afterSignIn(adoptSaved);
+      goHome();
+    };
     if (carry.length) {
-      const moved = await miraApi("/api/mira/auth", { body: { action: "carry", carry } });
+      const moved = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
+        body: { action: "carry", carry },
+      });
       if (moved.ok) local.saveChat(null);
+      if (moved.data.memoryOff) return notKept(goOn);
     }
-    if (needsProfile) {
-      setBusy(false);
-      return setStep("about");
-    }
-    await afterSignIn(adoptSaved);
-    goHome();
+    await goOn();
   }
 
   // The email field offers the browser's passkeys while the form shows (conditional mediation),
@@ -241,6 +367,7 @@ export default function SignUpFlow({
       const res = await signInWithPasskey({ autofill: true, live, ticks: () => ticks.current });
       if (!live()) return;
       if (res.ok) return passkeySignedIn(res.needsProfile);
+      if (res.minor) return refusedAsMinor(false);
       if (res.error) setError(res.error);
       if (!res.again) return;
     }
@@ -264,6 +391,7 @@ export default function SignUpFlow({
     setNotice(null);
     const res = await signInWithPasskey({ ticks: () => ticks.current });
     if (res.ok) return passkeySignedIn(res.needsProfile);
+    if (res.minor) return refusedAsMinor(false);
     setBusy(false);
     if (res.error) setError(res.error);
     // Still on the form: its suggestions come back.
@@ -299,7 +427,9 @@ export default function SignUpFlow({
   }
 
   // The offer belongs to the code check: the progress stays on Verify.
-  const current = STEPS.findIndex((s) => s.key === (step === "passkey" ? "verify" : step));
+  const current = STEPS.findIndex(
+    (s) => s.key === (step === "passkey" || step === "kept" ? "verify" : step)
+  );
   const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
   // Google sign-in leaves the page, so the optional ticks and `next` ride along on the link.
   const googleHref =
@@ -315,7 +445,7 @@ export default function SignUpFlow({
         <div className="relative hidden md:block">
           <Wordmark />
         </div>
-        <div className="relative mt-auto flex flex-col gap-4">
+        <div className={`relative mt-auto flex-col gap-4 ${step === "minor" ? "hidden" : "flex"}`}>
           <p className="flex items-center gap-2.5 text-[14px] text-ap-body">
             <Image
               src="/images/mira/mira.webp"
@@ -350,10 +480,18 @@ export default function SignUpFlow({
         <div className="mb-8 md:hidden">
           <Wordmark />
         </div>
-        <nav aria-label="Sign-up progress" className="grid grid-cols-3 gap-2">
+        <ol
+          aria-label="Sign-up progress"
+          className={`grid-cols-3 gap-2 ${step === "minor" ? "hidden" : "grid"}`}
+        >
           {STEPS.map((s, i) => (
-            <div key={s.key} className="flex flex-col gap-2">
+            <li
+              key={s.key}
+              aria-current={i === current ? "step" : undefined}
+              className="flex flex-col gap-2"
+            >
               <span
+                aria-hidden="true"
                 className={`h-1 rounded-full ${i <= current ? "bg-ap-purple" : "bg-ap-track"}`}
               />
               <span
@@ -361,9 +499,9 @@ export default function SignUpFlow({
               >
                 {s.label}
               </span>
-            </div>
+            </li>
           ))}
-        </nav>
+        </ol>
 
         <div className="my-auto flex w-full max-w-[460px] flex-col gap-5 py-10">
           {backFromGoogle && step === "account" ? (
@@ -373,8 +511,21 @@ export default function SignUpFlow({
           {step === "account" && !backFromGoogle ? (
             <form
               className="flex flex-col gap-5"
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
+                if (busy) return;
+                // Said, not a silently dead button: what is missing, and the focus on it.
+                if (!emailOk) {
+                  setError(ENTER_EMAIL);
+                  return emailField.current?.focus();
+                }
+                if (!adult || !terms || !consent) {
+                  setError(TICK_THREE);
+                  return e.currentTarget
+                    .querySelector<HTMLInputElement>('input[aria-required="true"]:not(:checked)')
+                    ?.focus();
+                }
                 void sendCode();
               }}
             >
@@ -396,13 +547,16 @@ export default function SignUpFlow({
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
                 Email
                 <input
+                  ref={emailField}
                   type="email"
                   // "webauthn": where the browser has them, this field also suggests passkeys.
                   autoComplete="email webauthn"
                   required
+                  aria-invalid={error === ENTER_EMAIL || undefined}
+                  aria-describedby={error === ENTER_EMAIL ? "signup-error" : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               {/* A honeypot: hidden from people and screen readers and out of the tab order, so
@@ -420,10 +574,10 @@ export default function SignUpFlow({
               <p className="-mt-2 text-[13px] text-ap-muted">
                 Took the LoveIQ test already? Use the same email and we&apos;ll connect your result.
               </p>
-              <Tick checked={adult} onChange={setAdult}>
+              <Tick checked={adult} onChange={setAdult} required>
                 I confirm that I am 18 years of age or older.
               </Tick>
-              <Tick checked={terms} onChange={setTerms}>
+              <Tick checked={terms} onChange={setTerms} required>
                 I accept the{" "}
                 <a href="/terms-of-use" target="_blank" className="underline">
                   terms of use
@@ -434,7 +588,7 @@ export default function SignUpFlow({
                 </a>
                 .
               </Tick>
-              <Tick checked={consent} onChange={setConsent}>
+              <Tick checked={consent} onChange={setConsent} required>
                 Mira may process what I share about my sex life and health to coach me, and to
                 count, without my words, how Mira is used and whether she helps.{" "}
                 <Link href="/mira/privacy" target="_blank" className="underline">
@@ -445,10 +599,7 @@ export default function SignUpFlow({
               <Tick checked={useAssessment} onChange={setUseAssessment}>
                 Use my LoveIQ test result to tailor my coaching.
               </Tick>
-              <PrimaryButton
-                type="submit"
-                disabled={busy || !emailOk || !adult || !terms || !consent}
-              >
+              <PrimaryButton type="submit" disabled={busy}>
                 {busy ? "Sending…" : "Send me a code"}
               </PrimaryButton>
               {googleEnabled ? (
@@ -475,9 +626,9 @@ export default function SignUpFlow({
               {passkeys ? (
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => void passkeyButton()}
-                  className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple disabled:opacity-50"
+                  aria-disabled={busy || undefined}
+                  onClick={() => (busy ? undefined : void passkeyButton())}
+                  className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-50"
                 >
                   <PasskeyIcon />
                   Sign in with a passkey
@@ -520,7 +671,7 @@ export default function SignUpFlow({
                   maxLength={10}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  className="min-h-[56px] rounded-2xl border border-ap-line px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
+                  className="min-h-[56px] rounded-2xl border border-ap-field px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
                 />
               </label>
               <PrimaryButton type="submit" disabled={busy || code.length < 6}>
@@ -529,10 +680,11 @@ export default function SignUpFlow({
               <div className="flex justify-between gap-3 text-[14px] text-ap-muted">
                 <button
                   type="button"
-                  className="underline disabled:opacity-50"
-                  disabled={busy}
+                  className="underline aria-disabled:cursor-wait aria-disabled:opacity-50"
+                  aria-disabled={busy || undefined}
                   onClick={async () => {
-                    if (await sendCode()) setNotice("A new code is on its way.");
+                    if (busy) return;
+                    if (await sendCode()) setNotice(NEW_CODE);
                   }}
                 >
                   Send a new code
@@ -541,6 +693,7 @@ export default function SignUpFlow({
                   type="button"
                   className="underline"
                   onClick={() => {
+                    keepWaiting(null);
                     setStep("account");
                     setCode("");
                   }}
@@ -553,6 +706,49 @@ export default function SignUpFlow({
 
           {step === "passkey" ? (
             <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
+          ) : null}
+
+          {step === "kept" ? (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h1
+                  ref={heading}
+                  tabIndex={-1}
+                  className="font-serif text-[34px] font-medium leading-tight outline-none"
+                >
+                  Your earlier chat wasn&apos;t kept
+                </h1>
+                <p className="mt-2 text-[15px] text-ap-body">
+                  “Remember our conversations” is off for this account, so Mira keeps no chats. You
+                  can turn it on in Settings.
+                </p>
+              </div>
+              <PrimaryButton onClick={() => void afterKept.current()}>Continue</PrimaryButton>
+            </div>
+          ) : null}
+
+          {step === "minor" ? (
+            <div className="flex flex-col gap-3">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[34px] font-medium leading-tight outline-none"
+              >
+                {ADULTS_ONLY}
+              </h1>
+              {minorSignedIn ? (
+                <p className="text-[15px] text-ap-body">
+                  You can sign out or delete the account in{" "}
+                  <Link
+                    href="/mira/settings"
+                    className="font-semibold text-ap-ink underline underline-offset-2"
+                  >
+                    Settings
+                  </Link>
+                  .
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {step === "about" ? (
@@ -577,7 +773,7 @@ export default function SignUpFlow({
                   maxLength={60}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Name or nickname"
-                  className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
@@ -590,7 +786,7 @@ export default function SignUpFlow({
                   maxLength={40}
                   onChange={(e) => setGender(e.target.value)}
                   placeholder="Woman, man, non-binary, or your own words"
-                  className="min-h-[48px] rounded-2xl border border-ap-line px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  className="min-h-[48px] rounded-2xl border border-ap-field px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
                 />
               </label>
               <label className="flex flex-col gap-2 text-[14px] font-semibold">
@@ -601,7 +797,7 @@ export default function SignUpFlow({
                 <select
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="min-h-[48px] rounded-2xl border border-ap-line bg-white px-4 text-[16px] font-normal"
+                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal"
                 >
                   <option value="">Choose…</option>
                   {CRISIS_COUNTRY_OPTIONS.map((c) => (
@@ -622,9 +818,9 @@ export default function SignUpFlow({
               </PrimaryButton>
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => void skipAbout()}
-                className="text-[14px] text-ap-muted underline disabled:opacity-50"
+                aria-disabled={busy || undefined}
+                onClick={() => (busy ? undefined : void skipAbout())}
+                className="text-[14px] text-ap-muted underline aria-disabled:cursor-wait aria-disabled:opacity-50"
               >
                 Skip for now
               </button>
@@ -637,7 +833,7 @@ export default function SignUpFlow({
             </p>
           ) : null}
           {error ? (
-            <p role="alert" className="text-[14px] text-ap-bad-ink">
+            <p id="signup-error" role="alert" className="text-[14px] text-ap-bad-ink">
               {error}
             </p>
           ) : null}
@@ -697,16 +893,20 @@ function GoogleG() {
 function Tick({
   checked,
   onChange,
+  required,
   children,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  /** One of the three the code and Google need (said when one is missing). */
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-3 py-1 text-[14px] leading-snug text-ap-body">
       <input
         type="checkbox"
+        aria-required={required || undefined}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-[1px] h-[18px] w-[18px] shrink-0 accent-ap-purple"

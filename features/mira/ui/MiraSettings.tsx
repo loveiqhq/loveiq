@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -10,13 +11,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
-import { PrimaryButton } from "./MiraShell";
+import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, type ApiResult } from "./api";
+import { miraApi, signInHref, useSignedOut, type ApiResult } from "./api";
+import { AdultsOnly, ConfirmDelete } from "./kit";
+import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
 
@@ -111,6 +115,21 @@ type SectionId =
   | "appearance"
   | "data";
 
+/**
+ * The coaching style goes out as the scales changed only (a point back at the middle as 3,
+ * balanced): the server puts them onto its newest style, so a change made meanwhile in another
+ * tab, on another device or in the chat's panel stays (round-2 SET-3).
+ */
+const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
+const changedScales = (next: Style, was: Style | null | undefined): Style =>
+  Object.fromEntries(
+    STYLE_KEYS.filter((k) => (next[k] ?? 3) !== (was?.[k] ?? 3)).map((k) => [k, next[k] ?? 3])
+  );
+const BALANCED = Object.fromEntries(STYLE_KEYS.map((k) => [k, 3])) as Style;
+
+/** What an account stopped as under 18 can still do here. */
+const STILL_WORKS = new Set<SectionId>(["security", "sharing", "data"]);
+
 type Status =
   { kind: "saving" } | { kind: "saved"; text?: string } | { kind: "error"; text: string };
 
@@ -148,6 +167,8 @@ export default function MiraSettings({
   const [status, setStatusMap] = useState<Partial<Record<SectionId, Status>>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
+  // The account and everything it kept are gone: the page says so (round-2 ID-18).
+  const [deleted, setDeleted] = useState(false);
   // The account's typed details changed since they were loaded or saved.
   const [accountDirty, setAccountDirty] = useState(false);
   // Saves go out one after another, so the last change made is the one kept; each field
@@ -156,42 +177,42 @@ export default function MiraSettings({
   const saves = useRef(0);
   const latest = useRef(new Map<string, number>());
   const { look, change } = useMiraLook();
+  // Stopped as under 18, on this browser or the account (GET /api/mira/me `minor`): only what
+  // still works stays (signing out, taking a rating back, deleting); every other change refuses.
+  const [minor, setMinor] = useState(false);
 
-  const sections: Array<[SectionId, string]> = [
-    ["account", "Account"],
-    ["language", "Language"],
-    ...(security ? ([["security", "Sign-in & security"]] as Array<[SectionId, string]>) : []),
-    ["coaching", "Coaching"],
-    ["privacy", "Privacy"],
-    ...(checks ? ([["checks", "Self-checks"]] as Array<[SectionId, string]>) : []),
-    ...(sharedReview ? ([["sharing", "Your rating"]] as Array<[SectionId, string]>) : []),
-    ["notifications", "Notifications"],
-    ...(journal ? ([["journal", "Daily journal"]] as Array<[SectionId, string]>) : []),
-    ...(weeklySession ? ([["weekly", "Weekly session"]] as Array<[SectionId, string]>) : []),
-    ["appearance", "Appearance"],
-    ["data", "Your data"],
-  ];
+  const sections = (
+    [
+      ["account", "Account"],
+      ["language", "Language"],
+      ...(security ? ([["security", "Sign-in & security"]] as Array<[SectionId, string]>) : []),
+      // Each named as its heading says (and as the menu does: the self-checks are Assessments).
+      ["coaching", "How Mira coaches you"],
+      ["privacy", "What Mira may use"],
+      ...(checks ? ([["checks", "Assessments"]] as Array<[SectionId, string]>) : []),
+      ...(sharedReview ? ([["sharing", "Your rating of Mira"]] as Array<[SectionId, string]>) : []),
+      ["notifications", "Notifications"],
+      ...(journal ? ([["journal", "Daily journal"]] as Array<[SectionId, string]>) : []),
+      ...(weeklySession ? ([["weekly", "Weekly session"]] as Array<[SectionId, string]>) : []),
+      ["appearance", "Appearance"],
+      ["data", "Your data"],
+    ] as Array<[SectionId, string]>
+  ).filter(([id]) => !minor || STILL_WORKS.has(id));
   const ready = p !== null;
+  const signedOut = useSignedOut();
   const active = useActiveSection(
     sections.map(([id]) => id),
     ready
   );
 
-  // A link into a section (#weekly from the session emails, #security back from Google) lands
-  // on it once it exists: the sections come after the profile, so the browser's own jump on
-  // arrival found nothing to go to.
-  useEffect(() => {
-    if (!ready) return;
-    const section = document.getElementById(window.location.hash.slice(1));
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
-  }, [ready]);
+  useLandOnSection(ready);
 
   function load() {
-    void miraApi<{ profile: Profile }>("/api/mira/me").then((r) => {
-      if (r.status === 401) router.replace("/mira/start");
+    void miraApi<{ profile: Profile; minor?: boolean }>("/api/mira/me").then((r) => {
+      if (r.status === 401) router.replace(signInHref());
       else if (r.ok) {
         stored.current = r.data.profile;
+        setMinor(r.data.minor === true);
         setP(r.data.profile);
       } else setLoadError(r.data.error ?? "We couldn't load your settings.");
     });
@@ -200,10 +221,16 @@ export default function MiraSettings({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  // "Delete…" swaps the buttons for the question: focus goes to its safe answer.
-  const cancel = useRef<HTMLButtonElement | null>(null);
+  // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
+  // it"); once it goes (kept, or done) the focus is back on the button that asked.
+  const openers = useRef<Partial<Record<"chats" | "account", HTMLButtonElement | null>>>({});
+  const asked = useRef<"chats" | "account" | null>(null);
   useEffect(() => {
-    if (confirm) cancel.current?.focus();
+    if (confirm) asked.current = confirm;
+    else if (asked.current) {
+      openers.current[asked.current]?.focus();
+      asked.current = null;
+    }
   }, [confirm]);
 
   const setStatus = (id: SectionId, s: Status | null) =>
@@ -223,11 +250,18 @@ export default function MiraSettings({
     return { r, current: Object.keys(body).filter((k) => latest.current.get(k) === n) };
   }
 
-  /** Shows `fields` at once and saves them; a refused save puts the stored values back. */
-  async function autosave(section: SectionId, fields: Partial<Profile>) {
+  /**
+   * Shows `fields` at once and saves them (or `body`, when what goes out differs from what shows);
+   * a refused save puts the stored values back.
+   */
+  async function autosave(
+    section: SectionId,
+    fields: Partial<Profile>,
+    body: Record<string, unknown> = fields
+  ) {
     setP((cur) => (cur ? { ...cur, ...fields } : cur));
     setStatus(section, { kind: "saving" });
-    const { r, current } = await save(fields);
+    const { r, current } = await save(body);
     if (r.ok && stored.current) stored.current = { ...stored.current, ...fields };
     // A later change of these fields is on its way: its answer decides.
     if (current.length === 0) return;
@@ -261,6 +295,8 @@ export default function MiraSettings({
     if (r.ok) {
       if (stored.current) stored.current = { ...stored.current, ...body } as Profile;
       setAccountDirty(false);
+      // The support lines (read in app/mira/layout.tsx) put the new country first at once.
+      if ("country" in body) router.refresh();
       return setStatus("account", { kind: "saved" });
     }
     setStatus("account", { kind: "error", text: r.data.error ?? "Unable to save." });
@@ -297,11 +333,8 @@ export default function MiraSettings({
         text: r.data.error ?? "Unable to delete right now.",
       });
     }
-    if (what === "account") {
-      router.replace("/mira");
-      router.refresh();
-      return;
-    }
+    // Said, with what went, before the person goes anywhere (the welcome alone said nothing).
+    if (what === "account") return setDeleted(true);
     setBusy(false);
     setStatus("data", { kind: "saved", text: "All your chats are deleted." });
   }
@@ -332,14 +365,22 @@ export default function MiraSettings({
     setP((cur) => (cur ? { ...cur, ...patch } : cur));
   };
 
+  if (deleted) return <AccountDeleted />;
+
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
       <h1 className="font-serif text-[34px] font-medium">Settings</h1>
-      <p className="mt-1 text-[15px] text-ap-body">
-        Changes save as you make them. Your account details have their own Save.
-      </p>
+      {minor ? null : (
+        <p className="mt-1 text-[15px] text-ap-body">
+          Changes save as you make them. Your account details have their own Save.
+        </p>
+      )}
 
-      {loadError ? (
+      {/* Any section's call that found the sign-in gone (another device's "Sign out everywhere"):
+          the page says so with a way back, instead of looking signed in and failing each save. */}
+      {signedOut ? <SignedOutNotice /> : null}
+
+      {loadError && !signedOut ? (
         <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
           <p className="text-[15px] font-semibold">{loadError}</p>
           <p className="mt-1 text-[14px] text-ap-body">
@@ -358,274 +399,312 @@ export default function MiraSettings({
         </div>
       ) : null}
 
-      {!p && !loadError ? <SettingsSkeleton /> : null}
+      {!p && !loadError && !signedOut ? <SettingsSkeleton /> : null}
 
-      {p ? (
+      {p && !signedOut ? (
         <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_176px] xl:gap-12">
           <div>
+            {minor ? (
+              <div className="mt-8 rounded-3xl bg-ap-lilac p-5">
+                <AdultsOnly className="font-semibold text-ap-ink" />
+                <p className="mt-1 text-[14px] text-ap-body">
+                  Here you can sign out, take back a rating, or delete the account.
+                </p>
+              </div>
+            ) : null}
             <SectionIndex sections={sections} active={active} variant="row" />
             <div className="mt-8 flex flex-col gap-12">
-              <SettingsSection
-                id="account"
-                title="Account"
-                status={status.account}
-                footer={
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <PrimaryButton
-                      onClick={saveAccount}
-                      disabled={!accountDirty || status.account?.kind === "saving"}
-                    >
-                      {status.account?.kind === "saving" ? "Saving…" : "Save"}
-                    </PrimaryButton>
-                    {accountDirty ? (
-                      <span className="text-[13px] text-ap-muted">Unsaved changes</span>
-                    ) : null}
-                  </div>
-                }
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Name or nickname">
-                    {(id) => (
-                      <input
-                        id={id}
-                        value={p.name ?? ""}
-                        maxLength={60}
-                        autoComplete="nickname"
-                        onChange={(e) => typed({ name: e.target.value })}
-                        className={INPUT}
-                      />
-                    )}
-                  </Field>
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[14px] font-semibold">Email</p>
-                    <p className="flex min-h-[48px] items-center rounded-2xl bg-ap-ground px-4 text-[16px] text-ap-body [overflow-wrap:anywhere]">
-                      {p.email}
-                    </p>
-                    <p className="text-[13px] text-ap-muted">The address you sign in with.</p>
-                  </div>
-                  <Field label="Gender" optional>
-                    {(id) => (
-                      <input
-                        id={id}
-                        value={p.gender ?? ""}
-                        maxLength={40}
-                        onChange={(e) => typed({ gender: e.target.value })}
-                        className={INPUT}
-                      />
-                    )}
-                  </Field>
-                  <Field
-                    label="Where you’re based"
-                    hint="When Mira shares support lines, this country’s come first."
+              {!minor ? (
+                <>
+                  <SettingsSection
+                    id="account"
+                    title="Account"
+                    status={status.account}
+                    footer={
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                          onClick={saveAccount}
+                          disabled={!accountDirty || status.account?.kind === "saving"}
+                        >
+                          {status.account?.kind === "saving" ? "Saving…" : "Save"}
+                        </PrimaryButton>
+                        {accountDirty ? (
+                          <span className="text-[13px] text-ap-muted">Unsaved changes</span>
+                        ) : null}
+                      </div>
+                    }
                   >
-                    {(id) => (
-                      <Select
-                        id={id}
-                        value={p.country ?? ""}
-                        onChange={(e) => typed({ country: e.target.value || null })}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Name or nickname">
+                        {(id) => (
+                          <input
+                            id={id}
+                            value={p.name ?? ""}
+                            maxLength={60}
+                            autoComplete="nickname"
+                            onChange={(e) => typed({ name: e.target.value })}
+                            className={INPUT}
+                          />
+                        )}
+                      </Field>
+                      <div className="flex flex-col gap-2">
+                        <p className="text-[14px] font-semibold">Email</p>
+                        <p className="flex min-h-[48px] items-center rounded-2xl bg-ap-ground px-4 text-[16px] text-ap-body [overflow-wrap:anywhere]">
+                          {p.email}
+                        </p>
+                        <p className="text-[13px] text-ap-muted">The address you sign in with.</p>
+                      </div>
+                      <Field label="Gender" optional>
+                        {(id) => (
+                          <input
+                            id={id}
+                            value={p.gender ?? ""}
+                            maxLength={40}
+                            onChange={(e) => typed({ gender: e.target.value })}
+                            className={INPUT}
+                          />
+                        )}
+                      </Field>
+                      <Field
+                        label="Where you’re based"
+                        hint="When Mira shares support lines, this country’s come first."
                       >
-                        <option value="">Not set</option>
-                        {CRISIS_COUNTRY_OPTIONS.map((c) => (
-                          <option key={c.code} value={c.code}>
-                            {c.name}
-                          </option>
-                        ))}
-                        <option value="OTHER">Somewhere else</option>
-                      </Select>
-                    )}
-                  </Field>
-                </div>
-              </SettingsSection>
+                        {(id) => (
+                          <Select
+                            id={id}
+                            value={p.country ?? ""}
+                            onChange={(e) => typed({ country: e.target.value || null })}
+                          >
+                            <option value="">Not set</option>
+                            {CRISIS_COUNTRY_OPTIONS.map((c) => (
+                              <option key={c.code} value={c.code}>
+                                {c.name}
+                              </option>
+                            ))}
+                            <option value="OTHER">Somewhere else</option>
+                          </Select>
+                        )}
+                      </Field>
+                    </div>
+                  </SettingsSection>
 
-              <SettingsSection id="language" title="Language" status={status.language}>
-                <SettingsGroup>
-                  <Row
-                    label="Mira replies in"
-                    description="She can answer in the language you write in, or always in one."
-                  >
-                    {(id, describedBy) => (
-                      <Select
-                        id={id}
-                        aria-describedby={describedBy}
-                        value={p.reply_language ?? ""}
-                        onChange={(e) =>
-                          void autosave("language", { reply_language: e.target.value || null })
-                        }
+                  <SettingsSection id="language" title="Language" status={status.language}>
+                    <SettingsGroup>
+                      <Row
+                        label="Mira replies in"
+                        description="She can answer in the language you write in, or always in one."
                       >
-                        <option value="">Match my messages</option>
-                        {REPLY_LANGUAGES.map((l) => (
-                          <option key={l.code} value={l.code} lang={l.code}>
-                            {l.native === l.name ? l.name : `${l.native} · ${l.name}`}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </Row>
-                </SettingsGroup>
-                <p className="mt-2 px-1 text-[13px] text-ap-muted">
-                  The app itself, with its safety messages and support lines, stays in English for
-                  now.
-                </p>
-              </SettingsSection>
+                        {(id, describedBy) => (
+                          <Select
+                            id={id}
+                            aria-describedby={describedBy}
+                            value={p.reply_language ?? ""}
+                            onChange={(e) =>
+                              void autosave("language", { reply_language: e.target.value || null })
+                            }
+                          >
+                            <option value="">Match my messages</option>
+                            {REPLY_LANGUAGES.map((l) => (
+                              <option key={l.code} value={l.code} lang={l.code}>
+                                {l.native === l.name ? l.name : `${l.native} · ${l.name}`}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </Row>
+                    </SettingsGroup>
+                    <p className="mt-2 px-1 text-[13px] text-ap-muted">
+                      The app itself, with its safety messages and support lines, stays in English
+                      for now.
+                    </p>
+                  </SettingsSection>
+                </>
+              ) : null}
 
               {security ? (
-                <Slot id="security-slot">
+                <Slot id="security">
                   <EmailChanged.Provider value={emailChanged}>{security}</EmailChanged.Provider>
                 </Slot>
               ) : null}
 
-              <SettingsSection
-                id="coaching"
-                title="How Mira coaches you"
-                description="Pick a point on each line. The middle is balanced."
-                status={status.coaching}
-                action={
-                  <button
-                    type="button"
-                    onClick={() => void autosave("coaching", { style: {} })}
-                    disabled={Object.keys(p.style ?? {}).length === 0}
-                    className="min-h-[44px] px-1 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline disabled:text-ap-muted disabled:no-underline"
+              {!minor ? (
+                <>
+                  <SettingsSection
+                    id="coaching"
+                    title="How Mira coaches you"
+                    description="Pick a point on each line. The middle is balanced."
+                    status={status.coaching}
+                    action={
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void autosave("coaching", { style: {} }, { style: BALANCED })
+                        }
+                        disabled={STYLE_KEYS.every((k) => (p.style?.[k] ?? 3) === 3)}
+                        className="min-h-[44px] px-1 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline disabled:text-ap-muted disabled:no-underline"
+                      >
+                        Reset to balanced
+                      </button>
+                    }
                   >
-                    Reset to balanced
-                  </button>
-                }
-              >
-                <StyleScales
-                  value={p.style ?? {}}
-                  onChange={(style) => void autosave("coaching", { style })}
-                />
-              </SettingsSection>
+                    <StyleScales
+                      value={p.style ?? {}}
+                      onChange={(style) =>
+                        void autosave(
+                          "coaching",
+                          { style },
+                          { style: changedScales(style, p.style) }
+                        )
+                      }
+                    />
+                  </SettingsSection>
 
-              <SettingsSection id="privacy" title="What Mira may use" status={status.privacy}>
-                <SettingsGroup>
-                  <Switch
-                    label="Remember our conversations"
-                    description="Mira keeps your chats, so you can pick any of them up again."
-                    checked={p.remember_chats}
-                    onChange={(v) => void autosave("privacy", { remember_chats: v })}
-                  />
-                  <Switch
-                    label="Use my test result"
-                    description="Your LoveIQ Sexual Personality result tailors the coaching."
-                    checked={p.use_assessment}
-                    onChange={(v) => void autosave("privacy", { use_assessment: v })}
-                  />
-                </SettingsGroup>
-                <p className="mt-3 px-1 text-[13px] leading-relaxed text-ap-muted">
-                  Your chats concern your sex life, which is sensitive data under the GDPR. We use
-                  them with your consent, to coach you and to improve Mira; our analytics tools also
-                  see what you type. Never for advertising, never to train shared models.{" "}
-                  <a href="/mira/privacy" className="text-ap-plum underline underline-offset-2">
-                    How Mira handles your data
-                  </a>
-                </p>
-              </SettingsSection>
+                  <SettingsSection id="privacy" title="What Mira may use" status={status.privacy}>
+                    <SettingsGroup>
+                      <Switch
+                        label="Remember our conversations"
+                        description="Mira keeps your chats, so you can pick any of them up again."
+                        checked={p.remember_chats}
+                        onChange={(v) => void autosave("privacy", { remember_chats: v })}
+                      />
+                      <Switch
+                        label="Mira may use my LoveIQ result"
+                        description="Your LoveIQ Sexual Personality result tailors the coaching."
+                        checked={p.use_assessment}
+                        onChange={(v) => void autosave("privacy", { use_assessment: v })}
+                      />
+                    </SettingsGroup>
+                    <p className="mt-3 px-1 text-[13px] leading-relaxed text-ap-muted">
+                      Your chats concern your sex life, which is sensitive data under the GDPR. We
+                      use them with your consent, to coach you and to improve Mira; our analytics
+                      tools also see what you type. Never for advertising, never to train shared
+                      models.{" "}
+                      <Link
+                        href="/mira/privacy"
+                        className="text-ap-plum underline underline-offset-2"
+                      >
+                        How Mira handles your data
+                      </Link>
+                    </p>
+                  </SettingsSection>
 
-              {checks ? <Slot id="checks">{checks}</Slot> : null}
+                  {checks ? <Slot id="checks">{checks}</Slot> : null}
+                </>
+              ) : null}
 
               {sharedReview ? <Slot id="sharing">{sharedReview}</Slot> : null}
 
-              <SettingsSection
-                id="notifications"
-                title="Notifications"
-                status={status.notifications}
-              >
-                <SettingsGroup>
-                  <Switch
-                    label="Daily nudges by email"
-                    description="A short thought from Mira that leads back into the chat. Neutral subject line."
-                    checked={p.nudges_on}
-                    onChange={(v) => void autosave("notifications", { nudges_on: v })}
-                  />
-                  {p.nudges_on && !p.remember_chats ? (
-                    <p className="px-4 py-3 text-[13px] text-ap-body sm:px-5">
-                      Nudges pick up on your last chat, so they need “Remember our conversations”
-                      on.
-                    </p>
-                  ) : null}
-                  {p.nudges_on ? (
-                    <Row label="Nudge time">
-                      {(id) => (
-                        <Select
-                          id={id}
-                          value={p.nudge_time}
-                          onChange={(e) =>
-                            void autosave("notifications", {
-                              nudge_time: e.target.value as Profile["nudge_time"],
-                            })
-                          }
-                        >
-                          {NUDGE_TIMES.map(([v, label]) => (
-                            <option key={v} value={v}>
-                              {label}
-                            </option>
-                          ))}
-                        </Select>
-                      )}
-                    </Row>
-                  ) : null}
-                  <Row label="Time zone" description="Nudges and reminders come at your own time.">
-                    {(id) => (
-                      <Select
-                        id={id}
-                        value={p.time_zone}
-                        onChange={(e) =>
-                          void autosave("notifications", { time_zone: e.target.value })
-                        }
+              {!minor ? (
+                <>
+                  <SettingsSection
+                    id="notifications"
+                    title="Notifications"
+                    status={status.notifications}
+                  >
+                    <SettingsGroup>
+                      <Switch
+                        label="Daily nudges by email"
+                        description="A short thought from Mira that leads back into the chat. Neutral subject line."
+                        checked={p.nudges_on}
+                        onChange={(v) => void autosave("notifications", { nudges_on: v })}
+                      />
+                      {p.nudges_on && !p.remember_chats ? (
+                        <p className="px-4 py-3 text-[13px] text-ap-body sm:px-5">
+                          Nudges pick up on your last chat, so they need “Remember our
+                          conversations” on.
+                        </p>
+                      ) : null}
+                      {p.nudges_on ? (
+                        <Row label="Nudge time">
+                          {(id) => (
+                            <Select
+                              id={id}
+                              value={p.nudge_time}
+                              onChange={(e) =>
+                                void autosave("notifications", {
+                                  nudge_time: e.target.value as Profile["nudge_time"],
+                                })
+                              }
+                            >
+                              {NUDGE_TIMES.map(([v, label]) => (
+                                <option key={v} value={v}>
+                                  {label}
+                                </option>
+                              ))}
+                            </Select>
+                          )}
+                        </Row>
+                      ) : null}
+                      <Row
+                        label="Time zone"
+                        description="Nudges and reminders come at your own time."
                       >
-                        {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
-                          <option key={tz} value={tz}>
-                            {tz.replace("_", " ")}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </Row>
-                </SettingsGroup>
-              </SettingsSection>
+                        {(id) => (
+                          <Select
+                            id={id}
+                            value={p.time_zone}
+                            onChange={(e) =>
+                              void autosave("notifications", { time_zone: e.target.value })
+                            }
+                          >
+                            {[...new Set([p.time_zone, ...TIME_ZONES])].map((tz) => (
+                              <option key={tz} value={tz}>
+                                {tz.replace("_", " ")}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </Row>
+                    </SettingsGroup>
+                  </SettingsSection>
 
-              {journal ? <Slot id="journal">{journal}</Slot> : null}
+                  {journal ? <Slot id="journal">{journal}</Slot> : null}
 
-              {weeklySession ? <Slot id="weekly">{weeklySession}</Slot> : null}
+                  {weeklySession ? <Slot id="weekly">{weeklySession}</Slot> : null}
 
-              <SettingsSection
-                id="appearance"
-                title="Appearance"
-                description="Kept in this browser, and with your account for your next sign-in elsewhere."
-                status={status.appearance}
-              >
-                <fieldset>
-                  <legend className="text-[15px] font-semibold">Theme</legend>
-                  <ThemePicker
-                    value={look.theme}
-                    onChange={(theme) => void changeLook({ theme })}
-                  />
-                </fieldset>
-                <fieldset className="mt-6">
-                  <legend className="text-[15px] font-semibold">Text size</legend>
-                  <Segmented
-                    name="mira-text-size"
-                    choices={TEXT_CHOICES}
-                    value={look.text}
-                    onChange={(text) => void changeLook({ text })}
-                  />
-                  <p className="mt-3 rounded-[20px] bg-ap-ground px-4 py-3 text-[16px] leading-[1.65]">
-                    Go gently with yourself. Come back anytime and tell me how it went.
-                  </p>
-                </fieldset>
-              </SettingsSection>
+                  <SettingsSection
+                    id="appearance"
+                    title="Appearance"
+                    description="Kept in this browser, and with your account for your next sign-in elsewhere."
+                    status={status.appearance}
+                  >
+                    <fieldset>
+                      <legend className="text-[15px] font-semibold">Theme</legend>
+                      <ThemePicker
+                        value={look.theme}
+                        onChange={(theme) => void changeLook({ theme })}
+                      />
+                    </fieldset>
+                    <fieldset className="mt-6">
+                      <legend className="text-[15px] font-semibold">Text size</legend>
+                      <Segmented
+                        name="mira-text-size"
+                        choices={TEXT_CHOICES}
+                        value={look.text}
+                        onChange={(text) => void changeLook({ text })}
+                      />
+                      <p className="mt-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-ap-muted">
+                        Preview
+                      </p>
+                      <p className="mt-1 rounded-[20px] bg-ap-ground px-4 py-3 text-[16px] leading-[1.65]">
+                        Go gently with yourself. Come back anytime and tell me how it went.
+                      </p>
+                    </fieldset>
+                  </SettingsSection>
+                </>
+              ) : null}
 
               <SettingsSection id="data" title="Your data" status={status.data}>
                 <div className="rounded-3xl bg-ap-lilac p-5">
                   <p className="text-[15px] font-semibold">Your plan: free while in beta</p>
                   <p className="mt-1 text-[14px] text-ap-body">
                     We&apos;ll tell you well before anything changes.{" "}
-                    <a
+                    <Link
                       href="/mira/feedback"
                       className="font-semibold text-ap-ink underline underline-offset-2"
                     >
                       Share feedback
-                    </a>
+                    </Link>
                   </p>
                 </div>
                 <p className="mt-5 text-[14px] text-ap-body">
@@ -639,35 +718,26 @@ export default function MiraSettings({
                   and we&apos;ll send it within 30 days.
                 </p>
                 {confirm ? (
-                  <div className="mt-4 rounded-3xl border border-ap-bad p-5 motion-safe:animate-mira-in">
-                    <p id="confirm-delete" className="text-[15px] font-semibold">
-                      {confirm === "chats"
-                        ? "Delete all your chats? This can't be undone."
-                        : "Delete your account, your profile and all your chats? This can't be undone."}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => remove(confirm)}
-                        className="min-h-[44px] rounded-full bg-ap-bad px-5 text-[15px] font-semibold text-white disabled:opacity-50"
-                      >
-                        {busy ? "Deleting…" : "Delete"}
-                      </button>
-                      <button
-                        ref={cancel}
-                        type="button"
-                        onClick={() => setConfirm(null)}
-                        className="min-h-[44px] rounded-full border border-ap-line px-5 text-[15px] font-semibold"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                  <div className="mt-4">
+                    <ConfirmDelete
+                      question={
+                        confirm === "chats"
+                          ? "Delete all your chats? This can't be undone."
+                          : "Delete your account and everything Mira keeps for you: your chats, journal, goals, check results, voice sessions, rating and passkeys? A booked weekly session is cancelled. This can't be undone."
+                      }
+                      action={busy ? "Deleting…" : "Delete"}
+                      busy={busy}
+                      onConfirm={() => void remove(confirm)}
+                      onKeep={() => setConfirm(null)}
+                    />
                   </div>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
                       type="button"
+                      ref={(b) => {
+                        openers.current.chats = b;
+                      }}
                       onClick={() => setConfirm("chats")}
                       className="min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold hover:border-ap-quiet"
                     >
@@ -675,6 +745,9 @@ export default function MiraSettings({
                     </button>
                     <button
                       type="button"
+                      ref={(b) => {
+                        openers.current.account = b;
+                      }}
                       onClick={() => setConfirm("account")}
                       className="min-h-[44px] rounded-full border border-ap-bad px-5 text-[14px] font-semibold text-ap-bad-ink"
                     >
@@ -684,9 +757,9 @@ export default function MiraSettings({
                 )}
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={signOut}
-                  className="mt-6 min-h-[44px] text-[15px] font-semibold text-ap-plum underline underline-offset-4 disabled:opacity-50"
+                  aria-disabled={busy || undefined}
+                  onClick={() => (busy ? undefined : void signOut())}
+                  className="mt-6 min-h-[44px] text-[15px] font-semibold text-ap-plum underline underline-offset-4 aria-disabled:cursor-wait aria-disabled:opacity-50"
                 >
                   Sign out
                 </button>
@@ -698,6 +771,37 @@ export default function MiraSettings({
       ) : null}
     </MiraAppFrame>
   );
+}
+
+/** What the person does when they take over the scrolling. */
+const TAKE_OVER = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/**
+ * A link into a section (#weekly from the session emails, #security back from Google) lands on it
+ * once it exists (the sections come after the profile, so the browser's own jump on arrival found
+ * nothing), at once, as the page's smooth scrolling would still be gliding when the sections above
+ * load their own data and grow. Until the person scrolls or taps (10 seconds at most), each growth
+ * lands it again, so it stays in view.
+ */
+function useLandOnSection(ready: boolean) {
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    // Only with an anchor: Firefox warns about an empty id.
+    const section = ready && id ? document.getElementById(id) : null;
+    if (!section) return;
+    const land = () => section.scrollIntoView({ behavior: "instant", block: "start" });
+    land();
+    const grew = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(land);
+    grew?.observe(document.body);
+    const stop = () => {
+      grew?.disconnect();
+      window.clearTimeout(timer);
+      for (const e of TAKE_OVER) window.removeEventListener(e, stop);
+    };
+    const timer = window.setTimeout(stop, 10_000);
+    for (const e of TAKE_OVER) window.addEventListener(e, stop, { passive: true });
+    return stop;
+  }, [ready]);
 }
 
 /**
@@ -946,7 +1050,7 @@ function Field({
 }
 
 const INPUT =
-  "min-h-[48px] w-full rounded-2xl border border-ap-line bg-white px-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25";
+  "min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] text-ap-ink caret-ap-purple outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25";
 
 /**
  * An on/off row: the whole row toggles. A checkbox with the switch role, so it is announced as
@@ -995,7 +1099,7 @@ export function Switch({
         />
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(22,16,33,0.3)] transition-transform duration-200 peer-checked:translate-x-5 motion-reduce:transition-none"
+          className="pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-ap transition-transform duration-200 peer-checked:translate-x-5 motion-reduce:transition-none"
         />
       </span>
     </label>
@@ -1008,7 +1112,7 @@ export function Select({ children, ...rest }: React.SelectHTMLAttributes<HTMLSel
     <span className="relative flex">
       <select
         {...rest}
-        className="min-h-[48px] w-full cursor-pointer appearance-none rounded-2xl border border-ap-line bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25"
+        className="min-h-[48px] w-full cursor-pointer appearance-none rounded-2xl border border-ap-field bg-white pl-4 pr-10 text-[16px] font-normal text-ap-ink outline-none transition-colors hover:border-ap-quiet focus:border-ap-purple focus-visible:ring-2 focus-visible:ring-ap-purple/25"
       >
         {children}
       </select>
@@ -1104,7 +1208,7 @@ function Segmented<T extends string>({
             onChange={() => onChange(v)}
             className="peer sr-only"
           />
-          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color,box-shadow] duration-200 hover:text-ap-ink peer-checked:bg-white peer-checked:font-semibold peer-checked:text-ap-ink peer-checked:shadow-[0_1px_3px_rgba(22,16,33,0.18)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
+          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
             <span
               aria-hidden="true"
               className="hidden font-serif sm:inline"
@@ -1117,6 +1221,41 @@ function Segmented<T extends string>({
         </label>
       ))}
     </div>
+  );
+}
+
+/**
+ * After "Delete account": the account and everything Mira kept for it are gone (the session too),
+ * so the page says so in the open frame, with the way back to the anonymous chat.
+ */
+function AccountDeleted() {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+  return (
+    <MiraFrame>
+      <div className="mx-auto flex max-w-[520px] flex-col gap-4 py-16">
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="font-serif text-[34px] font-medium leading-tight outline-none"
+        >
+          Your account is deleted
+        </h1>
+        <p className="text-[15px] leading-relaxed text-ap-body">
+          Your chats, journal, goals, check results, voice sessions, rating and passkeys went with
+          it, and any weekly session you booked is cancelled. You&apos;re signed out on every
+          device.
+        </p>
+        <div>
+          <Link
+            href="/mira"
+            className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-ap-ink px-6 text-[15px] font-bold text-white hover:bg-ap-ink/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+          >
+            Back to Mira
+          </Link>
+        </div>
+      </div>
+    </MiraFrame>
   );
 }
 

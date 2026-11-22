@@ -7,7 +7,7 @@
  *   POST { action: "sign-in-options" }           options for signing in (the button, or autofill)
  *   POST { action: "sign-in", response, ticks? } a passkey's signature → Mira's own session
  *   PATCH { id, label }                          renames one of the account's passkeys
- *   DELETE ?id=                                  removes one of them
+ *   DELETE ?id=                                  removes one of them; answers the passkeys left
  *
  * Every ceremony's challenge is single use, lives 5 minutes, and is bound to the browser that asked
  * (an httpOnly cookie holding its row id, SameSite=Strict, this path only) and, for a new passkey,
@@ -32,7 +32,12 @@ import { z } from "zod";
 import { anonId } from "@features/mira/server/anon";
 import { fromTeamBrowser } from "@features/mira/server/attribution";
 import { CONSENT_VERSION } from "@features/mira/server/config";
-import { deviceLabel, isRecentSignIn, recordSession } from "@features/mira/server/devices";
+import {
+  cityFrom,
+  deviceLabel,
+  isRecentSignIn,
+  recordSession,
+} from "@features/mira/server/devices";
 import { loginEmail } from "@features/mira/server/email-change";
 import { isStaffEmail } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
@@ -50,6 +55,7 @@ import {
   saveChallenge,
   takeChallenge,
   markPasskeyUsed,
+  summarise,
   userHandleOf,
   type ChallengePurpose,
 } from "@features/mira/server/passkeys";
@@ -185,7 +191,7 @@ export async function POST(request: Request) {
 
     const account = await getMiraAccount();
     if (!account) return fail("Please sign in again.", 401);
-    if (await isMinor(account.id)) return fail(ADULTS_ONLY, 403);
+    if (await isMinor(account.id)) return fail(ADULTS_ONLY, 403, { minor: true });
 
     if (body.action === "register-options") {
       if (await isStaffEmail(account.email)) {
@@ -261,8 +267,9 @@ export async function POST(request: Request) {
     if (body.via === "offer") logMiraEvent("passkey_offer_accepted", { userId: account.id });
     // The owner hears of every new passkey, wherever it was added from (security review M1).
     const label = passkey.label;
+    const city = cityFrom(request.headers);
     scheduleAfterResponse("mira-passkey-added-notice", async () => {
-      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label)))) {
+      if (!(await sendNeutralEmail(account.email, passkeyAddedNotice(label, city)))) {
         logger.warn("mira: the new-passkey notice was not sent");
       }
     });
@@ -315,17 +322,16 @@ async function signIn(
     return fail(DIDNT_WORK, 400);
   }
   if (!verified.verified) return fail(DIDNT_WORK, 400);
-  if (!(await markPasskeyUsed(passkey, verified.authenticationInfo.newCounter))) {
-    logger.warn("mira: a passkey's counter moved during its sign-in");
-    return fail(DIDNT_WORK, 400);
-  }
 
+  // Every refusal comes before the counter moves: a passkey is marked used only by a sign-in that
+  // happens (Settings shows when each was last used). The challenge is already spent, so a refused
+  // answer can't be sent again.
   const userId = passkey.user_id;
   const profile = await getProfile(userId);
   if (!profile) return fail(DIDNT_WORK, 400);
   // A browser or an account Mira stopped as under 18. A passkey's account already exists, so the
   // browser's cookie alone never stops or wipes it (carryMinorStop); this browser stays stopped.
-  if (await isMinor(userId)) return fail(ADULTS_ONLY, 403);
+  if (await isMinor(userId)) return fail(ADULTS_ONLY, 403, { minor: true });
   // The login's own address, never the profile's copy (which a change of email may have left
   // behind): a code minted for an address no login has would make a new login.
   const email = await loginEmail(userId);
@@ -340,6 +346,12 @@ async function signIn(
     return fail("Please tick the three boxes, then use your passkey again.", 409, {
       needsConsent: true,
     });
+  }
+  // Compare and set, right before the session: two sign-ins racing with one counter (a cloned
+  // authenticator's sign) can't both pass.
+  if (!(await markPasskeyUsed(passkey, verified.authenticationInfo.newCounter))) {
+    logger.warn("mira: a passkey's counter moved during its sign-in");
+    return fail(DIDNT_WORK, 400);
   }
 
   const code = await mintSignInCode(email);
@@ -403,7 +415,13 @@ export async function DELETE(request: Request) {
   try {
     if ((await removePasskeys(account.id, id.data)) === 0) return fail("Not found.", 404);
     logMiraEvent("passkey_removed", { userId: account.id });
-    return NextResponse.json({ success: true });
+    // The passkeys left, for the page to tell the passkey manager which still work (one added on
+    // another device since the page loaded included); none when they can't be read.
+    const left = await listPasskeys(account.id).catch(() => null);
+    return NextResponse.json({
+      success: true,
+      ...(left ? { passkeys: left.map(summarise) } : {}),
+    });
   } catch (err) {
     logger.error({ err }, "mira: a passkey was not removed");
     return fail("Unable to remove it right now. Please try again.", 500);
