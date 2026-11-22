@@ -294,10 +294,24 @@ describe("Saving", () => {
     );
   });
 
+  it("saves only the coaching scale that changed, so another tab's change stays (SET-3)", async () => {
+    await openSettings(); // the style here: { tone: 2 }
+    fireEvent.click(screen.getByRole("radio", { name: "Depth 4 of 5" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")).toEqual([{ style: { depth: 4 } }]));
+    fireEvent.click(screen.getByRole("radio", { name: "Tone 3 of 5" }));
+    await waitFor(() => expect(calls("PATCH /api/mira/me")[1]).toEqual({ style: { tone: 3 } }));
+  });
+
   it("resets the coaching style to balanced in one save", async () => {
     await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "Reset to balanced" }));
-    await waitFor(() => expect(calls("PATCH /api/mira/me")).toEqual([{ style: {} }]));
+    // Every scale at the middle (3), so the server's merge leaves nothing of the old style.
+    await waitFor(() =>
+      expect(calls("PATCH /api/mira/me")).toEqual([
+        { style: { guidance: 3, challenge: 3, depth: 3, practical: 3, tone: 3 } },
+      ])
+    );
+    expect(screen.getByRole("button", { name: "Reset to balanced" })).toBeDisabled();
   });
 });
 

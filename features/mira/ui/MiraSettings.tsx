@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import miraConfig from "@features/mira/content/mira-config.json";
 import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import { StyleScales, type Style } from "./CoachingStylePanel";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
@@ -111,6 +112,18 @@ type SectionId =
   | "weekly"
   | "appearance"
   | "data";
+
+/**
+ * The coaching style goes out as the scales changed only (a point back at the middle as 3,
+ * balanced): the server puts them onto its newest style, so a change made meanwhile in another
+ * tab, on another device or in the chat's panel stays (round-2 SET-3).
+ */
+const STYLE_KEYS = miraConfig.styleScales.map((s) => s.key) as Array<keyof Style>;
+const changedScales = (next: Style, was: Style | null | undefined): Style =>
+  Object.fromEntries(
+    STYLE_KEYS.filter((k) => (next[k] ?? 3) !== (was?.[k] ?? 3)).map((k) => [k, next[k] ?? 3])
+  );
+const BALANCED = Object.fromEntries(STYLE_KEYS.map((k) => [k, 3])) as Style;
 
 /** What an account stopped as under 18 can still do here. */
 const STILL_WORKS = new Set<SectionId>(["security", "sharing", "data"]);
@@ -235,11 +248,18 @@ export default function MiraSettings({
     return { r, current: Object.keys(body).filter((k) => latest.current.get(k) === n) };
   }
 
-  /** Shows `fields` at once and saves them; a refused save puts the stored values back. */
-  async function autosave(section: SectionId, fields: Partial<Profile>) {
+  /**
+   * Shows `fields` at once and saves them (or `body`, when what goes out differs from what shows);
+   * a refused save puts the stored values back.
+   */
+  async function autosave(
+    section: SectionId,
+    fields: Partial<Profile>,
+    body: Record<string, unknown> = fields
+  ) {
     setP((cur) => (cur ? { ...cur, ...fields } : cur));
     setStatus(section, { kind: "saving" });
-    const { r, current } = await save(fields);
+    const { r, current } = await save(body);
     if (r.ok && stored.current) stored.current = { ...stored.current, ...fields };
     // A later change of these fields is on its way: its answer decides.
     if (current.length === 0) return;
@@ -514,8 +534,10 @@ export default function MiraSettings({
                     action={
                       <button
                         type="button"
-                        onClick={() => void autosave("coaching", { style: {} })}
-                        disabled={Object.keys(p.style ?? {}).length === 0}
+                        onClick={() =>
+                          void autosave("coaching", { style: {} }, { style: BALANCED })
+                        }
+                        disabled={STYLE_KEYS.every((k) => (p.style?.[k] ?? 3) === 3)}
                         className="min-h-[44px] px-1 text-[14px] font-semibold text-ap-plum underline-offset-4 hover:underline disabled:text-ap-muted disabled:no-underline"
                       >
                         Reset to balanced
@@ -524,7 +546,13 @@ export default function MiraSettings({
                   >
                     <StyleScales
                       value={p.style ?? {}}
-                      onChange={(style) => void autosave("coaching", { style })}
+                      onChange={(style) =>
+                        void autosave(
+                          "coaching",
+                          { style },
+                          { style: changedScales(style, p.style) }
+                        )
+                      }
                     />
                   </SettingsSection>
 
