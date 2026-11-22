@@ -312,3 +312,14 @@ describe("reminders the person asked for reach anyone whose mail arrives", () =>
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe("what Mira is told about the invite", () => {
+  it("never that it was emailed: it may not have been", async () => {
+    const { weeklySessionInstructions } = await import("@features/mira/server/prompt");
+    const booked = weeklySessionInstructions({ ...SESSION_VIEW });
+    expect(booked).not.toMatch(/emailed them the calendar invite/);
+    expect(booked).toContain(
+      "The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox."
+    );
+  });
+});

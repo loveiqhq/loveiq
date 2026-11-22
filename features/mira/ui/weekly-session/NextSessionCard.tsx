@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarLinks, ScheduleSheet } from "./ScheduleSheet";
+import { ScheduleSheet } from "./ScheduleSheet";
+import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const SECTION = "rounded-3xl border border-ap-line p-5";

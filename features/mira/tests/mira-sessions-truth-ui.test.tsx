@@ -148,3 +148,72 @@ describe("cancelling in Settings says whether the calendar update went out", () 
     expect(screen.queryByRole("link", { name: "Download the cancellation" })).toBeNull();
   });
 });
+
+describe("booking in the chat says whether the invite was emailed", () => {
+  const weekly = (onAnswer = vi.fn()) => {
+    render(<IntakeAnswers questionId="weekly" onAnswer={onAnswer} onSkip={vi.fn()} />);
+    return onAnswer;
+  };
+
+  it("not emailed: the calendar links first, then the answer goes into the chat", async () => {
+    replies["GET /api/mira/weekly-session"] = () => ({
+      body: { slot: null, timeZone: "Europe/Berlin" },
+    });
+    replies["PUT /api/mira/weekly-session"] = () => ({
+      body: { slot: SLOT, timeZone: "Europe/Berlin", change: "booked", emailed: false },
+    });
+    const onAnswer = weekly();
+    fireEvent.click(await screen.findByRole("radio", { name: "Tuesday" }));
+    fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Book Tuesdays at 19:00" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "We couldn’t email your invite just now. Add it to your calendar here:"
+    );
+    expect(screen.getByRole("link", { name: "Google Calendar" })).toHaveAttribute(
+      "href",
+      SLOT.googleUrl
+    );
+    expect(screen.getByRole("link", { name: "Apple or Outlook" })).toHaveAttribute(
+      "href",
+      "/api/mira/weekly-session?format=ics"
+    );
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onAnswer).toHaveBeenCalledWith("Tuesdays at 19:00 works for me.");
+  });
+});
+
+describe("a new time zone alone is a change", () => {
+  it("in the chat: 'Use New York time' moves the session to New York time", async () => {
+    replies["PUT /api/mira/weekly-session"] = (b) => ({
+      body: {
+        slot: { ...SLOT, timeZone: b.timeZone },
+        timeZone: b.timeZone,
+        change: "moved",
+        emailed: true,
+      },
+    });
+    const onAnswer = vi.fn();
+    render(<IntakeAnswers questionId="weekly" onAnswer={onAnswer} onSkip={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Use New York time" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
+    );
+    await waitFor(() =>
+      expect(onAnswer).toHaveBeenCalledWith("Let’s move it to Tuesdays at 19:00, New York time.")
+    );
+    expect(calls("PUT /api/mira/weekly-session")).toEqual([
+      { weekday: 2, time: "19:00", timeZone: "America/New_York", source: "chat" },
+    ]);
+  });
+
+  it("on Home: the sheet's button says it moves to the new zone", async () => {
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+    expect(screen.getByRole("button", { name: "Keep Tuesdays at 19:00" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Use New York time" }));
+    expect(
+      screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
+    ).toBeEnabled();
+  });
+});
