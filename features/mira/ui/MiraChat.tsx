@@ -379,7 +379,8 @@ export default function MiraChat({
     setMessages(next);
     setInput("");
     setSending(true);
-    setSaid("Mira is writing…");
+    // A spoken turn has the voice panel's own status ("Mira is thinking"), so not this line too.
+    setSaid(opts.voice ? "" : "Mira is writing…");
     const res = await miraApi<{
       reply?: string;
       sources?: Source[];
@@ -414,6 +415,9 @@ export default function MiraChat({
     });
     setSending(false);
     if (opts.voice) voice.answered(res); // she says the reply, or listens again
+    // Said out loud: not read out by the live line as well (round-3 R3-CHAT-12). A device with no
+    // voice for her answers in writing, and that reply is read out.
+    const spoken = Boolean(opts.voice) && voice.speaking();
     if (res.data.gate) {
       // Never sent (a crisis message never gets here: the server answers it): the words go back
       // in the box and the page says why, rather than a message left waiting for a reply that
@@ -455,7 +459,9 @@ export default function MiraChat({
     ];
     replyAt.current = next.length;
     setMessages(withReply);
-    setSaid(`Mira: ${[res.data.reply, res.data.invitation].filter(Boolean).join(" ")}`);
+    setSaid(
+      spoken ? "" : `Mira: ${[res.data.reply, res.data.invitation].filter(Boolean).join(" ")}`
+    );
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
     // composer stays, and the server answers a crisis message whatever the limits. Nor after an
