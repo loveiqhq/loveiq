@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS public.mira_goal_log (
 );
 
 CREATE INDEX IF NOT EXISTS mira_goal_log_user_idx ON public.mira_goal_log (user_id, day);
+-- The ticks of one goal (its bars, and the cascade when the goal is deleted): the foreign key's
+-- columns, which the user index above doesn't cover (Supabase advisor, 22 Nov 2026).
+CREATE INDEX IF NOT EXISTS mira_goal_log_goal_idx ON public.mira_goal_log (goal_id, user_id);
 
 ALTER TABLE public.mira_goal ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mira_goal_log ENABLE ROW LEVEL SECURITY;
