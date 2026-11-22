@@ -853,6 +853,53 @@ describe("POST /api/mira/chat", () => {
     expect(personal).not.toMatch(/2, ?2, ?2/);
   });
 
+  // Round-2 audit HAB-11: the check-in after a mood check's question 9 was logged as a crisis.
+  it("opens the support lines for the question-9 check-in without counting a crisis", async () => {
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      country: "GB",
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+    } as never);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    vi.mocked(supabaseFetch).mockImplementation(
+      async (path) =>
+        new Response(
+          JSON.stringify(
+            String(path).includes("use_checks=is.true")
+              ? [
+                  {
+                    mira_check: [
+                      {
+                        scale: "phq9",
+                        answers: [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                        created_at: yesterday,
+                      },
+                    ],
+                  },
+                ]
+              : []
+          )
+        )
+    );
+    vi.mocked(askModel).mockResolvedValueOnce({
+      ok: true,
+      text: "Before anything else: how are you with those thoughts now?\n[[SUPPORT]]",
+      refused: false,
+    });
+    const body = await (await post({ message: "I hide during sex", consent: true })).json();
+    expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("[[SUPPORT]]");
+    expect(body.reply).toBe("Before anything else: how are you with those thoughts now?");
+    expect(body.crisis).toBe(true); // the browser opens the support panel on this
+    expect(body.crisisLines.code).toBe("GB");
+    expect(body.invitation).toBeUndefined(); // never a second ask under it
+    expect(events("crisis_shown")).toEqual([]);
+    expect(events("reply_shown")).toEqual([{ sources: [], crisis: false }]);
+  });
+
   it("asks the model for a topic only on a first message in the person's own words", async () => {
     await post({ message: "I only feel okay with the lights off", consent: true });
     expect(vi.mocked(askModel).mock.calls[0]![1]).toContain("FIRST MESSAGE TOPIC");

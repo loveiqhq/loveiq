@@ -210,6 +210,22 @@ describe("parseReply", () => {
       refer: false,
       topic: null,
       minor: false,
+      support: false,
+    });
+  });
+
+  // Round-2 audit HAB-11: the gentle check-in after a mood check's question 9 had only [[CRISIS]]
+  // to show the support lines, so it was counted as a crisis in the chat.
+  it("reads [[SUPPORT]] as the support lines without a crisis, and never beside one", () => {
+    expect(parseReply("How are you with those thoughts now?\n[[SUPPORT]]")).toMatchObject({
+      text: "How are you with those thoughts now?",
+      support: true,
+      crisis: false,
+    });
+    expect(parseReply(`Please reach out now.\n[[SUPPORT]]\n${CRISIS_TOKEN}`)).toMatchObject({
+      text: "Please reach out now.",
+      support: false,
+      crisis: true,
     });
   });
 

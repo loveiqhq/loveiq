@@ -435,6 +435,7 @@ export async function POST(request: Request) {
   let sources: CitedSource[] = [];
   let crisis = false;
   let refused = false;
+  let support = false; // the question-9 check-in's support lines, not a crisis (HAB-11)
   let ask: string | null = null;
   let goal: string | null = null;
 
@@ -481,6 +482,7 @@ export async function POST(request: Request) {
     reply = out.text;
     sources = out.sources;
     crisis = out.crisis;
+    support = out.support;
     ask = out.ask;
     goal = out.goal ?? null; // parseReply never offers one beside a crisis or an under-18 stop
   }
@@ -488,10 +490,13 @@ export async function POST(request: Request) {
   // The invitation is its own message after Mira's reply (with reply buttons). Not when her reply
   // already asked an intake question: that question's buttons come first.
   const invitation =
-    inviting && !crisis && !refused && !minor && !ask ? miraConfig.intakeInvitation : null;
+    inviting && !crisis && !refused && !support && !minor && !ask
+      ? miraConfig.intakeInvitation
+      : null;
 
-  // A declined reply opens the support lines the way a crisis reply does (the browser's `crisis`).
-  const lines = crisis || refused;
+  // A declined reply, and the question-9 check-in, open the support lines the way a crisis reply
+  // does (the browser's `crisis`); only a crisis is counted as one (crisis_shown).
+  const lines = crisis || refused || support;
   let messageId: number | null = null;
   let title: string | undefined; // a new chat's, as it is shown (Home, the chat list)
   if (minor) {
@@ -501,12 +506,14 @@ export async function POST(request: Request) {
   } else if (account && remember) {
     try {
       if (!chatId) {
-        // Named after its first message, unless that brought the support lines: then by its
-        // date, never those words (round-2 audit CHAT-17, lead decision 5).
+        // Named after its first message, unless the reply to it was a crisis or a declined one:
+        // then by its date, never those words (round-2 audit CHAT-17, lead decision 5). The
+        // question-9 check-in's lines come from a check, not the message, which names it.
         const now = new Date();
-        const stored = lines
-          ? neutralTitle(now, timeZone)
-          : message.replace(/\s+/g, " ").slice(0, 80);
+        const stored =
+          crisis || refused
+            ? neutralTitle(now, timeZone)
+            : message.replace(/\s+/g, " ").slice(0, 80);
         chatId = await createChat(account.id, stored);
         title = shownTitle(stored, now, timeZone);
       }

@@ -147,6 +147,12 @@ export type ParsedReply = {
   topic: string | null;
   /** The person said or clearly showed they are under 18 (rail 15). */
   minor: boolean;
+  /**
+   * Show the support lines without a crisis ([[SUPPORT]]): the check-in after a mood check's
+   * question 9 (prompt.ts). Never beside [[CRISIS]] or [[MINOR]]; not counted as crisis_shown
+   * (round-2 audit HAB-11).
+   */
+  support: boolean;
   /** A small goal Mira offers ([[GOAL:…]]), shown as "Add as a goal"; absent when none. */
   goal?: string;
 };
@@ -191,9 +197,11 @@ export function parseReply(raw: string): ParsedReply {
   let refer = false;
   let crisis = false;
   let minor = false;
+  let support = false;
   for (const [, inside] of raw.matchAll(MARKER)) {
     const [kind, id] = markerOf(inside!);
     if (kind === "CRISIS" && !id) crisis = true;
+    else if (kind === "SUPPORT" && !id) support = true;
     else if (kind === "MINOR" && !id) minor = true;
     else if (kind === "REFER" && !id) refer = true;
     else if (kind === "ASK" && id && INTAKE_IDS.has(id)) ask = id;
@@ -227,6 +235,7 @@ export function parseReply(raw: string): ParsedReply {
   if (crisis || minor) {
     ask = null;
     refer = false;
+    support = false;
   }
   if (minor) topic = null;
   return {
@@ -240,6 +249,7 @@ export function parseReply(raw: string): ParsedReply {
     refer,
     topic,
     minor,
+    support,
     ...(goal && goal.length <= GOAL_MAX_CHARS && !crisis && !minor ? { goal } : {}),
   };
 }
