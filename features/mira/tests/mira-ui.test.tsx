@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { CONSENT_VERSION } from "@features/mira/server/config";
+import { StyleScales } from "@features/mira/ui/CoachingStylePanel";
 import MiraChat from "@features/mira/ui/MiraChat";
 import MiraHome, { greeting } from "@features/mira/ui/MiraHome";
 import { changedFields } from "@features/mira/ui/MiraSettings";
@@ -698,6 +699,28 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Coaching style" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(tracked()).toContain("style_saved"));
+  });
+});
+
+// Round-2 audit A11Y-9 / CHAT-12: buttons with role="radio" and no arrow keys made 25 Tab
+// stops, and the unselected points were 14-px rings at 1.5:1.
+describe("How Mira coaches you", () => {
+  it("is five native radio groups, so each scale is one Tab stop that arrow keys move", () => {
+    const onChange = vi.fn();
+    render(<StyleScales value={{ guidance: 2 }} onChange={onChange} />);
+    const radios = screen.getAllByRole("radio") as HTMLInputElement[];
+    expect(radios).toHaveLength(25);
+    expect(radios.every((r) => r.tagName === "INPUT" && r.type === "radio")).toBe(true);
+    expect(new Set(radios.map((r) => r.name)).size).toBe(5);
+    expect(screen.getByRole("group", { name: "Guidance" })).toContainElement(radios[0]!);
+    expect(screen.getByRole("radio", { name: "Guidance 2 of 5" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Depth 3 of 5" })).toBeChecked(); // balanced
+    fireEvent.click(screen.getByRole("radio", { name: "Guidance 4 of 5" }));
+    expect(onChange).toHaveBeenCalledWith({ guidance: 4 });
+    // An unselected point is ringed in muted (4.5:1 on the page in both themes), not mist.
+    const ring = screen.getByRole("radio", { name: "Tone 1 of 5" }).nextElementSibling!;
+    expect(ring.className).toContain("border-ap-muted");
+    expect(ring.className).not.toContain("border-ap-mist");
   });
 });
 
