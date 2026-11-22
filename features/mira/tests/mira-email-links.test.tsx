@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -78,10 +78,17 @@ describe("a weekly session's stop page", () => {
     const t = makeToken("session-stop", ID)!;
     jar.set("mira_link", t);
     await open(SessionStopPage);
+    // SET-16: it never tells someone signed in that they'll sign in first.
+    expect(screen.queryByText(/sign in first|after signing in/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Stop reminder emails" }));
     expect(await screen.findByRole("heading", { name: "No more reminders" })).toBeVisible();
     // DATA-1: the token goes in the request's body, never in an address (logs, analytics).
     expect(sentTo()).toEqual(["/api/mira/weekly-session/stop", { action: "pause", t }]);
+    // Round-3 R3-DATA-3: the button went and the focus fell to the page; the new heading has it,
+    // as on the journal's and the nudges' pages.
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "No more reminders" })).toHaveFocus()
+    );
   });
 
   it("says Mira is only for adults when the stop is refused as under 18, never 'try again'", async () => {
@@ -96,6 +103,9 @@ describe("a weekly session's stop page", () => {
     expect(await screen.findByText("Mira is only for adults.")).toBeVisible();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Stop reminder emails" })).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Reminder emails" })).toHaveFocus()
+    );
   });
 
   it("ignores a token in the address: without the cookie the link doesn't work", async () => {
@@ -183,6 +193,9 @@ describe("a weekly session's stop page, opened again", () => {
     booked.slot = null;
     await open(SessionStopPage);
     expect(screen.getByRole("heading", { name: "Nothing to stop" })).toBeVisible();
+    // Round-3 R3-DATA-3: with nothing booked there's nothing to turn back on, change or cancel.
+    expect(screen.queryByText(/turn reminders back on|change or cancel/)).toBeNull();
+    expect(screen.getByText(/To book one, open/)).toBeVisible();
     cleanup();
     // Unreadable: the button stays, as before, and the stop itself still works.
     booked.slot = new Error("supabase down");
