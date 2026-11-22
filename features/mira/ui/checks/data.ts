@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SUPPORT_NOTE, bandOf, type Check, type CheckId } from "@features/mira/content/checks";
-import { miraApi } from "../api";
+import { miraApi, signInHref } from "../api";
 import { shortDate } from "../kit/dates";
 
 /** The menu tab these pages mark (MiraAppFrame). */
@@ -45,12 +45,11 @@ export function useChecks() {
   const [minor, setMinor] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    void miraApi<ChecksData & { minor?: boolean }>("/api/mira/checks").then((r) => {
-      if (r.status === 401) {
-        router.replace(`/mira/start?next=${encodeURIComponent(window.location.pathname)}`);
-      } else if (r.ok) setData(r.data);
+    void miraApi<ChecksData>("/api/mira/checks").then((r) => {
+      if (r.signedOut) router.replace(signInHref());
+      else if (r.ok) setData(r.data);
       else {
-        setMinor(r.status === 403 && r.data.minor === true);
+        setMinor(r.minor === true);
         setError(r.data.error ?? "Unable to load your checks.");
       }
     });

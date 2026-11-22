@@ -11,6 +11,8 @@ import {
 } from "../../server/goal-progress";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
+import { useSignedOut } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly } from "../kit";
 import { shortDate } from "../kit/dates";
 import { AskFirst } from "../journal/parts";
@@ -45,6 +47,8 @@ const H2 = "font-serif text-[22px] font-medium";
 
 export default function GoalsPage() {
   const g = useGoals();
+  // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
+  const out = useSignedOut() || g.load === "signed-out";
   const [said, setSaid] = useState<string | null>(null);
   const [popped, setPopped] = useState<string | null>(null);
   const today = g.today || localDay(new Date());
@@ -79,7 +83,9 @@ export default function GoalsPage() {
           {said}
         </p>
 
-        {g.load === "loading" ? (
+        {out ? (
+          <SignedOutNotice />
+        ) : g.load === "loading" ? (
           <div aria-hidden="true" className="mt-8 flex flex-col gap-3">
             {[0, 1].map((i) => (
               <div
@@ -93,22 +99,16 @@ export default function GoalsPage() {
         ) : g.load !== "ready" ? (
           <div className="mt-8 rounded-3xl border border-ap-line p-5">
             <p role="alert" className="text-[15px] text-ap-body">
-              {g.load === "signed-out" ? "Please sign in to see your goals." : g.loadError}
+              {g.loadError}
             </p>
             <div className="mt-3">
-              {g.load === "signed-out" ? (
-                <Link href="/mira/start" className={`text-[14px] font-semibold underline ${FOCUS}`}>
-                  Sign in
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={g.reload}
-                  className={`${TEXT_BUTTON} border border-ap-line`}
-                >
-                  Try again
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={g.reload}
+                className={`${TEXT_BUTTON} border border-ap-line`}
+              >
+                Try again
+              </button>
             </div>
           </div>
         ) : (

@@ -200,14 +200,23 @@ describe("The roster (/mira/coaches)", () => {
   });
 
   it("answers someone Mira stopped as under 18 on Home's cards with the one refusal", async () => {
-    serve({}, 403);
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
     render(<CoachesCard />);
     expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Talk to Mira" })).toBeNull();
   });
 
+  it("sends a lost sign-in to sign in and back to the roster (HAB-16)", async () => {
+    window.history.replaceState(null, "", "/mira/coaches#finder");
+    serve({}, 401);
+    render(<CoachRoster />);
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fcoaches%23finder")
+    );
+  });
+
   it("offers no coach to someone Mira stopped as under 18", async () => {
-    serve({}, 403);
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
     render(<CoachRoster />);
     expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
@@ -323,7 +332,7 @@ describe("Home search", () => {
   });
 
   it("isn't there for someone Mira stopped as under 18, like the coaches", async () => {
-    serve({}, 403);
+    replies["GET /api/mira/coaches"] = () => ({ status: 403, body: { error: "x", minor: true } });
     render(<HomeSearch />);
     await waitFor(() => expect(screen.queryByRole("combobox")).toBeNull());
   });

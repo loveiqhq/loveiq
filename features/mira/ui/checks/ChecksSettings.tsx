@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { miraApi } from "../api";
 import { AskFirst, Switch } from "../journal/parts";
+import { SettingsSection } from "../MiraSettings";
 import { AdultsOnly } from "../kit";
 import { useChecks } from "./data";
 
@@ -15,9 +16,12 @@ import { useChecks } from "./data";
 export function UseChecksSwitch({
   on,
   onChange,
+  onSaved,
 }: {
   on: boolean;
   onChange: (on: boolean) => void;
+  /** Settings says "Saved" beside its section. */
+  onSaved?: () => void;
 }) {
   const id = useId();
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +35,7 @@ export function UseChecksSwitch({
     if (!r.ok) {
       onChange(!next);
       setError(r.data.error ?? "Unable to save. Please try again.");
-    }
+    } else onSaved?.();
   }
   return (
     <div>
@@ -93,19 +97,17 @@ export function SwitchRow({
 }
 
 /**
- * Settings › Self-checks (the lead mounts it in MiraSettings): the "Mira may use" switch and
+ * Settings › Assessments (Settings' own SettingsSection, as its index names it): the "Mira may use" switch and
  * "Delete my check results", which deletes every result, the body check's included (the API also
  * does it for an under-18 stop). Loads its own data.
  */
 export default function ChecksSettings() {
   const { data, error, minor, setData, retry } = useChecks();
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  // Beside the heading, as Settings says it for every section: "Saved", or what was deleted.
+  const [status, setStatus] = useState<{ kind: "saved"; text?: string } | undefined>();
   if (!data) {
     return error ? (
-      <section aria-labelledby="checks-settings-h" className="flex flex-col gap-3">
-        <h2 id="checks-settings-h" className="font-serif text-[22px] font-medium">
-          Self-checks
-        </h2>
+      <SettingsSection id="checks-settings" title="Assessments">
         {minor ? (
           <AdultsOnly />
         ) : (
@@ -116,7 +118,7 @@ export default function ChecksSettings() {
             </button>
           </p>
         )}
-      </section>
+      </SettingsSection>
     ) : null;
   }
   const bodyChecks = data.bodyCheck?.taken.length ?? 0;
@@ -124,7 +126,7 @@ export default function ChecksSettings() {
 
   /** "Delete" once asked: null, or the message the question shows. */
   async function remove(): Promise<string | null> {
-    setStatus(null);
+    setStatus(undefined);
     const r = await miraApi("/api/mira/checks", { method: "DELETE" });
     if (!r.ok) return r.data.error ?? "Unable to delete right now.";
     setData(
@@ -135,41 +137,38 @@ export default function ChecksSettings() {
           bodyCheck: d.bodyCheck && { taken: [], due: "baseline", nextAt: null },
         }
     );
-    setStatus({ ok: true, text: "Your check results are deleted." });
+    setStatus({ kind: "saved", text: "Your check results are deleted." });
     return null;
   }
 
   return (
-    <section aria-labelledby="checks-settings-h" className="flex flex-col gap-3">
-      <h2 id="checks-settings-h" className="font-serif text-[22px] font-medium">
-        Self-checks
-      </h2>
-      <UseChecksSwitch
-        on={data.useChecks}
-        onChange={(on) => setData((d) => d && { ...d, useChecks: on })}
-      />
-      {count === 0 ? (
-        <button
-          type="button"
-          disabled
-          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-muted"
-        >
-          No check results to delete
-        </button>
-      ) : (
-        <AskFirst
-          label="Delete my check results"
-          question={`${count === 1 ? "Delete your check result" : `Delete all ${count} of your check results`}${bodyChecks ? ", your body check included" : ""}? Your history and trends go too. This can’t be undone.`}
-          className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-          run={remove}
+    <SettingsSection id="checks-settings" title="Assessments" status={status}>
+      <div className="flex flex-col gap-3">
+        <UseChecksSwitch
+          on={data.useChecks}
+          onChange={(on) => {
+            setStatus(undefined);
+            setData((d) => d && { ...d, useChecks: on });
+          }}
+          onSaved={() => setStatus({ kind: "saved" })}
         />
-      )}
-      <p
-        role={status && !status.ok ? "alert" : "status"}
-        className={`text-[14px] ${status?.ok === false ? "text-ap-bad-ink" : "text-ap-good-ink"}`}
-      >
-        {status?.text}
-      </p>
-    </section>
+        {count === 0 ? (
+          <button
+            type="button"
+            disabled
+            className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold text-ap-muted"
+          >
+            No check results to delete
+          </button>
+        ) : (
+          <AskFirst
+            label="Delete my check results"
+            question={`${count === 1 ? "Delete your check result" : `Delete all ${count} of your check results`}${bodyChecks ? ", your body check included" : ""}? Your history and trends go too. This can’t be undone.`}
+            className="min-h-[44px] w-fit rounded-full border border-ap-line px-5 text-[14px] font-semibold"
+            run={remove}
+          />
+        )}
+      </div>
+    </SettingsSection>
   );
 }

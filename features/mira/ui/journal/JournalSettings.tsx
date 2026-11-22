@@ -72,9 +72,7 @@ export function JournalSettings({
         <div className="text-[14px] text-ap-body">
           {j.status === "minor" ? (
             <AdultsOnly />
-          ) : j.status === "unavailable" ? (
-            "The journal isn’t available here."
-          ) : (
+          ) : j.status === "signed-out" ? null : (
             <>
               Your journal settings didn’t load.{" "}
               <button type="button" onClick={j.reload} className="font-semibold underline">

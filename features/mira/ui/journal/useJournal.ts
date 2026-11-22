@@ -24,10 +24,10 @@ export type SavedEntry = JournalEntry & { updated_at?: string };
 
 export type Journal = {
   /**
-   * unavailable: signed out (401); minor: an account Mira stopped as under 18 (403 `minor`), which
-   * the screens answer with the kit's AdultsOnly and nothing to retry.
+   * signed-out: the sign-in ran out (any 401: SignedOutNotice); minor: an account Mira stopped as
+   * under 18 (403 `minor`: the kit's AdultsOnly). Neither has anything to retry.
    */
-  status: "loading" | "ready" | "error" | "unavailable" | "minor";
+  status: "loading" | "ready" | "error" | "signed-out" | "minor";
   /** Newest first. */
   entries: SavedEntry[];
   settings: JournalSettings | null;
@@ -78,17 +78,17 @@ export function useJournal(enabled = true): Journal {
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    void miraApi<{ entries: SavedEntry[]; settings: JournalSettings; minor?: boolean }>(
-      "/api/mira/journal"
-    ).then((r) => {
-      if (!live) return;
-      if (r.status === 403 && r.data.minor) return setStatus("minor");
-      if (r.status === 401 || r.status === 403) return setStatus("unavailable");
-      if (!r.ok) return setStatus("error");
-      setEntries([...r.data.entries].sort(byDayDesc));
-      setSettingsState(r.data.settings);
-      setStatus("ready");
-    });
+    void miraApi<{ entries: SavedEntry[]; settings: JournalSettings }>("/api/mira/journal").then(
+      (r) => {
+        if (!live) return;
+        if (r.minor) return setStatus("minor");
+        if (r.signedOut) return setStatus("signed-out");
+        if (!r.ok) return setStatus("error");
+        setEntries([...r.data.entries].sort(byDayDesc));
+        setSettingsState(r.data.settings);
+        setStatus("ready");
+      }
+    );
     return () => {
       live = false;
     };

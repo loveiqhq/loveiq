@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { useSignedOut } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly, ConfirmDelete } from "../kit";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
@@ -22,6 +24,8 @@ const PAGE = 30;
 export default function JournalPage({ startCheckIn = false }: { startCheckIn?: boolean }) {
   const journal = useJournal();
   const { status, entries, today } = journal;
+  // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
+  const out = useSignedOut() || status === "signed-out";
   const [day, setDay] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [shown, setShown] = useState(PAGE);
@@ -76,7 +80,9 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
         can read.
       </p>
 
-      {status === "loading" ? (
+      {out ? (
+        <SignedOutNotice />
+      ) : status === "loading" ? (
         <div aria-busy="true" className="mt-8 flex flex-col gap-4">
           <span className="sr-only">Loading your journal</span>
           <Skeleton className="h-[132px] w-full rounded-[28px]" />
@@ -97,8 +103,6 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
         </div>
       ) : status === "minor" ? (
         <AdultsOnly className="mt-8" />
-      ) : status === "unavailable" ? (
-        <p className="mt-8 text-[15px] text-ap-body">The journal isn’t available here.</p>
       ) : (
         <>
           <div className="mt-7 flex flex-col gap-6 rounded-[28px] border border-ap-line p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">

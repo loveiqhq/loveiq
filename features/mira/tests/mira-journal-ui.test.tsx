@@ -289,11 +289,14 @@ describe("the Home card", () => {
     expect(document.body.textContent).not.toMatch(/\btaps?\b/i);
   });
 
-  it("stays quiet for an account the journal is not for", async () => {
-    replies = { "GET /api/mira/journal": () => ({ status: 403, body: { error: "x" } }) };
+  it("says a lost sign-in the one way, with the way back to this page (HAB-16)", async () => {
+    replies = { "GET /api/mira/journal": () => ({ status: 401, body: { error: "x" } }) };
     render(<JournalCard />);
-    expect(await screen.findByText("The journal isn’t available here.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check-in/ })).toBeNull();
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toMatch(
+      /^\/mira\/start\?next=/
+    );
+    expect(screen.queryByRole("button", { name: /check-in|Try again/ })).toBeNull();
   });
 });
 

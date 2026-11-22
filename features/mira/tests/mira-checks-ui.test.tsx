@@ -536,6 +536,13 @@ describe("the Home card", () => {
 });
 
 describe("Settings › Self-checks", () => {
+  it("is Settings' Assessments section, and says Saved once a change is saved", async () => {
+    render(<ChecksSettings />);
+    const section = await screen.findByRole("region", { name: /^Assessments/ });
+    fireEvent.click(within(section).getByRole("switch", { name: "Mira may use my check results" }));
+    expect(await within(section).findByText("Saved")).toBeInTheDocument();
+  });
+
   it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
     render(<ChecksSettings />);
     const box = await screen.findByRole("switch", { name: "Mira may use my check results" });
@@ -592,7 +599,7 @@ describe("when the checks don't load", () => {
   it("Settings says so and offers Try again, instead of showing nothing", async () => {
     failOnce();
     render(<ChecksSettings />);
-    const section = await screen.findByRole("region", { name: "Self-checks" });
+    const section = await screen.findByRole("region", { name: /^Assessments/ });
     expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
     fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
     expect(

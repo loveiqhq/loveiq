@@ -10,7 +10,7 @@ export type { Goal };
 /** minor: an account Mira stopped as under 18 (403 `minor`): the kit's AdultsOnly, no retry. */
 type Load = "loading" | "ready" | "error" | "signed-out" | "minor";
 
-const getGoals = () => miraApi<{ goals: Goal[]; minor?: boolean }>("/api/mira/goals");
+const getGoals = () => miraApi<{ goals: Goal[] }>("/api/mira/goals");
 
 /**
  * Challenges & goals in the browser: the person's goals from /api/mira/goals, and every change
@@ -27,9 +27,9 @@ export function useGoals() {
   const [ticking, setTicking] = useState<ReadonlySet<string>>(new Set());
   const saving = useRef(new Set<string>());
 
-  const show = useCallback((r: ApiResult<{ goals: Goal[]; minor?: boolean }>) => {
-    if (r.status === 401) return setLoad("signed-out");
-    if (r.status === 403 && r.data.minor) return setLoad("minor");
+  const show = useCallback((r: ApiResult<{ goals: Goal[] }>) => {
+    if (r.signedOut) return setLoad("signed-out");
+    if (r.minor) return setLoad("minor");
     if (!r.ok || !Array.isArray(r.data.goals)) {
       setLoadError(r.data.error ?? "Your goals didn't load.");
       return setLoad("error");

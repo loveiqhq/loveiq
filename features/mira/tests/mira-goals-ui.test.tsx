@@ -150,6 +150,15 @@ describe("Home's goals card", () => {
     expect(document.body.textContent).not.toMatch(/missed|behind|failed|broke/i);
   });
 
+  it("says a lost sign-in the one way when a tick finds it gone (HAB-16)", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals/g1/log"] = () => ({ status: 401, body: { error: "x" } });
+    render(<GoalsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Did it today/ }));
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toBeTruthy();
+  });
+
   it("puts a tick back when it doesn't save, and says so", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     replies["POST /api/mira/goals/g1/log"] = () => ({

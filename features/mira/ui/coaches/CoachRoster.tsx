@@ -13,6 +13,7 @@ import {
   type CoachId,
 } from "@features/mira/content/coaches";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { signInHref } from "../api";
 import { CoachFinder } from "./CoachFinder";
 import { track, useCoachData, useEmptySearchCount } from "./data";
 import { AdultsOnly } from "../kit";
@@ -56,7 +57,7 @@ export default function CoachRoster() {
   }, []);
 
   useEffect(() => {
-    if (state.status === "out") router.replace("/mira/start");
+    if (state.status === "out") router.replace(signInHref());
   }, [state.status, router]);
 
   function setNotified(id: CoachId, on: boolean) {

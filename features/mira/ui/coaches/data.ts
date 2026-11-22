@@ -38,9 +38,9 @@ function load(): Promise<ApiResult<CoachData>> {
 const stateOf = (r: ApiResult<CoachData>): CoachState =>
   r.ok
     ? { status: "ready", data: r.data }
-    : r.status === 401
+    : r.signedOut
       ? { status: "out" }
-      : r.status === 403
+      : r.minor
         ? { status: "closed" }
         : { status: "error", error: r.data.error ?? "That didn't load." };
 
