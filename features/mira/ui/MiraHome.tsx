@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
+import { SupportPanel } from "./SupportPanel";
 import { miraApi } from "./api";
 import ChecksHomeCard from "./checks/ChecksHomeCard";
 import CoachesCard from "./coaches/CoachesCard";
@@ -12,6 +13,8 @@ import HomeSearch from "./coaches/HomeSearch";
 import PicksCard from "./coaches/PicksCard";
 import GoalsCard from "./goals/GoalsCard";
 import { JournalCard } from "./journal/JournalCard";
+import { FOCUS_RING } from "./kit";
+import { shortDate } from "./kit/dates";
 import { RecordingsCard } from "./recordings/Recordings";
 import { NextSessionCard } from "./weekly-session/NextSessionCard";
 
@@ -26,6 +29,9 @@ type Me = {
   profile: { name: string | null; email: string };
   chats: Array<{ id: string; title: string; updated_at: string }>;
 };
+
+/** Earlier chats listed under the latest before "Show more chats". */
+const EARLIER = 3;
 
 /** 05–11 morning, 12–17 afternoon, otherwise evening (00:44 is not "morning"). */
 export function greeting(hour: number): string {
@@ -44,47 +50,76 @@ function when(iso: string): string {
       ? "Yesterday"
       : days < 7
         ? `${days} days ago`
-        : new Date(iso).toLocaleDateString();
+        : shortDate(iso);
 }
 
-export default function MiraHome() {
+const SKELETON = "block rounded-full bg-ap-track motion-safe:animate-pulse";
+
+export default function MiraHome({
+  name = null,
+  hour = null,
+  quiet = false,
+  country = null,
+}: {
+  /** The account's first name, read with the page (app/mira/home), so the heading never changes. */
+  name?: string | null;
+  /** The hour on the person's own clock; without it, "Hello". */
+  hour?: number | null;
+  /** Support lines showed in the last 14 days: a neutral greeting, the lines at hand (CHAT-17). */
+  quiet?: boolean;
+  /** Where the person is based: that country's lines come first when they open them here. */
+  country?: string | null;
+}) {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
-  // Neutral on the server (its clock is UTC); the browser's hour comes in with the account.
-  const [hello, setHello] = useState("Hello");
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [allChats, setAllChats] = useState(false);
+  const [support, setSupport] = useState(false);
 
   useEffect(() => {
+    let live = true;
     void miraApi<Me>("/api/mira/me").then((r) => {
-      setHello(greeting(new Date().getHours()));
-      if (r.status === 401) router.replace("/mira/start");
+      if (!live) return;
+      if (r.status === 401) router.replace("/mira/start?next=%2Fmira%2Fhome");
       else if (r.ok) setMe(r.data);
-      else setError(r.data.error ?? "Unable to load your account.");
+      else setFailed(true);
     });
-  }, [router]);
+    return () => {
+      live = false;
+    };
+  }, [router, attempt]);
 
+  // Until the chats are known, the card claims nothing: not "Start with Mira" to a person with
+  // chats (SET-4). A failed read says so, with a retry; "New chat" works either way.
+  const loading = !me && !failed;
   const [latest, ...earlier] = me?.chats ?? [];
+  const hello = quiet || hour === null ? "Hello" : greeting(hour);
 
   return (
-    <MiraAppFrame active="home" email={me?.profile.email} name={me?.profile.name}>
-      {error ? (
-        <p
-          role="alert"
-          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-[480px] rounded-2xl border border-ap-line bg-white px-4 py-3 text-[14px] text-ap-bad-ink shadow-lg"
-        >
-          {error}
-        </p>
-      ) : null}
-
+    <MiraAppFrame active="home" email={me?.profile.email} name={me?.profile.name ?? name}>
       <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <h1 className="font-serif text-[34px] font-medium leading-tight [overflow-wrap:anywhere] motion-safe:animate-mira-in">
             {hello}
-            {me?.profile.name ? `, ${me.profile.name}` : ""}
+            {name ? `, ${name}` : ""}
           </h1>
-          <p className="mt-1 text-[15px] text-ap-muted motion-safe:animate-mira-in">
-            Wonderful to see you working on your life.
-          </p>
+          {quiet ? (
+            <p className="mt-1 text-[15px] text-ap-muted motion-safe:animate-mira-in">
+              Take your time.{" "}
+              <button
+                type="button"
+                onClick={() => setSupport(true)}
+                className={`font-semibold text-ap-plum underline underline-offset-2 ${FOCUS_RING}`}
+              >
+                See support lines
+              </button>
+            </p>
+          ) : (
+            <p className="mt-1 text-[15px] text-ap-muted motion-safe:animate-mira-in">
+              Wonderful to see you working on your life.
+            </p>
+          )}
         </div>
         <div className="w-full lg:max-w-[340px]">
           <HomeSearch />
@@ -93,6 +128,7 @@ export default function MiraHome() {
 
       <section
         aria-labelledby="continue-h"
+        aria-busy={loading}
         className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
       >
         <div className="flex items-center gap-3">
@@ -106,15 +142,44 @@ export default function MiraHome() {
           />
           <div className="min-w-0 flex-1">
             <h2 id="continue-h" className="font-serif text-[22px] font-medium leading-tight">
-              {latest ? "Continue with Mira" : "Start with Mira"}
+              {loading ? (
+                <>
+                  <span className="sr-only">Loading your chats</span>
+                  <span aria-hidden="true" className={`${SKELETON} my-1 h-5 w-48 max-w-full`} />
+                </>
+              ) : latest || failed ? (
+                "Continue with Mira"
+              ) : (
+                "Start with Mira"
+              )}
             </h2>
-            <p className="text-[13px] text-ap-muted">
-              Body confidence
-              {latest ? ` · last chat ${when(latest.updated_at).toLowerCase()}` : " · your coach"}
-            </p>
+            {loading ? (
+              <span aria-hidden="true" className={`${SKELETON} mt-1.5 h-3 w-32 max-w-full`} />
+            ) : (
+              <p className="text-[13px] text-ap-muted">
+                Body confidence
+                {latest ? ` · last chat ${when(latest.updated_at).toLowerCase()}` : " · your coach"}
+              </p>
+            )}
           </div>
         </div>
-        {latest ? (
+        {loading ? (
+          <span aria-hidden="true" className={`${SKELETON} mt-4 h-[50px] !rounded-2xl`} />
+        ) : failed ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-[15px] text-ap-body">Your chats didn&apos;t load.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+              className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold ${FOCUS_RING}`}
+            >
+              Try again
+            </button>
+          </div>
+        ) : latest ? (
           <Link
             href={`/mira?chat=${latest.id}`}
             className="mt-4 block rounded-2xl bg-ap-ground px-4 py-3 text-[15px] text-ap-body transition-colors hover:bg-ap-track"
@@ -147,22 +212,37 @@ export default function MiraHome() {
           </Link>
         </div>
         {earlier.length ? (
-          <ul
-            aria-label="Earlier chats"
-            className="mt-4 flex flex-col divide-y divide-ap-line border-t border-ap-line"
-          >
-            {earlier.slice(0, 3).map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/mira?chat=${c.id}`}
-                  className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
-                >
-                  <span className="truncate">{c.title}</span>
-                  <span className="shrink-0 text-[12px] text-ap-muted">{when(c.updated_at)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul
+              id="earlier-chats"
+              aria-label="Earlier chats"
+              className="mt-4 flex flex-col divide-y divide-ap-line border-t border-ap-line"
+            >
+              {(allChats ? earlier : earlier.slice(0, EARLIER)).map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={`/mira?chat=${c.id}`}
+                    className="flex min-h-[44px] items-center justify-between gap-3 py-2 text-[14px]"
+                  >
+                    <span className="truncate">{c.title}</span>
+                    <span className="shrink-0 text-[12px] text-ap-muted">{when(c.updated_at)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {/* Every chat, on any screen (CHAT-26): the chat's own list shows only from lg. */}
+            {earlier.length > EARLIER ? (
+              <button
+                type="button"
+                aria-expanded={allChats}
+                aria-controls="earlier-chats"
+                onClick={() => setAllChats(!allChats)}
+                className={`-mx-2 mt-1 min-h-[44px] rounded-full px-2 text-[14px] font-semibold text-ap-link underline-offset-4 hover:underline ${FOCUS_RING}`}
+              >
+                {allChats ? "Show fewer chats" : "Show more chats"}
+              </button>
+            ) : null}
+          </>
         ) : null}
       </section>
 
@@ -177,6 +257,12 @@ export default function MiraHome() {
         <RecordingsCard />
         <CoachesCard />
       </div>
+      {support ? (
+        <SupportPanel
+          highlight={country ? { code: country } : null}
+          onClose={() => setSupport(false)}
+        />
+      ) : null}
     </MiraAppFrame>
   );
 }

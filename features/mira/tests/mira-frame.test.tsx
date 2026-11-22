@@ -1,16 +1,31 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => router,
   usePathname: () => "/mira/home",
+  redirect: (to: string) => {
+    throw new Error(`redirect ${to}`);
+  },
 }));
 
 const session = vi.hoisted(() => ({ account: null as null | { id: string; email: string } }));
 vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => session.account }));
+const server = vi.hoisted(() => ({
+  profile: null as null | { name: string | null; time_zone: string; country: string | null },
+  hadCrisis: async (_id: string, _since: Date): Promise<boolean> => false,
+}));
+vi.mock("@features/mira/server/store", () => ({ getProfile: async () => server.profile }));
+vi.mock("@features/mira/server/nudges", async (original) => ({
+  ...(await original<typeof import("@features/mira/server/nudges")>()),
+  hadCrisis: (id: string, since: Date) => server.hadCrisis(id, since),
+}));
 
+import HomePage from "@/app/mira/home/page";
 import GuideLayout from "@/app/mira/guide/layout";
+import MiraHome from "@features/mira/ui/MiraHome";
 import { MiraAppFrame } from "@features/mira/ui/MiraAppFrame";
 import { PrimaryButton, Wordmark } from "@features/mira/ui/MiraShell";
 import { ADULTS_ONLY, AdultsOnly, ConfirmDelete, SectionLink } from "@features/mira/ui/kit";
@@ -23,6 +38,9 @@ import { shortDate } from "@features/mira/ui/kit/dates";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  Object.values(router).forEach((f) => f.mockClear());
 });
 
 describe("PrimaryButton (decision 7, A11Y-1)", () => {
@@ -258,5 +276,151 @@ describe("the guide's frame (UX-3, SET-6)", () => {
     expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
     expect(screen.getByRole("main")).toHaveTextContent("The guide");
     expect(screen.getByRole("navigation", { name: "Legal" })).toBeInTheDocument();
+  });
+});
+
+describe("Home", () => {
+  type Chat = { id: string; title: string; updated_at: string };
+  /**
+   * GET /api/mira/me answers with each reply in turn; a missing one never answers, nor do the
+   * other cards' reads (each card owns its own states, tested with it).
+   */
+  function account(...replies: Array<{ status: number; chats?: Chat[] }>) {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url !== "/api/mira/me") return new Promise<Response>(() => undefined);
+      const r = replies.shift();
+      if (!r) return new Promise<Response>(() => undefined);
+      return {
+        ok: r.status < 400,
+        status: r.status,
+        json: async () =>
+          r.status < 400
+            ? { profile: { name: "Robin", email: "robin@example.com" }, chats: r.chats ?? [] }
+            : { error: "Unable to load your account." },
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+  const chat = (n: number, updated_at = "2026-11-22T08:00:00Z"): Chat => ({
+    id: `00000000-0000-4000-8000-00000000000${n}`,
+    title: `Chat ${n}`,
+    updated_at,
+  });
+
+  it("greets by name from the first paint, so the heading never changes (UX-15)", async () => {
+    account({ status: 200, chats: [chat(1)] });
+    render(<MiraHome hour={8} name="Robin" />);
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("Good morning, Robin");
+    await screen.findByRole("heading", { name: "Continue with Mira" });
+    expect(h1).toHaveTextContent("Good morning, Robin");
+  });
+
+  it("never shows the new person's card while the chats load; a failure says so and can be tried again (SET-4)", async () => {
+    const fetchMock = account({ status: 500 }, { status: 200, chats: [chat(1)] });
+    render(<MiraHome hour={8} name="Robin" />);
+    expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
+    expect(screen.getByText("Loading your chats")).toBeInTheDocument();
+    expect(await screen.findByText("Your chats didn't load.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Start with Mira" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/mira");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Continue with Mira" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/mira/me")).toHaveLength(2);
+  });
+
+  it("invites a person with no chats to start", async () => {
+    account({ status: 200, chats: [] });
+    render(<MiraHome hour={8} name="Robin" />);
+    expect(await screen.findByRole("heading", { name: "Start with Mira" })).toBeInTheDocument();
+  });
+
+  it("sends a lost sign-in back to Home after signing in again", async () => {
+    account({ status: 401 });
+    render(<MiraHome hour={8} name="Robin" />);
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fhome")
+    );
+  });
+
+  it("opens every chat on any screen, not only the latest four (CHAT-26)", async () => {
+    account({ status: 200, chats: [1, 2, 3, 4, 5, 6].map((n) => chat(n)) });
+    render(<MiraHome hour={8} name="Robin" />);
+    const earlier = await screen.findByRole("list", { name: "Earlier chats" });
+    expect(
+      within(earlier)
+        .getAllByRole("link")
+        .map((a) => a.textContent)
+    ).toEqual([
+      expect.stringContaining("Chat 2"),
+      expect.stringContaining("Chat 3"),
+      expect.stringContaining("Chat 4"),
+    ]);
+    const more = screen.getByRole("button", { name: "Show more chats" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(more);
+    expect(within(earlier).getAllByRole("link")).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "Show fewer chats" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  });
+
+  it("dates a chat older than a week like the rest of Mira, whatever the browser's language (SET-12)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-22T12:00:00Z"), toFake: ["Date"] });
+    account({ status: 200, chats: [chat(1), chat(2, "2026-11-01T12:00:00Z")] });
+    render(<MiraHome hour={8} name="Robin" />);
+    const earlier = await screen.findByRole("list", { name: "Earlier chats" });
+    expect(earlier).toHaveTextContent("1 Nov");
+  });
+
+  it("is neutral while the 14 days after the support lines run, with the lines at hand (CHAT-17)", async () => {
+    account();
+    render(<MiraHome quiet hour={8} name="Kim" />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello, Kim");
+    expect(screen.queryByText(/Wonderful to see you/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "See support lines" }));
+    expect(screen.getByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
+  });
+});
+
+describe("Home's page (server)", () => {
+  it("passes the name, the hour in the person's own time zone and the quiet the nudges keep", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-22T07:30:00Z"), toFake: ["Date"] });
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = { name: "Kim", time_zone: "Asia/Tokyo", country: "JP" };
+    const asked: Array<[string, Date]> = [];
+    server.hadCrisis = async (id, since) => {
+      asked.push([id, since]);
+      return true;
+    };
+    const el = (await HomePage()) as { props: Record<string, unknown> };
+    expect(el.props).toMatchObject({ name: "Kim", hour: 16, quiet: true, country: "JP" });
+    // The same 14 days as the nudges and the journal reminders.
+    expect(asked).toEqual([["u1", new Date("2026-11-08T07:30:00Z")]]);
+  });
+
+  it("stays neutral when it can't tell, and says Hello when the account can't be read", async () => {
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = null;
+    server.hadCrisis = async () => {
+      throw new Error("down");
+    };
+    const el = (await HomePage()) as { props: Record<string, unknown> };
+    expect(el.props).toMatchObject({ name: null, hour: null, quiet: true });
+  });
+
+  it("is quiet only after support lines", async () => {
+    session.account = { id: "u1", email: "kim@example.com" };
+    server.profile = { name: "Kim", time_zone: "Europe/Berlin", country: "DE" };
+    server.hadCrisis = async () => false;
+    const el = (await HomePage()) as { props: Record<string, unknown> };
+    expect(el.props).toMatchObject({ quiet: false });
+  });
+
+  it("sends a signed-out visit to sign in, then back to Home", async () => {
+    session.account = null;
+    await expect(HomePage()).rejects.toThrow("redirect /mira/start?next=%2Fmira%2Fhome");
   });
 });
