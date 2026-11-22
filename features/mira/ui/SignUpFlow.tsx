@@ -74,6 +74,30 @@ async function afterSignIn(adopt: (saved: SavedLook) => void) {
 const carriedChat = () =>
   (local.chat()?.turns ?? []).map(({ role, content }) => ({ role, content })).slice(-48);
 
+/**
+ * "Check your inbox", kept in this tab for the code's hour, so a reload, Back or a tab the phone
+ * discarded while the person read their mail comes back to the code field (round-2 ID-5).
+ */
+const WAITING = "mira.signin.code.v1";
+const CODE_LIFE_MS = 60 * 60_000;
+type Waiting = { email: string; useAssessment: boolean; at: number };
+function waitingCode(): Waiting | null {
+  try {
+    const w = JSON.parse(sessionStorage.getItem(WAITING) ?? "null") as Waiting | null;
+    return w && typeof w.email === "string" && Date.now() - w.at < CODE_LIFE_MS ? w : null;
+  } catch {
+    return null;
+  }
+}
+function keepWaiting(w: Waiting | null): void {
+  try {
+    if (w) sessionStorage.setItem(WAITING, JSON.stringify(w));
+    else sessionStorage.removeItem(WAITING);
+  } catch {
+    // Blocked storage: a reload starts over, as before.
+  }
+}
+
 const unchanging = () => () => {};
 /** A Settings section the sign-in page was opened at (`#weekly`), or ""; "" on the server. */
 const sectionHere = () => (/^#[a-z]{2,20}$/.test(window.location.hash) ? window.location.hash : "");
@@ -164,6 +188,20 @@ export default function SignUpFlow({
     setStep("minor");
   }
 
+  // A reload, Back or a discarded tab on "Check your inbox": back to it, with its address and
+  // the optional tick (the verify records it). Once, after the first paint.
+  useEffect(() => {
+    if (step !== "account" || backFromGoogle) return;
+    const waiting = waitingCode();
+    if (!waiting) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- this tab's storage, read after hydration */
+    setEmail(waiting.email);
+    setUseAssessment(waiting.useAssessment);
+    setStep("verify");
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Back from Google, signed in: the chat in this browser comes along, as with the emailed code.
   useEffect(() => {
     if (!backFromGoogle) return;
@@ -190,16 +228,20 @@ export default function SignUpFlow({
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await miraApi("/api/mira/auth", {
+    const res = await miraApi<{ codeSent?: boolean }>("/api/mira/auth", {
       body: { action: "start", email, adult, terms, consent, website },
     });
     setBusy(false);
-    if (!res.ok) {
+    // One went out minutes ago (the inbox's 10-minute wait): it still works, so on to its field.
+    const sentBefore = res.status === 429 && res.data.codeSent === true && step === "account";
+    if (!res.ok && !sentBefore) {
       setError(res.data.error ?? "We couldn't send the code. Please try again.");
       return false;
     }
+    keepWaiting({ email, useAssessment, at: Date.now() });
+    if (sentBefore) setNotice(res.data.error ?? null);
     setStep("verify");
-    return true;
+    return res.ok;
   }
 
   // Each success below keeps `busy` on until the next page shows, so nothing can be sent twice.
@@ -226,6 +268,7 @@ export default function SignUpFlow({
       setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
     }
+    keepWaiting(null);
     if (res.data.minor) return refusedAsMinor(true);
     local.saveChat(null);
     if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
@@ -588,6 +631,7 @@ export default function SignUpFlow({
                   type="button"
                   className="underline"
                   onClick={() => {
+                    keepWaiting(null);
                     setStep("account");
                     setCode("");
                   }}

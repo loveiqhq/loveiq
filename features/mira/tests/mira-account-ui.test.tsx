@@ -154,6 +154,66 @@ describe("Use Face ID next time?", () => {
   });
 });
 
+describe("The code step", () => {
+  afterEach(() => sessionStorage.clear());
+  const toCodeStep = async () => {
+    render(<SignUpFlow />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "lea@example.com" } });
+    tickAll();
+    fireEvent.click(screen.getAllByRole("checkbox")[3]!); // the optional LoveIQ result
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await screen.findByRole("heading", { name: "Check your inbox" });
+  };
+
+  it("comes back after a reload, Back or a discarded tab, with its address", async () => {
+    await toCodeStep();
+    cleanup(); // the page goes; this tab's storage stays
+    render(<SignUpFlow />);
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    expect(screen.getByText("lea@example.com")).toBeInTheDocument();
+    replies["POST /api/mira/auth"] = (b) =>
+      b.action === "verify" ? { body: { success: true } } : { body: { success: true } };
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { time_zone: "Europe/Berlin" } } });
+    fireEvent.change(screen.getByLabelText("Code from the email"), {
+      target: { value: "12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+    expect(calls("POST /api/mira/auth").at(-1)).toMatchObject({
+      action: "verify",
+      email: "lea@example.com",
+      useAssessment: true,
+    });
+    // Signed in: nothing waits any more.
+    cleanup();
+    render(<SignUpFlow />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("heading", { name: /Create your free account/ })).toBeVisible();
+  });
+
+  it("is left for good with Change email", async () => {
+    await toCodeStep();
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+    cleanup();
+    render(<SignUpFlow />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("heading", { name: "Check your inbox" })).toBeNull();
+  });
+
+  it("opens when a code went out minutes ago, so the code in the inbox can still be used", async () => {
+    replies["POST /api/mira/auth"] = () => ({
+      status: 429,
+      body: {
+        error: "We just sent you a code. Check your inbox and spam, or try again in a few minutes.",
+        codeSent: true,
+      },
+    });
+    await toCodeStep();
+    expect(screen.getByRole("status")).toHaveTextContent("We just sent you a code.");
+    expect(screen.getByLabelText("Code from the email")).toBeInTheDocument();
+  });
+});
+
 describe("A sign-in Mira refuses as under 18", () => {
   const adultsOnly = () => screen.findByRole("heading", { name: "Mira is only for adults." });
 

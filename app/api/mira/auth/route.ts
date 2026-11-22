@@ -203,10 +203,12 @@ export async function POST(request: Request) {
     if (!perIp.allowed) return tryLater();
     const inbox = addressKey(body.email);
     if (!(await checkCooldown(inbox, CODE_WAIT, 10 * MINUTE_MS)).allowed) {
+      // `codeSent`: the code that went out still works, so the page opens its code field.
       return NextResponse.json(
         {
           error:
             "We just sent you a code. Check your inbox and spam, or try again in a few minutes.",
+          codeSent: true,
         },
         { status: 429 }
       );

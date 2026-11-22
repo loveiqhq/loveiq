@@ -257,7 +257,11 @@ describe("POST /api/mira/auth", () => {
       for (const email of ["lea+1@gmail.com", "lea@googlemail.com"]) {
         const again = await start(email);
         expect(again.status).toBe(429);
-        expect((await again.json()).error).toMatch(/We just sent you a code/);
+        // `codeSent`: the page goes on to the code field, as the code that went out still works.
+        expect(await again.json()).toMatchObject({
+          error: expect.stringMatching(/We just sent you a code/),
+          codeSent: true,
+        });
       }
       expect(sendSignInCode).toHaveBeenCalledTimes(1);
       // The account keeps the address as typed; only the limit's key is normalised.
