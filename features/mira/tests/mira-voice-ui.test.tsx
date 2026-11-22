@@ -363,10 +363,17 @@ describe("a spoken turn", () => {
     vi.spyOn(navigator, "vendor", "get").mockReturnValue("Apple Computer, Inc.");
     render(<MiraChat signedIn={false} initialChatId={null} />);
     talk();
-    await sayToMira("It's the lights");
+    mic().hear(["It's the lights", true]);
+    // A11Y-16: words for every way of choosing her photo (a click, a key, a screen reader).
+    expect(screen.getByText("Pause when you're done, or select her photo.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send what you said" }));
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
     await waitFor(() => expect(screen.getByText("Mira is speaking")).toBeTruthy());
     expect(listening()).toHaveLength(0);
-    expect(screen.getByText("Tap her photo to stop her.")).toBeTruthy();
+    expect(screen.getByText("Select her photo to stop her.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Talking with Mira" }).textContent).not.toMatch(
+      /\btap\b/i
+    );
     fireEvent.click(screen.getByRole("button", { name: "Stop Mira and talk" }));
     expect(synth.cancel).toHaveBeenCalled();
     expect(listening()).toHaveLength(1);
