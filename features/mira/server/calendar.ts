@@ -108,6 +108,20 @@ export function reminderDue(slot: WeeklySlot, now: Date): Date | null {
   return lead >= REMIND_UNTIL_MS && lead <= REMIND_FROM_MS ? start : null;
 }
 
+/** The line the session's link sends for the person, so Mira opens it (and its chat's title). */
+export const SESSION_OPENING = "I’m here for my weekly session.";
+
+/**
+ * Which weekly session a visit to the session's link is for: the booked slot's start from half an
+ * hour back (the one under way, or the next), or, with nothing booked, the visit's UTC day. Each
+ * session has one chat, and Mira writes its opening once.
+ */
+export function sessionKey(slot: WeeklySlot | null, at: Date): string {
+  return slot
+    ? nextOccurrence(slot, new Date(at.getTime() - JOIN_AFTER_MS)).toISOString()
+    : at.toISOString().slice(0, 10);
+}
+
 /** The start a session opened now is for, while one is open (an hour before to 30 minutes after). */
 export function joinedOccurrence(slot: WeeklySlot, at: Date): Date | null {
   const start = nextOccurrence(slot, new Date(at.getTime() - JOIN_AFTER_MS));

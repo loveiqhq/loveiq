@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import miraConfig from "@features/mira/content/mira-config.json";
+import { SESSION_OPENING } from "@features/mira/server/calendar";
 import { ANON_FREE_MESSAGES, CONSENT_VERSION } from "@features/mira/server/config";
 import { BodyCheck } from "./BodyCheck";
 import { CoachingStylePanel, type Style } from "./CoachingStylePanel";
@@ -59,8 +60,7 @@ const crisisIn = (turns: LocalTurn[]) =>
     (t) => t.role === "assistant" && (t.crisis === true || t.content === miraConfig.crisisMessage)
   );
 const SKIP_ANSWER = "I’d rather skip this one.";
-/** The line the weekly session's link sends for the person, so Mira opens the session. */
-export const SESSION_OPENING = "I’m here for my weekly session.";
+export { SESSION_OPENING };
 
 /**
  * The NPS question (Marcus's MVP success board) after the 3rd conversation, then at most
@@ -94,8 +94,13 @@ export default function MiraChat({
    * the person sends them.
    */
   starter?: string | null;
-  /** Opened from the weekly session's link: a new chat that Mira opens as the session. */
-  session?: boolean;
+  /**
+   * Opened from the weekly session's link: a new chat that Mira opens as the session. With the
+   * session's key (app/mira/session), this browser opens each session once: Back can bring the
+   * page back from the router's cache, and without "Remember our conversations" there is no
+   * stored chat for the page to reopen instead.
+   */
+  session?: boolean | string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -335,6 +340,7 @@ export default function MiraChat({
       return;
     }
     if (!res.ok || !res.data.reply) {
+      if (opts.session) local.saveSessionOpened(null); // not opened: a later visit tries again
       setMessages(messages);
       setInput(message);
       setError({
@@ -597,6 +603,10 @@ export default function MiraChat({
   useEffect(() => {
     if (!session || !signedIn || sessionOpened.current) return;
     sessionOpened.current = true;
+    if (typeof session === "string") {
+      if (local.sessionOpened() === session) return;
+      local.saveSessionOpened(session);
+    }
     window.history.replaceState(null, "", "/mira");
     void send(SESSION_OPENING, { session: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival

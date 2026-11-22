@@ -108,6 +108,8 @@ const LOCAL_BODY_CHECK = "mira.bodycheck.v1";
 const LOCAL_STYLE_TIP = "mira.tip.style.v1";
 /** When this browser's person read the one-time notice about their browser's speech service. */
 const LOCAL_VOICE_NOTICE = "mira.voice.notice.v1";
+/** The weekly session this browser last opened (its key): each one's opening is sent once. */
+const LOCAL_SESSION = "mira.session.v1";
 /** "Not now" on the body check offer waits this long before it is offered again. */
 const BODY_CHECK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -169,5 +171,7 @@ export const local = {
   saveStyleTipSeen: () => write(LOCAL_STYLE_TIP, Date.now()),
   /** Talking to Mira: the browser's speech service notice is shown before its first use only. */
   voiceNoticeSeen: () => read<number>(LOCAL_VOICE_NOTICE) !== null,
+  sessionOpened: () => read<string>(LOCAL_SESSION),
+  saveSessionOpened: (key: string | null) => write(LOCAL_SESSION, key),
   saveVoiceNoticeSeen: () => write(LOCAL_VOICE_NOTICE, Date.now()),
 };

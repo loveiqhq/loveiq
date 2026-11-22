@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Weekly sessions say and do what really happened: the under-18 stop is told apart from other
@@ -119,6 +120,7 @@ vi.mock("@features/mira/server/store", () => ({
   logMiraEvent: vi.fn(),
 }));
 
+import SessionPage from "@/app/mira/session/page";
 import { DELETE, GET, PUT } from "@/app/api/mira/weekly-session/route";
 import { joinedOccurrence, reminderDue } from "@features/mira/server/calendar";
 import { runSessionReminders } from "@features/mira/server/session-emails";
@@ -321,5 +323,88 @@ describe("what Mira is told about the invite", () => {
     expect(booked).toContain(
       "The app emails the calendar invite, or shows them calendar links when that email can't go: don't tell them it's in their inbox."
     );
+  });
+});
+
+describe("the session's link: one chat, and one opening by Mira, per session", () => {
+  const OPENING = "I’m here for my weekly session.";
+  /** A visit to /mira/session at a moment: what the chat is given. */
+  const visit = async (iso: string) => {
+    vi.setSystemTime(new Date(iso));
+    const page = (await SessionPage()) as ReactElement<{
+      initialChatId: string | null;
+      session?: boolean | string;
+    }>;
+    return page.props;
+  };
+  /** What the chat route stores once Mira's opening is written (Remember our conversations on). */
+  const stored = (id: string, at: string) =>
+    (db.tables.mira_chat ??= []).push({ id, user_id: LEA.id, title: OPENING, created_at: at });
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("opens the session on the first visit, and reopens its chat on every later one", async () => {
+    vi.setSystemTime(new Date("2026-11-22T10:00:00Z"));
+    await book(); // Tuesdays 19:00 Berlin = 18:00Z
+    expect(await visit("2026-11-24T17:04:00Z")).toMatchObject({
+      initialChatId: null,
+      session: "2026-11-24T18:00:00.000Z",
+    });
+    stored("c0ffee00-0000-4000-8000-000000000001", "2026-11-24T17:04:20.000Z");
+    // A reload, Back or the reminder's link again: the same chat, no new opening.
+    for (const at of ["2026-11-24T17:05:00Z", "2026-11-24T18:10:00Z", "2026-11-24T18:30:00Z"]) {
+      const props = await visit(at);
+      expect(props.initialChatId, at).toBe("c0ffee00-0000-4000-8000-000000000001");
+      expect(props.session, at).toBeFalsy();
+    }
+    // Next week's session is a new one.
+    expect(await visit("2026-12-01T17:10:00Z")).toMatchObject({
+      initialChatId: null,
+      session: "2026-12-01T18:00:00.000Z",
+    });
+    // Someone else's chat, or another chat of hers, is never taken for it.
+    db.tables.mira_chat!.push({
+      id: "c0ffee00-0000-4000-8000-000000000002",
+      user_id: LEA.id,
+      title: "Something else",
+      created_at: "2026-12-01T17:11:00.000Z",
+    });
+    expect((await visit("2026-12-01T17:12:00Z")).initialChatId).toBeNull();
+  });
+
+  it("an opening written just after the session closed still belongs to that session", async () => {
+    vi.setSystemTime(new Date("2026-11-22T10:00:00Z"));
+    await book();
+    await visit("2026-11-24T18:29:30Z");
+    stored("c0ffee00-0000-4000-8000-000000000003", "2026-11-24T18:30:25.000Z"); // the reply took a minute
+    expect((await visit("2026-11-24T18:29:59Z")).initialChatId).toBe(
+      "c0ffee00-0000-4000-8000-000000000003"
+    );
+    expect((await visit("2026-12-01T17:10:00Z")).initialChatId).toBeNull();
+  });
+
+  it("with nothing booked, one session a day", async () => {
+    expect(await visit("2026-11-24T09:00:00Z")).toMatchObject({ session: "2026-11-24" });
+    stored("c0ffee00-0000-4000-8000-000000000004", "2026-11-24T09:00:30.000Z");
+    expect((await visit("2026-11-24T21:00:00Z")).initialChatId).toBe(
+      "c0ffee00-0000-4000-8000-000000000004"
+    );
+    expect((await visit("2026-11-25T09:00:00Z")).session).toBe("2026-11-25");
+  });
+
+  it("counts the visit as attending while the session is open, once", async () => {
+    vi.setSystemTime(new Date("2026-11-22T10:00:00Z"));
+    await book();
+    candidates.rows = [
+      {
+        ...db.tables.mira_session_slot![0],
+        user_id: LEA.id,
+        mira_user: { email: LEA.email, minor_at: null },
+      },
+    ];
+    await runSessionReminders(new Date("2026-11-24T17:02:00Z"));
+    await visit("2026-11-24T17:04:00Z");
+    await visit("2026-11-24T17:20:00Z");
+    expect(db.tables.mira_session_reminder![0]!.joined_at).toBe("2026-11-24T17:04:00.000Z");
   });
 });

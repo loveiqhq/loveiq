@@ -61,7 +61,7 @@ import {
   logMiraEvent,
   ownsChat,
 } from "@features/mira/server/store";
-import { getSlot, markJoined, type StoredSlot } from "@features/mira/server/weekly-sessions";
+import { getSlot, type StoredSlot } from "@features/mira/server/weekly-sessions";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -471,12 +471,6 @@ export async function POST(request: Request) {
   }
 
   if (isFirst) logMiraEvent("chat_started", who, { signedIn: Boolean(account), chip });
-  // Attendance: opened within 30 minutes of a start its reminder went out for (once per start).
-  if (opening && weekly && account && !minor) {
-    await markJoined(weekly, account.id, new Date()).catch((err) =>
-      logger.error({ err }, "mira: a weekly session's attendance was not recorded")
-    );
-  }
   if (chip === -1 && out?.topic && !crisis) logMiraEvent("chat_topic", who, { topic: out.topic });
   if (answering && INTAKE_IDS.has(answering))
     logMiraEvent("intake_answered", who, { q: answering });

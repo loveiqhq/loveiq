@@ -147,8 +147,8 @@ describe("opening the weekly session from its link", () => {
     expect(vi.mocked(addMessages).mock.calls[0]![1]).toHaveLength(2);
     const started = vi.mocked(logMiraEvent).mock.calls.find(([n]) => n === "chat_started");
     expect(started?.[2]).toEqual({ signedIn: true, chip: null });
-    // Attendance is checked against the start it was opened for.
-    expect(markJoined).toHaveBeenCalledWith(SLOT, "u1", expect.any(Date));
+    // Attendance is the session page's (app/mira/session), on every visit, not the opening's.
+    expect(markJoined).not.toHaveBeenCalled();
   });
 
   it("remembers nothing when Remember our conversations is off", async () => {

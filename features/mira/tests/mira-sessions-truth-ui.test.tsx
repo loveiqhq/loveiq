@@ -11,6 +11,7 @@ vi.mock("@features/mira/ui/weekly-session/useWeeklySession", async (orig) => ({
 }));
 
 import { IntakeAnswers } from "@features/mira/ui/IntakeAnswers";
+import MiraChat from "@features/mira/ui/MiraChat";
 import { NextSessionCard } from "@features/mira/ui/weekly-session/NextSessionCard";
 import { WeeklySessionSettings } from "@features/mira/ui/weekly-session/WeeklySessionSettings";
 
@@ -215,5 +216,48 @@ describe("a new time zone alone is a change", () => {
     expect(
       screen.getByRole("button", { name: "Move to Tuesdays at 19:00, New York time" })
     ).toBeEnabled();
+  });
+});
+
+describe("the session's link opens each session once in this browser", () => {
+  const KEY = "2026-11-24T18:00:00.000Z";
+  const open = (key = KEY) => {
+    window.history.replaceState(null, "", "/mira/session");
+    return render(<MiraChat signedIn initialChatId={null} session={key} />);
+  };
+  beforeEach(() => {
+    localStorage.clear();
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [] } });
+  });
+
+  it("sends Mira's opening once: a page brought back for the same session sends nothing", async () => {
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "Welcome to your weekly session.", sources: [], chatId: null },
+    });
+    const first = open();
+    await screen.findByText("Welcome to your weekly session.");
+    first.unmount();
+    open(); // Back, from the router's cache: the same session
+    await waitFor(() => expect(calls("GET /api/mira/me")).toHaveLength(2));
+    expect(calls("POST /api/mira/chat")).toHaveLength(1);
+    cleanup();
+    open("2026-12-01T18:00:00.000Z"); // next week's session is a new one
+    await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(2));
+  });
+
+  it("an opening that failed is tried again on the next visit", async () => {
+    replies["POST /api/mira/chat"] = () => ({
+      status: 503,
+      body: { error: "Mira is resting for today. Please come back tomorrow." },
+    });
+    const first = open();
+    await screen.findByText(/Mira is resting for today/);
+    first.unmount();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "Welcome back.", sources: [], chatId: null },
+    });
+    open();
+    await screen.findByText("Welcome back.");
+    expect(calls("POST /api/mira/chat")).toHaveLength(2);
   });
 });
