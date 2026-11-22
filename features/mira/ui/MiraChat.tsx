@@ -109,6 +109,8 @@ export default function MiraChat({
   // prompts may not belong on screen: they are left out rather than flashed.
   const [ready, setReady] = useState(signedIn && !initialChatId);
   const [style, setStyle] = useState<Style>({});
+  // "Mira replies in" (Settings): Talk listens and speaks in it too.
+  const [replyLanguage, setReplyLanguage] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
@@ -144,6 +146,7 @@ export default function MiraChat({
     onTurn: (text, o) => void send(text, { ...o, voice: true }),
     chatId: () => chatId,
     held: supportOpen || crisis !== null || styleOpen,
+    replyLanguage,
   });
   const voiceOn = voice.phase !== "off";
 
@@ -171,12 +174,13 @@ export default function MiraChat({
     void (async () => {
       const me = await miraApi<{
         chats: ChatSummary[];
-        profile: { style: Style };
+        profile: { style: Style; reply_language?: string | null };
         bodyCheck?: { due: BodyDue };
       }>("/api/mira/me");
       if (me.ok) {
         setChats(me.data.chats);
         setStyle(me.data.profile.style ?? {});
+        setReplyLanguage(me.data.profile.reply_language ?? null);
         setBodyDue(me.data.bodyCheck?.due ?? null);
       }
       if (initialChatId) {

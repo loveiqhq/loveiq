@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REPLY_LANGUAGES } from "@features/mira/reply-languages";
 import {
   forSpeech,
   isEcho,
@@ -74,10 +75,29 @@ describe("barge-in: telling the person from Mira's own voice in the speakers", (
 });
 
 describe("which language and voice", () => {
-  it("listens in the browser's English, or US English (Mira replies in English only for now)", () => {
-    expect(recognitionLang(["de-DE", "en-GB", "en-US"])).toBe("en-GB");
-    expect(recognitionLang(["en"])).toBe("en-US");
-    expect(recognitionLang(["de-DE"])).toBe("en-US");
+  // Crisis words are read in the person's own language (server/safety.ts): speech must become
+  // text in that language, never English by force.
+  it("listens in the language Mira replies in when one is chosen, as a full language tag", () => {
+    expect(recognitionLang("de", "en-GB")).toBe("de-DE");
+    expect(recognitionLang("pt", "pt-BR")).toBe("pt-PT");
+    expect(recognitionLang("en", "de-DE")).toBe("en-US");
+    // Serbian is offered, and its crisis words read, in the Latin script.
+    expect(recognitionLang("sr", "sr-RS")).toBe("sr-Latn-RS");
+  });
+
+  it("otherwise in the browser's own language, else US English", () => {
+    expect(recognitionLang(null, "fr-CA")).toBe("fr-CA");
+    expect(recognitionLang(null, "pl")).toBe("pl");
+    expect(recognitionLang(null, "")).toBe("en-US");
+    expect(recognitionLang(null, undefined)).toBe("en-US");
+    expect(recognitionLang(null, "not a language")).toBe("en-US");
+    expect(recognitionLang("xx", "it-IT")).toBe("it-IT"); // not a reply language
+  });
+
+  it("has a language tag for every language Mira can reply in", () => {
+    for (const l of REPLY_LANGUAGES) {
+      expect(l.speech, l.code).toMatch(new RegExp(`^${l.code}(-[A-Za-z]{4})?-[A-Z]{2}$`));
+    }
   });
 
   const voice = (name: string, lang: string, localService: boolean) =>
@@ -98,5 +118,20 @@ describe("which language and voice", () => {
   it("has no voice when the device has none of its own (a cloud voice would send her words away)", () => {
     expect(pickVoice([voice("Google US English", "en-US", false)], "en-US")).toBeNull();
     expect(pickVoice([voice("Anna", "de-DE", true)], "en-US")).toBeNull();
+  });
+
+  it("speaks in the listening language, on the device only, or not at all", () => {
+    const voices = [
+      voice("Samantha", "en-US", true),
+      voice("Google Deutsch", "de-DE", false),
+      voice("Anna", "de-DE", true),
+      voice("Markus", "de_AT", true),
+      voice("Goran", "sr-RS", true),
+    ];
+    expect(pickVoice(voices, "de-DE")?.name).toBe("Anna");
+    expect(pickVoice(voices, "de-AT")?.name).toBe("Markus");
+    expect(pickVoice(voices, "sr-Latn-RS")?.name).toBe("Goran");
+    expect(pickVoice(voices, "pl-PL")).toBeNull(); // no Polish voice here: she answers in writing
+    expect(pickVoice([voice("Google Deutsch", "de-DE", false)], "de-DE")).toBeNull();
   });
 });

@@ -165,7 +165,7 @@ describe("Talk", () => {
       { type: "voice_notice", version: "mira-voice-2026-11-22" },
     ]);
     expect(mic()).toMatchObject({ started: true, continuous: true, interimResults: true });
-    expect(mic().lang).toMatch(/^en-/);
+    expect(mic().lang).toBe(navigator.language);
     expect(mic().processLocally).toBeUndefined();
     expect(screen.getByRole("status", { name: "" }).textContent).toContain("Mira is listening");
     // Asked once: the next session starts listening straight away.
@@ -200,6 +200,34 @@ describe("Talk", () => {
     expect(mic().processLocally).toBe(true);
     expect(screen.queryByRole("heading", { name: "Before you talk" })).toBeNull();
     expect(screen.getByText(/Speech becomes text on this device/)).toBeTruthy();
+  });
+});
+
+describe("the language Talk listens and speaks in", () => {
+  it("is the language a signed-in person chose for Mira's replies, with a voice of it", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: { profile: { style: {}, reply_language: "de" }, chats: [] },
+    });
+    vi.spyOn(synth, "getVoices").mockReturnValue([
+      { name: "Samantha", lang: "en-US", localService: true, default: true },
+      { name: "Anna", lang: "de-DE", localService: true, default: false },
+    ]);
+    render(<MiraChat signedIn initialChatId={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/mira/me", expect.anything()));
+    await act(async () => {}); // the profile's answer is in
+    talk();
+    expect(mic().lang).toBe("de-DE");
+    await sayToMira("Ich mag das Licht nicht");
+    await waitFor(() => expect(spoken().length).toBeGreaterThan(0));
+    const utterance = said.find((u) => u.text.trim())!;
+    expect(utterance).toMatchObject({ lang: "de-DE", voice: { name: "Anna" } });
+  });
+
+  it("is the browser's own language otherwise", async () => {
+    vi.spyOn(navigator, "language", "get").mockReturnValue("pl-PL");
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    talk();
+    expect(mic().lang).toBe("pl-PL");
   });
 });
 

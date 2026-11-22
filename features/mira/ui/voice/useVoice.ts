@@ -82,6 +82,8 @@ export function useVoice(options: {
   chatId: () => string | null;
   /** A panel is open over the chat (support lines, coaching style): the microphone waits. */
   held: boolean;
+  /** The language Mira replies in, chosen in Settings (null: none chosen, or signed out). */
+  replyLanguage: string | null;
 }) {
   const [phase, setPhaseState] = useState<VoicePhase>("off");
   const [heard, setHeard] = useState("");
@@ -357,9 +359,7 @@ export function useVoice(options: {
     window.speechSynthesis?.getVoices(); // Chrome loads its voices on the first ask
     Object.assign(m, {
       Recognizer,
-      lang: recognitionLang(
-        navigator.languages?.length ? navigator.languages : [navigator.language]
-      ),
+      lang: recognitionLang(latest.current.replyLanguage, navigator.language),
       session: crypto.randomUUID(),
       chatId: latest.current.chatId(),
       saveOnAnswer: false,
