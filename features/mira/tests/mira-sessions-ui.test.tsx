@@ -262,11 +262,11 @@ describe("Settings' weekly session section", () => {
     });
     render(<WeeklySessionSettings />);
     expect(await screen.findByText("Tuesdays at 19:00")).toBeInTheDocument();
-    const reminders = screen.getByRole("checkbox", { name: /Reminder emails/ });
+    const reminders = screen.getByRole("switch", { name: "Reminder emails" });
     expect(reminders).toBeChecked();
     fireEvent.click(reminders);
     expect(await screen.findByText("Reminders are paused.")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Reminder emails/ })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Reminder emails" })).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
     expect(screen.getByText(/takes it out of your calendar/)).toBeInTheDocument();

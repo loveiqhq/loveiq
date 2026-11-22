@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { SwitchRow } from "../checks/ChecksSettings";
 import { refocus } from "../journal/parts";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
@@ -26,6 +27,7 @@ export function WeeklySessionSettings() {
   const [file, setFile] = useState<string | null>(null);
   // Where focus goes when the sheet closes and its opener went with the booking.
   const opener = useRef<HTMLButtonElement | null>(null);
+  const id = useId();
 
   if (state.status === "signed-out" || state.status === "unavailable") return null;
   const slot = state.status === "ready" ? state.slot : null;
@@ -103,26 +105,16 @@ export function WeeklySessionSettings() {
               Change
             </button>
           </div>
-          <label className="flex items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
-            <span>
-              <span className="block text-[15px] font-bold">Reminder emails</span>
-              <span className="text-[14px] text-ap-body">
-                A short email 30 to 60 minutes before each session. Neutral subject line.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={!slot.paused}
-              disabled={busy}
-              onChange={(e) =>
-                void run(
-                  () => setPaused(!e.target.checked),
-                  e.target.checked ? "Reminders are on." : "Reminders are paused."
-                )
-              }
-              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
-            />
-          </label>
+          <SwitchRow
+            id={id}
+            label="Reminder emails"
+            description="A short email 30 to 60 minutes before each session. Neutral subject line."
+            checked={!slot.paused}
+            busy={busy}
+            onChange={(on) =>
+              void run(() => setPaused(!on), on ? "Reminders are on." : "Reminders are paused.")
+            }
+          />
           {confirm ? (
             <div className="rounded-2xl border border-ap-bad p-4 text-[14px]">
               <p>

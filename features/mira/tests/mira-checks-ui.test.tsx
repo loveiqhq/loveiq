@@ -497,8 +497,8 @@ describe("the Home card", () => {
 describe("Settings › Self-checks", () => {
   it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
     render(<ChecksSettings />);
-    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
-    expect(box.closest("label")!.textContent).toMatch(
+    const box = await screen.findByRole("switch", { name: "Mira may use my check results" });
+    expect(box).toHaveAccessibleDescription(
       /latest band.*whether your last mood check opened the support lines/
     );
     fireEvent.click(box);
@@ -555,7 +555,7 @@ describe("when the checks don't load", () => {
     expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
     fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
     expect(
-      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+      await screen.findByRole("switch", { name: "Mira may use my check results" })
     ).not.toBeChecked();
   });
 
@@ -574,6 +574,21 @@ describe("when the checks don't load", () => {
   });
 });
 
+describe("Assessments' 'Mira may use my LoveIQ result'", () => {
+  it("is a switch, saved with the other choices and put back if the save fails", async () => {
+    render(<AssessmentsPage />);
+    const sw = await screen.findByRole("switch", { name: "Mira may use my LoveIQ result" });
+    expect(sw).not.toBeChecked();
+    fireEvent.click(sw);
+    await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_assessment: true }]));
+    expect(sw).toBeChecked();
+    replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
+    fireEvent.click(sw);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
+    expect(sw).toBeChecked();
+  });
+});
+
 describe("the result page's 'Mira may use my check results'", () => {
   it("stays in view once ticked, and says why when the save fails", async () => {
     account.checks[0] = {
@@ -582,18 +597,18 @@ describe("the result page's 'Mira may use my check results'", () => {
       nextAt: new Date(Date.now() + 13 * DAY).toISOString(),
     };
     render(<CheckPage checkId="anxiety" practice={null} />);
-    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    const box = await screen.findByRole("switch", { name: "Mira may use my check results" });
     fireEvent.click(box);
     await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
     // Saved: still there, ticked.
     expect(
-      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+      await screen.findByRole("switch", { name: "Mira may use my check results" })
     ).toBeChecked();
     replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mira may use my check results/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Mira may use my check results" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
     // Put back as it was before the failed change.
-    expect(screen.getByRole("checkbox", { name: /Mira may use my check results/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Mira may use my check results" })).toBeChecked();
   });
 });
 

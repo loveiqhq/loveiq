@@ -79,12 +79,12 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
   it("Settings: a reminder switch refused by the CSRF check keeps the section, and says so", async () => {
     replies["PATCH /api/mira/weekly-session"] = CSRF;
     render(<WeeklySessionSettings />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Reminder emails/ }));
+    fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That didn’t go through. Please try again."
     );
     expect(screen.getByRole("heading", { name: "Weekly session" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Reminder emails/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Reminder emails" })).toBeChecked();
   });
 
   it("only the under-18 stop (403 with `minor`) hides the card", async () => {
@@ -104,7 +104,7 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     });
     window.history.replaceState(null, "", "/mira/settings");
     render(<WeeklySessionSettings />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Reminder emails/ }));
+    fireEvent.click(await screen.findByRole("switch", { name: "Reminder emails" }));
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Fsettings")
     );

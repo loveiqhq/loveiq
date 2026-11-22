@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { miraApi } from "../api";
+import { Switch } from "../journal/parts";
 import { useChecks } from "./data";
 
 /**
@@ -17,6 +18,7 @@ export function UseChecksSwitch({
   on: boolean;
   onChange: (on: boolean) => void;
 }) {
+  const id = useId();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function toggle(next: boolean) {
@@ -32,27 +34,59 @@ export function UseChecksSwitch({
   }
   return (
     <div>
-      <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
-        <span>
-          <span className="block text-[15px] font-bold">Mira may use my check results</span>
-          <span className="text-[14px] text-ap-body">
-            She sees each check&rsquo;s latest band, like &ldquo;mild&rdquo;, and whether your last
-            mood check opened the support lines. Never your scores or other answers.
-          </span>
-        </span>
-        <input
-          type="checkbox"
-          checked={on}
-          disabled={busy}
-          onChange={(e) => void toggle(e.target.checked)}
-          className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
-        />
-      </label>
+      <SwitchRow
+        id={id}
+        label="Mira may use my check results"
+        description="She sees each check’s latest band, like “mild”, and whether your last mood check opened the support lines. Never your scores or other answers."
+        checked={on}
+        busy={busy}
+        onChange={(next) => void toggle(next)}
+      />
       {error ? (
         <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * An on/off choice as Settings shows every one (round-2 decision 6): its name and what it means,
+ * with the journal's switch beside them, which keeps focus and ignores taps while it saves.
+ */
+export function SwitchRow({
+  id,
+  label,
+  description,
+  checked,
+  busy,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  busy: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
+      <span>
+        <span id={`${id}-l`} className="block text-[15px] font-bold">
+          {label}
+        </span>
+        <span id={`${id}-d`} className="text-[14px] text-ap-body">
+          {description}
+        </span>
+      </span>
+      <Switch
+        checked={checked}
+        disabled={busy}
+        onChange={onChange}
+        labelledBy={`${id}-l`}
+        describedBy={`${id}-d`}
+      />
     </div>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { CHECKS, CHECK_IDS, bandOf, type Check } from "@features/mira/content/checks";
+import { useId, useState } from "react";
+import { CHECKS, CHECK_IDS, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { miraApi } from "../api";
-import { UseChecksSwitch } from "./ChecksSettings";
+import { SwitchRow, UseChecksSwitch } from "./ChecksSettings";
 import { CheckIcon, LoveIqTile } from "./icons";
 import {
   FRAME_TAB,
@@ -30,12 +30,16 @@ export default function AssessmentsPage() {
   const { data, error, setData, retry } = useChecks();
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
+  const [useBusy, setUseBusy] = useState(false);
+  const switchId = useId();
   const body = bodyLine(data?.bodyCheck ?? null);
 
   async function toggleAssessment(on: boolean) {
     setUseError(null);
+    setUseBusy(true);
     setData((d) => d && { ...d, useAssessment: on });
     const r = await miraApi("/api/mira/me", { method: "PATCH", body: { use_assessment: on } });
+    setUseBusy(false);
     if (!r.ok) {
       setData((d) => d && { ...d, useAssessment: !on });
       setUseError(r.data.error ?? "Unable to save. Please try again.");
@@ -171,20 +175,14 @@ export default function AssessmentsPage() {
             on={data.useChecks}
             onChange={(on) => setData((d) => d && { ...d, useChecks: on })}
           />
-          <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-ap-line p-4">
-            <span>
-              <span className="block text-[15px] font-bold">Mira may use my LoveIQ result</span>
-              <span className="text-[14px] text-ap-body">
-                Your Sexual Personality result tailors her coaching.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={data.useAssessment}
-              onChange={(e) => void toggleAssessment(e.target.checked)}
-              className="mt-1 h-5 w-5 shrink-0 accent-ap-purple"
-            />
-          </label>
+          <SwitchRow
+            id={switchId}
+            label="Mira may use my LoveIQ result"
+            description="Your Sexual Personality result tailors her coaching."
+            checked={data.useAssessment}
+            busy={useBusy}
+            onChange={(on) => void toggleAssessment(on)}
+          />
           {useError ? (
             <p role="alert" className="text-[13px] text-ap-bad-ink">
               {useError}
