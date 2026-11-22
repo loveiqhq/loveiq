@@ -350,10 +350,12 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             To show honest ratings on Mira&apos;s pages. Your stars count toward the average shown,
-            never with your name. Legal basis: our legitimate interest in telling visitors what
-            people think of Mira (Art. 6(1)(f) GDPR). Your words, name and age range are shown only
-            with your explicit consent, because they may say something about your sex life or your
-            health (Art. 6(1)(a) and Art. 9(2)(a) GDPR).
+            never with your name. Before we take a rating, we count your messages to Mira to check
+            that you have talked with her; we don&apos;t read them for it. Legal basis: our
+            legitimate interest in telling visitors what people think of Mira (Art. 6(1)(f) GDPR).
+            Your words, name and age range are shown only with your explicit consent, because they
+            may say something about your sex life or your health (Art. 6(1)(a) and Art. 9(2)(a)
+            GDPR).
           </li>
           <li>
             Our analytics tools run on Mira&apos;s pages, as on the rest of our site. PostHog and
@@ -482,7 +484,8 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             Your rating, and your words if you shared them, stay until you take them back in
-            Settings or delete your account. Words our team decides not to show are deleted then.
+            Settings or delete your account. Words our team decides not to show are deleted then;
+            the reason we gave stays with your rating, so you can see it in Settings.
           </li>
           <li>
             Your self-check answers stay until you delete them (Settings, &ldquo;Delete my check
@@ -600,22 +603,33 @@ export default function MiraPrivacyPage() {
 
         <h2 id="ratings">Ratings and quotes</h2>
         <p className="mt-3">
-          Signed in, Mira may ask you for a rating at a good moment: after you say you would
-          recommend her, or after you liked several of her answers in one chat. Never right after a
-          crisis, a suggestion to see a doctor or therapist, or the body check, and at most once a
-          month. You can always say &ldquo;Not now&rdquo;.
+          Anyone who has talked with Mira can rate her in Settings, at any time. Mira also asks at a
+          good moment: after you say you would recommend her, or after you liked several of her
+          answers in one chat. Never right after a crisis, a suggestion to see a doctor or
+          therapist, or the body check, and at most once a month. You can always say &ldquo;Not
+          now&rdquo;.
         </p>
         <ul>
-          <li>Only people signed in to Mira can rate her, once each.</li>
+          <li>
+            Only people who have talked with Mira can rate her, once each: an account needs at least
+            three messages of its own. To check, we count your messages; we don&apos;t read them for
+            it.
+          </li>
+          <li>Every rating counts toward the average, high or low.</li>
           <li>
             Your words are shown only if you tick the box for it. Our team reads every quote before
             it shows. We never change your words, except to take out a detail that could identify
             you or someone else, which we mark with […], as the box says.
           </li>
           <li>
+            We hold back or take down a quote only if we can&apos;t remove identifying details, it
+            is harmful or abusive, it isn&apos;t about Mira, or it is spam or a duplicate, never
+            because it is critical. Settings shows you our reason.
+          </li>
+          <li>
             Mira&apos;s pages show the average, how many people rated her and one approved quote a
-            day, and only once at least 20 people have rated her. Our team&apos;s own ratings, and
-            those of anyone who said they are under 18, never count.
+            day, whatever its stars, and only once at least 20 people have rated her. Our
+            team&apos;s own ratings, and those of anyone who said they are under 18, never count.
           </li>
           <li>
             If you tell Mira you are under 18, your rating and your words are deleted, even if they
