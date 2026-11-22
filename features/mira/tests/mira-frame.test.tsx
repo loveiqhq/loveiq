@@ -7,6 +7,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/mira/home",
 }));
 
+const session = vi.hoisted(() => ({ account: null as null | { id: string; email: string } }));
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: async () => session.account }));
+
+import GuideLayout from "@/app/mira/guide/layout";
 import { MiraAppFrame } from "@features/mira/ui/MiraAppFrame";
 import { PrimaryButton, Wordmark } from "@features/mira/ui/MiraShell";
 import { ADULTS_ONLY, AdultsOnly, ConfirmDelete, SectionLink } from "@features/mira/ui/kit";
@@ -232,5 +236,27 @@ describe("the logo (SET-7)", () => {
     expect(link.textContent!.replace(/\s+/g, " ").trim()).toBe(
       "Applied Psychometrics BETA, talk to Mira"
     );
+  });
+});
+
+describe("the guide's frame (UX-3, SET-6)", () => {
+  it("signed in, is the app's frame with Guide marked, so the menu and Home are one tap away", async () => {
+    session.account = { id: "u1", email: "robin@example.com" };
+    render(await GuideLayout({ children: <p>The guide</p> }));
+    const menu = screen.getByRole("navigation", { name: "Mira" });
+    expect(within(menu).getByRole("link", { current: "page" })).toHaveAttribute(
+      "href",
+      "/mira/guide"
+    );
+    expect(screen.getByRole("main")).toHaveTextContent("The guide");
+    expect(screen.getByRole("link", { name: /Mira home$/ })).toHaveAttribute("href", "/mira/home");
+  });
+
+  it("signed out, is the open pages' frame: the logo and the legal links, no menu", async () => {
+    session.account = null;
+    render(await GuideLayout({ children: <p>The guide</p> }));
+    expect(screen.queryByRole("navigation", { name: "Mira" })).toBeNull();
+    expect(screen.getByRole("main")).toHaveTextContent("The guide");
+    expect(screen.getByRole("navigation", { name: "Legal" })).toBeInTheDocument();
   });
 });
