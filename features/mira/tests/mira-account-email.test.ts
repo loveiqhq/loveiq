@@ -255,7 +255,7 @@ describe("changing the email", () => {
     db.tables.mira_user![0]!.minor_at = new Date().toISOString();
     expect(await start()).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     db.tables.mira_user![0]!.minor_at = null;
     expect((await start("lea@example.com")).status).toBe(400);

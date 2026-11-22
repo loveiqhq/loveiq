@@ -7,8 +7,11 @@
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), records the device (devices.ts; Mira honours only recorded sessions), moves the
  *       anonymous chat into the account ("your current chat comes with you"), and says whether to
- *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys)
- *   { action: "carry", carry } → after Google sign-in, moves the anonymous chat into the account
+ *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys);
+ *       `minor: true` when this browser or the account was stopped as under 18 (nothing carried)
+ *   { action: "carry", carry } → after a Google or passkey sign-in, moves the anonymous chat into
+ *       the account (never from a browser or for an account Mira stopped as under 18: 403
+ *       `minor: true`)
  *   { action: "logout" }  → also forgets this device (its row in Settings › Devices)
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
@@ -99,6 +102,7 @@ const schema = z.discriminatedUnion("action", [
 type Turn = z.infer<typeof carrySchema>[number];
 
 const tryLater = () => NextResponse.json({ error: "Please try again later." }, { status: 429 });
+const ADULTS_ONLY = "Mira is only for adults.";
 const codeSent = () => NextResponse.json({ success: true });
 
 /**
@@ -169,6 +173,10 @@ export async function POST(request: Request) {
     const account = await getMiraAccount();
     if (!account) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
     try {
+      // A browser (or an account) Mira stopped as under 18 keeps none of its chat, as with the code.
+      if (await isMinor(account.id)) {
+        return NextResponse.json({ error: ADULTS_ONLY, minor: true }, { status: 403 });
+      }
       const profile = await getProfile(account.id);
       const turns = body.carry.filter((t) => t.content.trim());
       const chatId = await carryChat(account.id, profile?.remember_chats !== false, turns);
@@ -318,21 +326,33 @@ export async function POST(request: Request) {
   // A browser Mira stopped as under 18: a new account takes the stop, and its chat isn't kept.
   const stopped = await carryMinorStop(account.id, profile?.created_at);
   try {
+    // That browser, or an account stopped before: every route refuses them from here on, so the
+    // page says "Mira is only for adults." at once, never "About you" and its nudge promise.
+    // Unsure is not stopped (each route checks again and refuses).
+    const minor = stopped || (await isMinor(account.id).catch(() => false));
     const carry = body.carry?.filter((t) => t.content.trim()) ?? [];
-    const remember = !stopped && profile?.remember_chats !== false;
+    const remember = !minor && profile?.remember_chats !== false;
     const chatId = await carryChat(account.id, remember, carry);
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },
       { carried: carry.length, method: "email" }
     );
+    if (minor) {
+      return NextResponse.json({
+        success: true,
+        minor: true,
+        needsProfile: false,
+        chatId: null,
+        offerPasskey: false,
+      });
+    }
     // Only an offer: a failed read just doesn't make it.
     const offerPasskey = await Promise.all([
       isStaffEmail(account.email),
-      isMinor(account.id),
       listPasskeys(account.id),
     ]).then(
-      ([staff, minor, keys]) => !staff && !minor && keys.length < MAX_PASSKEYS,
+      ([staff, keys]) => !staff && keys.length < MAX_PASSKEYS,
       () => false
     );
     return NextResponse.json({

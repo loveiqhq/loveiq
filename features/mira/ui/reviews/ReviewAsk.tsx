@@ -61,6 +61,8 @@ const FIELD =
 
 export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: () => void }) {
   const [ready, setReady] = useState(false);
+  // A 9 or 10 from someone who can't rate (rated already): the NPS thanks, which this ask took over.
+  const [thanked, setThanked] = useState(false);
   const [name, setName] = useState("");
   const [done, setDone] = useState<{ words: boolean; name: string } | null>(null);
   const close = useRef(onClose);
@@ -74,19 +76,21 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
   // offered to sign with comes along.
   useEffect(() => {
     let live = true;
-    void miraApi<{ canRate?: boolean; name?: string | null }>("/api/mira/reviews/mine").then(
-      (r) => {
-        if (!live) return;
-        if (!r.ok || !r.data.canRate) {
-          if (takeFocus.current) document.getElementById("mira-input")?.focus();
-          return close.current();
-        }
-        setName(r.data.name ?? "");
-        setReady(true);
-        markAsked();
-        void miraApi("/api/mira/event", { body: { type: "track", name: "review_prompt_shown" } });
+    void miraApi<{ canRate?: boolean; name?: string | null; review?: unknown }>(
+      "/api/mira/reviews/mine"
+    ).then((r) => {
+      if (!live) return;
+      // Rated already: nothing to ask this browser for 30 days, so no read at every thumbs-up.
+      if (r.ok && r.data.review) markAsked();
+      if (!r.ok || !r.data.canRate) {
+        if (takeFocus.current) return setThanked(true);
+        return close.current();
       }
-    );
+      setName(r.data.name ?? "");
+      setReady(true);
+      markAsked();
+      void miraApi("/api/mira/event", { body: { type: "track", name: "review_prompt_shown" } });
+    });
     return () => {
       live = false;
     };
@@ -98,9 +102,27 @@ export function ReviewAsk({ from, onClose }: { from: "nps" | "thumbs"; onClose: 
 
   // The Send button goes with the form: the thanks takes the focus, without opening a keyboard.
   useEffect(() => {
-    if (done) thanks.current?.focus();
-  }, [done]);
+    if (done || thanked) thanks.current?.focus();
+  }, [done, thanked]);
 
+  if (thanked) {
+    return (
+      <section
+        aria-labelledby="mira-review-title"
+        className="rounded-[20px] border border-ap-line bg-white/90 p-4 motion-safe:animate-mira-reply sm:p-5"
+      >
+        <p
+          ref={thanks}
+          id="mira-review-title"
+          role="status"
+          tabIndex={-1}
+          className="text-[14px] text-ap-body outline-none"
+        >
+          Thank you, that helps us a lot.
+        </p>
+      </section>
+    );
+  }
   if (!ready) return null;
 
   function notNow() {

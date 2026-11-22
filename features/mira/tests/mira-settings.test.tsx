@@ -151,6 +151,33 @@ describe("Settings sections", () => {
     }
   });
 
+  it("after an under-18 stop, says so once and keeps only what still works", async () => {
+    replies["GET /api/mira/me"] = () => ({ body: { profile: { ...PROFILE }, minor: true } });
+    render(
+      <MiraSettings
+        security={<p>Devices here</p>}
+        checks={<p>Self-checks here</p>}
+        sharedReview={<p>Shared review here</p>}
+        journal={<p>Journal settings here</p>}
+        weeklySession={<p>Weekly session here</p>}
+      />
+    );
+    expect(await screen.findByRole("heading", { name: "Mira is only for adults." })).toBeVisible();
+    // Signing out, taking a rating back and deleting: every other section would only refuse.
+    const links = within(screen.getAllByRole("navigation", { name: "Settings sections" })[0]!)
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["#security", "#sharing", "#data"]);
+    expect(screen.getByText("Devices here")).toBeInTheDocument();
+    expect(screen.getByText("Shared review here")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeInTheDocument();
+    for (const gone of ["Self-checks here", "Journal settings here", "Weekly session here"]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("shows the page's shape while loading, and a way to try again when loading fails", async () => {
     replies["GET /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to load." } });
     render(<MiraSettings />);

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { miraLinkPreview } from "@features/mira/link-preview";
 import { redirect } from "next/navigation";
 import { googleClient } from "@features/mira/server/google";
+import { isMinor } from "@features/mira/server/minor";
 import { getMiraAccount, safeNext } from "@features/mira/server/session";
 import { getProfile } from "@features/mira/server/store";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
@@ -30,11 +31,16 @@ export default async function MiraStartPage({
   // Back from Google, signed in: stay to bring the chat along and ask "About you".
   if (signedIn && google !== "done") redirect(next ?? "/mira/home");
   const googleResult = google === "done" ? (signedIn ? "done" : "failed") : (google ?? null);
+  // Into an account this browser may not use (stopped as under 18, here or on the account): the
+  // page says "Mira is only for adults." at once, never "About you". Unsure is not stopped.
+  const minor =
+    googleResult === "done" && account ? await isMinor(account.id).catch(() => false) : false;
   return (
     <SignUpFlow
       googleEnabled={googleClient() !== null}
       googleResult={googleResult}
       needsAbout={about === "1"}
+      minor={minor}
       next={next}
     />
   );

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { LegalLinks, MiraCloud, PrimaryButton, Wordmark } from "./MiraShell";
 import { useMiraLook } from "./MiraLook";
-import { local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
+import { ADULTS_ONLY, local, miraApi, rememberSourceForGoogle, useReloadWhenRestored } from "./api";
 import { accountLook } from "./prefs";
 import { PasskeyOffer } from "./account/PasskeyOffer";
 import {
@@ -26,7 +26,7 @@ import {
  * code sign-in on a device that can make one, "Use Face ID next time?" once (account/).
  */
 
-type Step = "account" | "verify" | "passkey" | "about";
+type Step = "account" | "verify" | "passkey" | "about" | "minor";
 const STEPS: Array<{ key: Step; label: string }> = [
   { key: "account", label: "Account" },
   { key: "verify", label: "Verify" },
@@ -76,11 +76,14 @@ export default function SignUpFlow({
   googleEnabled = false,
   googleResult = null,
   needsAbout = false,
+  minor = false,
   next: asked = null,
 }: {
   googleEnabled?: boolean;
   googleResult?: string | null;
   needsAbout?: boolean;
+  /** Back from Google into an account this browser may not use: stopped as under 18 (rail 15). */
+  minor?: boolean;
   /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
   next?: string | null;
 }) {
@@ -92,7 +95,12 @@ export default function SignUpFlow({
   const { look, adopt } = useMiraLook();
   const adoptSaved = (saved: SavedLook) => adopt(accountLook(saved, look));
   const backFromGoogle = googleResult === "done";
-  const [step, setStep] = useState<Step>(backFromGoogle && needsAbout ? "about" : "account");
+  const [step, setStep] = useState<Step>(
+    minor ? "minor" : backFromGoogle && needsAbout ? "about" : "account"
+  );
+  // On the under-18 refusal: whether a sign-in happened (a code or Google), so Settings can sign
+  // out or delete; a refused passkey signed nobody in.
+  const [minorSignedIn, setMinorSignedIn] = useState(minor);
   const [email, setEmail] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -137,9 +145,25 @@ export default function SignUpFlow({
     router.refresh();
   }
 
+  /**
+   * This browser or the account was stopped as under 18 (rail 15): "Mira is only for adults."
+   * instead of "About you" or Home, every route refusing from here on; the browser forgets its
+   * chat and its 18+ tick, as the chat does at the stop.
+   */
+  function refusedAsMinor(signedIn: boolean) {
+    local.forget();
+    setMinorSignedIn(signedIn);
+    setBusy(false);
+    setStep("minor");
+  }
+
   // Back from Google, signed in: the chat in this browser comes along, as with the emailed code.
   useEffect(() => {
     if (!backFromGoogle) return;
+    if (minor) {
+      local.forget(); // its chat isn't kept (the page shows the refusal)
+      return;
+    }
     const carry = carriedChat();
     void (async () => {
       if (carry.length) {
@@ -181,6 +205,7 @@ export default function SignUpFlow({
       needsProfile?: boolean;
       chatId?: string | null;
       offerPasskey?: boolean;
+      minor?: boolean;
     }>("/api/mira/auth", {
       body: {
         action: "verify",
@@ -194,6 +219,7 @@ export default function SignUpFlow({
       setBusy(false);
       return setError(res.data.error ?? "That code didn't work. Check it, or send a new one.");
     }
+    if (res.data.minor) return refusedAsMinor(true);
     local.saveChat(null);
     if (res.data.offerPasskey && !offeredHere() && (await canOfferPasskey())) {
       afterOffer.current = res.data.needsProfile ? "about" : "home";
@@ -250,6 +276,7 @@ export default function SignUpFlow({
       const res = await signInWithPasskey({ autofill: true, live, ticks: () => ticks.current });
       if (!live()) return;
       if (res.ok) return passkeySignedIn(res.needsProfile);
+      if (res.minor) return refusedAsMinor(false);
       if (res.error) setError(res.error);
       if (!res.again) return;
     }
@@ -273,6 +300,7 @@ export default function SignUpFlow({
     setNotice(null);
     const res = await signInWithPasskey({ ticks: () => ticks.current });
     if (res.ok) return passkeySignedIn(res.needsProfile);
+    if (res.minor) return refusedAsMinor(false);
     setBusy(false);
     if (res.error) setError(res.error);
     // Still on the form: its suggestions come back.
@@ -324,7 +352,7 @@ export default function SignUpFlow({
         <div className="relative hidden md:block">
           <Wordmark />
         </div>
-        <div className="relative mt-auto flex flex-col gap-4">
+        <div className={`relative mt-auto flex-col gap-4 ${step === "minor" ? "hidden" : "flex"}`}>
           <p className="flex items-center gap-2.5 text-[14px] text-ap-body">
             <Image
               src="/images/mira/mira.webp"
@@ -359,7 +387,10 @@ export default function SignUpFlow({
         <div className="mb-8 md:hidden">
           <Wordmark />
         </div>
-        <nav aria-label="Sign-up progress" className="grid grid-cols-3 gap-2">
+        <nav
+          aria-label="Sign-up progress"
+          className={`grid-cols-3 gap-2 ${step === "minor" ? "hidden" : "grid"}`}
+        >
           {STEPS.map((s, i) => (
             <div key={s.key} className="flex flex-col gap-2">
               <span
@@ -562,6 +593,30 @@ export default function SignUpFlow({
 
           {step === "passkey" ? (
             <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
+          ) : null}
+
+          {step === "minor" ? (
+            <div className="flex flex-col gap-3">
+              <h1
+                ref={heading}
+                tabIndex={-1}
+                className="font-serif text-[34px] font-medium leading-tight outline-none"
+              >
+                {ADULTS_ONLY}
+              </h1>
+              {minorSignedIn ? (
+                <p className="text-[15px] text-ap-body">
+                  You can sign out or delete the account in{" "}
+                  <a
+                    href="/mira/settings"
+                    className="font-semibold text-ap-ink underline underline-offset-2"
+                  >
+                    Settings
+                  </a>
+                  .
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {step === "about" ? (

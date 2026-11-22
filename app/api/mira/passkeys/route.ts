@@ -185,7 +185,7 @@ export async function POST(request: Request) {
 
     const account = await getMiraAccount();
     if (!account) return fail("Please sign in again.", 401);
-    if (await isMinor(account.id)) return fail(ADULTS_ONLY, 403);
+    if (await isMinor(account.id)) return fail(ADULTS_ONLY, 403, { minor: true });
 
     if (body.action === "register-options") {
       if (await isStaffEmail(account.email)) {
@@ -325,7 +325,7 @@ async function signIn(
   if (!profile) return fail(DIDNT_WORK, 400);
   // A browser or an account Mira stopped as under 18. A passkey's account already exists, so the
   // browser's cookie alone never stops or wipes it (carryMinorStop); this browser stays stopped.
-  if (await isMinor(userId)) return fail(ADULTS_ONLY, 403);
+  if (await isMinor(userId)) return fail(ADULTS_ONLY, 403, { minor: true });
   // The login's own address, never the profile's copy (which a change of email may have left
   // behind): a code minted for an address no login has would make a new login.
   const email = await loginEmail(userId);

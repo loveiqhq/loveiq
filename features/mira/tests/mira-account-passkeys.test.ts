@@ -203,7 +203,7 @@ describe("adding a passkey", () => {
     db.tables.mira_user![0]!.minor_at = new Date().toISOString();
     expect(await read(await post({ action: "register-options" }))).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     db.tables.mira_user![0]!.minor_at = null;
     db.tables.mira_passkey = Array.from({ length: 10 }, (_, i) => ({
@@ -367,7 +367,7 @@ describe("signing in with a passkey", () => {
     db.tables.mira_user![0]!.minor_at = new Date().toISOString();
     expect(await signInWith(key)).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     expect(verifyOtp).not.toHaveBeenCalled();
     expect(db.tables.mira_session ?? []).toEqual([]);
@@ -463,7 +463,7 @@ describe("a passkey from a browser Mira stopped as under 18", () => {
     browser = new Map([["mira_minor", "1"]]);
     expect(await signInWith(key)).toMatchObject({
       status: 403,
-      body: { error: "Mira is only for adults." },
+      body: { error: "Mira is only for adults.", minor: true },
     });
     expect(db.tables.mira_user![0]!.minor_at ?? null).toBeNull();
     expect(db.tables.mira_passkey).toHaveLength(1);

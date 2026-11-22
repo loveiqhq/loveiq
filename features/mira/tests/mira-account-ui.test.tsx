@@ -147,6 +147,51 @@ describe("Use Face ID next time?", () => {
   });
 });
 
+describe("A sign-in Mira refuses as under 18", () => {
+  const adultsOnly = () => screen.findByRole("heading", { name: "Mira is only for adults." });
+
+  it("by code: says so at once, never asks About you or promises nudges", async () => {
+    localStorage.setItem("mira.chat.v1", JSON.stringify({ turns: [], freeLeft: 0 }));
+    await codeSignIn({ success: true, minor: true, needsProfile: false, chatId: null });
+    const heading = await adultsOnly();
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.queryByText(/daily nudge/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/mira/settings"
+    );
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(calls("PATCH /api/mira/me")).toEqual([]);
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull(); // the browser forgets its chat
+  });
+
+  it("with a passkey: the same refusal, not an error under the form", async () => {
+    replies["POST /api/mira/passkeys"] = (b) =>
+      b.action === "sign-in-options"
+        ? { body: { options: { challenge: "c" } } }
+        : { status: 403, body: { error: "Mira is only for adults.", minor: true } };
+    render(<SignUpFlow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+    await adultsOnly();
+    expect(screen.queryByRole("button", { name: "Send me a code" })).toBeNull();
+    // Not signed in: nothing to manage in Settings.
+    expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+  });
+
+  it("back from Google: the same refusal, and the browser's chat stays out of the account", async () => {
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hi" }], freeLeft: 0 })
+    );
+    render(<SignUpFlow googleResult="done" needsAbout minor />);
+    await adultsOnly();
+    expect(screen.queryByRole("heading", { name: "About you" })).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls("POST /api/mira/auth")).toEqual([]);
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull();
+  });
+});
+
 describe("Back to a Settings section after sign-in", () => {
   // A session email's link, /mira/settings#weekly, signed out: the page's redirect can't see the
   // hash, so it sends next=/mira/settings, and the browser keeps #weekly on the sign-in page.
@@ -477,6 +522,8 @@ describe("Settings › Sign-in & security", () => {
     expect(screen.getByText("Mira is only for adults.")).toBeInTheDocument();
     expect(screen.queryByText(/team login/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    // Never a reason that isn't the reason ("Sign in with the emailed code").
+    expect(screen.queryByText(/Passkeys aren.t available/)).toBeNull();
   });
 
   it("says once how Connect Google went, then takes it out of the address", async () => {

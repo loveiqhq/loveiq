@@ -495,13 +495,16 @@ function Passkeys({
     if (r.error) setError(r.error);
   }
 
-  const note = !allowed
-    ? rpID
-      ? "Passkeys aren't available for this account. Sign in with the emailed code."
-      : "Passkeys work on loveiq.org."
-    : !canPasskey
-      ? "This browser can't make passkeys. Try Safari, Chrome or Edge on a recent device."
-      : null;
+  // Stopped as under 18: the page already says why (no other reason is given).
+  const note = data.minor
+    ? null
+    : !allowed
+      ? rpID
+        ? "Passkeys aren't available for this account. Sign in with the emailed code."
+        : "Passkeys work on loveiq.org."
+      : !canPasskey
+        ? "This browser can't make passkeys. Try Safari, Chrome or Edge on a recent device."
+        : null;
 
   return (
     <Row

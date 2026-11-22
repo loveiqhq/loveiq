@@ -29,6 +29,8 @@ type Failure = {
   needsConsent?: boolean;
   /** Worth asking again: the person closed the sheet, or the challenge ran out. */
   again?: boolean;
+  /** Refused for good: this browser or the account was stopped as under 18 (rail 15). */
+  minor?: boolean;
 };
 
 /** What the person calls their device's lock, for "Use Face ID next time?". */
@@ -186,6 +188,7 @@ export async function signInWithPasskey(opts: {
     error: res.data.error ?? "That passkey didn't work. Please try again, or use your email.",
     needsConsent: res.data.needsConsent === true,
     again: res.data.retry === true,
+    minor: res.minor === true,
   };
 }
 
