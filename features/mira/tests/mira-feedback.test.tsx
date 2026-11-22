@@ -7,8 +7,16 @@ vi.mock("@features/mira/ui/api", () => ({
   miraApi: vi.fn(async () => ({ ok: true, status: 200, data: { success: true } })),
   useReloadWhenRestored: () => undefined,
 }));
+vi.mock("next/navigation", () => ({ redirect: vi.fn(), useRouter: () => ({}) }));
+vi.mock("@features/mira/server/session", () => ({
+  getMiraAccount: async () => ({ id: "u1", email: "lea@example.com" }),
+}));
+vi.mock("@features/mira/server/minor", () => ({ isMinor: vi.fn(async () => false) }));
 
+import type { ReactElement } from "react";
+import FeedbackPage from "@/app/mira/feedback/page";
 import { COACHES } from "@features/mira/content/coaches";
+import { isMinor } from "@features/mira/server/minor";
 import { miraApi } from "@features/mira/ui/api";
 import MiraFeedback from "@features/mira/ui/MiraFeedback";
 
@@ -75,6 +83,20 @@ describe("the beta feedback form", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
     expect(screen.queryByText("Thank you. Your feedback is with the team.")).toBeNull();
+  });
+
+  // Round-3 R3-DATA-5: an account stopped as under 18 was shown the whole form and refused only
+  // after writing and sending. The page reads the stop, and the form gives way to it at once.
+  it("says 'Mira is only for adults.' from the start for an account stopped as under 18", async () => {
+    vi.mocked(isMinor).mockResolvedValueOnce(true);
+    const page = (await FeedbackPage()) as ReactElement<{ minor?: boolean }>;
+    expect(isMinor).toHaveBeenCalledWith("u1");
+    expect(page.props.minor).toBe(true);
+    expect(((await FeedbackPage()) as ReactElement<{ minor?: boolean }>).props.minor).toBe(false);
+    render(<MiraFeedback minor />);
+    expect(screen.getByText("Mira is only for adults.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(miraApi).not.toHaveBeenCalled();
   });
 
   it("draws its fields on the paper colour with a visible edge, never the browser's grey (UX-7, A11Y-8)", () => {
