@@ -122,6 +122,9 @@ describe("Funnel and paywall's cards (review, 23 Nov 2026)", () => {
       expect(card.caveat, key).toContain(
         "Where the query names Pay after the report, that is Before the paywall here"
       );
+      // The week chart draws the range's own weeks: its card never claims 1–22 Oct.
+      if (key === "pts.weeks") expect(card.caveat).not.toContain("1–22 Oct");
+      else expect(card.caveat, key).toContain("read over 1–22 Oct 2026 whatever the range");
     }
   });
 });

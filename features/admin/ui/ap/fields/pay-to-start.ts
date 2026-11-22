@@ -768,10 +768,17 @@ const cards: FieldRegistry = {
   },
 };
 
+/**
+ * The week chart draws the free funnel over the range's own weeks, not over 1–22 Oct: its card
+ * maps the names its own way (review, 23 Nov 2026).
+ */
+const WEEK_NAMES =
+  "Where the query names Pay after the report, that is Before the paywall here, over the range's own weeks up to the €1.99 page's first; €1.99 after the survey is the gate's; pay to start's rows are the paused funnels, no longer shown.";
+
 /** Every card, with the funnels' names mapped (review, 23 Nov 2026: three of 26 had it). */
 export const fields: FieldRegistry = Object.fromEntries(
-  Object.entries(cards).map(([k, f]) => [
-    k,
-    { ...f, caveat: f.caveat ? `${f.caveat} ${NAMES}` : NAMES },
-  ])
+  Object.entries(cards).map(([k, f]) => {
+    const names = k === "pts.weeks" ? WEEK_NAMES : NAMES;
+    return [k, { ...f, caveat: f.caveat ? `${f.caveat} ${names}` : names }];
+  })
 );
