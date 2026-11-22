@@ -5,11 +5,14 @@ import type { ReactNode } from "react";
  * The Applied Psychometrics wordmark with a quiet beta mark (Marcus, 17 Nov: "beta above
  * Psychometrics"), on every Mira page: Mark's minimal board V2 (21 Nov 2026) has it, and Eman chose
  * it for all of Mira's pages the same day (it replaced the 18 Nov "LoveIQ for now").
+ *
+ * Its name says where it goes (round-2 SET-7): on the signed-in pages (`home`) to Home, as the
+ * menu's Home does; everywhere else to the chat's start, "Talk to Mira about your body confidence".
  */
-export function Wordmark({ onHome }: { onHome?: () => void }) {
+export function Wordmark({ home = false, onHome }: { home?: boolean; onHome?: () => void }) {
   return (
     <Link
-      href="/mira"
+      href={home ? "/mira/home" : "/mira"}
       className="no-underline"
       // In the chat itself the logo takes you back to Mira's start, not to the same page. Only
       // there: server-rendered pages (privacy, guide) may not hand a function to a client Link.
@@ -37,7 +40,7 @@ export function Wordmark({ onHome }: { onHome?: () => void }) {
           BETA
         </span>
       </span>
-      <span className="sr-only">, Mira home</span>
+      <span className="sr-only">{home ? ", Mira home" : ", talk to Mira"}</span>
     </Link>
   );
 }
