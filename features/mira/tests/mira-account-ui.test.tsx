@@ -938,7 +938,7 @@ describe("Settings › Sign-in & security", () => {
   it("can be loaded again after a failure", async () => {
     replies["GET /api/mira/security"] = () => ({ status: 500, body: { error: "x" } });
     render(<SecuritySettings />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load this right now.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in & security didn't load.");
     replies["GET /api/mira/security"] = () => ({ body: SECURITY });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("region", { name: "Devices" });

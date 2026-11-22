@@ -214,7 +214,7 @@ export default function MiraSettings({
         stored.current = r.data.profile;
         setMinor(r.data.minor === true);
         setP(r.data.profile);
-      } else setLoadError(r.data.error ?? "We couldn't load your settings.");
+      } else setLoadError(r.data.error ?? "Your settings didn't load.");
     });
   }
   // Once, on arrival.

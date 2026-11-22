@@ -449,6 +449,6 @@ describe("Settings: what you shared", () => {
     cleanup();
     replies["GET /api/mira/reviews/mine"] = () => ({ status: 500, body: { error: "x" } });
     render(<SharedReviewSettings />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn’t load what you shared.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("What you shared didn’t load.");
   });
 });

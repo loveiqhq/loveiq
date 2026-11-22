@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -1469,5 +1471,26 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
     );
     await signIn();
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith(next));
+  });
+});
+
+// Round-3 SET-11 residual: a read that failed was said two ways, "…didn't load" and "We couldn't
+// load your…". One way on every screen: "<what> didn't load."
+describe("Mira's wording", () => {
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) return files(full);
+      return /\.tsx?$/.test(name) ? [full] : [];
+    });
+
+  it("says a failed load one way on every screen", () => {
+    const found = [...files("features/mira/ui"), ...files("app/mira")].flatMap((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .filter((line) => /couldn(’|'|&apos;)t load/.test(line))
+        .map((line) => `${f}: ${line.trim()}`)
+    );
+    expect(found).toEqual([]);
   });
 });

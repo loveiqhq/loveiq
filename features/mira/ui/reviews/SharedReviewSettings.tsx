@@ -137,7 +137,7 @@ export default function SharedReviewSettings() {
         </div>
       ) : state === "failed" ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
-          We couldn’t load what you shared.{" "}
+          What you shared didn’t load.{" "}
           <button type="button" onClick={() => void load()} className="font-semibold underline">
             Try again
           </button>

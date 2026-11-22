@@ -161,7 +161,7 @@ export default function SecuritySettings() {
       </div>
       {failed ? (
         <div className="rounded-[20px] border border-ap-line p-5 text-[14px] text-ap-body">
-          <p role="alert">We couldn&apos;t load this right now.</p>
+          <p role="alert">Sign-in &amp; security didn&apos;t load.</p>
           <button type="button" className={`${LINK} mt-1`} onClick={() => void load()}>
             Try again
           </button>
