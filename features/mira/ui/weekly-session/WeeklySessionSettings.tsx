@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { refocus } from "../journal/parts";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
@@ -23,6 +24,8 @@ export function WeeklySessionSettings() {
   const [error, setError] = useState<string | null>(null);
   // A cancellation that couldn't be emailed: its calendar update, to open in a calendar instead.
   const [file, setFile] = useState<string | null>(null);
+  // Where focus goes when the sheet closes and its opener went with the booking.
+  const opener = useRef<HTMLButtonElement | null>(null);
 
   if (state.status === "signed-out" || state.status === "unavailable") return null;
   const slot = state.status === "ready" ? state.slot : null;
@@ -91,7 +94,12 @@ export function WeeklySessionSettings() {
                 }).format(new Date(slot.next))}
               </span>
             </span>
-            <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+            <button
+              ref={opener}
+              type="button"
+              onClick={() => setSheet(true)}
+              className={OUTLINE_PILL}
+            >
               Change
             </button>
           </div>
@@ -158,7 +166,12 @@ export function WeeklySessionSettings() {
             No weekly session yet. Book 15 minutes a week with Mira: a calendar invite, and a short
             reminder before each session.
           </p>
-          <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+          <button
+            ref={opener}
+            type="button"
+            onClick={() => setSheet(true)}
+            className={OUTLINE_PILL}
+          >
             Choose a time
           </button>
         </div>
@@ -190,7 +203,10 @@ export function WeeklySessionSettings() {
           timeZone={state.timeZone}
           source="settings"
           book={book}
-          onClose={() => setSheet(false)}
+          onClose={() => {
+            setSheet(false);
+            refocus(() => opener.current);
+          }}
         />
       ) : null}
     </section>

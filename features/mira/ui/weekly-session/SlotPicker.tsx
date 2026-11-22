@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ANSWER_CHIP } from "../IntakeAnswers";
 import { PrimaryButton } from "../MiraShell";
 import {
@@ -90,7 +90,6 @@ export function SlotPicker({
 }) {
   const id = useId();
   const [other, setOther] = useState(value.time !== null && !SUGGESTED_TIMES.includes(value.time));
-  const timeRef = useRef<HTMLInputElement | null>(null);
   const [here, setHere] = useState<string | null>(null);
   // This device's zone is only known in the browser.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -143,11 +142,9 @@ export function SlotPicker({
               name={`${id}-time`}
               value="other"
               checked={other}
-              onChange={() => {
-                setOther(true);
-                // Keeps a picked time as the starting point; focus moves to the time itself.
-                window.requestAnimationFrame(() => timeRef.current?.focus());
-              }}
+              // Keeps a picked time as the starting point. Focus stays in the group (arrows
+              // only choose there); the time field is the next Tab stop.
+              onChange={() => setOther(true)}
               className="peer sr-only"
             />
             <span className={RADIO_CHIP}>Another time</span>
@@ -157,7 +154,6 @@ export function SlotPicker({
           <label className="mt-3 flex items-center gap-3 text-[14px] text-ap-body motion-safe:animate-mira-reply">
             Your time
             <input
-              ref={timeRef}
               type="time"
               step={300}
               required

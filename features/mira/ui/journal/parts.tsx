@@ -29,6 +29,17 @@ export function Icon({ path, className = "" }: { path: string; className?: strin
 
 export const ARROW = "M5 12h14M13 6l6 6-6 6";
 
+/**
+ * After a sheet closes, focus goes back to its opener (Modal does that). When a save replaced the
+ * opener ("Do today’s check-in" becomes "Edit today’s check-in", "Choose a time" becomes
+ * "Change"), focus would fall to the page: it goes to `to` instead, what replaced it.
+ */
+export function refocus(to: () => HTMLElement | null | undefined): void {
+  window.requestAnimationFrame(() => {
+    if (!document.activeElement || document.activeElement === document.body) to()?.focus();
+  });
+}
+
 /** The reminder's time when it is first switched on: an evening check-in. */
 export const DEFAULT_REMINDER = "20:00";
 export { CHECK };

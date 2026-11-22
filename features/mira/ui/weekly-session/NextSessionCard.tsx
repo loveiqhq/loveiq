@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { refocus } from "../journal/parts";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
@@ -23,6 +24,8 @@ export function NextSessionCard() {
   const [sheet, setSheet] = useState(false);
   const [calendar, setCalendar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Where focus goes when the sheet closes and its opener went with the booking.
+  const opener = useRef<HTMLButtonElement | null>(null);
   // The card turns into "now" on its own when the time comes.
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -74,7 +77,10 @@ export function NextSessionCard() {
       timeZone={state.timeZone}
       source="home"
       book={book}
-      onClose={() => setSheet(false)}
+      onClose={() => {
+        setSheet(false);
+        refocus(() => opener.current);
+      }}
     />
   ) : null;
   const withSheet = (card: ReactNode) => (
@@ -94,7 +100,12 @@ export function NextSessionCard() {
           Real change comes from small, regular steps. Pick a time that’s yours each week: Mira
           sends a calendar invite, and a short reminder before you meet.
         </p>
-        <button type="button" onClick={() => setSheet(true)} className={`${INK_PILL} mt-4`}>
+        <button
+          ref={opener}
+          type="button"
+          onClick={() => setSheet(true)}
+          className={`${INK_PILL} mt-4`}
+        >
           Choose a time
         </button>
       </section>
@@ -172,7 +183,7 @@ export function NextSessionCard() {
             Add to calendar
           </button>
         )}
-        <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+        <button ref={opener} type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
           Change
         </button>
       </div>

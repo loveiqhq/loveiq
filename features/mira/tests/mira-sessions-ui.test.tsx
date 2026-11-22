@@ -147,6 +147,41 @@ describe("Home's weekly session card", () => {
     expect(calls("PUT /api/mira/weekly-session")[0]!.body).toMatchObject({ source: "home" });
   });
 
+  it("moves focus to the confirmation, and back to the card's Change after Done", async () => {
+    replies["PUT /api/mira/weekly-session"] = () => ({
+      body: { slot: SLOT, timeZone: "Europe/Berlin", change: "booked", emailed: true },
+    });
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a time" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tuesday" }));
+    fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
+    const book = screen.getByRole("button", { name: "Book Tuesdays at 19:00" });
+    book.focus();
+    fireEvent.click(book);
+    const done = await screen.findByRole("dialog", { name: "Weekly session booked" });
+    // Not left on the vanished Book button: on the confirmation, whose news is then read out.
+    await waitFor(() =>
+      expect(within(done).getByRole("heading", { name: "You’re booked" })).toHaveFocus()
+    );
+    await waitFor(() =>
+      expect(within(done).getByRole("status")).toHaveTextContent("on its way to your inbox")
+    );
+    fireEvent.click(within(done).getByRole("button", { name: "Done" }));
+    // "Choose a time" is gone with the booking: focus goes to what replaced it.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Change" })).toHaveFocus());
+  });
+
+  it("keeps focus in the time group when the arrows reach Another time", async () => {
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a time" }));
+    const other = screen.getByRole("radio", { name: "Another time" });
+    other.focus();
+    fireEvent.click(other);
+    await new Promise((r) => requestAnimationFrame(r));
+    expect(screen.getByLabelText("Your time")).toBeInTheDocument();
+    expect(other).toHaveFocus();
+  });
+
   it("says when the invite couldn't be emailed, and still offers the calendar", async () => {
     replies["PUT /api/mira/weekly-session"] = () => ({
       body: { slot: SLOT, timeZone: "Europe/Berlin", change: "booked", emailed: false },
@@ -156,7 +191,9 @@ describe("Home's weekly session card", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Tuesday" }));
     fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
     fireEvent.click(screen.getByRole("button", { name: "Book Tuesdays at 19:00" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("couldn’t email your invite");
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("couldn’t email your invite")
+    );
   });
 
   it("shows the next session, its way into a calendar, and a way to change it", async () => {

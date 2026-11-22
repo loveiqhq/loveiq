@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
-import { ARROW, CHECK, Icon, Skeleton, WeekDots, dayName, thisWeek } from "./parts";
+import { ARROW, CHECK, Icon, Skeleton, WeekDots, dayName, refocus, thisWeek } from "./parts";
 import { useJournal } from "./useJournal";
 
 /** Shown at once, then more on request. */
@@ -27,6 +27,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   const [confirm, setConfirm] = useState<string | null>(null);
   const [said, setSaid] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const checkInRef = useRef<HTMLDivElement | null>(null);
 
   const openDay = day ?? (startCheckIn && !dismissed && status === "ready" && today ? today : null);
   const doneToday = entries.some((e) => e.day === today);
@@ -98,7 +99,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
       ) : (
         <>
           <div className="mt-7 flex flex-col gap-6 rounded-[28px] border border-ap-line p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+            <div ref={checkInRef}>
               {checkInButton}
               <p className="mt-3 text-[14px] text-ap-body">
                 {run >= 2
@@ -203,6 +204,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
           onClose={() => {
             setDay(null);
             setDismissed(true);
+            refocus(() => checkInRef.current?.querySelector("button"));
             // The email's ?checkin=1 has done its job: a reload shouldn't open the sheet again.
             if (startCheckIn) window.history.replaceState(null, "", "/mira/journal");
           }}

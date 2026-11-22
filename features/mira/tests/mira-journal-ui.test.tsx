@@ -103,7 +103,9 @@ describe("the Home card", () => {
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("button", { name: /Edit today’s check-in/ })).toBeInTheDocument();
+    // The save replaced "Do today's check-in": focus goes to what replaced it, not the page.
+    const edit = screen.getByRole("button", { name: /Edit today’s check-in/ });
+    await waitFor(() => expect(edit).toHaveFocus());
     expect(screen.getByRole("listitem", { name: "Today: checked in" })).toBeInTheDocument();
   });
 

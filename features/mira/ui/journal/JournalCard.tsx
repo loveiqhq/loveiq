@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { streak } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
@@ -13,6 +13,7 @@ import {
   Skeleton,
   Switch,
   WeekDots,
+  refocus,
   thisWeek,
 } from "./parts";
 import { useJournal } from "./useJournal";
@@ -28,6 +29,7 @@ export function JournalCard() {
   const [open, setOpen] = useState(false);
   const [bloom, setBloom] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  const actions = useRef<HTMLDivElement | null>(null);
 
   const doneToday = entries.some((e) => e.day === today);
   const days = entries.map((e) => e.day);
@@ -112,7 +114,7 @@ export function JournalCard() {
                     ? "You haven’t checked in yet today. A few taps across the areas of your life, plus a line if you feel like writing one."
                     : "A few taps across the areas of your life, plus a line if you feel like writing one. About 30 seconds, and yours to look back on."}
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
+              <div ref={actions} className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
                 {doneToday ? (
                   <button
                     type="button"
@@ -176,6 +178,7 @@ export function JournalCard() {
           onClose={() => {
             setOpen(false);
             setBloom(true);
+            refocus(() => actions.current?.querySelector("button"));
           }}
         />
       ) : null}
