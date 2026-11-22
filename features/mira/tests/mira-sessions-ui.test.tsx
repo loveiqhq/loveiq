@@ -149,6 +149,43 @@ describe("Home's weekly session card", () => {
     expect(calls("PUT /api/mira/weekly-session")[0]!.body).toMatchObject({ source: "home" });
   });
 
+  it("moves focus to the confirmation, and back to the card's Change after Done", async () => {
+    replies["PUT /api/mira/weekly-session"] = () => ({
+      body: { slot: SLOT, timeZone: "Europe/Berlin", change: "booked", emailed: true },
+    });
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a time" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tuesday" }));
+    fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
+    const book = screen.getByRole("button", { name: "Book Tuesdays at 19:00" });
+    book.focus();
+    fireEvent.click(book);
+    const done = await screen.findByRole("dialog", { name: "Weekly session booked" });
+    // Not left on the vanished Book button: on the confirmation, whose news is then read out.
+    await waitFor(() =>
+      expect(within(done).getByRole("heading", { name: "You’re booked" })).toHaveFocus()
+    );
+    await waitFor(() =>
+      expect(within(done).getByRole("status")).toHaveTextContent("on its way to your inbox")
+    );
+    fireEvent.click(within(done).getByRole("button", { name: "Done" }));
+    // "Choose a time" is gone with the booking: focus goes to what replaced it.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Change your weekly session" })).toHaveFocus()
+    );
+  });
+
+  it("keeps focus in the time group when the arrows reach Another time", async () => {
+    render(<NextSessionCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a time" }));
+    const other = screen.getByRole("radio", { name: "Another time" });
+    other.focus();
+    fireEvent.click(other);
+    await new Promise((r) => requestAnimationFrame(r));
+    expect(screen.getByLabelText("Your time")).toBeInTheDocument();
+    expect(other).toHaveFocus();
+  });
+
   it("says when the invite couldn't be emailed, and still offers the calendar", async () => {
     replies["PUT /api/mira/weekly-session"] = () => ({
       body: { slot: SLOT, timeZone: "Europe/Berlin", change: "booked", emailed: false },
@@ -158,7 +195,9 @@ describe("Home's weekly session card", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Tuesday" }));
     fireEvent.click(screen.getByRole("radio", { name: "19:00" }));
     fireEvent.click(screen.getByRole("button", { name: "Book Tuesdays at 19:00" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("couldn’t email your invite");
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("couldn’t email your invite")
+    );
   });
 
   it("shows the next session, its way into a calendar, and a way to change it", async () => {
@@ -174,7 +213,7 @@ describe("Home's weekly session card", () => {
     fireEvent.click(add);
     expect(add).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "Google Calendar" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change your weekly session" }));
     const sheet = screen.getByRole("dialog", { name: "Your weekly session" });
     expect(within(sheet).getByRole("radio", { name: "Tuesday" })).toBeChecked();
     expect(within(sheet).getByRole("button", { name: "Keep Tuesdays at 19:00" })).toHaveAttribute(
@@ -191,6 +230,19 @@ describe("Home's weekly session card", () => {
       await screen.findByRole("heading", { name: "Your session is open now" })
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Join now" })).toHaveAttribute("href", "/mira/session");
+  });
+
+  it("says truthfully when reminder emails are on hold for now, in neutral words", async () => {
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<NextSessionCard />);
+    expect(
+      await screen.findByText("Reminder emails are on hold for now. They start again on their own.")
+    ).toBeInTheDocument();
+    // Home stays neutral: nothing about why.
+    expect(document.body.textContent).not.toMatch(/support|crisis/i);
   });
 
   it("says when reminders are paused, and turns them back on", async () => {
@@ -220,6 +272,27 @@ describe("Home's weekly session card", () => {
 });
 
 describe("Settings' weekly session section", () => {
+  it("says when reminder emails are on hold after support lines, and that they come back", async () => {
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<WeeklySessionSettings />);
+    expect(
+      await screen.findByText(/on hold for up to two weeks after the support lines came up/)
+    ).toBeInTheDocument();
+    // Paused by the person: nothing to say about a hold.
+    cleanup();
+    replies["GET /api/mira/weekly-session"] = has({
+      ...SLOT,
+      paused: true,
+      remindersOnHold: true,
+    } as typeof SLOT);
+    render(<WeeklySessionSettings />);
+    expect(await screen.findByText("Tuesdays at 19:00")).toBeInTheDocument();
+    expect(screen.queryByText(/on hold/)).toBeNull();
+  });
+
   it("pauses the reminders at once, and cancels after a confirmation", async () => {
     replies["GET /api/mira/weekly-session"] = has(SLOT);
     replies["PATCH /api/mira/weekly-session"] = () => ({
@@ -230,14 +303,21 @@ describe("Settings' weekly session section", () => {
     });
     render(<WeeklySessionSettings />);
     expect(await screen.findByText("Tuesdays at 19:00")).toBeInTheDocument();
-    const reminders = screen.getByRole("checkbox", { name: /Reminder emails/ });
+    const reminders = screen.getByRole("switch", { name: "Reminder emails" });
     expect(reminders).toBeChecked();
     fireEvent.click(reminders);
     expect(await screen.findByText("Reminders are paused.")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Reminder emails/ })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Reminder emails" })).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
-    expect(screen.getByText(/takes it out of your calendar/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /takes it out of your calendar/ })).toBeTruthy();
+    // "Keep it" first, as everywhere: it hands focus back, and nothing is cancelled.
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cancel weekly session" })).toHaveFocus()
+    );
+    expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel weekly session" }));
     expect(calls("DELETE /api/mira/weekly-session")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Cancel session" }));
     expect(await screen.findByText("Your weekly session is cancelled.")).toBeInTheDocument();

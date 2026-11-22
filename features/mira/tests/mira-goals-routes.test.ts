@@ -18,7 +18,7 @@ vi.mock("@features/mira/server/goals", async (actual) => ({
   updateGoal: vi.fn(),
   deleteGoal: vi.fn().mockResolvedValue(true),
   deleteGoals: vi.fn().mockResolvedValue(undefined),
-  setTick: vi.fn().mockResolvedValue(true),
+  setTick: vi.fn().mockResolvedValue("ticked"),
 }));
 
 import { DELETE as deleteAll, GET, POST } from "@/app/api/mira/goals/route";
@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.mocked(isMinor).mockResolvedValue(false);
   vi.mocked(verifyCsrfToken).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, remaining: 9, resetAt: new Date() });
-  vi.mocked(createGoal).mockResolvedValue({ ...row, days: [] });
+  vi.mocked(createGoal).mockResolvedValue({ goal: { ...row, days: [] }, existing: false });
   vi.mocked(updateGoal).mockResolvedValue(row);
 });
 
@@ -117,6 +117,14 @@ describe("POST /api/mira/goals", () => {
       { via: "mira", target: 3 }
     );
     expect(logged()).not.toContain("soft light");
+  });
+
+  it("makes one goal of the same words twice: the second answers the first, counted once", async () => {
+    vi.mocked(createGoal).mockResolvedValueOnce({ goal: { ...row, days: [] }, existing: true });
+    const res = await create({ text: WORDS, via: "mira" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ goal: { ...row, days: [] } });
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 
   it("sets one by hand with no target unless told otherwise", async () => {
@@ -262,8 +270,17 @@ describe("POST /api/mira/goals/[id]/log", () => {
       expect((await log({ day, done: true })).status, day).toBe(400);
     }
     expect(setTick).not.toHaveBeenCalled();
-    vi.mocked(setTick).mockResolvedValueOnce(false);
+    vi.mocked(setTick).mockResolvedValueOnce("missing");
     expect((await log({ day: today, done: true })).status).toBe(404);
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("says when the goal was put away or done meanwhile, and counts no tick", async () => {
+    vi.mocked(setTick).mockResolvedValueOnce("inactive");
+    const res = await log({ day: today, done: true });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toMatch(/put away or marked done/);
+    expect(logMiraEvent).not.toHaveBeenCalled();
   });
 
   it("needs the CSRF token, an account and a slower hand", async () => {
@@ -286,7 +303,10 @@ describe("someone who said they are under 18 (rail 15)", () => {
 
   it("sees, sets, changes and ticks no goals", async () => {
     const today = new Date().toISOString().slice(0, 10);
-    expect((await GET(req("GET", "/api/mira/goals"))).status).toBe(403);
+    const refused = await GET(req("GET", "/api/mira/goals"));
+    expect(refused.status).toBe(403);
+    // Decision 9: one sentence, marked so the screens show the kit's AdultsOnly.
+    expect(await refused.json()).toEqual({ error: "Mira is only for adults.", minor: true });
     expect((await POST(req("POST", "/api/mira/goals", { text: "Walk" }))).status).toBe(403);
     const change = req("PATCH", `/api/mira/goals/${GOAL}`, { completed: true });
     expect((await PATCH(change, params())).status).toBe(403);

@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { refocus } from "../journal/parts";
+import { AdultsOnly } from "../kit";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const SECTION = "rounded-3xl border border-ap-line p-5";
 const OUTLINE_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50";
 const INK_PILL =
-  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2";
+  "inline-flex min-h-[44px] items-center justify-center rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white transition-[transform,background-color] hover:bg-ap-ink/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /**
  * Home's weekly session card: the next session's day and time with a way into a calendar and a
@@ -23,6 +25,8 @@ export function NextSessionCard() {
   const [sheet, setSheet] = useState(false);
   const [calendar, setCalendar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Where focus goes when the sheet closes and its opener went with the booking.
+  const opener = useRef<HTMLButtonElement | null>(null);
   // The card turns into "now" on its own when the time comes.
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -33,7 +37,17 @@ export function NextSessionCard() {
     return () => window.clearInterval(timer);
   }, []);
 
-  if (state.status === "signed-out" || state.status === "unavailable") return null;
+  if (state.status === "signed-out") return null;
+  if (state.status === "unavailable") {
+    return (
+      <section aria-labelledby="weekly-h" className={SECTION}>
+        <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
+          Your weekly session
+        </h2>
+        <AdultsOnly className="mt-1" />
+      </section>
+    );
+  }
 
   if (state.status === "loading" || now === null) {
     return (
@@ -74,7 +88,10 @@ export function NextSessionCard() {
       timeZone={state.timeZone}
       source="home"
       book={book}
-      onClose={() => setSheet(false)}
+      onClose={() => {
+        setSheet(false);
+        refocus(() => opener.current);
+      }}
     />
   ) : null;
   const withSheet = (card: ReactNode) => (
@@ -94,7 +111,12 @@ export function NextSessionCard() {
           Real change comes from small, regular steps. Pick a time that’s yours each week: Mira
           sends a calendar invite, and a short reminder before you meet.
         </p>
-        <button type="button" onClick={() => setSheet(true)} className={`${INK_PILL} mt-4`}>
+        <button
+          ref={opener}
+          type="button"
+          onClick={() => setSheet(true)}
+          className={`${INK_PILL} mt-4`}
+        >
           Choose a time
         </button>
       </section>
@@ -142,6 +164,12 @@ export function NextSessionCard() {
               ? `${slotLabel(slot)}, ${zoneLabel(slot.timeZone)}. Fifteen minutes, whenever you’re ready.`
               : `${next.when} · 15 minutes with Mira · ${zoneLabel(slot.timeZone)}`}
           </p>
+          {slot.remindersOnHold && !slot.paused ? (
+            // Home stays neutral while this lasts: the why is in Settings.
+            <p className="mt-1 text-[13px] text-ap-muted">
+              Reminder emails are on hold for now. They start again on their own.
+            </p>
+          ) : null}
           {slot.paused ? (
             <p className="mt-1 text-[13px] text-ap-muted">
               Reminder emails are paused.{" "}
@@ -172,7 +200,14 @@ export function NextSessionCard() {
             Add to calendar
           </button>
         )}
-        <button type="button" onClick={() => setSheet(true)} className={OUTLINE_PILL}>
+        <button
+          ref={opener}
+          type="button"
+          // The whole name says what changes (A11Y-13); it starts with the word on screen.
+          aria-label="Change your weekly session"
+          onClick={() => setSheet(true)}
+          className={OUTLINE_PILL}
+        >
           Change
         </button>
       </div>

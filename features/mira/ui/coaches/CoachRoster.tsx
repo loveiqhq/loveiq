@@ -13,8 +13,10 @@ import {
   type CoachId,
 } from "@features/mira/content/coaches";
 import { MiraAppFrame } from "../MiraAppFrame";
+import { signInHref } from "../api";
 import { CoachFinder } from "./CoachFinder";
 import { track, useCoachData, useEmptySearchCount } from "./data";
+import { AdultsOnly } from "../kit";
 import { CoachPortrait, CompassIcon, NotifyButton, SearchIcon, SparkIcon } from "./parts";
 import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
 
@@ -55,7 +57,7 @@ export default function CoachRoster() {
   }, []);
 
   useEffect(() => {
-    if (state.status === "out") router.replace("/mira/start");
+    if (state.status === "out") router.replace(signInHref());
   }, [state.status, router]);
 
   function setNotified(id: CoachId, on: boolean) {
@@ -73,9 +75,7 @@ export default function CoachRoster() {
     return (
       <MiraAppFrame active="coaches">
         <h1 className="font-serif text-[32px] font-medium leading-tight">Coaches</h1>
-        <p className="mt-3 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
-          Mira’s coaches are for adults, so they aren’t available here.
-        </p>
+        <AdultsOnly className="mt-3" />
       </MiraAppFrame>
     );
   }
@@ -106,7 +106,7 @@ export default function CoachRoster() {
             autoComplete="off"
             enterKeyHint="search"
             placeholder="Try “lights off”, “no desire”"
-            className="h-12 w-full rounded-full border border-ap-line bg-white pl-11 pr-4 text-[16px] text-ap-ink caret-ap-purple shadow-[0_6px_24px_-16px_rgba(22,16,33,0.25)] outline-none transition-colors placeholder:text-ap-muted focus-visible:border-ap-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
+            className="h-12 w-full rounded-full border border-ap-field bg-white pl-11 pr-4 text-[16px] text-ap-ink caret-ap-purple shadow-[0_6px_24px_-16px_rgba(22,16,33,0.25)] outline-none transition-colors placeholder:text-ap-muted focus-visible:border-ap-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple"
           />
         </div>
         <button

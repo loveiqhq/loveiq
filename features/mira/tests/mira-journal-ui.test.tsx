@@ -68,7 +68,7 @@ describe("the Home card", () => {
     expect(dots.at(-1)).toBe("Today: not yet");
     expect(dots.at(-2)).toMatch(/: checked in$/);
     expect(dots.at(0)).toMatch(/: no check-in$/);
-    expect(screen.getByRole("link", { name: /Open journal/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "See all check-ins" })).toHaveAttribute(
       "href",
       "/mira/journal"
     );
@@ -87,16 +87,85 @@ describe("the Home card", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    // The very first check-in has its own line.
+    expect(screen.getByText("Your first check-in. Come back any day.")).toBeInTheDocument();
     expect(sent("PUT")).toEqual([
       {
         url: "/api/mira/journal",
-        body: { day: TODAY, mood: 4, body: null, closeness: null, energy: 2, note: "A long walk" },
+        body: {
+          day: TODAY,
+          mood: 4,
+          body: null,
+          closeness: null,
+          energy: 2,
+          note: "A long walk",
+          base: null,
+        },
       },
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("button", { name: /Edit today’s check-in/ })).toBeInTheDocument();
+    // The save replaced "Do today's check-in": focus goes to what replaced it, not the page.
+    const edit = screen.getByRole("button", { name: /Edit today’s check-in/ });
+    await waitFor(() => expect(edit).toHaveFocus());
     expect(screen.getByRole("listitem", { name: "Today: checked in" })).toBeInTheDocument();
+  });
+
+  it("keeps focus where it is while saving: nothing goes disabled, changes wait", async () => {
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    // The save is held until released.
+    let release = () => undefined as void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((done) => {
+          release = () =>
+            done({
+              ok: true,
+              status: 200,
+              json: async () => ({ success: true, updatedAt: "2026-11-22T10:00:00Z" }),
+            } as Response);
+        })
+    );
+    const mood = within(screen.getByRole("radiogroup", { name: "Mood" }));
+    fireEvent.click(mood.getByRole("radio", { name: "4, Good" }));
+    const note = screen.getByLabelText(/A line for the day/);
+    note.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Saving…" });
+    // Decision 7: a disabled control would drop the keyboard's focus.
+    expect(note).not.toBeDisabled();
+    expect(note).toHaveFocus();
+    expect(note).toHaveAttribute("readonly");
+    expect(mood.getByRole("radio", { name: "1, Very low" })).not.toBeDisabled();
+    fireEvent.click(mood.getByRole("radio", { name: "1, Very low" }));
+    expect(mood.getByRole("radio", { name: "4, Good" })).toBeChecked();
+    release();
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+  });
+
+  it("keeps the first check-in's line for the very first one only", async () => {
+    replies = journalReply([entry(day(-3), { mood: 3 })]);
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const mood = screen.getByRole("radiogroup", { name: "Mood" });
+    fireEvent.click(within(mood).getByRole("radio", { name: "4, Good" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    expect(screen.queryByText("Your first check-in. Come back any day.")).toBeNull();
+    expect(screen.getByText("Every check-in adds to the picture.")).toBeInTheDocument();
+  });
+
+  it("counts the note's characters as a person does, an emoji as one, up to 280", async () => {
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const line = screen.getByLabelText(/A line for the day/) as HTMLInputElement;
+    fireEvent.change(line, { target: { value: `${"a".repeat(273)}${"😀".repeat(6)}` } });
+    expect(line).toHaveAccessibleDescription(/1 character left\.$/);
+    fireEvent.change(line, { target: { value: `${"a".repeat(276)}${"😀".repeat(6)}` } });
+    // Kept to 280 characters (the database's own count), not 280 UTF-16 units.
+    expect([...line.value]).toHaveLength(280);
+    expect(line).toHaveAccessibleDescription(/0 characters left\.$/);
   });
 
   it("asks for one rating before saving, and lets a second tap clear a row", async () => {
@@ -109,8 +178,35 @@ describe("the Home card", () => {
     fireEvent.click(good);
     expect(good).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose one rating in any row to save.");
     expect(sent("PUT")).toEqual([]);
+  });
+
+  it("never overwrites a check-in another tab saved: the typing stays, a second Save replaces it", async () => {
+    const other = entry(TODAY, { mood: 5, note: "Tab one", updated_at: "2026-11-22T09:00:00Z" });
+    let puts = 0;
+    replies["PUT /api/mira/journal"] = () =>
+      ++puts === 1
+        ? { status: 409, body: { conflict: true, current: other, error: "x" } }
+        : { body: { success: true, updatedAt: "2026-11-22T09:05:00Z" } };
+    render(<JournalCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const dialog = screen.getByRole("dialog", { name: "Today’s check-in" });
+    const low = within(within(dialog).getByRole("radiogroup", { name: "Mood" })).getByRole(
+      "radio",
+      { name: "1, Very low" }
+    );
+    fireEvent.click(low);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /saved in another tab or on another device.*Save again to replace it/
+    );
+    expect(low).toBeChecked();
+    expect(screen.queryByText("Saved to your journal.")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    // The first save claimed an empty day; the second names the version it now knows about.
+    expect(sent("PUT").map((p) => p.body.base)).toEqual([null, "2026-11-22T09:00:00Z"]);
   });
 
   it("opens the chat's support lines for a note with crisis words", async () => {
@@ -145,7 +241,7 @@ describe("the Home card", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("dialog", { name: "Support right now" })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Tap one circle in any row to save.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose one rating in any row to save.");
   });
 
   it("switches the daily reminder on at 20:00, and back off if it didn't save", async () => {
@@ -171,11 +267,36 @@ describe("the Home card", () => {
     expect(await screen.findByText("How is life feeling today?")).toBeInTheDocument();
   });
 
-  it("stays quiet for an account the journal is not for", async () => {
-    replies = { "GET /api/mira/journal": () => ({ status: 403, body: { error: "x" } }) };
+  it("tells someone Mira stopped as under 18 the one refusal, with nothing to retry", async () => {
+    replies = {
+      "GET /api/mira/journal": () => ({
+        status: 403,
+        body: { error: "Mira is only for adults.", minor: true },
+      }),
+    };
     render(<JournalCard />);
-    expect(await screen.findByText("The journal isn’t available here.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check-in/ })).toBeNull();
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try again|check-in/ })).toBeNull();
+  });
+
+  it("speaks of choosing, never tapping: keyboards and screen readers check in too", async () => {
+    render(<JournalCard />);
+    expect(
+      await screen.findByText(/A few quick ratings across the areas of your life/)
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Do today’s check-in/ }));
+    expect(screen.getByText(/one rating a row, skip any/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\btaps?\b/i);
+  });
+
+  it("says a lost sign-in the one way, with the way back to this page (HAB-16)", async () => {
+    replies = { "GET /api/mira/journal": () => ({ status: 401, body: { error: "x" } }) };
+    render(<JournalCard />);
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toMatch(
+      /^\/mira\/start\?next=/
+    );
+    expect(screen.queryByRole("button", { name: /check-in|Try again/ })).toBeNull();
   });
 });
 
@@ -232,7 +353,8 @@ describe("the journal's settings", () => {
     replies = journalReply([], { reminderTime: "20:00" });
     render(<JournalSettings />);
     const time = await screen.findByRole("combobox", { name: /Time/ });
-    expect(screen.getByText("Europe/Berlin time")).toBeInTheDocument();
+    // The zone as the rest of Mira says it (sessions, their emails): "Berlin time".
+    expect(screen.getByText("Berlin time")).toBeInTheDocument();
     fireEvent.change(time, { target: { value: "07:30" } });
     await waitFor(() =>
       expect(sent("PATCH").map((p) => p.body)).toEqual([{ reminderTime: "07:30" }])
@@ -243,6 +365,22 @@ describe("the journal's settings", () => {
     expect(options[0]).toBe("06:00");
     expect(options.at(-1)).toBe("23:00");
     expect(options.every((t) => /:(00|30)$/.test(t!))).toBe(true);
+  });
+
+  it("ask before deleting as everywhere in Mira, and Keep it hands focus back", async () => {
+    replies = journalReply([entry(day(0), { mood: 3 })]);
+    render(<JournalSettings />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete my journal" }));
+    expect(
+      screen.getByRole("group", { name: /Delete every check-in in your journal\?/ })
+    ).toBeTruthy();
+    const keep = screen.getByRole("button", { name: "Keep it" });
+    await waitFor(() => expect(keep).toHaveFocus());
+    fireEvent.click(keep);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete my journal" })).toHaveFocus()
+    );
+    expect(sent("DELETE")).toEqual([]);
   });
 
   it("delete the whole journal, after asking", async () => {
@@ -257,6 +395,18 @@ describe("the journal's settings", () => {
 });
 
 describe("the journal page", () => {
+  it("asks before deleting a day, and Keep it goes back to that day's Delete", async () => {
+    replies = journalReply([entry(day(0), { mood: 3 })]);
+    render(<JournalPage />);
+    const ask = await screen.findByRole("button", { name: "Delete Today" });
+    fireEvent.click(ask);
+    expect(screen.getByRole("group", { name: /Delete this check-in\?/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(ask).toHaveFocus();
+    expect(screen.queryByRole("group", { name: /Delete this check-in/ })).toBeNull();
+  });
+
   it("shows each area's pattern in words and every day's entry, to edit or delete", async () => {
     replies = journalReply([
       entry(day(0), { mood: 4, note: "Slept well" }),

@@ -17,6 +17,7 @@ vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 import MiraPage from "@/app/mira/page";
 import { SUPPORT_STARTER, checkById } from "@features/mira/content/checks";
 import { getMiraAccount } from "@features/mira/server/session";
+import { BodyCheck } from "@features/mira/ui/BodyCheck";
 import AssessmentsPage from "@features/mira/ui/checks/AssessmentsPage";
 import CheckPage, { BodyCheckPage } from "@features/mira/ui/checks/CheckPage";
 import ChecksHomeCard from "@features/mira/ui/checks/ChecksHomeCard";
@@ -130,6 +131,77 @@ describe("taking a check", () => {
     expect(screen.getByRole("radio", { name: "Not at all" })).toBeChecked();
   });
 
+  it("lets the last answer be checked or changed before anything is saved", async () => {
+    replies["POST /api/mira/checks"] = () => ({
+      body: {
+        result: { at: new Date().toISOString(), score: 11, band: "moderate", support: false },
+        previous: null,
+      },
+    });
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Nearly every day");
+    await new Promise((r) => setTimeout(r, 320));
+    // Picked, not saved: still the last question, with Back and "See my result".
+    expect(sent("POST /api/mira/checks")).toEqual([]);
+    expect(question()).toMatch(/Question 7 of 7/);
+    expect(screen.getByRole("radio", { name: "Nearly every day" })).toBeChecked();
+    expect(screen.getByRole("button", { name: /Back/ })).toBeTruthy();
+    tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    await waitFor(() =>
+      expect(sent("POST /api/mira/checks")).toEqual([
+        { check: "anxiety", answers: [2, 2, 2, 2, 2, 1, 1] },
+      ])
+    );
+    await screen.findByRole("heading", { level: 1 });
+  });
+
+  it("keeps the answers and Back focusable while it saves, ignoring them till then", async () => {
+    sessionStorage.setItem(
+      "mira.check.v1:u1:anxiety",
+      JSON.stringify({ answers: [2, 2, 2, 2, 2, 1], at: Date.now() })
+    );
+    render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
+    tap("Several days");
+    // The save is held until released.
+    let release = () => undefined as void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((done) => {
+          release = () =>
+            done({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                result: {
+                  at: new Date().toISOString(),
+                  score: 11,
+                  band: "moderate",
+                  support: false,
+                },
+                previous: null,
+              }),
+            } as Response);
+        })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    await screen.findByRole("button", { name: "Saving…" });
+    const back = screen.getByRole("button", { name: /Back/ });
+    expect(back).not.toBeDisabled();
+    expect(back).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("radio", { name: "Not at all" })).not.toBeDisabled();
+    fireEvent.click(back);
+    expect(question()).toMatch(/Question 7 of 7/);
+    release();
+    await screen.findByRole("heading", { level: 1 });
+  });
+
   it("sends only the answers and shows the result in words, with the next steps", async () => {
     replies["POST /api/mira/checks"] = () => ({
       body: {
@@ -144,6 +216,7 @@ describe("taking a check", () => {
     render(<CheckPage checkId="anxiety" practice={PRACTICE} />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue from question 7" }));
     tap("Several days");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
     const heading = await screen.findByRole("heading", { level: 1 });
     expect(heading.textContent).toBe(
       "Your answers suggest moderate anxiety over the last two weeks."
@@ -167,6 +240,70 @@ describe("taking a check", () => {
 
 // EU MDR: a self-check reflects, it doesn't monitor. Two results show only their difference,
 // never a verdict on it ("a real change", "within the usual ups and downs").
+describe("the body check's own page", () => {
+  const keyboard = (label: string, next: string) => {
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: next }));
+  };
+
+  it("works like the other checks, and ends on a thank-you it doesn't leave on its own", async () => {
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    expect(tracked()).toEqual(["body_check_started"]);
+    // One statement per screen as radios, with "n of N" and Back, like the other three.
+    expect(question()).toMatch(/Question 1 of 10/);
+    expect(screen.getAllByRole("radio").map((r) => r.getAttribute("value"))).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    for (let i = 1; i < 10; i++) keyboard("Often", "Next");
+    expect(question()).toMatch(/Question 10 of 10/);
+    keyboard("Always", "Save my answers");
+    const thanks = await screen.findByRole("heading", {
+      name: "Thank you. I’ll ask again in four weeks.",
+    });
+    await waitFor(() => expect(thanks).toHaveFocus());
+    expect(sent("POST /api/mira/body-check")).toEqual([
+      { answers: [4, 4, 4, 4, 4, 4, 4, 4, 4, 5] },
+    ]);
+    expect(screen.getByRole("link", { name: "Back to assessments" }).getAttribute("href")).toBe(
+      "/mira/assessments"
+    );
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("in the chat's card, reads the thank-you out: its region is there before its words", async () => {
+    render(<BodyCheck due="week4" onStart={() => undefined} onClose={() => undefined} />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole("button", { name: "Often" }));
+    await waitFor(() =>
+      expect(region.textContent).toBe("Thank you. That’s your four-week check done.")
+    );
+    expect(screen.getByRole("status")).toBe(region);
+  });
+
+  it("keeps the answers and offers Try again when the save fails", async () => {
+    replies["POST /api/mira/body-check"] = () => ({ status: 500, body: { error: "Not saved." } });
+    render(<BodyCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    for (let i = 1; i < 10; i++) keyboard("Seldom", "Next");
+    keyboard("Never", "Save my answers");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not saved.");
+    replies["POST /api/mira/body-check"] = () => ({ body: { success: true } });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("heading", { name: /^Thank you/ });
+    expect(sent("POST /api/mira/body-check").at(-1)).toEqual({
+      answers: [2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    });
+  });
+});
+
 describe("the change since last time", () => {
   const anxiety = (scores: number[], daysAgo: number[]) => {
     account.checks[0] = {
@@ -238,10 +375,18 @@ describe("the mood check's question 9", () => {
       "/mira?say=support"
     );
     expect(tracked()).toEqual(["check_support_shown"]);
-    // Behind it, the result keeps the support at the top, with a minimal total.
+    // The lines open at once; the answer itself waits until the person has seen it.
+    expect(sent("POST /api/mira/checks")).toEqual([]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("radio", { name: "Several days" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
+    // Then the result keeps the support at the top; its minimal total is never the headline.
     await screen.findByRole("region", { name: "You don’t have to carry this alone" });
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/minimal/);
-    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    const headline = screen.getByRole("heading", { level: 1 });
+    expect(headline.textContent).toBe(NOT_THE_SCORE);
+    expect(headline.textContent).not.toMatch(/minimal/i);
+    // The band only beside the score, as the cards show it.
+    expect(within(headline.closest("header")!).getByText("Minimal · support for you")).toBeTruthy();
   });
 
   it("keeps its support at the top on every later visit, never 'minimal' alone", async () => {
@@ -256,10 +401,9 @@ describe("the mood check's question 9", () => {
     render(<CheckPage checkId="mood" practice={null} />);
     // A reload or Home's link: no save response, the stored result alone carries it.
     const top = await screen.findByRole("region", { name: "You don’t have to carry this alone" });
-    expect(top.compareDocumentPosition(screen.getByRole("heading", { level: 1 }))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(screen.getByText(NOT_THE_SCORE)).toBeTruthy();
+    const headline = screen.getByRole("heading", { level: 1 });
+    expect(top.compareDocumentPosition(headline)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(headline.textContent).toBe(NOT_THE_SCORE);
     // No "holding up" reassurance beside it, and the professional step comes first.
     expect(screen.queryByText(checkById("mood")!.bands[0]!.daily)).toBeNull();
     expect(screen.queryByText(checkById("mood")!.bands[0]!.intimacy)).toBeNull();
@@ -307,6 +451,7 @@ describe("the mood check's question 9", () => {
     render(<CheckPage checkId="mood" practice={null} />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue from question 9" }));
     tap("Not at all");
+    fireEvent.click(screen.getByRole("button", { name: "See my result" }));
     await screen.findByRole("heading", { level: 1 });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(tracked()).toEqual([]);
@@ -391,10 +536,17 @@ describe("the Home card", () => {
 });
 
 describe("Settings › Self-checks", () => {
+  it("is Settings' Assessments section, and says Saved once a change is saved", async () => {
+    render(<ChecksSettings />);
+    const section = await screen.findByRole("region", { name: /^Assessments/ });
+    fireEvent.click(within(section).getByRole("switch", { name: "Mira may use my check results" }));
+    expect(await within(section).findByText("Saved")).toBeInTheDocument();
+  });
+
   it("saves 'Mira may use my check results' with the other switches, and puts it back on failure", async () => {
     render(<ChecksSettings />);
-    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
-    expect(box.closest("label")!.textContent).toMatch(
+    const box = await screen.findByRole("switch", { name: "Mira may use my check results" });
+    expect(box).toHaveAccessibleDescription(
       /latest band.*whether your last mood check opened the support lines/
     );
     fireEvent.click(box);
@@ -406,10 +558,14 @@ describe("Settings › Self-checks", () => {
     expect(box).toBeChecked();
   });
 
-  it("deletes every check result after a confirmation", async () => {
+  it("deletes every check result, the body check's too, after a confirmation that counts them", async () => {
     account.checks[0]!.results = [{ at: ago(3), score: 7, band: "mild", support: false }];
+    account.bodyCheck = { taken: [ago(3)], due: null, nextAt: ago(-25) };
     render(<ChecksSettings />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete my check results" }));
+    expect(
+      screen.getByText(/Delete all 2 of your check results, your body check included\?/)
+    ).toBeTruthy();
     expect(sent("DELETE /api/mira/checks")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("Your check results are deleted.")).toBeTruthy();
@@ -443,11 +599,11 @@ describe("when the checks don't load", () => {
   it("Settings says so and offers Try again, instead of showing nothing", async () => {
     failOnce();
     render(<ChecksSettings />);
-    const section = await screen.findByRole("region", { name: "Self-checks" });
+    const section = await screen.findByRole("region", { name: /^Assessments/ });
     expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
     fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
     expect(
-      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+      await screen.findByRole("switch", { name: "Mira may use my check results" })
     ).not.toBeChecked();
   });
 
@@ -466,6 +622,60 @@ describe("when the checks don't load", () => {
   });
 });
 
+describe("dates on the check screens", () => {
+  it("read day first, spelled as everywhere else in Mira, whatever the browser's language", async () => {
+    const year = new Date().getFullYear();
+    account.checks[0] = {
+      id: "anxiety",
+      results: [{ at: `${year}-03-15T12:00:00Z`, score: 7, band: "mild", support: false }],
+      nextAt: `${year + 1}-03-29T12:00:00Z`,
+    };
+    render(<AssessmentsPage />);
+    const card = (await screen.findByRole("heading", { name: "Anxiety check" })).closest(
+      "article"
+    )!;
+    expect(card.textContent).toMatch(/Mild15 Mar/); // the band, then its date
+    // Another year says so.
+    expect(card.textContent).toMatch(/Opens again on 29 Mar \d{4}/);
+    expect(card.textContent).not.toMatch(/Mar 15/);
+  });
+});
+
+describe("someone Mira stopped as under 18", () => {
+  it("sees the one refusal on the check screens, never a Try again", async () => {
+    replies["GET /api/mira/checks"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    for (const ui of [
+      <AssessmentsPage key="a" />,
+      <ChecksHomeCard key="h" />,
+      <ChecksSettings key="s" />,
+    ]) {
+      const view = render(ui);
+      expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      view.unmount();
+    }
+  });
+});
+
+describe("Assessments' 'Mira may use my LoveIQ result'", () => {
+  it("is a switch, saved with the other choices and put back if the save fails", async () => {
+    render(<AssessmentsPage />);
+    const sw = await screen.findByRole("switch", { name: "Mira may use my LoveIQ result" });
+    expect(sw).not.toBeChecked();
+    fireEvent.click(sw);
+    await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_assessment: true }]));
+    expect(sw).toBeChecked();
+    replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
+    fireEvent.click(sw);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
+    expect(sw).toBeChecked();
+  });
+});
+
 describe("the result page's 'Mira may use my check results'", () => {
   it("stays in view once ticked, and says why when the save fails", async () => {
     account.checks[0] = {
@@ -474,18 +684,18 @@ describe("the result page's 'Mira may use my check results'", () => {
       nextAt: new Date(Date.now() + 13 * DAY).toISOString(),
     };
     render(<CheckPage checkId="anxiety" practice={null} />);
-    const box = await screen.findByRole("checkbox", { name: /Mira may use my check results/ });
+    const box = await screen.findByRole("switch", { name: "Mira may use my check results" });
     fireEvent.click(box);
     await waitFor(() => expect(sent("PATCH /api/mira/me")).toEqual([{ use_checks: true }]));
     // Saved: still there, ticked.
     expect(
-      await screen.findByRole("checkbox", { name: /Mira may use my check results/ })
+      await screen.findByRole("switch", { name: "Mira may use my check results" })
     ).toBeChecked();
     replies["PATCH /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to save." } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mira may use my check results/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Mira may use my check results" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to save.");
     // Put back as it was before the failed change.
-    expect(screen.getByRole("checkbox", { name: /Mira may use my check results/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Mira may use my check results" })).toBeChecked();
   });
 });
 

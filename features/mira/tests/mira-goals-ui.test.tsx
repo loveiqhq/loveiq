@@ -65,6 +65,26 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
+describe("focus rings in the habits' screens", () => {
+  it("leave a paper-coloured gap, never a white one in Dark", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const dirs = ["goals", "journal", "checks", "coaches", "weekly-session"];
+    const files = dirs.flatMap((d) =>
+      readdirSync(`features/mira/ui/${d}`)
+        .filter((f) => /\.tsx?$/.test(f))
+        .map((f) => `features/mira/ui/${d}/${f}`)
+    );
+    const bare = files.flatMap((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .flatMap((line, i) =>
+          /ring-offset-2/.test(line) && !/ring-offset-white/.test(line) ? [`${f}:${i + 1}`] : []
+        )
+    );
+    expect(bare).toEqual([]);
+  });
+});
+
 describe("Home's goals card", () => {
   it("teaches a first goal: ask Mira (written, not sent) or write your own", async () => {
     render(<GoalsCard />);
@@ -77,9 +97,8 @@ describe("Home's goals card", () => {
       "/mira/goals#new"
     );
     expect(screen.getByText("Body confidence")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Add a challenge" }).getAttribute("href")).toBe(
-      "/mira/coaches"
-    );
+    // No "Add a challenge" until a second one can be picked: it led to coaches who can't be.
+    expect(screen.queryByRole("link", { name: /challenge/i })).toBeNull();
   });
 
   it("shows three goals on the go with this week, and the way to the rest", async () => {
@@ -131,6 +150,15 @@ describe("Home's goals card", () => {
     expect(document.body.textContent).not.toMatch(/missed|behind|failed|broke/i);
   });
 
+  it("says a lost sign-in the one way when a tick finds it gone (HAB-16)", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals/g1/log"] = () => ({ status: 401, body: { error: "x" } });
+    render(<GoalsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /Did it today/ }));
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toBeTruthy();
+  });
+
   it("puts a tick back when it doesn't save, and says so", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     replies["POST /api/mira/goals/g1/log"] = () => ({
@@ -142,6 +170,17 @@ describe("Home's goals card", () => {
     fireEvent.click(tick);
     expect((await screen.findByRole("alert")).textContent).toContain("didn't save");
     expect(tick.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("tells someone Mira stopped as under 18 the one refusal, with nothing to retry", async () => {
+    replies["GET /api/mira/goals"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<GoalsCard />);
+    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ask Mira to help" })).toBeNull();
   });
 
   it("offers a way out when the goals don't load", async () => {
@@ -248,6 +287,80 @@ describe("the goals page", () => {
       { text: "Walk ten minutes", weeklyTarget: 3, via: "hand" },
     ]);
     expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("says so when a stale tab ticks a goal put away elsewhere, and keeps no tick", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals/g1/log"] = () => ({
+      status: 409,
+      body: { error: "This goal was put away or marked done somewhere else. Reload to see it." },
+    });
+    render(<GoalsPage />);
+    const tick = await screen.findByRole("button", { name: /Did it today/ });
+    fireEvent.click(tick);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/put away or marked done/);
+    expect(tick.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("names a goal's aim once, and shows its 8 weeks as labelled slots, not a hairline", async () => {
+    const fresh = goal("g5", { text: "Two quiet minutes", weekly_target: 2 });
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [fresh] } });
+    render(<GoalsPage />);
+    const entry = (await screen.findByRole("heading", { name: "Two quiet minutes" })).closest(
+      "li"
+    )!;
+    expect(within(entry).getAllByText(/2 days a week/)).toHaveLength(1);
+    expect(within(entry).getByText("Tick the days you do it")).toBeTruthy();
+    const weeks = within(entry).getByRole("list", { name: "Days ticked, last 8 weeks" });
+    expect(within(weeks).getAllByRole("listitem")).toHaveLength(8);
+    // Every week is a visible slot (a track), filled as days are ticked.
+    for (const li of within(weeks).getAllByRole("listitem")) {
+      expect(li.className).toMatch(/bg-ap-track/);
+    }
+    expect(within(entry).getByText("Last 8 weeks")).toBeTruthy();
+    // Spelled out, as the journal does: "Sep", never ICU's "Sept".
+    expect(within(weeks).getByText(/^Week of 28 Sep: /)).toBeTruthy();
+  });
+
+  it("keeps the days stepper focused at its ends, ignoring a press past them", async () => {
+    render(<GoalsPage />);
+    const more = await screen.findByRole("button", { name: "More days" });
+    more.focus();
+    for (let i = 0; i < 8; i++) fireEvent.click(more);
+    expect(screen.getByText("Every day")).toBeTruthy();
+    expect(more).toHaveAttribute("aria-disabled", "true");
+    expect(more).not.toBeDisabled();
+    expect(more).toHaveFocus();
+    const fewer = screen.getByRole("button", { name: "Fewer days" });
+    fewer.focus();
+    for (let i = 0; i < 8; i++) fireEvent.click(fewer);
+    expect(screen.getByText("No set days")).toBeTruthy();
+    expect(fewer).toHaveAttribute("aria-disabled", "true");
+    expect(fewer).toHaveFocus();
+  });
+
+  it("opens a goal's delete question on Keep it, and Keep it hands focus back", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    render(<GoalsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: `Edit: ${LIGHT.text}` }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete goal" }));
+    const keep = screen.getByRole("button", { name: "Keep it" });
+    await waitFor(() => expect(keep).toHaveFocus());
+    fireEvent.click(keep);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete goal" })).toHaveFocus());
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  });
+
+  it("lists a goal once when the same words come back as the goal already on the go", async () => {
+    replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
+    replies["POST /api/mira/goals"] = () => ({ body: { goal: LIGHT } });
+    render(<GoalsPage />);
+    const input = await screen.findByLabelText("Your goal, in your own words");
+    fireEvent.change(input, { target: { value: LIGHT.text } });
+    fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
+    await waitFor(() => expect(calls("POST /api/mira/goals")).toHaveLength(1));
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+    expect(screen.getAllByRole("heading", { name: LIGHT.text })).toHaveLength(1);
   });
 
   it("asks for words before adding an empty goal", async () => {

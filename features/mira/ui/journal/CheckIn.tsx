@@ -21,7 +21,14 @@ type Ratings = Record<AreaId, number | null>;
 
 const empty = (): Ratings => ({ mood: null, body: null, closeness: null, energy: null });
 
-const UNRATED = "Tap one circle in any row to save.";
+// Words for every way in: a keyboard or screen reader chooses, it doesn't tap (A11Y-16).
+const UNRATED = "Choose one rating in any row to save.";
+
+/** Another tab or device changed the day while this sheet was open: nothing was overwritten. */
+const CHANGED_ELSEWHERE =
+  "This day’s check-in was saved in another tab or on another device while this was open. Save again to replace it with what’s here, or choose Not now to keep that one.";
+const DELETED_ELSEWHERE =
+  "This check-in was deleted in another tab or on another device. Save again to keep what’s here.";
 
 const NOTE_HINT = {
   off: "Mira reads your journal only if you allow it in Settings.",
@@ -61,6 +68,10 @@ export function CheckIn({
       : empty()
   );
   const [note, setNote] = useState(existing?.note ?? "");
+  // The version this sheet started from: a save never lands on one it hasn't seen (HAB-13).
+  const [base, setBase] = useState<string | null>(existing?.updated_at ?? null);
+  // Read as the sheet opens: once saved, the journal holds this check-in too.
+  const [firstEver] = useState(journal.entries.length === 0);
   const [phase, setPhase] = useState<"edit" | "saving" | "done">("edit");
   const [error, setError] = useState<string | null>(null);
   // A note with crisis words: the support lines (this country first), open until closed.
@@ -89,11 +100,18 @@ export function CheckIn({
     setError(null);
     setPhase("saving");
     const entry: JournalEntry = { day, ...ratings, note: line };
-    const result = await journal.save(entry);
+    const result = await journal.save(entry, base);
     // The support lines come first, whatever happened to the save.
     if (result.crisisLines) {
       setCrisis(result.crisisLines);
       setSupportOpen(true);
+    }
+    if (result.conflict) {
+      // What is typed here stays; a second Save replaces the other one, knowingly.
+      setBase(result.conflict.current?.updated_at ?? null);
+      setPhase("edit");
+      setError(result.conflict.current ? CHANGED_ELSEWHERE : DELETED_ELSEWHERE);
+      return;
     }
     if (!result.ok) {
       setPhase("edit");
@@ -103,9 +121,10 @@ export function CheckIn({
     setPhase("done");
   }
 
+  // Characters as a person counts them, and as the database and the API do: an emoji is one.
+  const left = NOTE_MAX - [...note].length;
   const days = journal.entries.map((e) => e.day);
   const run = streak(days, journal.today);
-  const firstEver = !existing && journal.entries.length === 1;
 
   return (
     <>
@@ -184,9 +203,11 @@ export function CheckIn({
                 {isToday ? "How is life feeling today?" : `How was ${longDate(day).split(" ")[0]}?`}
               </h2>
               <p className="mt-1.5 text-[14px] text-ap-muted">
-                {longDate(day)} · one tap a row, skip any
+                {longDate(day)} · one rating a row, skip any
               </p>
-              <fieldset disabled={phase === "saving"} className="mt-5 flex flex-col gap-5">
+              {/* Nothing goes disabled while it saves (decision 7: that would drop the keyboard's
+                  focus): the circles ignore a change and the line is read-only till then. */}
+              <fieldset aria-busy={phase === "saving"} className="mt-5 flex flex-col gap-5">
                 {AREAS.map((area, i) => (
                   <Scale
                     key={area.id}
@@ -196,6 +217,7 @@ export function CheckIn({
                     hint={area.hint}
                     value={ratings[area.id]}
                     onChange={(v) => {
+                      if (phase === "saving") return;
                       setError(null);
                       setRatings((r) => ({ ...r, [area.id]: v }));
                     }}
@@ -208,22 +230,20 @@ export function CheckIn({
                   <input
                     id={`${id}-note`}
                     value={note}
-                    maxLength={NOTE_MAX}
                     autoComplete="off"
                     enterKeyHint="done"
                     placeholder="What stood out?"
                     aria-describedby={`${id}-note-hint`}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="mt-2 min-h-[48px] w-full rounded-2xl border border-ap-line bg-white px-4 text-[16px] caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
+                    readOnly={phase === "saving"}
+                    onChange={(e) => setNote([...e.target.value].slice(0, NOTE_MAX).join(""))}
+                    className="mt-2 min-h-[48px] w-full rounded-2xl border border-ap-field bg-white px-4 text-[16px] caret-ap-purple outline-none transition-colors placeholder:text-ap-muted focus:border-ap-purple"
                   />
                   <p
                     id={`${id}-note-hint`}
                     className="mt-1.5 text-[12px] leading-relaxed text-ap-muted"
                   >
                     {NOTE_HINT[share]}
-                    {note.length >= NOTE_MAX - 40
-                      ? ` ${NOTE_MAX - note.length} characters left.`
-                      : ""}
+                    {left <= 40 ? ` ${left} character${left === 1 ? "" : "s"} left.` : ""}
                   </p>
                 </div>
               </fieldset>
@@ -301,7 +321,7 @@ function Scale({
               onClick={() => value === i + 1 && onChange(null)}
               className="peer sr-only"
             />
-            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-line bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-field bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
               {i + 1}
             </span>
           </label>

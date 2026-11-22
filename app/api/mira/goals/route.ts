@@ -3,7 +3,9 @@
  *
  *   GET     → the person's goals in the order they were set, each with the days it was ticked
  *   POST    → a new goal { text, weeklyTarget?: 1 to 7 or null, via?: "hand" | "mira" } ("mira":
- *             "Add as a goal" under one of Mira's replies); 409 with MAX_ACTIVE_GOALS on the go
+ *             "Add as a goal" under one of Mira's replies); 409 with MAX_ACTIVE_GOALS on the go.
+ *             The same words as a goal on the go (any case) answer that goal, uncounted: a
+ *             second tap or device makes no second goal
  *   DELETE  → every goal of the person's, and their ticks
  *
  * Everything is scoped to the signed-in account (features/mira/server/goals.ts). An account or
@@ -13,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  ADULTS_ONLY,
+  MINOR_REFUSAL,
   MAX_ACTIVE_GOALS,
   createGoal,
   deleteGoals,
@@ -46,7 +48,7 @@ const slowDown = () =>
   NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
 const signIn = () => NextResponse.json({ error: "Please sign in." }, { status: 401 });
 const invalid = () => NextResponse.json({ error: "Invalid request." }, { status: 403 });
-const adultsOnly = () => NextResponse.json({ error: ADULTS_ONLY }, { status: 403 });
+const adultsOnly = () => NextResponse.json(MINOR_REFUSAL, { status: 403 });
 
 export async function GET(request: Request) {
   if (!(await checkRateLimit(getClientIp(request), PER_MINUTE)).allowed) return slowDown();
@@ -75,8 +77,8 @@ export async function POST(request: Request) {
     if (!(await checkRateLimit(account.id, NEW_PER_DAY)).allowed) {
       return NextResponse.json({ error: "That's plenty of new goals for today." }, { status: 429 });
     }
-    const goal = await createGoal(account.id, { text, weeklyTarget: target, via });
-    if (goal === "full") {
+    const made = await createGoal(account.id, { text, weeklyTarget: target, via });
+    if (made === "full") {
       return NextResponse.json(
         {
           error: `You have ${MAX_ACTIVE_GOALS} goals on the go. Mark one done or put one away first.`,
@@ -84,8 +86,8 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    logMiraEvent("goal_set", { userId: account.id }, { via, target });
-    return NextResponse.json({ goal });
+    if (!made.existing) logMiraEvent("goal_set", { userId: account.id }, { via, target });
+    return NextResponse.json({ goal: made.goal });
   } catch (err) {
     logger.error({ err }, "mira: a goal was not saved");
     return NextResponse.json(

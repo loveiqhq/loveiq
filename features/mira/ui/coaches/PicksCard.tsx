@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { picksFor } from "@features/mira/content/coaches";
+import { AdultsOnly } from "../kit";
 import { track, useCoachData } from "./data";
 import { ChevronIcon, CoachPortrait } from "./parts";
 import { FOCUS, QUIET_PILL } from "./styles";
@@ -19,7 +20,7 @@ export default function PicksCard() {
   useEffect(() => {
     if (basis) track("picks_shown", basis);
   }, [basis]);
-  if (state.status === "out" || state.status === "closed") return null;
+  if (state.status === "out") return null;
 
   return (
     <section
@@ -29,7 +30,9 @@ export default function PicksCard() {
       <h2 id="picks-h" className="font-serif text-[22px] font-medium leading-tight">
         Picked for you
       </h2>
-      {state.status === "loading" ? (
+      {state.status === "closed" ? (
+        <AdultsOnly className="mt-3" />
+      ) : state.status === "loading" ? (
         <div className="mt-3 flex flex-col gap-2">
           <p role="status" className="sr-only">
             Loading your picks

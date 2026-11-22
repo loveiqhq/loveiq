@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PrimaryButton } from "../MiraShell";
 import { Modal } from "../SupportPanel";
 import { CalendarLinks, SlotPicker, bookLabel, type Pick } from "./SlotPicker";
 import { browserZone, slotLabel, zoneLabel, type Booked, type SlotView } from "./useWeeklySession";
+
+const INVITE_SENT = "Your calendar invite is on its way to your inbox. Or add it here:";
+const INVITE_NOT_SENT = "We couldn’t email your invite just now. Add it to your calendar here:";
 
 /**
  * "Schedule a weekly session" from Home or Settings: the picker in Mira's sheet (a bottom sheet on
@@ -40,6 +43,13 @@ export function ScheduleSheet({
   const [done, setDone] = useState<{ emailed: boolean; moved: boolean; slot: SlotView } | null>(
     null
   );
+  // The invite line, put in its status region once the confirmation is up: a region mounted
+  // with its words already in it is not read out.
+  const [invite, setInvite] = useState("");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- after the confirmation mounts
+    if (done) setInvite(done.emailed ? INVITE_SENT : INVITE_NOT_SENT);
+  }, [done]);
   const label = bookLabel(pick, slot, zone);
   const unchanged = label.startsWith("Keep ");
   const ready = pick.weekday !== null && pick.time !== null && !unchanged;
@@ -56,7 +66,10 @@ export function ScheduleSheet({
 
   if (done) {
     return (
+      // Its own dialog (key): opened afresh, it puts focus on its heading, as the picker's
+      // focused button is gone.
       <Modal
+        key="done"
         label={done.moved ? "Weekly session moved" : "Weekly session booked"}
         onClose={onClose}
       >
@@ -96,9 +109,7 @@ export function ScheduleSheet({
             role="status"
             className="relative mt-4 text-[14px] text-ap-muted [animation-delay:420ms] motion-safe:animate-mira-in"
           >
-            {done.emailed
-              ? "Your calendar invite is on its way to your inbox. Or add it here:"
-              : "We couldn’t email your invite just now. Add it to your calendar here:"}
+            {invite}
           </p>
           <div className="relative mt-3 [animation-delay:480ms] motion-safe:animate-mira-in">
             <CalendarLinks googleUrl={done.slot.googleUrl} center />

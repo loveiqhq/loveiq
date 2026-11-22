@@ -43,6 +43,24 @@ export async function readCoachState(
 }
 
 /**
+ * "Notify me" taken back for one coach: the account's requests for it go, under its id or Home's
+ * older label (read as readCoachState reads them), so nothing is kept of a challenge the person
+ * no longer wants to hear about, and no event records that they stopped.
+ */
+export async function stopNotify(userId: string, coach: CoachId): Promise<void> {
+  const res = await supabaseFetch(`${mine(userId)}&name=eq.notify_me&select=id,props&limit=500`);
+  if (!res.ok) throw new Error(`mira notify-me read failed (${res.status})`);
+  const ids = ((await res.json()) as Array<{ id: number; props: Row["props"] }>)
+    .filter((r) => coachIdFor(String(r.props?.coach ?? "")) === coach)
+    .map((r) => r.id);
+  if (!ids.length) return;
+  const del = await supabaseFetch(`${mine(userId)}&id=in.(${ids.join(",")})`, {
+    method: "DELETE",
+  });
+  if (!del.ok) throw new Error(`mira notify-me delete failed (${del.status})`);
+}
+
+/**
  * Forgets the account's Notify me requests and which coach the finder suggested (finder_done),
  * at the under-18 stop (minor.ts): nobody under 18 is ever told a coach for sex is ready, and
  * nothing is kept of what they were looking for.

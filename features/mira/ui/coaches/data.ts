@@ -38,9 +38,9 @@ function load(): Promise<ApiResult<CoachData>> {
 const stateOf = (r: ApiResult<CoachData>): CoachState =>
   r.ok
     ? { status: "ready", data: r.data }
-    : r.status === 401
+    : r.signedOut
       ? { status: "out" }
-      : r.status === 403
+      : r.minor
         ? { status: "closed" }
         : { status: "error", error: r.data.error ?? "That didn't load." };
 
@@ -68,6 +68,12 @@ export function track(name: CoachEvent, detail?: string): void {
 /** "Notify me" on a coming-soon coach: null when it went through, else what to tell the person. */
 export async function notify(coach: CoachId): Promise<string | null> {
   const r = await miraApi("/api/mira/event", { body: { type: "notify", coach } });
+  return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
+}
+
+/** "Notify me" taken back: null when it went through, else what to tell the person. */
+export async function stopNotifying(coach: CoachId): Promise<string | null> {
+  const r = await miraApi(`/api/mira/coaches?notify=${coach}`, { method: "DELETE" });
   return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
 }
 

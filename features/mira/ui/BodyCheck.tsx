@@ -7,6 +7,32 @@ import { Modal } from "./SupportPanel";
 
 const { items, answers: LABELS, directions } = miraConfig.bodyCheck;
 
+/** The scale as the self-checks' runner asks it on its own page (ui/checks/CheckRunner.tsx). */
+export const BODY_CHECK = {
+  id: "body",
+  title: "Body check",
+  instructions: directions,
+  items,
+  options: LABELS.map((label, i) => ({ label, value: i + 1 })),
+};
+
+/** What the check is, before it starts: in the chat's card and on its page. */
+export const OFFER = {
+  baseline: {
+    title: "A two-minute body check",
+    text: "Ten short statements about how you relate to your body, from a research questionnaire. Answer them now and again in four weeks, so we can both see whether our chats help. Your answers stay with your account, and you can skip this.",
+  },
+  week4: {
+    title: "Your four-week body check",
+    text: "It’s been four weeks since your first body check. The same ten statements again, about two minutes, to see what has changed.",
+  },
+} as const;
+
+export const THANKS = {
+  baseline: "Thank you. I’ll ask again in four weeks.",
+  week4: "Thank you. That’s your four-week check done.",
+} as const;
+
 /**
  * The body check in the chat (Marcus's MVP success board, "Therapeutic success"): offered as a
  * card under Mira's reply, then the Body Appreciation Scale-2 one statement at a time in a dialog
@@ -59,118 +85,108 @@ export function BodyCheck({
 
   const card = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 
-  if (step === "offer") {
-    return (
-      <div className={card}>
-        <p className="text-[14px] font-semibold">
-          {due === "baseline" ? "A two-minute body check" : "Your four-week body check"}
-        </p>
-        <p className="mt-1 text-[14px] leading-relaxed text-ap-body">
-          {due === "baseline"
-            ? "Ten short statements about how you relate to your body, from a research questionnaire. Answer them now and again in four weeks, so we can both see whether our chats help. Your answers stay with your account, and you can skip this."
-            : "It’s been four weeks since your first body check. The same ten statements again, about two minutes, to see what has changed."}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              void miraApi("/api/mira/event", {
-                body: { type: "track", name: "body_check_started" },
-              });
-              onStart();
-              setStep(0);
-            }}
-            className="min-h-[44px] rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
-          >
-            Start
-          </button>
-          <button
-            type="button"
-            onClick={() => onClose(false)}
-            className="min-h-[44px] px-3 text-[13px] text-ap-muted underline"
-          >
-            Not now
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "done") {
-    return (
-      <div className={card}>
-        <p role="status" className="text-[14px] text-ap-body">
-          {due === "baseline"
-            ? "Thank you. I’ll ask again in four weeks."
-            : "Thank you. That’s your four-week check done."}
-        </p>
-      </div>
-    );
-  }
-
-  const index = step === "saving" ? items.length - 1 : step;
+  // The statement on screen: while saving, the last.
+  const index = typeof step === "number" ? step : items.length - 1;
   return (
-    <Modal label="Body check" onClose={() => onClose(false)}>
-      <fieldset disabled={step === "saving"}>
-        <legend className="text-[12px] font-semibold uppercase tracking-wide text-ap-muted">
-          Body check · statement {index + 1} of {items.length}
-        </legend>
-        <p className="mt-1 text-[13px] text-ap-muted">{directions}</p>
-        <p
-          ref={statementRef}
-          data-autofocus
-          tabIndex={-1}
-          className="mt-4 font-serif text-[22px] font-medium leading-snug outline-none"
-        >
-          {items[index]}
-        </p>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-5">
-          {LABELS.map((label, i) => (
+    <>
+      {/* There from the start, so the thank-you is read out when it comes (a region mounted with
+          its text already in it is not); the visible card once the check is saved. */}
+      <p role="status" className={step === "done" ? `${card} text-[14px] text-ap-body` : "sr-only"}>
+        {step === "done" ? THANKS[due] : ""}
+      </p>
+      {step === "offer" ? (
+        <div className={card}>
+          <p className="text-[14px] font-semibold">{OFFER[due].title}</p>
+          <p className="mt-1 text-[14px] leading-relaxed text-ap-body">{OFFER[due].text}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
-              key={label}
               type="button"
-              aria-pressed={picked[index] === i + 1}
-              onClick={() => answer(i + 1)}
-              className={`min-h-[48px] rounded-full border px-4 text-[15px] hover:border-ap-purple ${picked[index] === i + 1 ? "border-ap-purple bg-ap-lilac font-semibold" : "border-ap-line bg-white"}`}
+              onClick={() => {
+                void miraApi("/api/mira/event", {
+                  body: { type: "track", name: "body_check_started" },
+                });
+                onStart();
+                setStep(0);
+              }}
+              className="min-h-[44px] rounded-full bg-ap-ink px-5 text-[14px] font-bold text-white"
             >
-              {label}
+              Start
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => onClose(false)}
+              className="min-h-[44px] px-3 text-[13px] text-ap-muted underline"
+            >
+              Not now
+            </button>
+          </div>
         </div>
-        <div className="mt-4 flex flex-wrap justify-between gap-3">
-          {index > 0 ? (
-            <button
-              type="button"
-              onClick={() => setStep(index - 1)}
-              className="min-h-[44px] text-[14px] text-ap-plum underline"
+      ) : null}
+      {step === "offer" || step === "done" ? null : (
+        <Modal label="Body check" onClose={() => onClose(false)}>
+          {/* Not disabled while it saves (decision 7): answer() ignores taps till then. */}
+          <fieldset aria-busy={step === "saving"}>
+            <legend className="text-[12px] font-semibold uppercase tracking-wide text-ap-muted">
+              Body check · statement {index + 1} of {items.length}
+            </legend>
+            <p className="mt-1 text-[13px] text-ap-muted">{directions}</p>
+            <p
+              ref={statementRef}
+              data-autofocus
+              tabIndex={-1}
+              className="mt-4 font-serif text-[22px] font-medium leading-snug outline-none"
             >
-              Back
-            </button>
-          ) : (
-            <span />
-          )}
-          <button
-            type="button"
-            onClick={() => onClose(false)}
-            className="min-h-[44px] text-[14px] text-ap-muted underline"
-          >
-            Stop for now
-          </button>
-        </div>
-        {step === "saving" ? <p className="mt-2 text-[13px] text-ap-muted">Saving…</p> : null}
-        {error ? (
-          <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
-            {error}{" "}
-            <button
-              type="button"
-              onClick={() => void save(picked)}
-              className="font-semibold underline"
-            >
-              Try again
-            </button>
-          </p>
-        ) : null}
-      </fieldset>
-    </Modal>
+              {items[index]}
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-5">
+              {LABELS.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={picked[index] === i + 1}
+                  onClick={() => answer(i + 1)}
+                  className={`min-h-[48px] rounded-full border px-4 text-[15px] hover:border-ap-purple ${picked[index] === i + 1 ? "border-ap-purple bg-ap-lilac font-semibold" : "border-ap-line bg-white"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap justify-between gap-3">
+              {index > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => step !== "saving" && setStep(index - 1)}
+                  className="min-h-[44px] text-[14px] text-ap-plum underline"
+                >
+                  Back
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => onClose(false)}
+                className="min-h-[44px] text-[14px] text-ap-muted underline"
+              >
+                Stop for now
+              </button>
+            </div>
+            {step === "saving" ? <p className="mt-2 text-[13px] text-ap-muted">Saving…</p> : null}
+            {error ? (
+              <p role="alert" className="mt-2 text-[13px] text-ap-bad-ink">
+                {error}{" "}
+                <button
+                  type="button"
+                  onClick={() => void save(picked)}
+                  className="font-semibold underline"
+                >
+                  Try again
+                </button>
+              </p>
+            ) : null}
+          </fieldset>
+        </Modal>
+      )}
+    </>
   );
 }

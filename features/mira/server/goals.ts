@@ -20,9 +20,11 @@ import type { GoalForPrompt } from "./prompt";
 export { GOAL_TEXT_MAX, MAX_ACTIVE_GOALS };
 /**
  * Rail 15: an account or browser that said it is under 18 (server/minor.ts isMinor) sees, sets,
- * changes and ticks no goals; deleting them always works.
+ * changes and ticks no goals; deleting them always works. The habits' routes refuse it with this
+ * one sentence and `minor: true` (decision 9 of round 2: the screens show the kit's AdultsOnly).
  */
-export const ADULTS_ONLY = "Mira's coaching is only for adults.";
+export const ADULTS_ONLY = "Mira is only for adults.";
+export const MINOR_REFUSAL = { error: ADULTS_ONLY, minor: true } as const;
 
 /** A goal as the API takes it: spaces tidied, 1 to GOAL_TEXT_MAX characters. */
 export const goalText = z
@@ -78,14 +80,24 @@ async function activeCount(userId: string): Promise<number> {
 }
 
 /**
- * A new goal, or "full" with MAX_ACTIVE_GOALS on the go. ponytail: two quick taps can both pass
- * the count and make one more than the cap; a trigger closes it if that ever matters.
+ * A new goal, or "full" with MAX_ACTIVE_GOALS on the go. The same words as a goal on the go (any
+ * case) give that goal back instead (`existing`): "Add as a goal" tapped twice, or on two devices,
+ * makes one goal. ponytail: two taps at the same instant can both pass the read and make two (or
+ * one more than the cap); a partial unique index or a trigger closes it if that ever matters.
  */
 export async function createGoal(
   userId: string,
   goal: { text: string; weeklyTarget: number | null; via: GoalRow["via"] }
-): Promise<Goal | "full"> {
-  if ((await activeCount(userId)) >= MAX_ACTIVE_GOALS) return "full";
+): Promise<{ goal: Goal; existing: boolean } | "full"> {
+  const active = await read<GoalRow & { log: Array<{ day: Day }> }>(
+    `/rest/v1/mira_goal?user_id=eq.${enc(userId)}&archived_at=is.null&completed_at=is.null&select=${COLS},log:mira_goal_log(day)&log.order=day.desc`
+  );
+  const same = active.find((g) => g.text.toLowerCase() === goal.text.toLowerCase());
+  if (same) {
+    const { log, ...row } = same;
+    return { goal: { ...row, days: log.map((l) => l.day) }, existing: true };
+  }
+  if (active.length >= MAX_ACTIVE_GOALS) return "full";
   const res = await supabaseFetch(`/rest/v1/mira_goal?select=${COLS}`, {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -98,7 +110,7 @@ export async function createGoal(
   });
   if (!res.ok) throw new Error(`mira goal insert failed (${res.status})`);
   const [row] = (await res.json()) as GoalRow[];
-  return { ...row!, days: [] };
+  return { goal: { ...row!, days: [] }, existing: false };
 }
 
 export type GoalPatch = {
@@ -164,17 +176,25 @@ export async function deleteGoals(userId: string): Promise<void> {
 }
 
 /**
- * Ticks a goal for a day (once, however often it is tapped) or takes the tick back. The tick
- * carries its person, and the log's composite key refuses one whose goal is someone else's:
- * false then.
+ * Ticks one of the account's goals on the go for a day (once, however often it is tapped) or
+ * takes the tick back. The goal is read in the account's own scope first, so someone else's id
+ * answers "missing" exactly as a random one does, whatever its owner ticked (the log's key would
+ * skip a duplicate before its foreign key is checked); a goal put away or done ("inactive", as a
+ * tab opened before may still offer it) gets no tick. ponytail: a put-away between the read and
+ * the write still lands one tick; a single conditional statement (an RPC) closes it if it matters.
  */
 export async function setTick(
   userId: string,
   goalId: string,
   day: Day,
   done: boolean
-): Promise<boolean> {
-  if (!isUuid(goalId)) return false;
+): Promise<"ticked" | "missing" | "inactive"> {
+  if (!isUuid(goalId)) return "missing";
+  const [goal] = await read<GoalRow>(
+    `/rest/v1/mira_goal?id=eq.${enc(goalId)}&user_id=eq.${enc(userId)}&select=${COLS}`
+  );
+  if (!goal) return "missing";
+  if (!isActive(goal)) return "inactive";
   const res = done
     ? await supabaseFetch("/rest/v1/mira_goal_log?on_conflict=goal_id,day", {
         method: "POST",
@@ -185,9 +205,9 @@ export async function setTick(
         `/rest/v1/mira_goal_log?goal_id=eq.${enc(goalId)}&user_id=eq.${enc(userId)}&day=eq.${enc(day)}`,
         { method: "DELETE" }
       );
-  if (done && res.status === 409) return false; // the foreign key: no goal of theirs
+  if (done && res.status === 409) return "missing"; // deleted meanwhile: the composite key
   if (!res.ok) throw new Error(`mira goal tick failed (${res.status})`);
-  return true;
+  return "ticked";
 }
 
 /** The account's goals on the go as Mira is told of them, with the week in their time zone. */

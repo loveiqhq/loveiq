@@ -30,13 +30,14 @@ vi.mock("@features/mira/server/minor", async (real) => ({
   isMinor: vi.fn(),
 }));
 
-import { GET } from "@/app/api/mira/coaches/route";
+import { DELETE, GET } from "@/app/api/mira/coaches/route";
 import { POST } from "@/app/api/mira/event/route";
 import { picksFor } from "@features/mira/content/coaches";
 import { readCoachState } from "@features/mira/server/coaches";
 import { isMinor, stopForMinor } from "@features/mira/server/minor";
 import { getMiraAccount } from "@features/mira/server/session";
 import { getProfile, listChats, logMiraEvent } from "@features/mira/server/store";
+import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
 /** GET /api/mira/coaches and the coaches' events on POST /api/mira/event (22 Nov 2026). */
@@ -194,6 +195,56 @@ describe("GET /api/mira/coaches", () => {
     const res = await get();
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Unable to load your coaches." });
+  });
+});
+
+describe("DELETE /api/mira/coaches?notify= (Notify me taken back)", () => {
+  const stop = (coach: string) =>
+    DELETE(
+      new Request(`http://localhost/api/mira/coaches?notify=${encodeURIComponent(coach)}`, {
+        method: "DELETE",
+      })
+    );
+  const deleted = () =>
+    db.fetch.mock.calls
+      .filter(([, init]) => init?.method === "DELETE")
+      .map(([path]) => String(path));
+
+  it("deletes the person's requests for that coach, under its id or Home's older label", async () => {
+    db.fetch.mockImplementation(async (path: string, init?: { method?: string }) =>
+      json(
+        init?.method === "DELETE"
+          ? []
+          : [
+              { id: 7, props: { coach: "jonas" } },
+              { id: 5, props: { coach: "Libido challenges" } },
+              { id: 3, props: { coach: "lena" } },
+            ]
+      )
+    );
+    const res = await stop("jonas");
+    expect(res.status).toBe(200);
+    const [read] = db.fetch.mock.calls.map(([path]) => String(path));
+    expect(read).toContain(`/rest/v1/mira_event?user_id=eq.${LEA.id}&name=eq.notify_me`);
+    // Only Jonas's two rows, only the person's own.
+    expect(deleted()).toEqual([`/rest/v1/mira_event?user_id=eq.${LEA.id}&id=in.(7,5)`]);
+    // Taking it back leaves nothing of the challenge behind, not even an event.
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("needs the person, their CSRF token and a coming-soon coach", async () => {
+    expect((await stop("mira")).status).toBe(400);
+    expect((await stop("nobody")).status).toBe(400);
+    vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
+    expect((await stop("jonas")).status).toBe(403);
+    vi.mocked(getMiraAccount).mockResolvedValueOnce(null);
+    expect((await stop("jonas")).status).toBe(401);
+    expect(deleted()).toEqual([]);
+  });
+
+  it("is never refused for age: taking back is always allowed", async () => {
+    vi.mocked(isMinor).mockResolvedValue(true);
+    expect((await stop("jonas")).status).toBe(200);
   });
 });
 
