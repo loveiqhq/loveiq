@@ -122,10 +122,10 @@ export default function MiraChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // `retry`: the saved chat didn't load (Try again loads it).
-  const [error, setError] = useState<{ text: string; signIn?: boolean; retry?: boolean } | null>(
-    null
-  );
+  const [error, setError] = useState<{ text: string; signIn?: boolean } | null>(null);
+  // The saved chat didn't load: said with Try again, whatever else fails meanwhile (a send's
+  // error doesn't replace it), and it stays the chat being continued (CHAT-16, R3-CHAT-10).
+  const [unloaded, setUnloaded] = useState(false);
   // A calm line about the chat itself (it isn't here any more), read out as a status.
   const [notice, setNotice] = useState<string | null>(null);
   // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
@@ -220,6 +220,7 @@ export default function MiraChat({
     );
     if (chat.ok) {
       setError(null);
+      setUnloaded(false);
       setMessages(
         chat.data.messages.map((m) => ({
           role: m.role,
@@ -235,12 +236,10 @@ export default function MiraChat({
       setChatId(null);
       window.history.replaceState(null, "", "/mira");
       setNotice("That chat isn't here any more. It may have been deleted.");
+    } else if (chat.status === 401) {
+      setError({ text: "Please sign in again.", signIn: true });
     } else {
-      setError(
-        chat.status === 401
-          ? { text: "Please sign in again.", signIn: true }
-          : { text: "This chat didn't load. Please try again.", retry: true }
-      );
+      setUnloaded(true);
     }
   }, []);
 
@@ -603,6 +602,7 @@ export default function MiraChat({
     setMessages([]);
     setChatId(null);
     setError(null);
+    setUnloaded(false);
     setNotice(null);
     setNps(null);
     window.history.replaceState(null, "", "/mira");
@@ -756,7 +756,6 @@ export default function MiraChat({
 
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
-  const unloaded = Boolean(error?.retry);
   // A chat opened by its link loads first: the welcome would only flash before it.
   const showWelcome = empty && (ready || !initialChatId) && !unloaded;
   const showChips = ready && empty && !gate && !unloaded;
@@ -1284,31 +1283,33 @@ export default function MiraChat({
               >
                 {notice}
               </p>
-              {error ? (
+              {error || (unloaded && chatId) ? (
                 <div className="mt-2 text-center">
-                  <p role="alert" className="text-[13px] text-ap-bad-ink">
-                    {error.text}
-                    {error.signIn ? (
-                      <>
-                        {" "}
-                        <Link href="/mira/start" className="font-semibold underline">
-                          Sign in again
-                        </Link>
-                      </>
-                    ) : null}
-                    {error.retry && chatId ? (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          onClick={() => void openChat(chatId)}
-                          className="font-semibold underline"
-                        >
-                          Try again
-                        </button>
-                      </>
-                    ) : null}
-                  </p>
+                  {unloaded && chatId ? (
+                    <p role="alert" className="text-[13px] text-ap-bad-ink">
+                      This chat didn&apos;t load. Please try again.{" "}
+                      <button
+                        type="button"
+                        onClick={() => void openChat(chatId)}
+                        className="font-semibold underline"
+                      >
+                        Try again
+                      </button>
+                    </p>
+                  ) : null}
+                  {error ? (
+                    <p role="alert" className="text-[13px] text-ap-bad-ink">
+                      {error.text}
+                      {error.signIn ? (
+                        <>
+                          {" "}
+                          <Link href="/mira/start" className="font-semibold underline">
+                            Sign in again
+                          </Link>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
                   <p className="mt-0.5 text-[12px] text-ap-muted">
                     If you&apos;re in danger right now, open{" "}
                     <button

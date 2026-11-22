@@ -389,6 +389,23 @@ describe("Chat", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  // Round-3 R3-CHAT-10: a send that also failed replaced the load's error, and the screen became
+  // the welcome with its prompts, Try again gone, as if this were a new chat.
+  it("still says the chat didn't load after a send that failed too", async () => {
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({ status: 500, body: {} });
+    replies["POST /api/mira/chat"] = () => ({ status: 502, body: { error: "Mira is busy." } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    await screen.findByRole("button", { name: "Try again" });
+    typeAndSend("hello");
+    expect(await screen.findByText("Mira is busy.")).toBeInTheDocument();
+    expect(screen.getByText(/This chat didn't load/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    expect(screen.getByLabelText("Message Mira")).toHaveValue("hello");
+    expect(calls("POST /api/mira/chat")[0]!.chatId).toBe(SAVED); // still this chat
+  });
+
   it("lists a new chat under the title the server gave it, never words it held back", async () => {
     const earlier = { id: SAVED, title: "Lights off", updated_at: "2026-11-21T10:00:00Z" };
     replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [earlier] } });
