@@ -71,10 +71,12 @@ function LineItem({ line: l }: { line: SupportLine }) {
  * Mira's panels, on the native <dialog>: showModal() keeps focus inside and the page behind
  * inert, Escape (or Android's back) closes it, the page can't scroll behind it, focus starts on
  * the element marked data-autofocus (the heading) and goes back to the opener on close. Shown
- * while mounted: the parent unmounts it to close.
+ * while mounted: the parent unmounts it to close. The opener is the focused control, or, when the
+ * page itself has the focus (a tap in WebKit focuses no button), the control the tap landed on.
  *
  * When closing removed the opener (a save swapped "Do today’s check-in" for "Edit today’s
- * check-in", A11Y-2), focus goes to the control now in its place in its section, unless the caller
+ * check-in", A11Y-2), focus goes to the control now in its place in its section (a header, footer
+ * or menu counts as one; the main part's first control when no opener is known), unless the caller
  * placed it meanwhile: never to the page itself. `closeOnBackdrop`: a tap on the dimmed page closes
  * it too, for a sheet that guards nothing (the phone's More); never a delete, a consent, answers
  * not saved yet or the support lines.
@@ -82,6 +84,17 @@ function LineItem({ line: l }: { line: SupportLine }) {
 let openDialogs = 0;
 const CONTROLS =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** What the last click landed on: a panel's opener when the click focused nothing (WebKit). */
+let clicked: Element | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "click",
+    (e) => {
+      clicked = e.target instanceof Element ? e.target : null;
+    },
+    true
+  );
+}
 
 export function Modal({
   label,
@@ -98,10 +111,19 @@ export function Modal({
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    // Where the opener sits, should closing replace it: its section and its place among the
-    // section's controls (the dialog's own left out).
-    const home = opener?.closest<HTMLElement>("section, article, form, main") ?? null;
+    const focused = document.activeElement;
+    const opener =
+      focused instanceof HTMLElement && focused !== document.body
+        ? focused
+        : clicked?.isConnected
+          ? clicked.closest<HTMLElement>(CONTROLS)
+          : null;
+    // Where the opener sits, should closing replace it: its section (or the main part, with no
+    // opener known) and its place among the section's controls (the dialog's own left out).
+    const home =
+      (opener ?? document.querySelector("main"))?.closest<HTMLElement>(
+        "section, article, form, main, header, footer, nav"
+      ) ?? null;
     const controls = () =>
       home
         ? [...home.querySelectorAll<HTMLElement>(CONTROLS)].filter((c) => !dialog.contains(c))
@@ -119,10 +141,15 @@ export function Modal({
       if (--openDialogs === 0) root.style.overflow = "";
       if (modal && dialog.open) dialog.close();
       if (opener?.isConnected) return opener.focus();
-      // A frame later, so a caller that put the focus somewhere itself has had its say.
+      // A frame later, so a caller (or a panel opening next) that put the focus anywhere since
+      // has had its say. A section that went too (the page changed) is left to the page showing.
+      let moved = false;
+      const mark = () => (moved = true);
+      document.addEventListener("focusin", mark);
       requestAnimationFrame(() => {
+        document.removeEventListener("focusin", mark);
         const now = document.activeElement;
-        if ((now && now !== document.body) || !home?.isConnected) return;
+        if (moved || (now && now !== document.body) || !home?.isConnected) return;
         const left = controls();
         left[Math.min(Math.max(place, 0), left.length - 1)]?.focus();
       });

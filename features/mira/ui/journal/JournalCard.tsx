@@ -5,7 +5,7 @@ import { streak } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
 import { useSignedOut } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { CheckIn } from "./CheckIn";
 import {
   ARROW,
@@ -28,6 +28,7 @@ import { useJournal } from "./useJournal";
 export function JournalCard() {
   const journal = useJournal();
   const { status, entries, settings, today } = journal;
+  const again = useRetry(status === "loading", journal.reload);
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || status === "signed-out";
   const [open, setOpen] = useState(false);
@@ -71,7 +72,11 @@ export function JournalCard() {
       className="font-sans text-ap-ink"
     >
       <div className="flex items-end justify-between gap-3">
-        <h2 id="journal-card-h" className="font-serif text-[24px] font-medium leading-tight">
+        <h2
+          id="journal-card-h"
+          tabIndex={-1}
+          className="font-serif text-[24px] font-medium leading-tight outline-none"
+        >
           Daily journal
         </h2>
         <SectionLink href="/mira/journal" what="check-ins" />
@@ -83,15 +88,15 @@ export function JournalCard() {
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-28 h-64 w-80 rounded-full bg-[radial-gradient(closest-side_at_40%_55%,rgba(191,102,217,0.12),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_65%_45%,rgba(149,142,246,0.14),rgba(149,142,246,0)_100%)] blur-[40px]"
         />
-        {status === "loading" ? (
+        {status === "loading" && !again.busy ? (
           <div className="relative flex flex-col gap-4" aria-hidden="true">
             <Skeleton className="h-7 w-3/4 max-w-[340px]" />
             <Skeleton className="h-4 w-full max-w-[420px]" />
             <Skeleton className="h-12 w-[220px] rounded-full" />
             <Skeleton className="h-11 w-full max-w-[360px]" />
           </div>
-        ) : status === "error" ? (
-          <LoadFailed what="Your journal" onRetry={journal.reload} className="relative" />
+        ) : status === "error" || again.busy ? (
+          <LoadFailed what="Your journal" {...again} className="relative" />
         ) : status === "minor" ? (
           <AdultsOnly className="relative" />
         ) : (

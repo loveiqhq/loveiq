@@ -5,7 +5,7 @@ import { useState } from "react";
 import { localDay, progress } from "../../server/goal-progress";
 import { useSignedOut } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import { ChallengePills, FOCUS, TickButton, WeekLine, onTheGo } from "./parts";
 import { useGoals, type Goal } from "./useGoals";
@@ -21,6 +21,7 @@ const ON_HOME = 3;
  */
 export default function GoalsCard() {
   const g = useGoals();
+  const again = useRetry(g.load === "loading", g.reload);
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || g.load === "signed-out";
   const [popped, setPopped] = useState<string | null>(null);
@@ -46,7 +47,11 @@ export default function GoalsCard() {
       className="rounded-3xl border border-ap-line p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="goals-card-h" className="font-serif text-[20px] font-semibold">
+        <h2
+          id="goals-card-h"
+          tabIndex={-1}
+          className="font-serif text-[20px] font-semibold outline-none"
+        >
           Challenges &amp; goals
         </h2>
         {g.load === "ready" && g.goals.length > 0 ? (
@@ -59,7 +64,7 @@ export default function GoalsCard() {
         </div>
       )}
 
-      {g.load === "loading" ? (
+      {g.load === "loading" && !again.busy ? (
         <div className="mt-5 flex flex-col gap-4" aria-hidden="true">
           {[0, 1].map((i) => (
             <div key={i} className="flex flex-col gap-2.5">
@@ -71,8 +76,8 @@ export default function GoalsCard() {
         </div>
       ) : g.load === "minor" ? (
         <AdultsOnly className="mt-4" />
-      ) : g.load === "error" ? (
-        <LoadFailed what="Your goals" onRetry={g.reload} className="mt-4" />
+      ) : g.load === "error" || again.busy ? (
+        <LoadFailed what="Your goals" {...again} className="mt-4" />
       ) : active.length > 0 ? (
         <ul className="mt-4 flex flex-col divide-y divide-ap-line">
           {active.slice(0, ON_HOME).map((goal) => {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { coachById, suggestedCoaches, type CoachId } from "@features/mira/content/coaches";
 import { AdultsOnly, SectionLink } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { useCoachData } from "./data";
 import { CoachPortrait, NotifyButton } from "./parts";
 import { FOCUS, INK_PILL } from "./styles";
@@ -18,6 +18,7 @@ const MIRA = coachById("mira");
  */
 export default function CoachesCard() {
   const { state, retry } = useCoachData();
+  const again = useRetry(state.status === "loading", retry);
   const data = state.status === "ready" ? state.data : null;
   const [asked, setAsked] = useState<CoachId[] | null>(null);
   if (state.status === "out") return null;
@@ -34,7 +35,11 @@ export default function CoachesCard() {
   return (
     <section aria-labelledby="coaches-h">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id="coaches-h" className="font-serif text-[24px] font-medium leading-tight">
+        <h2
+          id="coaches-h"
+          tabIndex={-1}
+          className="font-serif text-[24px] font-medium leading-tight outline-none"
+        >
           Your coaches
         </h2>
         <SectionLink href="/mira/coaches" what="coaches" />
@@ -82,7 +87,7 @@ export default function CoachesCard() {
           </article>
 
           <div className="rounded-[24px] border border-ap-line bg-white px-5 pb-2 pt-4 sm:px-6">
-            {state.status === "loading" ? (
+            {state.status === "loading" && !again.busy ? (
               <div className="flex flex-col gap-2 py-2">
                 <p role="status" className="sr-only">
                   Loading your coaches
@@ -95,8 +100,8 @@ export default function CoachesCard() {
                   />
                 ))}
               </div>
-            ) : state.status === "error" ? (
-              <LoadFailed what="Your coaches" onRetry={retry} className="py-3" />
+            ) : state.status === "error" || again.busy ? (
+              <LoadFailed what="Your coaches" {...again} className="py-3" />
             ) : (
               <ul className="flex flex-col">
                 {suggested.map((s, i) => (
