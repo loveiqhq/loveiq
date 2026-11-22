@@ -349,8 +349,9 @@ export default function MiraChat({
     setMessages(withReply);
     setFreeLeft(res.data.freeLeft ?? freeLeft);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
-    // composer stays, and the server answers a crisis message whatever the limits.
-    if (res.data.freeLeft === 0 && !res.data.crisis) setGate(true);
+    // composer stays, and the server answers a crisis message whatever the limits. Nor after an
+    // under-18 stop: nobody under 18 is asked to make an account.
+    if (res.data.freeLeft === 0 && !res.data.crisis && !res.data.minor) setGate(true);
     if (res.data.crisis && res.data.crisisLines) setCrisis(res.data.crisisLines);
     if (res.data.refer) referred.current = true;
     if (res.data.minor) {

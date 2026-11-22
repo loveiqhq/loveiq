@@ -114,7 +114,10 @@ export function useVoice(options: {
     heard: "",
     said: "",
     speech: 0,
-    /** After her reply: end the session, or end it and keep nothing (an under-18 stop). */
+    /**
+     * The session is over once her reply is said: "end" (no free message left), or "forget"
+     * (an under-18 stop, which ends it at once and keeps nothing).
+     */
     after: null as "end" | "forget" | null,
     muted: false,
     held: false,
@@ -205,6 +208,7 @@ export function useVoice(options: {
       m.floor = read.floor;
       if (!read.bargeIn) return;
       hush(); // the person cut in: she stops, they have the floor
+      if (m.after) return end(); // unless that was her last word: the session is over
       set("listening");
     }
     if (m.phase !== "listening") return;
@@ -265,22 +269,35 @@ export function useVoice(options: {
     latest.current.onTurn(text.trim(), opts);
   }
 
-  /** The chat's answer to the person's turn: she says it, then listens again (or the session ends). */
+  /**
+   * The chat's answer to the person's turn: she says it, then listens again, or the session ends.
+   * The stops come first, whatever the session is doing (paused, ended while the turn was on its
+   * way): no microphone, Resume or new turn can follow them.
+   */
   function answered(res: VoiceAnswer) {
     clear("thinking");
     const d = res.data;
     if (d.chatId) m.chatId = d.chatId;
+    if (d.minor) {
+      // Under 18 (rail 15): the session ends at once, and nothing of it is sent or kept, not even
+      // a save End asked for while this turn was on its way (Mira's routes refuse them anyway).
+      // Message G is in the chat.
+      m.after = "forget";
+      setEnded(null);
+      return end();
+    }
     if (m.saveOnAnswer && m.last) {
       m.saveOnAnswer = false;
       m.last.chatId = m.chatId;
       return void save();
     }
-    if (m.phase !== "thinking") return; // ended or left meanwhile: the reply is on screen
-    if (d.gate && !d.reply) return end(); // no free message was left: the sign-up card takes over
+    // No free message was left, or this reply used the last one: no turn can follow, so the
+    // session ends and the sign-up card takes over (after she says the reply, if she can).
+    const last = (d.gate && !d.reply) || (d.freeLeft === 0 && !d.crisis);
+    if (m.phase !== "thinking") return last ? end() : undefined; // left meanwhile: it's on screen
+    if (d.gate && !d.reply) return end();
     if (!res.ok || !d.reply) return listen(); // the chat shows what went wrong; they can say it again
-    // The last free message: she answers, then the session ends. An under-18 stop ends it too,
-    // and nothing of it is sent or kept (Mira's routes refuse that person anyway).
-    m.after = d.minor ? "forget" : d.freeLeft === 0 && !d.crisis ? "end" : null;
+    m.after = last ? "end" : null;
     speak([d.reply, d.invitation].filter(Boolean).join("\n\n"));
   }
 
@@ -333,12 +350,12 @@ export function useVoice(options: {
 
   function afterSpeaking() {
     setSaying("");
-    if (m.after) return end();
-    listen();
+    listen(); // which ends the session after her last reply
   }
 
-  /** The person's turn again: listening, unless the microphone is paused. */
+  /** The person's turn again: listening, unless the microphone is paused or the session is over. */
   function listen() {
+    if (m.after) return end(); // her last reply was said (or cut short): no turn follows it
     m.floor = m.seen; // what was heard while she spoke was her own voice
     m.heard = "";
     setHeard("");
@@ -502,6 +519,7 @@ export function useVoice(options: {
       // start the browser's service without the notice's tick.
       const live = m.phase === "listening" || m.phase === "speaking" || m.phase === "thinking";
       if (document.visibilityState !== "hidden" || !live) return;
+      if (m.after) return end(); // leaving during her last reply: the session is over, no Resume
       micOff();
       hush();
       clear("thinking");
