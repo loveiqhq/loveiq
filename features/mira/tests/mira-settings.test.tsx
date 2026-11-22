@@ -15,7 +15,7 @@ vi.mock("next/headers", () => ({
 
 import MiraLayout from "@/app/mira/layout";
 import MiraSettings from "@features/mira/ui/MiraSettings";
-import { MiraLookRoot } from "@features/mira/ui/MiraLook";
+import { MiraLookRoot, useMiraLook } from "@features/mira/ui/MiraLook";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import { DEFAULT_LOOK } from "@features/mira/ui/prefs";
 
@@ -81,9 +81,9 @@ function holdSaves() {
     );
   return held;
 }
-async function openSettings(slots = {}, signedIn = true) {
+async function openSettings(slots = {}) {
   render(
-    <MiraLookRoot initial={DEFAULT_LOOK} signedIn={signedIn}>
+    <MiraLookRoot initial={DEFAULT_LOOK}>
       <MiraSettings {...slots} />
     </MiraLookRoot>
   );
@@ -265,6 +265,45 @@ describe("Appearance", () => {
     );
   });
 
+  it("saves theme changes one after another, and the last one's answer decides", async () => {
+    const held = holdSaves();
+    await openSettings();
+    const appearance = section("Appearance");
+    fireEvent.click(within(appearance).getByRole("radio", { name: /Dark/ }));
+    fireEvent.click(within(appearance).getByRole("radio", { name: /Light/ }));
+    expect(root()).toHaveAttribute("data-mira-theme", "light");
+    await waitFor(() => expect(held).toHaveLength(1));
+    expect(held[0]!.body).toEqual({ theme: "dark" });
+    await act(async () => held[0]!.answer(500)); // the older choice, refused
+    expect(within(appearance).queryByRole("alert")).toBeNull(); // Light is on its way
+    await waitFor(() => expect(held).toHaveLength(2));
+    expect(held[1]!.body).toEqual({ theme: "light" });
+    await act(async () => held[1]!.answer(200));
+    expect(await within(appearance).findByText("Saved")).toBeInTheDocument();
+    expect(within(appearance).queryByRole("alert")).toBeNull();
+    expect(root()).toHaveAttribute("data-mira-theme", "light");
+  });
+
+  it("keeps a look chosen outside Settings in this browser only: nothing is sent", () => {
+    function Probe() {
+      const { change } = useMiraLook();
+      return (
+        <button type="button" onClick={() => change({ theme: "dark" })}>
+          Dark
+        </button>
+      );
+    }
+    render(
+      <MiraLookRoot initial={DEFAULT_LOOK}>
+        <Probe />
+      </MiraLookRoot>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    expect(root()).toHaveAttribute("data-mira-theme", "dark");
+    expect(document.cookie).toContain("mira_look=dark.default");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("is in the first HTML, read from the cookie: no flash of the wrong theme", async () => {
     cookieJar.set("mira_look", "dark.large");
     const html = renderToString(await MiraLayout({ children: <p>Hi</p> }));
@@ -282,7 +321,7 @@ describe("Appearance", () => {
     });
     await act(async () => {
       render(
-        <MiraLookRoot initial={{ theme: "light", text: "large" }} signedIn={false}>
+        <MiraLookRoot initial={{ theme: "light", text: "large" }}>
           <SignUpFlow googleResult="done" />
         </MiraLookRoot>
       );

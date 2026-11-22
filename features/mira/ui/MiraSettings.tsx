@@ -255,12 +255,18 @@ export default function MiraSettings({
     setStatus("account", { kind: "error", text: r.data.error ?? "Unable to save." });
   }
 
+  /** Shows the look at once and keeps it in this browser, then saves it on the account. */
   async function changeLook(patch: { theme?: Theme; text?: TextSize }) {
+    change(patch);
     setStatus("appearance", { kind: "saving" });
-    const ok = await change(patch);
+    const { r, current } = await save({
+      ...(patch.theme ? { theme: patch.theme } : {}),
+      ...(patch.text ? { text_size: patch.text } : {}),
+    });
+    if (current.length === 0) return;
     setStatus(
       "appearance",
-      ok
+      r.ok
         ? { kind: "saved" }
         : {
             kind: "error",
