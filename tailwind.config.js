@@ -70,6 +70,23 @@ const miraTheme = plugin(({ addBase }) => {
       outline: RING,
       "outline-offset": "0px",
     },
+    // Home's sections (MiraHome, round-3 audit): one anatomy whichever card fills them, the
+    // heading and then the content on the page itself, boxes only around things (the check-in,
+    // a coach, a voice session). The cards drew it three ways (a box with the heading inside, the
+    // heading over a box, no box), so Home lays them out: a card's own outer box goes, and its
+    // one h2 is a section heading, Lora 24px like "Daily journal".
+    ".mira-home-sections > section": {
+      "border-width": "0",
+      "border-radius": "0",
+      padding: "0",
+      margin: "0",
+      background: "none",
+    },
+    ".mira-home-sections > section > h2, .mira-home-sections > section > div:first-child h2": {
+      "font-size": "calc(24px * var(--mira-fs, 1))",
+      "font-weight": "500",
+      "line-height": "1.25",
+    },
   });
 });
 

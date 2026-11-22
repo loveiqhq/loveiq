@@ -161,7 +161,7 @@ export default function MiraHome({
           <section
             aria-labelledby="continue-h"
             aria-busy={loading || retrying}
-            className="mt-7 rounded-3xl border border-ap-line p-5 motion-safe:animate-mira-rise"
+            className="mt-8 motion-safe:animate-mira-rise"
           >
             <div className="flex items-center gap-3">
               <Image
@@ -177,7 +177,7 @@ export default function MiraHome({
                   ref={heading}
                   id="continue-h"
                   tabIndex={-1}
-                  className="font-serif text-[22px] font-medium leading-tight outline-none"
+                  className="font-serif text-[24px] font-medium leading-tight outline-none"
                 >
                   {loading ? (
                     <>
@@ -290,9 +290,10 @@ export default function MiraHome({
             ) : null}
           </section>
 
-          <div className="mt-8 flex flex-col gap-8">
+          {/* One anatomy for every section, whichever card fills it (tailwind.config.js). */}
+          <div className="mira-home-sections mt-12 flex flex-col gap-12">
             <JournalCard />
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="mira-home-sections grid gap-12 md:grid-cols-2 md:gap-x-8">
               <GoalsCard />
               <NextSessionCard />
             </div>

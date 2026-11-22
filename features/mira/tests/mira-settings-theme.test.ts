@@ -307,3 +307,38 @@ describe("one focus style (round 3)", () => {
     }
   });
 });
+
+describe("Home's sections (round 3)", () => {
+  /** Each `prop` of rules whose selector holds `part`, in order. */
+  function values(css: string, part: string, prop: string): string[] {
+    const found: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes(part)) rule.walkDecls(prop, (d) => found.push(d.value));
+    });
+    return found;
+  }
+
+  it("are one anatomy: a card's own outer box goes, its one h2 is the section heading", async () => {
+    // MiraHome's section lists carry the class; Tailwind emits the rules only then.
+    const css = await compile(
+      "mira-home-sections border p-5 rounded-3xl text-[20px] font-semibold"
+    );
+    expect(decls(css, ".mira-home-sections > section", "border-width")).toEqual(["0"]);
+    expect(decls(css, ".mira-home-sections > section", "padding")).toEqual(["0"]);
+    expect(decls(css, ".mira-home-sections > section", "margin")).toEqual(["0"]);
+    // Directly under the section (Picked for you) or in its first row (the others, wrapped with
+    // a subline or not), at Lora 24px medium like Daily journal, scaled with the text size.
+    const heading = postcss
+      .parse(css)
+      .nodes.filter((n): n is postcss.Rule => n.type === "rule" && n.selector.includes("h2"))
+      .find((r) => r.selector.includes("mira-home-sections"))!;
+    expect(heading.selector.split(",").map((s) => s.trim())).toEqual([
+      ".mira-home-sections > section > h2",
+      ".mira-home-sections > section > div:first-child h2",
+    ]);
+    expect(values(css, "mira-home-sections > section > h2", "font-size")).toEqual([
+      "calc(24px * var(--mira-fs, 1))",
+    ]);
+    expect(values(css, "mira-home-sections > section > h2", "font-weight")).toEqual(["500"]);
+  });
+});

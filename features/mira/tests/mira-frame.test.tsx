@@ -434,6 +434,24 @@ describe("Home", () => {
     await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 
+  // The round-3 audit: Home built its sections three ways (a box with the heading inside, the
+  // heading over a box, no box). Home now lays them out: one anatomy (tailwind.config.js).
+  it("lays every section out one way, its own and each card's", async () => {
+    account({ status: 200, chats: [chat(1)] });
+    const { container } = render(<MiraHome hour={8} name="Robin" />);
+    await screen.findByRole("heading", { name: "Continue with Mira" });
+    const lists = [...container.querySelectorAll(".mira-home-sections")];
+    const sections = lists.flatMap((l) => [...l.children].filter((c) => c.tagName === "SECTION"));
+    // Each card's section is placed in a list that lays it out: journal, goals, the weekly
+    // session, picks, assessments, voice sessions and coaches (some still loading here).
+    expect(
+      sections.map((s) => s.getAttribute("aria-labelledby") ?? s.getAttribute("aria-label"))
+    ).toEqual(expect.arrayContaining(["journal-card-h", "goals-card-h", "mira-voice-sessions"]));
+    // Home's own first section is open too: no box of its own.
+    const first = screen.getByRole("region", { name: "Continue with Mira" });
+    expect(first.className).not.toMatch(/\bborder\b/);
+  });
+
   it("invites a person with no chats to start", async () => {
     account({ status: 200, chats: [] });
     render(<MiraHome hour={8} name="Robin" />);
