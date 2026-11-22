@@ -180,7 +180,12 @@ describe("Chat", () => {
   it("forgets this browser's chat and the 18+ tick once the person says they are under 18", async () => {
     giveConsent();
     replies["POST /api/mira/chat"] = () => ({
-      body: { reply: "I can only talk about this with adults.", sources: [], minor: true },
+      body: {
+        reply: "I can only talk about this with adults.",
+        sources: [],
+        minor: true,
+        freeLeft: 0,
+      },
     });
     render(<MiraChat signedIn={false} initialChatId={null} />);
     typeAndSend("I'm 15");
@@ -188,6 +193,9 @@ describe("Chat", () => {
     expect(localStorage.getItem("mira.chat.v1")).toBeNull();
     expect(localStorage.getItem("mira.consent.v1")).toBeNull();
     expect(screen.queryByRole("link", { name: "Keep this chat" })).toBeNull();
+    // Round-2 audit CHAT-20 / ID-4: the stop's reply also says freeLeft 0, and nobody under 18
+    // is pointed at an account, not even by the line under the composer.
+    expect(screen.queryByText(/free message|free account/)).toBeNull();
     // The 18+ tick is gone with it: the next message asks for it again, unticked.
     typeAndSend("hello");
     const step = await screen.findByRole("dialog", { name: "Before your first message" });

@@ -1141,7 +1141,8 @@ export default function MiraChat({
                   ) : null}
                 </div>
               )}
-              {!gate && freeLeft !== null && freeLeft <= 3 && !signedIn ? (
+              {/* Never after an under-18 stop: nobody under 18 is pointed at an account. */}
+              {!gate && !minor && freeLeft !== null && freeLeft <= 3 && !signedIn ? (
                 <p className="mt-2 text-center text-[12px] text-ap-muted">
                   {freeLeft === 0
                     ? "That was your last free message: the next one needs a free account."
