@@ -4,9 +4,8 @@ import { PP_ACCENT, PP_H2, PP_INNER } from "./ppStyles";
 
 /**
  * "Sex problems are common. Talking about them isn't." (board "Stats"): four numbers in
- * outlined cards, four across at 1440 and one column on a phone. The board names no source;
- * the line under the cards does (Fatih, 14 Nov): 47% is LoveHoney's, as on the video page,
- * and 56%, 42% and 77% are LoveIQ State of Desire 2026's agreement shares.
+ * outlined cards, four across at 1440 and one column on a phone. Where they come from is in
+ * painPointContent.ts (no sources line on the page since v2).
  */
 const PStats: FC = () => (
   <section data-landing-section="stats" className="px-4 py-16 lg:px-6 lg:py-24">
@@ -31,7 +30,6 @@ const PStats: FC = () => (
             </div>
           ))}
         </div>
-        <p className="m-0 text-[10px] leading-[15px] text-[#6f6a7a]">{STATS.sources}</p>
       </div>
     </div>
   </section>

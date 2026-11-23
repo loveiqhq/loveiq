@@ -105,11 +105,8 @@ export const PAIN_POINTS = {
   titleLead: "Is your sex life stuck in one of these ",
   titleAccent: "patterns",
   titleTail: "?",
-  /** Phone board only. */
-  intro:
-    // CHANGED (Fatih, 15 Nov): the board says "the six things people tell us most often";
-    // nobody tells LoveIQ anything before the test.
-    "These are six patterns people often recognise in themselves before they take the test. Each one has a cause you can name, and your report shows you what it is in your case and what to do about it.",
+  // CHANGED (v2, Fatih, 23 Nov): no phone intro over the cards. Mark (12 Nov): "Isn't that
+  // clear from the cards? Do we need this?"
   cards: [
     {
       quote: "“I want sex more than my partner does, and asking has started to feel like begging.”",
@@ -148,7 +145,9 @@ export const PROMISE = {
   titleLead: "What ",
   titleAccent: "changes",
   titleTail: " with LoveIQ.",
-  body: "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot kinder.",
+  // CHANGED (v2, Fatih, 23 Nov): "calmer" for "kinder". Mark asked "Why kinder?"; Marcus meant
+  // "less emotional and more clear".
+  body: "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot calmer.",
   rows: [
     {
       before: "Hoping your partner will guess",
@@ -198,9 +197,9 @@ export const STATS = {
     // CHANGED (Fatih, 14 Nov): the board says 76%; LoveIQ State of Desire 2026 says 77%.
     { value: "77%", body: "want more variety in their sex life than they have now." },
   ],
-  // CHANGED (Fatih, 14 Nov): added; the board names no source. 47% is LoveHoney's (as on
-  // the video page); 56%, 42% and 77% are our own survey's agreement shares.
-  sources: "Sources: LoveHoney Global Sex Survey 2023 · LoveIQ State of Desire 2026 (n = 2,369)",
+  // CHANGED (v2, 23 Nov): no sources line under the numbers. Mark (12 Nov): "Do we really want
+  // to show this?" Marcus: "will take out". 47% is LoveHoney Global Sex Survey 2023's (as on
+  // the video page); 56%, 42% and 77% are LoveIQ State of Desire 2026's agreement shares.
 } as const;
 
 export const FAQ_TITLE = "The questions people actually ask.";

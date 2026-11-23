@@ -16,7 +16,8 @@ import { LANDING_PREFILL_QID, SURVEY_STATE_KEY } from "@features/survey/ui/hooks
  * pain-point version", final boards "Desktop · Hero 3" and "Mobile · Hero 3"). Copy is the
  * boards' after Fatih's calls of 14.11 and 15.11: 15 minutes, the price on the archetype
  * (never implied free), the 14-day guarantee, "taken a first step", patterns people recognise,
- * today's FAQ, sources under the numbers, every button to /survey.
+ * today's FAQ, every button to /survey. v2 (23.11, Mark's comments): no phone intro over the
+ * cards, "calmer" for "kinder", and no sources line under the numbers.
  */
 class FakeObserver {
   constructor(public cb: IntersectionObserverCallback) {}
@@ -224,12 +225,13 @@ describe("pain-point page — the six pain points", () => {
       "You'll get the vocabulary for what you want, in plain words you can use.",
       "“We keep having the same argument about how often.”",
       "You'll see the pattern behind the argument, so you can stop repeating it.",
-      "These are six patterns people often recognise in themselves before they take the test.",
     ]) {
       expect(text).toContain(line);
     }
     // Nobody tells LoveIQ anything before the test (Fatih, 15 Nov).
     expect(text).not.toContain("people tell us");
+    // Mark (12 Nov): "Isn't that clear from the cards? Do we need this?" Cut in v2 (Fatih, 23 Nov).
+    expect(text).not.toContain("These are six patterns");
   });
 
   it("starts the survey from its button, counted from the pain points", () => {
@@ -249,7 +251,7 @@ describe("pain-point page — what changes", () => {
       .closest("section") as HTMLElement;
     expect(section.getAttribute("data-landing-section")).toBe("promise");
     expect(section.textContent).toContain(
-      "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot kinder."
+      "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot calmer."
     );
     const struck = [...section.querySelectorAll("s")].map((s) => s.textContent);
     expect(struck).toEqual([
@@ -307,7 +309,7 @@ describe("pain-point page — sentences you can actually say", () => {
 });
 
 describe("pain-point page — the numbers", () => {
-  it("shows four numbers with what they count, and where they come from", () => {
+  it("shows four numbers with what they count", () => {
     renderPage();
     const section = screen
       .getByRole("heading", {
@@ -325,8 +327,7 @@ describe("pain-point page — the numbers", () => {
       "42%shut down when sex starts to feel like pressure.",
       "77%want more variety in their sex life than they have now.",
     ]);
-    expect(section.textContent).toContain(
-      "Sources: LoveHoney Global Sex Survey 2023 · LoveIQ State of Desire 2026 (n = 2,369)"
-    );
+    // Mark (12 Nov): "Do we really want to show this?" Marcus: "will take out". Out in v2.
+    expect(section.textContent).not.toContain("Sources:");
   });
 });
