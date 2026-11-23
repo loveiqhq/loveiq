@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -23,14 +23,27 @@ vi.mock("@features/analytics/client", () => ({
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
 }));
-const run = vi.hoisted(() => ({ submit: vi.fn() }));
+const run = vi.hoisted(() => ({
+  submit: vi.fn(),
+  clear: vi.fn(),
+  status: "idle" as "idle" | "error",
+  errorKind: null as string | null,
+}));
 vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
   useSubmitSurvey: () => ({
     submit: run.submit,
     retryPending: vi.fn(),
-    status: "idle",
+    clearPendingCompletion: run.clear,
+    status: run.status,
+    errorKind: run.errorKind,
     hasPendingCompletion: false,
   }),
+}));
+// The animated steps after the last screen, as the classic engine test stands them in.
+vi.mock("@features/survey/ui/ProcessingSequence", () => ({
+  default: ({ onComplete }: { onComplete: () => void }) => (
+    <button onClick={onComplete}>Finish Processing</button>
+  ),
 }));
 vi.mock("@features/survey/ui/hooks/usePartialSave", () => ({
   usePartialSave: () => ({ savePartial: vi.fn() }),
@@ -169,6 +182,50 @@ describe("Survey 2.0's details screen", () => {
     });
   });
 
+  it("closes the miss-out sheet back onto the page while a field is still open, with no error", async () => {
+    // The sheet opens on picking No, which can come before the country (the newsletter question
+    // shows once the email is in): Not now keeps the No and returns to the page.
+    run.submit.mockClear();
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    vi.mocked(trackSurveyFormError).mockClear();
+    onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
+    const sheet = await screen.findByRole("dialog");
+    await new Promise((r) => setTimeout(r, 450)); // it ignores taps for its first 400 ms
+    await user.click(within(sheet).getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    expect(screen.getByRole("radio", { name: "No, thanks" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(screen.queryByText("Pick your country and add your postal code.")).toBeNull();
+    expect(vi.mocked(trackSurveyFormError)).not.toHaveBeenCalled();
+    expect(run.submit).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox", { name: "Which country do you live in?" })).toBeTruthy();
+  });
+
+  it("submits from the miss-out sheet once every field is filled", async () => {
+    run.submit.mockClear();
+    onDetails({
+      "00001": "Sam",
+      "00000": "sam.private@example.com",
+      "15001": "Germany",
+      "15002": "101",
+    });
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
+    const sheet = await screen.findByRole("dialog");
+    await new Promise((r) => setTimeout(r, 450));
+    await user.click(within(sheet).getByRole("button", { name: "Not now" }));
+
+    await waitFor(() => expect(run.submit).toHaveBeenCalledTimes(1));
+    expect(String(run.submit.mock.calls[0]![0]["16015"])).toMatch(/^no/i);
+  });
+
   it("offers the miss-out sheet once, when No is picked", async () => {
     onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
     const user = userEvent.setup();
@@ -199,5 +256,83 @@ describe("Survey 2.0's report map", () => {
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["reportMap"]} />);
     await user.click(await screen.findByRole("button", { name: /^next/i }));
     expect(await screen.findByText(/2 questions left/)).toBeTruthy();
+  });
+});
+
+/**
+ * Survey 2.0's own time (Mark's short guide: "It takes about 9 minutes from start to finish"):
+ * the progress and the sheets' minutes left tell the same, never the classic survey's 15.
+ */
+describe("Survey 2.0's time", () => {
+  it("shows the guide's 9 minutes on its first screen", async () => {
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers: {},
+        currentIndex: 0,
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    expect(await screen.findByText("1/61")).toBeTruthy();
+    expect(screen.getByText("~9 min")).toBeTruthy();
+    expect(screen.queryByText("~15 min")).toBeNull();
+  });
+
+  it("counts minutes left from 2.0's total, and the classic survey's from its own", async () => {
+    const { minutesLeft } = await import("@features/survey/ui/SurveyProgress");
+    const { SURVEY_2_MINUTES } = await import("@features/survey/survey2/order");
+    expect(SURVEY_2_MINUTES).toBe(9);
+    expect(minutesLeft(0, 61, SURVEY_2_MINUTES)).toBe(9);
+    expect(minutesLeft(59, 61, SURVEY_2_MINUTES)).toBe(1);
+    expect(minutesLeft(0, 62)).toBe(15);
+  });
+});
+
+/**
+ * Review Focus 4: the server refuses the email (an invalid address) after a 2.0 run's last
+ * screen. Fix my email brings the reader back to the details page with the email field open,
+ * the rest kept. (The five-minute limit is a 429: the retry screen, as in the classic survey.)
+ */
+describe("Survey 2.0's details screen after the server refused the email", () => {
+  it("returns to the details page on an email refusal, the email field open and the rest kept", async () => {
+    const OPT_IN = surveyQuestions.find((q) => q.qId === "16015")!;
+    const { no: NO } = optInLabels(OPT_IN.options);
+    run.status = "error";
+    run.errorKind = "email";
+    run.clear.mockClear();
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers: {
+          "00001": "Sam",
+          "00000": "sam@not-an-address",
+          "15001": "Germany",
+          "15002": "101",
+          "16015": NO,
+          "17001": 4,
+        },
+        currentIndex: SCREENS.length, // past the last screen: the submission's outcome
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+    try {
+      const user = userEvent.setup();
+      render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+      await user.click(await screen.findByRole("button", { name: /finish processing/i }));
+      await user.click(await screen.findByRole("button", { name: /fix my email/i }));
+
+      expect(await screen.findByText("Where should we send your report?")).toBeTruthy();
+      expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("sam@not-an-address");
+      expect(screen.getByText("Sam")).toBeTruthy();
+      expect(run.clear).toHaveBeenCalled();
+    } finally {
+      run.status = "idle";
+      run.errorKind = null;
+    }
   });
 });

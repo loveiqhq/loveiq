@@ -6,6 +6,8 @@ interface SurveyProgressProps {
   /** Zero-based position of the question on screen. */
   index: number;
   total: number;
+  /** The whole survey's minutes: Survey 2.0's own (SURVEY_2_MINUTES), the classic 15 by default. */
+  totalMinutes?: number;
 }
 
 const TOTAL_MINUTES = 15;
@@ -23,10 +25,10 @@ export function progressPercent(index: number, total: number): number {
   return HEAD_START_PERCENT + (100 - HEAD_START_PERCENT) * done;
 }
 
-export function minutesLeft(index: number, total: number): number {
+export function minutesLeft(index: number, total: number, totalMinutes = TOTAL_MINUTES): number {
   if (total <= 0) return 0;
   const remaining = Math.min(Math.max(total - index, 0), total);
-  return Math.ceil((TOTAL_MINUTES * remaining) / total);
+  return Math.ceil((totalMinutes * remaining) / total);
 }
 
 const ClockIcon: FC = () => (
@@ -57,10 +59,10 @@ const ClockIcon: FC = () => (
  * MIN" runs into the box's right padding, as the frame's own sample does; it still
  * ends about 8px short of the bar.
  */
-const SurveyProgress: FC<SurveyProgressProps> = ({ index, total }) => {
+const SurveyProgress: FC<SurveyProgressProps> = ({ index, total, totalMinutes }) => {
   const percent = progressPercent(index, total);
   const position = Math.min(index + 1, total);
-  const minutes = minutesLeft(index, total);
+  const minutes = minutesLeft(index, total, totalMinutes);
 
   return (
     <div className="flex flex-col gap-[5px] sm:flex-row sm:items-center sm:gap-[13px]">

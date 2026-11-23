@@ -11,6 +11,13 @@
 /** The details page: name, email, opt-in, country and postal code on one screen. */
 export const SURVEY_2_DETAILS_QID = "00010";
 
+/**
+ * How long Survey 2.0 takes, as Mark's short guide tells it ("It takes about 9 minutes from start
+ * to finish"): its progress and the sheets' minutes left count from it, the classic survey's from
+ * its own 15 (SurveyProgress). One figure, so the guide and the bar never disagree.
+ */
+export const SURVEY_2_MINUTES = 9;
+
 /** The first of 16016's two screens: up to two of its 13 areas. Never submitted. */
 export const SURVEY_2_AREAS_QID = "16016a";
 

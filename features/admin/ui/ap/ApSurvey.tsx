@@ -161,8 +161,11 @@ export default function ApSurvey() {
   const questions = data?.questions ?? null;
   // Until one is picked: the new order for a range that reaches the test's end, when every run
   // began to be asked it, and the old one for a range before it. Survey 2.0's funnel is one pick
-  // away (its pill) while it runs beside them.
-  const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
+  // away (its pill) while it runs beside them, and the default when the range has no runs in the
+  // new order (staging with its switch on; every range once 2.0 is everyone's survey).
+  const classic: Order = data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey";
+  const order: Order =
+    picked ?? (classic === "test" && questions?.survey2 && !questions.test ? "survey2" : classic);
   // The funnel in the order picked: the test's or Survey 2.0's only while the range has runs in it.
   const rows = orderFunnel(questions, order)?.rows ?? [];
   // The Sheets section's runs: the funnel's order; without the questions, the order the range
