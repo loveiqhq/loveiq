@@ -15,6 +15,7 @@ import {
   sheetNumber,
   sheetSpots,
 } from "./sheets";
+import { hasOrderChoice, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import { overFive } from "./SurveyTimeDrop";
 
 /** The table's columns, as drawn: badge and name, where it sits, then the four figures. */
@@ -35,12 +36,12 @@ export default function SheetsSection({
   /** The question funnel's rows in the order picked, for where each sheet sits. */
   rows: QuestionRow[];
   /** That order: the sheets' figures are its runs', as the funnel's are. */
-  order: "survey" | "test";
+  order: SurveyOrder;
 }) {
   const { on, seen, from } = data.sheets;
-  const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
+  const spots = new Map(sheetSpots(rows, order).map((s) => [s.id, s]));
   const asked = rows.filter((r) => r.n > 0);
-  const figures = seen?.ok ? seen.value[order] : null;
+  const figures = seen?.ok ? (seen.value[order] ?? null) : null;
   // Without the questions (their read failed) there is nothing to place a sheet against.
   const placed = asked.length > 0;
   const all = figures?.all;
@@ -54,9 +55,9 @@ export default function SheetsSection({
         // Which runs these are, when the range has both orders: the funnel's pick, two sections up
         // (review, 22 Nov 2026).
         description={
-          // Both orders in the range, or the questions unread (the order is then the page's pick).
-          !data.questions || data.questions.test
-            ? `Runs in ${order === "test" ? "the new order (C13)" : "the old order"}${data.questions ? ", as picked in the Question funnel" : ""}.`
+          // More than one order in the range, or the questions unread (the order is then the page's pick).
+          !data.questions || hasOrderChoice(data.questions)
+            ? `Runs in ${order === "survey2" ? ORDER_NAMES.survey2 : order === "test" ? "the new order (C13)" : "the old order"}${data.questions ? ", as picked in the Question funnel" : ""}.`
             : undefined
         }
       />

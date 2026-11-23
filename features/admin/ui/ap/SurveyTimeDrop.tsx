@@ -8,6 +8,7 @@ import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
 import { Info } from "./field-info";
 import { IndexHover, type Tip } from "./hover";
 import { AllTraffic, Card, Pills, SectionHead } from "./kit";
+import { hasOrderChoice, orderOptions, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import {
   SHEET_BADGE_BG,
   SHEET_NAMES,
@@ -34,16 +35,23 @@ const PIN = "#bf66d9";
 /** "Well above average", as drawn: a median at least this many times the questions' average. */
 const SLOW = 1.6;
 
-/** The design's chapter groups under the charts: its own short names, by the id's chapter. */
+/**
+ * The design's chapter groups under the charts: its own short names, by the id's chapter. Survey
+ * 2.0's details page (00010: name, email, newsletter, country, postal code) is the reader's
+ * details, its closing questions (17001 to 17003) feedback, and its 16016 areas screen (16016a)
+ * sits with 16016.
+ */
 export function chapterBand(id: string): string {
   if (id === "00000") return "Email";
   if (id === "00001") return "Name";
+  if (id === "00010") return "Your details";
   const c = Number(id.slice(0, 2));
   if (c === 0) return "Intro";
   if (c <= 3) return "Desire & arousal";
   if (c <= 9) return "Attachment";
   if (c <= 11) return "Communication & power";
   if (c <= 14) return "Motivation";
+  if (c === 17) return "Feedback";
   return c === 15 ? "About you" : "Goals & growth";
 }
 
@@ -85,15 +93,18 @@ export interface TimeDropChart {
  */
 export function timeDropChart(
   rows: QuestionRow[],
-  /** Pin the sheets between the questions: only for a range that reaches them. */
-  { sheets = false }: { sheets?: boolean } = {}
+  /**
+   * Pin the sheets between the questions: only for a range that reaches them. `order` is the
+   * funnel's (Survey 2.0's sheets sit at its own spots).
+   */
+  { sheets = false, order = "survey" }: { sheets?: boolean; order?: SurveyOrder } = {}
 ): TimeDropChart {
   const asked = rows.filter((r) => r.n > 0);
   const times = asked.flatMap((r) => (r.medianMs === null ? [] : [r.medianMs]));
   const rates = asked.flatMap((r) => (r.dropRate === null ? [] : [r.dropRate * 100]));
   const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
   let run = 0;
-  const spots = sheets ? sheetSpots(rows) : [];
+  const spots = sheets ? sheetSpots(rows, order) : [];
   const cols = asked.map((row, i) => {
     run += row.medianMs ?? 0;
     return {
@@ -136,8 +147,8 @@ export default function TimeDropSection({
 }: {
   data: SurveyPayload;
   rows: QuestionRow[];
-  order: "survey" | "test" | null;
-  onOrder: (o: "survey" | "test") => void;
+  order: SurveyOrder | null;
+  onOrder: (o: SurveyOrder) => void;
   onPick: (id: string) => void;
 }) {
   const q = data.questions;
@@ -146,10 +157,11 @@ export default function TimeDropSection({
   // database's survey runs) don't narrow.
   const chart = timeDropChart(rows, {
     sheets: data.sheets.seen !== null && (q?.segment ?? "All traffic") === "All traffic",
+    order: order ?? "survey",
   });
   const title = (c: ChartColumn) => `#${c.row.n} · ${c.row.id} · ${c.band}`;
   // The sheets' figures for the charts' own runs: begun in the range, in the order shown.
-  const seen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
+  const seen = data.sheets.seen?.ok ? (data.sheets.seen.value[order ?? "survey"] ?? null) : null;
   const known = seen !== null;
   // Hovering a pin's question also shows the sheet after it, with its figures from the Sheets
   // section below (Mark, 17 Nov 2026).
@@ -173,18 +185,15 @@ export default function TimeDropSection({
       <SectionHead
         id="h-td"
         title="Time and drop-out per question"
-        description={`Every question in ${order === "test" ? "the new order (C13)" : "the old order"}${pinKey.length ? ", with the numbered sheets where they sit between questions" : ""}. Hover a bar to see the question; click it to open it in Question detail.`}
+        description={`Every question in ${order === "survey2" ? ORDER_NAMES.survey2 : order === "test" ? "the new order (C13)" : "the old order"}${pinKey.length ? ", with the numbered sheets where they sit between questions" : ""}. Hover a bar to see the question; click it to open it in Question detail.`}
       />
-      {order && q?.test && (
+      {order && q && hasOrderChoice(q) && (
         <div className="flex flex-wrap items-center gap-2">
           <Pills
             label="Question order for these charts"
             value={order}
             onChange={onOrder}
-            options={[
-              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
-              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
-            ]}
+            options={orderOptions(q)}
           />
           <Info k="survey.order" />
         </div>
