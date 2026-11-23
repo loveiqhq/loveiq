@@ -20,6 +20,7 @@ export type Survey2Copy = Partial<
     | "formatGuidance"
     | "maxSelections"
     | "optionLabels"
+    | "optionLayout"
   >
 >;
 
@@ -103,6 +104,7 @@ export const SURVEY_2_COPY: Readonly<Record<string, Survey2Copy>> = {
     supportAndGuidance: "This helps us decide what to build next, so there are no wrong answers.",
     formatGuidance: "Pick up to 3.",
     maxSelections: 3,
+    optionLayout: "sections",
   },
 };
 

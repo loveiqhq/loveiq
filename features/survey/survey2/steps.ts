@@ -42,6 +42,7 @@ export function areasStep(topics: SurveyQuestion): SurveyQuestion {
     supportAndGuidance: DEMAND_GUIDE,
     formatGuidance: "Pick up to 2.",
     maxSelections: 2,
+    optionLayout: "grid",
     howAnswerIsUsed: topics.howAnswerIsUsed,
     comment: topics.comment,
   };

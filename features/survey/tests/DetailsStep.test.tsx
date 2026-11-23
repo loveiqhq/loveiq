@@ -129,6 +129,14 @@ describe("the details screen", () => {
     expect(screen.getByText("The first 3 digits are enough")).toBeTruthy();
   });
 
+  it("shows a picked country as Mark's row, and the search again on a tap", async () => {
+    setup({ "00001": "Sam", "00000": EMAIL, "15001": "Germany" });
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByText("Where do you live?")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Country.*Germany/ }));
+    expect(screen.getByRole("combobox")).toBeTruthy();
+  });
+
   it("keeps details on Back: a run that comes back shows what it filled in", () => {
     setup({ "00001": "Sam", "00000": EMAIL, "15001": "Germany", "15002": "101", "16015": YES });
     expect(screen.getByText("Sam")).toBeTruthy();
