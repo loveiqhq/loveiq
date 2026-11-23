@@ -3849,9 +3849,9 @@ body {
   padding-bottom: var(--liq-consent-h, 0px);
 }
 
-/* The new landing page (round 4's pain_point, features/landing/ui/painpoint). Its own
-   sections do not fade in (the board draws none); the live sections it reuses do, so its
-   reveals are shown without JavaScript and under reduced motion, like pay to start's. */
+/* The new landing page (round 4's pain_point, features/landing/ui/painpoint). Its reveals
+   (the live sections it reuses, and since v2 its own; see the .pp-* rules below) are shown
+   without JavaScript and under reduced motion, like pay to start's. */
 @media (scripting: none) {
   .pp-root .animate-on-scroll {
     opacity: 1;

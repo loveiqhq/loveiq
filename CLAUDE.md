@@ -622,7 +622,7 @@ that should not gain features.
 1. Create `features/landing/ui/white/WNewSection.tsx` (or `painpoint/PNewSection.tsx`)
 2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`, or `painpoint/PStats.tsx`)
 3. Import and add to `white/LandingPageWhite.tsx` (or `painpoint/LandingPagePainPoint.tsx`) in order
-4. Use `animate-on-scroll` class for scroll animations (the new page's own sections have none: its boards draw none)
+4. Animate it the house way: `.claude/skills/animating-loveiq-pages/SKILL.md` (Hana's animation library: what to animate, the values, and the reduced-motion and no-JavaScript rules every entrance needs)
 
 #### Add a New Page
 
