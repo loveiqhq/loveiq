@@ -64,6 +64,7 @@ export default function MiraHome({
   hour = null,
   quiet = false,
   minor = false,
+  account = null,
 }: {
   /** The account's first name, read with the page (app/mira/home), so the heading never changes. */
   name?: string | null;
@@ -73,6 +74,8 @@ export default function MiraHome({
   quiet?: boolean;
   /** Stopped as under 18, read with the page; /api/mira/me can say so too. */
   minor?: boolean;
+  /** The account's id: a check-in kept through a lost sign-in is its own (JournalCard). */
+  account?: string | null;
 }) {
   const country = useSupportCountry();
   const [me, setMe] = useState<Me | null>(null);
@@ -278,7 +281,7 @@ export default function MiraHome({
 
           {/* One anatomy for every section, whichever card fills it (tailwind.config.js). */}
           <div className="mira-home-sections mt-12 flex flex-col gap-12">
-            <JournalCard />
+            <JournalCard account={account} />
             <div className="mira-home-sections grid gap-12 md:grid-cols-2 md:gap-x-8">
               <GoalsCard />
               <NextSessionCard />

@@ -22,9 +22,11 @@ export default async function Page({
   searchParams: Promise<{ checkin?: string | string[] }>;
 }) {
   const checkIn = (await searchParams).checkin === "1";
-  if (!(await getMiraAccount())) {
+  const account = await getMiraAccount();
+  if (!account) {
     const back = checkIn ? "/mira/journal?checkin=1" : "/mira/journal";
     redirect(`/mira/start?next=${encodeURIComponent(back)}`);
   }
-  return <JournalPage startCheckIn={checkIn} />;
+  // Its id: a check-in kept in the tab through a lost sign-in comes back to it alone.
+  return <JournalPage startCheckIn={checkIn} account={account.id} />;
 }

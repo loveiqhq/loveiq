@@ -349,6 +349,88 @@ describe("the Home card", () => {
   });
 });
 
+// Round 4 (R4-HABITS-3): a check-in saved after the sign-in went vanished on Home with its card,
+// what was typed included; on the journal page its line had no way back in.
+describe("a check-in that meets a lost sign-in", () => {
+  const LINE = "A line I typed and want to keep";
+  const fill = async () => {
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.click(
+      within(dialog.getByRole("radiogroup", { name: "Mood" })).getByRole("radio", {
+        name: "4, Good",
+      })
+    );
+    fireEvent.change(dialog.getByLabelText(/A line for the day/), { target: { value: LINE } });
+    replies["PUT /api/mira/journal"] = () => ({ status: 401, body: { error: "x" } });
+    const save = dialog.getByRole("button", { name: "Save" });
+    save.focus();
+    fireEvent.click(save);
+    return dialog;
+  };
+  afterEach(() => sessionStorage.clear());
+
+  it("keeps Home's sheet open with the way back in, and the check-in for after signing in", async () => {
+    render(<JournalCard account="u1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const dialog = await fill();
+    const said = await dialog.findByText(
+      /^You were signed out\. Your check-in is kept in this tab/
+    );
+    expect(said.closest("[class*='text-ap-bad']")).toBeNull();
+    expect(dialog.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent(window.location.pathname)}`
+    );
+    expect(dialog.getByRole("button", { name: "Save" })).toHaveFocus();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    cleanup();
+
+    // Back in: the card opens the check-in again, as it was.
+    replies = journalReply([]);
+    render(<JournalCard account="u1" />);
+    const back = within(await screen.findByRole("dialog"));
+    expect(
+      within(back.getByRole("radiogroup", { name: "Mood" })).getByRole("radio", { name: "4, Good" })
+    ).toBeChecked();
+    expect(back.getByLabelText(/A line for the day/)).toHaveValue(LINE);
+    fireEvent.click(back.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved to your journal.")).toBeInTheDocument();
+    expect(sent("PUT").at(-1)?.body).toMatchObject({ mood: 4, note: LINE, base: null });
+  });
+
+  it("never brings one account's check-in back to another", async () => {
+    render(<JournalCard account="u1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do today’s check-in/ }));
+    const dialog = await fill();
+    await dialog.findByRole("link", { name: "Sign in again" });
+    cleanup();
+    replies = journalReply([]);
+    render(<JournalCard account="u2" />);
+    await screen.findByRole("button", { name: /Do today’s check-in/ });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByDisplayValue(LINE)).toBeNull();
+  });
+
+  it("gives the journal page's sheet the way back in, and Not now hands the focus to the notice", async () => {
+    render(<JournalPage account="u1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Do your first check-in/ }));
+    const dialog = await fill();
+    expect(await dialog.findByRole("link", { name: "Sign in again" })).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "Not now" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByText("You were signed out.").closest("[role=alert]")
+      )
+    );
+    cleanup();
+    replies = journalReply([]);
+    render(<JournalPage account="u1" />);
+    expect(
+      within(await screen.findByRole("dialog")).getByLabelText(/A line for the day/)
+    ).toHaveValue(LINE);
+  });
+});
+
 describe("the journal's settings", () => {
   it("let Mira read the ratings, then the notes as a second choice, and take both back", async () => {
     render(<JournalSettings />);
