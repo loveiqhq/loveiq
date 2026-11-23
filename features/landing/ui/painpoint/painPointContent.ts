@@ -188,14 +188,15 @@ export const WORDS = {
 export const STATS = {
   title: "Sex problems are common. Talking about them isn't.",
   cards: [
-    { value: "47%", body: "of adults have a sexual concern they've never raised with a partner." },
+    // Shares in percent: the dots light that many of 100, and the number rolls up to it.
+    { share: 47, body: "of adults have a sexual concern they've never raised with a partner." },
     {
-      value: "56%",
+      share: 56,
       body: "of people who take our test need emotional closeness before desire shows up.",
     },
-    { value: "42%", body: "shut down when sex starts to feel like pressure." },
+    { share: 42, body: "shut down when sex starts to feel like pressure." },
     // CHANGED (Fatih, 14 Nov): the board says 76%; LoveIQ State of Desire 2026 says 77%.
-    { value: "77%", body: "want more variety in their sex life than they have now." },
+    { share: 77, body: "want more variety in their sex life than they have now." },
   ],
   // CHANGED (v2, 23 Nov): no sources line under the numbers. Mark (12 Nov): "Do we really want
   // to show this?" Marcus: "will take out". 47% is LoveHoney Global Sex Survey 2023's (as on
