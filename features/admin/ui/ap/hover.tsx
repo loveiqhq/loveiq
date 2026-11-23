@@ -637,6 +637,8 @@ export function useRowTip() {
   return {
     bind,
     card: open ? <TipCard tip={open.tip} anchor={{ x: open.x, y: open.y }} mode="above" /> : null,
+    /** Shuts the card: when what it describes changes under a resting pointer. */
+    close,
   };
 }
 
