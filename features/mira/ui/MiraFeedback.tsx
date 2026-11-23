@@ -6,6 +6,7 @@ import { COACHES } from "@features/mira/content/coaches";
 import { PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { miraApi } from "./api";
+import { SignInAgain } from "./account/SignedOut";
 import { AdultsOnly } from "./kit";
 
 /**
@@ -148,6 +149,8 @@ export default function MiraFeedback({ minor: stopped = false }: { minor?: boole
           {error ? (
             <p role="alert" className="text-ap-bad-ink">
               {error}
+              {/* A lost sign-in: the way back to this page, the words kept (R4-CORE-6). */}
+              <SignInAgain error={error} />
             </p>
           ) : null}
         </form>
