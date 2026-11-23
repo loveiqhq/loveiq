@@ -424,6 +424,11 @@ export interface SurveyQuestion {
    * The option stays what is stored and scored; only what the reader sees changes.
    */
   optionLabels?: Record<string, string>;
+  /**
+   * Survey 2.0's compact layouts for 16016's two screens (Mark's boards): "grid", the areas as
+   * tiles in two columns; "sections", the topics under small headings, all open.
+   */
+  optionLayout?: "grid" | "sections";
 }
 
 export const surveyQuestions: SurveyQuestion[] = [\n`;
