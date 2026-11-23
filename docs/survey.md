@@ -1,7 +1,7 @@
 # Survey Flow
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-05-31
+> Last verified: 2026-11-23
 > Verified against: `app/survey/page.tsx`, `features/survey/ui/**`, `app/api/survey/route.ts`, `app/api/survey-partial/route.ts`, `app/api/survey-tracking/route.ts`, `shared/url/utm.ts`
 > Canonical source: Product-flow reference for `/survey`; request and response details live in [api.md](api.md).
 
@@ -27,6 +27,9 @@ Top-level step orchestration lives in `SurveyPage`:
 | `1` to `4` | Prep slides   | `SlideScreen` inside [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)   | Four informational slides shown before consent.           |
 | `5`        | Consent       | `ConsentScreen` inside [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx) | Users must agree before entering the question engine.     |
 | `6`        | Survey engine | [`features/survey/ui/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx)                    | Question loop, submission, retry, and pre-report handoff. |
+
+A Survey 2.0 run shows its short guide on steps `0` to `2` instead of the intro and the slides
+(see [Survey 2.0](#survey-20)); steps `5` and `6` are the same.
 
 Inside `SurveyEngine`, the completion path moves through three internal phases:
 
@@ -277,8 +280,8 @@ with a "Keep going" that carries on. The rules are in
 - **Placed by question, not by position.** C13 asked the questions in two orders, and the
   reorder still to come moves them again. In C13's control order 01005 is question 3, so the
   expert's sheet stayed shut there. Since the test ended (2026-11-21) every new run is asked
-  the new order, where it opens; a draft resumed in the old order still skips it. Re-key it
-  when the reorder lands.
+  the new order, where it opens; a draft resumed in the old order still skips it. Survey 2.0
+  has spots of its own (`survey2Placement`, see [Survey 2.0](#survey-20)).
 - **When they open.** A sheet "after" a question holds the move: Next, Auto-advance, Enter,
   ArrowRight and a swipe all go through `goNext`, which opens it instead. One "before" a
   question rises over it as it arrives. Each opens once per run (`loveiq-survey-sheets`, keyed
@@ -396,6 +399,70 @@ group by b.band order by b.band;
 Run on 2026-09-11, this returned a real split — high-urgency readers clicked a paywall CTA
 at 5.8% against 1.7% for low urgency, and began checkout at 9.1% against 6.6%. That is the
 evidence the urgency-gated CTA was meant to rest on.
+
+## Survey 2.0
+
+Mark's survey review (Claude Design canvas `LcXv9Kc2vTQR1jGhacobak`, pages "Survey review" and
+"Pre Survey Wizard", posted for development 2026-11-19), built as a third version of the survey
+next to C13's two orders. It stays off in production until the founders' check-in ("don't push
+live before checking in with us", Mark 2026-11-19).
+
+- **Switch.** `system_flags` row `survey_2`, read with the default off
+  ([`survey2Switch.ts`](../features/survey/server/survey2Switch.ts)); no row is seeded. On dev,
+  previews and staging (and the e2e server, `SURVEY_SHEETS_PREVIEW=1`) `?order=survey2` shows it
+  without the switch, and `?order=control` or `?order=variant` show the classic survey while it is
+  on. Production ignores `?order=`.
+- **Who gets it.** A fresh run while the switch is on. The version is decided once per run and kept
+  in the draft (`orderArm: "survey2"`), as C13's order was: a classic draft keeps its order when the
+  switch goes on, and a 2.0 draft keeps 2.0 when it goes off. A reader who paid before the survey
+  (pay to start) gets the classic survey. The server stamps `question_order_arm = 'survey2'` on a
+  submission that answered 17001, 17002 or 17003 (`isSurvey2Run`).
+- **The short guide.** In place of the intro and its four slides: three cards under a "Short guide /
+  before you start" header (three rules, the perspective of today, privacy) on steps 0 to 2
+  ([`features/survey/ui/guide/`](../features/survey/ui/guide/)), then the consent on step 5 in 2.0's
+  words: the 18+ and the use of the answers, sex life included, as two ticks, and the terms in a line
+  under the buttons. The page shows the guide and consent of the version the run's questions use. The
+  cards record `guide_card_1..3`, `guide_back_2..3` and `guide_skip_1..3` in `funnel_event`;
+  `consent_view`, `consent_back` and `survey_engine_mount` are recorded as before.
+- **The screens.** 61, in Mark's order (`SURVEY_2_ORDER` in
+  [`features/survey/survey2/order.ts`](../features/survey/survey2/order.ts)): his 60 entries with
+  16016 split in two. The landing card's question (01002) is dropped when it was answered there, as in
+  the classic survey. 16009 is not asked. Three closing questions are new: 17001 (how much the reader
+  enjoyed the survey, 1 to 7), 17002 (how much it helped them reflect, 1 to 7) and 17003 (a fair price
+  for the full report, seven bands).
+- **Simpler words, same answers.** Ten questions take Mark's wording in 2.0 only
+  ([`copy.ts`](../features/survey/survey2/copy.ts)). A reworded option shows its new label but is
+  stored, scored and matched under its old value (`optionLabels`), so scoring, boosts and the pricing
+  rules are unchanged.
+- **16016 in two screens.** `16016a` asks for up to two of the 13 areas; 16016 then lists only those
+  areas' topics, under small headings, up to three. Going back and changing the areas drops the topics
+  outside them. `16016a` is never submitted.
+- **One details page.** `00010`, the last screen, asks for the name, the email (with the privacy tip),
+  the newsletter question (Yes or No, nothing picked; No opens the miss-out sheet once), the country
+  and the postal code, one field at a time
+  ([`DetailsStep.tsx`](../features/survey/ui/questions/DetailsStep.tsx)). It writes today's ids
+  (00001, 00000, 16015, 15001, 15002), so emails, Slack, pricing and exports read them as before. An
+  email the server refuses brings the reader back to this page with the email field open. `00010` is
+  never submitted.
+- **Sheets.** The same six, at Mark's spots: Science after 02004, Trustpilot after 03013, the expert
+  after 03012, Halfway after 14021, State of Desire after 16005 and the report map after 17002
+  (`survey2Placement` in [`surveySheets.ts`](../features/survey/surveySheets.ts)).
+- **Consent records.** A 2.0 submission is filed under `CONSENT_TERMS_VERSION_SURVEY_2` and a
+  newsletter Yes under `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2`, both 2026-11-23
+  ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A2 and A6).
+- **AP-Analytics.** A run is Survey 2.0's when its first questions follow 2.0's screens (it opens on
+  10003 and asks the name last, so no classic run fits it). The Survey page gives it its own funnel
+  (a "Survey 2.0" pill beside the classic orders; the page still opens on the classic order), its
+  own time and drop-out charts and its sheets at 2.0's spots, and shows the short guide as a table of
+  its own, read by `ap_guide_facts`; the intro's consent row leaves the guide's visitors out. Jarvis's
+  `intro_completed` counts the guide's last card as the intro's last slide. The weekly drop-off
+  digests and the old daily rollup still count the classic survey: split them before 2.0 becomes
+  everyone's survey.
+- **Apply before deploying.** `20261123120000_survey_2_feedback_questions.sql` (the three closing
+  questions; the `survey-db-sync` check reads the production database, so they go there before the
+  push), `20261123130000_funnel_event_guide_steps.sql` (the guide's records) and
+  `20261123140000_ap_guide_facts.sql` (AP's reader for them). Each has its rollback in
+  `supabase/rollbacks/`.
 
 ## Related Coverage
 

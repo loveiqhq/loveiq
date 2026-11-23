@@ -50,6 +50,14 @@ file's existing endings if you do.
 This restore path was tested on 2026-09-11: both questions below were put back and
 regenerated, and all 59 questions came out identical to the pre-deletion original.
 
+## Not asked in Survey 2.0
+
+16009 ("If these existed for what you most want to work on in your sex life, which would you
+actually buy first?") is left out of Survey 2.0's screens (Mark's survey review, 2026-11-19;
+[survey.md](survey.md#survey-20)). It is not removed: the classic survey still asks it, and
+its row, CSV entry and scoring stay as they are. Retire it here, with its definition, when the
+classic survey goes.
+
 ## 03014 — During sex, I can usually reach orgasm when I want to.
 
 |                 |                                            |
