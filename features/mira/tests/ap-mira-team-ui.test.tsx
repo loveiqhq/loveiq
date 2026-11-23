@@ -83,9 +83,11 @@ describe("AP › Mira, 21 Nov 2026", () => {
       within(within(table).getByRole("rowheader", { name }).parentElement!)
         .getAllByRole("cell")
         .map((c) => c.textContent);
-    expect(cells("instagram")).toEqual(["2", "0", "0", "0.0%"]);
-    expect(cells("Direct")).toEqual(["1", "0", "0", "0.0%"]);
-    expect(cells("Not recorded")).toEqual(["1", "0", "0", "0.0%"]);
+    // Staging's AP formatter writes a rate under 10% with two decimals ("0.00%"); main's
+    // writes one (#734). Main's version of this test comes back with the main-into-staging sync.
+    expect(cells("instagram")).toEqual(["2", "0", "0", "0.00%"]);
+    expect(cells("Direct")).toEqual(["1", "0", "0", "0.00%"]);
+    expect(cells("Not recorded")).toEqual(["1", "0", "0", "0.00%"]);
   });
 
   it("marks this browser as team through the admin route, with the CSRF token", async () => {
