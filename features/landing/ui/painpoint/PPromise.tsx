@@ -38,8 +38,11 @@ const PPromise: FC = () => (
             className={`${PP_CARD} pp-change flex flex-col gap-4 p-6`}
           >
             <RingIconTile icon={row.icon} />
-            <p className="m-0 flex items-center gap-2 text-[14px] leading-5 text-[#6b6678]">
-              <s className="pp-strike">{row.before}</s>
+            {/* Plain text, not a flex row: the struck habit stays inline, so its drawn line
+                slices across every line it wraps onto (as a flex item it became a block and the
+                line ran under its first line). The arrow follows the last word. */}
+            <p className="m-0 text-[14px] leading-5 text-[#6b6678]">
+              <s className="pp-strike">{row.before}</s>{" "}
               <svg
                 aria-hidden
                 viewBox="0 0 24 24"
@@ -48,7 +51,7 @@ const PPromise: FC = () => (
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-[14px] w-[14px] flex-none"
+                className="inline-block h-[14px] w-[14px] align-[-2px]"
               >
                 <path d="M5 12h14M13 6l6 6-6 6" />
               </svg>
