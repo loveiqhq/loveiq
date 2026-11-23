@@ -389,7 +389,11 @@ function main() {
   let output = `// Auto-generated from data/survey-source.csv — do not edit manually
 // Run: node scripts/update-survey.js
 
-export type AnswerType = "open" | "scale" | "single" | "multiple" | "country";
+/**
+ * "details" is Survey 2.0's one-page details screen (features/survey/survey2/steps.ts): it is never
+ * a row in the CSV, and writes five answers of its own (name, email, opt-in, country, postal code).
+ */
+export type AnswerType = "open" | "scale" | "single" | "multiple" | "country" | "details";
 
 export interface AnswerOptionExplained {
   option: string;
@@ -415,6 +419,11 @@ export interface SurveyQuestion {
   hoverStates?: Record<number, string>;
   formatGuidance?: string;
   maxSelections?: number;
+  /**
+   * Survey 2.0's wording for an option, keyed by the option itself (features/survey/survey2/copy.ts).
+   * The option stays what is stored and scored; only what the reader sees changes.
+   */
+  optionLabels?: Record<string, string>;
 }
 
 export const surveyQuestions: SurveyQuestion[] = [\n`;
