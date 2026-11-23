@@ -1,7 +1,7 @@
 # LoveIQ skills for claude.ai
 
-Five skills that teach Claude in claude.ai how LoveIQ does five jobs, four of them using
-Jarvis (the loveiq-brain connector). They are the non-engineer half of the Jarvis pack; the Claude
+Five skills that teach Claude in claude.ai how LoveIQ does five jobs, using Jarvis (the
+loveiq-brain connector). They are the non-engineer half of the Jarvis pack; the Claude
 Code half is `.claude/skills/` in this repo.
 
 | Skill                   | For                                                             |

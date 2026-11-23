@@ -221,4 +221,3 @@ describe("the house voice", () => {
     expect(named.filter((p) => !AI_PHRASES.some(([, re]) => re.test(p)))).toEqual([]);
   });
 });
-

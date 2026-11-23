@@ -2153,11 +2153,11 @@ describe("/api/mcp", () => {
       // client reads, so the rule lives here and not only in an optional skill.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 9, method: "initialize" }))).json();
       const text = String(body.result.instructions);
-      expect(text).toMatch(/HOW WE WRITE/);
-      expect(text).toMatch(/first line is the result, the decision or the ask/);
-      expect(text).toMatch(/loveiq-voice/);
-      expect(text).toMatch(/"Editorial voice: everything we write"/);
-      expect(text).toMatch(/Run check_copy on anything users will read/);
+      expect(text).toMatch(/HOW WE WRITE: in LoveIQ's house voice, the loveiq-voice skill/);
+      // Two readers, two rules: result first is for the team, never for user copy.
+      expect(text).toMatch(/For the team .*the result, decision or ask goes first/);
+      expect(text).toMatch(/For users, the reader comes first/);
+      expect(text).toMatch(/Run check_copy on what you write/);
     });
 
     it("returns 202 with no body for a notification, which expects no response", async () => {

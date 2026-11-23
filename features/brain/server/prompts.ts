@@ -24,14 +24,10 @@ export interface BrainPrompt {
   render: (args: Record<string, string>) => string;
 }
 
-/**
- * How every answer should read. Mark: "so simple an eight-year-old could follow it"; the
- * 11 Nov 2026 sync: results and decisions first, zero noise (the loveiq-voice skill).
- */
+/** How every answer should read. Mark: "so simple an eight-year-old could follow it". */
 const HOUSE_RULES =
-  "Put the answer in the first line, then only what backs it, short and in plain words. " +
-  "Put a link or id beside every fact so it can be checked, say plainly when the record is " +
-  "thin, and never fill a gap by guessing.";
+  "Answer short and in plain words. Put a link or id beside every fact so it can be " +
+  "checked, say plainly when the record is thin, and never fill a gap by guessing.";
 
 /** A month's first and last day, worked out when the prompt is rendered, never stored. */
 function monthSpan(month: string): { name: string; since: string; until: string } {
