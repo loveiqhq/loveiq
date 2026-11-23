@@ -1,6 +1,6 @@
 ---
 name: loveiq-voice
-description: LoveIQ's house editorial voice, for anything written for LoveIQ or Applied Psychometrics. Use before writing or editing text for the team (an artifact, a Slack message, a Notion page or card, a doc, a brief, an update, a summary of a meeting or of work done) or for users (website, landing page, survey, report, paywall, email, ad, social or Substack post, help text, a button). Also use when asked to review, shorten or tighten such text.
+description: Use whenever you write or edit words for LoveIQ or Applied Psychometrics, even a two-line Slack message. For the team that means an artifact, an update, a summary of a meeting or of work done, a Notion page or card, a doc or a brief; for users, the website, a landing page, the survey, the report, the paywall, an email, an ad, a social or Substack post, help text or a button. Also use it when asked to review, shorten or tighten such text. It is the house editorial voice, result first for the team and the reader first for users.
 ---
 
 # LoveIQ voice
