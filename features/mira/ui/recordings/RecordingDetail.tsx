@@ -7,6 +7,7 @@ import { MiraAppFrame } from "../MiraAppFrame";
 import { SignedOutNotice } from "../account/SignedOut";
 import { miraApi, useSignedOut } from "../api";
 import { AdultsOnly, ConfirmDelete } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { DurationChip, TalkShare } from "./Recordings";
 
 /**
@@ -64,6 +65,11 @@ export default function RecordingDetail({ id }: { id: string }) {
       );
     });
   }, [id, attempt]);
+  // Try again keeps the failed state, and its focus, until the retry answers (kit/load-failed).
+  const again = useRetry(load.state === "loading", () => {
+    setLoad({ state: "loading" });
+    setAttempt((n) => n + 1);
+  });
 
   async function writePoints() {
     setWriting(true);
@@ -119,7 +125,7 @@ export default function RecordingDetail({ id }: { id: string }) {
     <MiraAppFrame active="recordings">
       {back}
 
-      {load.state === "loading" ? (
+      {load.state === "loading" && !again.busy ? (
         <div aria-hidden="true" className="mt-4 flex flex-col gap-4">
           <div className="h-10 w-2/3 rounded-xl bg-ap-ground motion-safe:animate-pulse" />
           <div className="h-32 rounded-[22px] bg-ap-ground motion-safe:animate-pulse" />
@@ -133,36 +139,26 @@ export default function RecordingDetail({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {load.state === "missing" || load.state === "failed" || load.state === "deleted" ? (
+      {/* A failed read, said as on every page (kit/load-failed); "← Voice sessions" stays above. */}
+      {load.state === "failed" || again.busy ? (
+        <div className="mt-6 max-w-[560px]">
+          <h1 className="font-serif text-[28px] font-medium">Voice session</h1>
+          <LoadFailed what="Your voice session" {...again} className="mt-2" />
+        </div>
+      ) : null}
+
+      {load.state === "missing" || load.state === "deleted" ? (
         <div role={load.state === "deleted" ? "status" : "alert"} className="mt-6 max-w-[560px]">
           <h1 className="font-serif text-[28px] font-medium">
-            {load.state === "deleted"
-              ? "Session deleted"
-              : load.state === "missing"
-                ? "This session isn't here"
-                : "This session didn't load"}
+            {load.state === "deleted" ? "Session deleted" : "This session isn't here"}
           </h1>
           <p className="mt-2 text-[15px] leading-snug text-ap-body">
             {load.state === "deleted"
               ? "Its key points and its words are gone, here and in the chat."
-              : load.state === "missing"
-                ? "It may have been deleted, or it belongs to another account."
-                : "Please check your connection and try again."}
+              : "It may have been deleted, or it belongs to another account."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {load.state === "failed" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setLoad({ state: "loading" });
-                  setAttempt((n) => n + 1);
-                }}
-                className={INK}
-              >
-                Try again
-              </button>
-            ) : null}
-            <Link href={BACK} className={load.state === "failed" ? GHOST : INK}>
+            <Link href={BACK} className={INK}>
               Your voice sessions
             </Link>
           </div>
@@ -171,7 +167,11 @@ export default function RecordingDetail({ id }: { id: string }) {
 
       {load.state === "ready" ? (
         <article className="mt-3 max-w-[760px] motion-safe:animate-mira-in">
-          <h1 className="font-serif text-[28px] font-medium leading-tight sm:text-[32px]">
+          {/* Focus lands here after a Try again that loaded (kit/load-failed). */}
+          <h1
+            tabIndex={-1}
+            className="font-serif text-[28px] font-medium leading-tight outline-none sm:text-[32px]"
+          >
             {new Date(load.recording.startedAt).toLocaleString("en-GB", {
               weekday: "long",
               day: "numeric",

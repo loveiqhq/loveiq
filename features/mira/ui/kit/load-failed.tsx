@@ -13,6 +13,12 @@ import { FOCUS_RING } from ".";
  * (`busy`, from useRetry) it stays, with the focus, aria-disabled, and a press does nothing; once
  * the card has loaded in its place, the focus goes to the card's heading (its section's
  * `aria-labelledby`; the page's h1 outside one), unless it is somewhere already: never the page.
+ * A retry that fails again says so again (round 4): the line comes back as a new alert, as the
+ * same words left in place are never read out twice.
+ *
+ * The pages that share the cards' hooks use it too (round 4: Goals, Journal, Assessments, the
+ * checks, Settings' sections, a voice session, Home's chats), so a failed read is said one way
+ * across Mira, never with the route's own words.
  */
 export function LoadFailed({
   what,
@@ -27,6 +33,9 @@ export function LoadFailed({
   className?: string;
 }) {
   const id = useId();
+  // Each retry that ends with this still here failed again: its line is a new alert.
+  const [said, setSaid] = useState({ busy, times: 0 });
+  if (said.busy !== busy) setSaid({ busy, times: said.times + (busy ? 0 : 1) });
   // Set by a press: the heading that takes the focus once this goes.
   const pressed = useRef<{ heading: string | null } | null>(null);
   useEffect(
@@ -46,7 +55,7 @@ export function LoadFailed({
   );
   return (
     <div aria-busy={busy || undefined} className={`flex flex-wrap items-center gap-3 ${className}`}>
-      <p id={id} role="alert" className="text-[15px] text-ap-body">
+      <p key={said.times} id={id} role="alert" className="text-[15px] text-ap-body">
         {what} didn’t load.
       </p>
       <button

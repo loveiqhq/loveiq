@@ -1543,7 +1543,9 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
 });
 
 // Round-3 SET-11 residual: a read that failed was said two ways, "…didn't load" and "We couldn't
-// load your…". One way on every screen: "<what> didn't load."
+// load your…". One way on every screen: "<what> didn't load." Round 4 (R4-CORE-4): the pages
+// also said "Unable to load your…" (the route's words), "…couldn’t be loaded" and "…didn’t load
+// just now"; mira-pages-failed.test.tsx checks the screens themselves.
 describe("Mira's wording", () => {
   const files = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
@@ -1556,7 +1558,7 @@ describe("Mira's wording", () => {
     const found = [...files("features/mira/ui"), ...files("app/mira")].flatMap((f) =>
       readFileSync(f, "utf8")
         .split("\n")
-        .filter((line) => /couldn(’|'|&apos;)t load/.test(line))
+        .filter((line) => /couldn(’|'|&apos;)t (be )?load|Unable to load|load just now/.test(line))
         .map((line) => `${f}: ${line.trim()}`)
     );
     expect(found).toEqual([]);

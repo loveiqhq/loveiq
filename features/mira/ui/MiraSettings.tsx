@@ -20,6 +20,7 @@ import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
 import { miraApi, useSignedOut, type ApiResult } from "./api";
 import { AdultsOnly, ConfirmDelete } from "./kit";
+import { LoadFailed, useRetry } from "./kit/load-failed";
 import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
@@ -163,7 +164,8 @@ export default function MiraSettings({
   const [p, setP] = useState<Profile | null>(null);
   // The profile as the server has it, after the load and after each save.
   const stored = useRef<Profile | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The account didn't load: said with the kit's LoadFailed, never the route's words (round 4).
+  const [failed, setFailed] = useState(false);
   const [status, setStatusMap] = useState<Partial<Record<SectionId, Status>>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
@@ -216,11 +218,15 @@ export default function MiraSettings({
         stored.current = r.data.profile;
         setMinor(r.data.minor === true);
         setP(r.data.profile);
-      } else setLoadError(r.data.error ?? "Your settings didn't load.");
+      } else setFailed(true);
     });
   }
   // Once, on arrival.
   useEffect(load, []);
+  const again = useRetry(!p && !failed, () => {
+    setFailed(false);
+    load();
+  });
 
   // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
   // it"); once it goes (kept, or done) the focus is back on the button that asked.
@@ -375,7 +381,9 @@ export default function MiraSettings({
 
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
-      <h1 className="font-serif text-[34px] font-medium">Settings</h1>
+      <h1 tabIndex={-1} className="font-serif text-[34px] font-medium outline-none">
+        Settings
+      </h1>
       {minor ? null : (
         <p className="mt-1 text-[15px] text-ap-body">
           Changes save as you make them. Your account details have their own Save.
@@ -386,26 +394,11 @@ export default function MiraSettings({
           the page says so with a way back, instead of looking signed in and failing each save. */}
       {signedOut ? <SignedOutNotice /> : null}
 
-      {loadError && !signedOut ? (
-        <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
-          <p className="text-[15px] font-semibold">{loadError}</p>
-          <p className="mt-1 text-[14px] text-ap-body">
-            Check your connection, then try again. Your settings are safe.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <PrimaryButton
-              onClick={() => {
-                setLoadError(null);
-                load();
-              }}
-            >
-              Try again
-            </PrimaryButton>
-          </div>
-        </div>
+      {(failed || again.busy) && !signedOut ? (
+        <LoadFailed what="Your settings" {...again} className="mt-8" />
       ) : null}
 
-      {!p && !loadError && !signedOut ? <SettingsSkeleton /> : null}
+      {!p && !failed && !again.busy && !signedOut ? <SettingsSkeleton /> : null}
 
       {p && !signedOut ? (
         <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_176px] xl:gap-12">
@@ -970,7 +963,12 @@ export function SettingsSection({
     <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-16 xl:scroll-mt-10">
       <div className="flex flex-wrap items-center justify-between gap-x-3">
         <div className="flex items-center gap-3">
-          <h2 id={`${id}-title`} className="font-serif text-[22px] font-medium">
+          {/* Focus can land here: after a Try again that loaded (kit/load-failed). */}
+          <h2
+            id={`${id}-title`}
+            tabIndex={-1}
+            className="font-serif text-[22px] font-medium outline-none"
+          >
             {title}
           </h2>
           <span role="status" className="text-[13px]">

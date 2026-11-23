@@ -6,6 +6,7 @@ import { MiraAppFrame } from "../MiraAppFrame";
 import { useSignedOut } from "../api";
 import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly, ConfirmDelete } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
@@ -35,6 +36,7 @@ const PAGE = 30;
 export default function JournalPage({ startCheckIn = false }: { startCheckIn?: boolean }) {
   const journal = useJournal();
   const { status, entries, today } = journal;
+  const again = useRetry(status === "loading", journal.reload);
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || status === "signed-out";
   const [day, setDay] = useState<string | null>(null);
@@ -86,7 +88,10 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
 
   return (
     <MiraAppFrame active="journal">
-      <h1 className="font-serif text-[34px] font-medium leading-tight motion-safe:animate-mira-in">
+      <h1
+        tabIndex={-1}
+        className="font-serif text-[34px] font-medium leading-tight outline-none motion-safe:animate-mira-in"
+      >
         Daily journal
       </h1>
       <p className="mt-2 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
@@ -96,7 +101,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
 
       {out ? (
         <SignedOutNotice />
-      ) : status === "loading" ? (
+      ) : status === "loading" && !again.busy ? (
         <div aria-busy="true" className="mt-8 flex flex-col gap-4">
           <span className="sr-only">Loading your journal</span>
           <Skeleton className="h-[132px] w-full rounded-[28px]" />
@@ -104,17 +109,8 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : status === "error" ? (
-        <div className="mt-8">
-          <p className="text-[15px] text-ap-body">Your journal didn’t load just now.</p>
-          <button
-            type="button"
-            onClick={journal.reload}
-            className="mt-3 min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-          >
-            Try again
-          </button>
-        </div>
+      ) : status === "error" || again.busy ? (
+        <LoadFailed what="Your journal" {...again} className="mt-8" />
       ) : status === "minor" ? (
         <AdultsOnly className="mt-8" />
       ) : (

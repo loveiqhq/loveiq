@@ -292,7 +292,8 @@ describe("Settings sections", () => {
     replies["GET /api/mira/me"] = () => ({ status: 500, body: { error: "Unable to load." } });
     render(<MiraSettings />);
     expect(screen.getByLabelText("Loading your settings")).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load.");
+    // The kit's one line, never the route's words (R4-CORE-4).
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your settings didn’t load.");
     replies["GET /api/mira/me"] = () => ({ body: { profile: { ...PROFILE }, chats: [] } });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Account" })).toBeInTheDocument();

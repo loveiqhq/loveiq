@@ -15,6 +15,7 @@ import { useSignedOut } from "../api";
 import { SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly } from "../kit";
 import { shortDate } from "../kit/dates";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { AskFirst, byId, refocus, refocusRow } from "../journal/parts";
 import { ASK_MIRA_FOR_A_GOAL } from "./GoalSuggestion";
 import {
@@ -47,6 +48,7 @@ const H2 = "font-serif text-[22px] font-medium outline-none";
 
 export default function GoalsPage() {
   const g = useGoals();
+  const again = useRetry(g.load === "loading", g.reload);
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || g.load === "signed-out";
   const [said, setSaid] = useState<string | null>(null);
@@ -69,7 +71,9 @@ export default function GoalsPage() {
       {/* "feedback" marks no tab: MiraAppFrame has no Goals tab yet and isn't edited on this
           branch; the lead adds one when the nav is composed. */}
       <div className="max-w-[720px]">
-        <h1 className="font-serif text-[34px] font-medium leading-tight">Challenges &amp; goals</h1>
+        <h1 tabIndex={-1} className="font-serif text-[34px] font-medium leading-tight outline-none">
+          Challenges &amp; goals
+        </h1>
         <p className="mt-2 max-w-[60ch] text-[15px] leading-relaxed text-ap-body">
           Small, doable steps in your own words. Tick the days you do one, and watch it build over
           the weeks. Mira can check in on them in the chat.
@@ -86,7 +90,7 @@ export default function GoalsPage() {
 
         {out ? (
           <SignedOutNotice />
-        ) : g.load === "loading" ? (
+        ) : g.load === "loading" && !again.busy ? (
           <div aria-hidden="true" className="mt-8 flex flex-col gap-3">
             {[0, 1].map((i) => (
               <div
@@ -98,20 +102,7 @@ export default function GoalsPage() {
         ) : g.load === "minor" ? (
           <AdultsOnly className="mt-8" />
         ) : g.load !== "ready" ? (
-          <div className="mt-8 rounded-3xl border border-ap-line p-5">
-            <p role="alert" className="text-[15px] text-ap-body">
-              {g.loadError}
-            </p>
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={g.reload}
-                className={`${TEXT_BUTTON} border border-ap-line`}
-              >
-                Try again
-              </button>
-            </div>
-          </div>
+          <LoadFailed what="Your goals" {...again} className="mt-8" />
         ) : (
           <>
             <section aria-labelledby="on-the-go-h" className="mt-9">

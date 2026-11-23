@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { useSupportCountry } from "./MiraLook";
 import { SupportPanel } from "./SupportPanel";
@@ -16,6 +16,7 @@ import GoalsCard from "./goals/GoalsCard";
 import { JournalCard } from "./journal/JournalCard";
 import { AdultsOnly, FOCUS_RING } from "./kit";
 import { shortDate } from "./kit/dates";
+import { LoadFailed } from "./kit/load-failed";
 import { RecordingsCard } from "./recordings/Recordings";
 import { NextSessionCard } from "./weekly-session/NextSessionCard";
 
@@ -77,10 +78,9 @@ export default function MiraHome({
   const [me, setMe] = useState<Me | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  // Try again keeps the failed card, and its focus, until the retry answers (round-3 R3-UXA-7).
+  // Try again keeps the failed card, and its focus, until the retry answers (round-3 R3-UXA-7),
+  // then the kit's LoadFailed hands the focus to the card's heading.
   const [retrying, setRetrying] = useState(false);
-  const retried = useRef(false);
-  const heading = useRef<HTMLHeadingElement>(null);
   const [allChats, setAllChats] = useState(false);
   const [support, setSupport] = useState(false);
   const signedOut = useSignedOut();
@@ -102,13 +102,6 @@ export default function MiraHome({
       live = false;
     };
   }, [attempt]);
-
-  // A retry that loaded replaced Try again: its focus goes to the card's heading, not the page.
-  useEffect(() => {
-    if (!me || !retried.current) return;
-    retried.current = false;
-    heading.current?.focus();
-  }, [me]);
 
   // Until the chats are known, the card claims nothing: not "Start with Mira" to a person with
   // chats (SET-4). A failed read says so, with a retry; "New chat" works either way.
@@ -174,7 +167,6 @@ export default function MiraHome({
               />
               <div className="min-w-0 flex-1">
                 <h2
-                  ref={heading}
                   id="continue-h"
                   tabIndex={-1}
                   className="font-serif text-[24px] font-medium leading-tight outline-none"
@@ -205,22 +197,16 @@ export default function MiraHome({
             {loading ? (
               <span aria-hidden="true" className={`${SKELETON} mt-4 h-[50px] !rounded-2xl`} />
             ) : failed ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <p className="text-[15px] text-ap-body">Your chats didn’t load.</p>
-                <button
-                  type="button"
-                  aria-disabled={retrying || undefined}
-                  onClick={() => {
-                    if (retrying) return;
-                    retried.current = true;
-                    setRetrying(true);
-                    setAttempt((n) => n + 1);
-                  }}
-                  className={`min-h-[44px] rounded-full border border-ap-line px-4 text-[14px] font-semibold aria-disabled:cursor-wait aria-disabled:opacity-60 ${FOCUS_RING}`}
-                >
-                  Try again
-                </button>
-              </div>
+              // As every card says it (kit/load-failed), Try again described by its line.
+              <LoadFailed
+                what="Your chats"
+                busy={retrying}
+                onRetry={() => {
+                  setRetrying(true);
+                  setAttempt((n) => n + 1);
+                }}
+                className="mt-4"
+              />
             ) : latest ? (
               <Link
                 href={`/mira?chat=${latest.id}`}

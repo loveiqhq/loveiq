@@ -31,7 +31,8 @@ export type WeeklyState =
   | { status: "signed-out" }
   /** Mira stopped this account as under 18: nothing about sessions shows. */
   | { status: "unavailable" }
-  | { status: "error"; message: string };
+  /** Said with the kit's LoadFailed, never the route's words (round 4). */
+  | { status: "error" };
 
 export type Booked =
   { ok: true; emailed: boolean; change: string; slot: SlotView } | { ok: false; error: string };
@@ -86,9 +87,7 @@ export function useWeeklySession() {
   const load = useCallback(async () => {
     setState({ status: "loading" });
     const r = await miraApi<View>("/api/mira/weekly-session");
-    if (!apply(r)) {
-      setState({ status: "error", message: failed(r, "Your weekly session didn't load.") });
-    }
+    if (!apply(r)) setState({ status: "error" });
   }, [apply]);
 
   useEffect(() => {

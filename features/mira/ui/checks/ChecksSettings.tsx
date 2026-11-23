@@ -6,6 +6,7 @@ import { SignInAgain } from "../account/SignedOut";
 import { AskFirst, Switch, refocus } from "../journal/parts";
 import { SettingsSection } from "../MiraSettings";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { useChecks } from "./data";
 
 /**
@@ -105,22 +106,14 @@ export function SwitchRow({
  */
 export default function ChecksSettings() {
   const { data, error, minor, setData, retry } = useChecks();
+  const again = useRetry(!data && !error, retry);
   // Beside the heading, as Settings says it for every section: "Saved", or what was deleted.
   const [status, setStatus] = useState<{ kind: "saved"; text?: string } | undefined>();
   const none = useRef<HTMLButtonElement | null>(null);
   if (!data) {
-    return error ? (
+    return error || again.busy ? (
       <SettingsSection id="checks-settings" title="Assessments">
-        {minor ? (
-          <AdultsOnly />
-        ) : (
-          <p role="alert" className="text-[14px] text-ap-bad-ink">
-            {error}{" "}
-            <button type="button" onClick={retry} className="font-semibold underline">
-              Try again
-            </button>
-          </p>
-        )}
+        {minor ? <AdultsOnly /> : <LoadFailed what="Your assessments" {...again} />}
       </SettingsSection>
     ) : null;
   }
