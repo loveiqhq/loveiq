@@ -11,9 +11,19 @@ interface CountryQuestionProps {
   question: SurveyQuestion;
   value: string | null;
   onChange: (value: string) => void;
+  /**
+   * The question's heading above the search box. Off inside Survey 2.0's details screen
+   * (DetailsStep), which asks for the country in its own words.
+   */
+  heading?: boolean;
 }
 
-const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }) => {
+const CountryQuestion: FC<CountryQuestionProps> = ({
+  question,
+  value,
+  onChange,
+  heading = true,
+}) => {
   const white = useSurveyTheme() === "white";
   // search tracks user typing only while dropdown is open
   const [search, setSearch] = useState("");
@@ -170,7 +180,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
 
   return (
     <div className="flex flex-col gap-5">
-      <QuestionHeading question={question} />
+      {heading && <QuestionHeading question={question} />}
 
       <div ref={containerRef} className="relative">
         {/* Search input */}

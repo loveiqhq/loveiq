@@ -75,6 +75,7 @@ import {
   __setSubmitLandPollMsForTests,
   MARKETING_OPT_IN_SHEET_TERMS_VERSION,
   MARKETING_OPT_IN_TERMS_VERSION,
+  MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2,
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
@@ -775,6 +776,32 @@ describe("POST /api/survey", () => {
     it("drops an unknown source instead of refusing the submission", async () => {
       await submitOptIn(YES, { marketingOptInVia: "popup" });
       expect(consentPatch().marketing_opt_in_terms_version).toBe(MARKETING_OPT_IN_TERMS_VERSION);
+    });
+
+    // Survey 2.0 asks the newsletter question on its details screen, in its own words, so a Yes
+    // there is filed under that text's version (a 2.0 run is known by its closing questions).
+    const survey2Answers = (answer: string) => ({
+      ...validBody().answers,
+      "16015": answer,
+      "17001": 6,
+    });
+
+    it("dates the details screen's newsletter text", () => {
+      expect(MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2).toBe("2026-11-23");
+    });
+
+    it("files a Survey 2.0 Yes under the details screen's version", async () => {
+      await submitOptIn(YES, { answers: survey2Answers(YES) });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(
+        MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2
+      );
+    });
+
+    it("files a Survey 2.0 Yes given after the sheet under both texts", async () => {
+      await submitOptIn(YES, { answers: survey2Answers(YES), marketingOptInVia: "sheet" });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(
+        `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-2026-11-10`
+      );
     });
   });
 
