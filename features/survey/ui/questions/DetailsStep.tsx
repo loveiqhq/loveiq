@@ -122,6 +122,8 @@ const DetailsStep: FC<DetailsStepProps> = ({
     () => focusField ?? firstOpenField(answers) ?? "country"
   );
   const [blocked, setBlocked] = useState<DetailsField | "optIn" | null>(null);
+  /** The country search reopened over a picked country (a tap on its row). */
+  const [changingCountry, setChangingCountry] = useState(false);
   const moved = useRef(false);
   const inputs = useRef<Partial<Record<DetailsField, HTMLInputElement | null>>>({});
   const { yes, no } = optInLabels(optInOptions);
@@ -185,18 +187,41 @@ const DetailsStep: FC<DetailsStepProps> = ({
   const activeBody = (field: DetailsField) => {
     const copy = DETAILS_COPY.fields[field];
     if (field === "country") {
+      // Picked: the country as a quiet row (Mark's board "3 · Country picked"), the postal code
+      // under it; a tap on the row searches again.
+      const searching = !country || changingCountry;
       return (
         <>
-          <div className="font-serif text-[18px] leading-[24px] text-[#161021]">{copy.prompt}</div>
-          <div className="mt-[10px]">
-            <CountryQuestion
-              question={countryQuestion}
-              value={country || null}
-              onChange={(value) => onAnswer(COUNTRY_QID, value)}
-              heading={false}
-            />
-          </div>
-          {country && (
+          {searching ? (
+            <>
+              <div className="font-serif text-[18px] leading-[24px] text-[#161021]">
+                {copy.prompt}
+              </div>
+              <div className="mt-[10px]">
+                <CountryQuestion
+                  question={countryQuestion}
+                  value={country || null}
+                  onChange={(value) => {
+                    onAnswer(COUNTRY_QID, value);
+                    if (value) setChangingCountry(false);
+                  }}
+                  heading={false}
+                />
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setChangingCountry(true)}
+              className="focus-visible-ring block w-full text-left"
+            >
+              <span className="block font-sans text-[12px] text-[#6b6678]">{copy.row}</span>
+              <span className="block truncate font-sans text-[15.5px] font-semibold text-[#161021]">
+                {country}
+              </span>
+            </button>
+          )}
+          {country && !searching && (
             <div className="ml-[14px] mt-3 border-l-2 border-[#e4dcf5] pb-[14px] pl-[26px] pt-[2px]">
               <label className="block">
                 <span className="font-sans text-[12.5px] font-bold text-[#413b4d]">
