@@ -10,6 +10,7 @@ import {
 import type { SurveyAnswers } from "./types";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
 import { OPT_IN_SHEET_COPY_VERSION, type MarketingOptInVia } from "@features/survey/optInSheet";
+import { DESIRE_SHEET_COPY_VERSION } from "@features/survey/surveySheetsCopy";
 
 const SUPABASE_TIMEOUT_MS = 8000;
 /** The submit writes every answer, so it gets longer than a lookup; the browser waits 30 s. */
@@ -49,11 +50,12 @@ export const SUBMIT_OUTCOME_UNKNOWN = "submit_survey_outcome_unknown";
 export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 
 /**
- * T-11 again, for a Yes given in the opt-in's "Sure you want to miss out?" sheet (Mark,
- * 10 Nov 2026), which only opens after a No. That reader saw Q16015's words AND the
- * sheet's (features/survey/optInSheet.ts), so the version names both: the question's
- * version, then "+sheet-", then the sheet copy's date (2026-10-14+sheet-2026-11-10).
- * It follows either bump by itself. A Yes on the question alone keeps
+ * T-11 again, for a Yes given once the opt-in's "Sure you want to miss out?" sheet (Mark,
+ * 10 Nov 2026) has been shown, which happens only after a No: in the sheet, or on the
+ * question after closing it. That reader saw Q16015's words AND the sheet's
+ * (features/survey/optInSheet.ts), so the version names both: the question's version,
+ * then "+sheet-", then the sheet copy's date (2026-10-14+sheet-2026-11-10). It follows
+ * either bump by itself. A Yes from a reader who never saw the sheet keeps
  * MARKETING_OPT_IN_TERMS_VERSION.
  */
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
@@ -97,10 +99,17 @@ export interface SurveySubmissionPayload {
    */
   marketingOptIn?: boolean | null;
   /**
-   * "sheet" when that Yes was given in the "Sure you want to miss out?" sheet: the row is
-   * then stamped with MARKETING_OPT_IN_SHEET_TERMS_VERSION. Ignored unless the answer is Yes.
+   * "sheet" when that Yes came once the "Sure you want to miss out?" sheet had been shown:
+   * the row is then stamped with MARKETING_OPT_IN_SHEET_TERMS_VERSION. Ignored unless the
+   * answer is Yes.
    */
   marketingOptInVia?: MarketingOptInVia | null;
+  /**
+   * The State of Desire sheet's box was ticked ("Email me a 5€ off code"). Stamps
+   * `state_of_desire_opt_in_at` and `state_of_desire_opt_in_version` (the box's words,
+   * DESIRE_SHEET_COPY_VERSION). Anything but `true` stamps nothing.
+   */
+  stateOfDesireTicked?: boolean | null;
 }
 
 export interface SurveyScoringSummary {
@@ -353,6 +362,42 @@ export async function submitSurveyOnce(
       { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
       "Audit M2 / T-11: failed to stamp consent fields"
     );
+  }
+
+  /**
+   * The State of Desire tick's own consent record (Eman's switch note: "the tick is kept with
+   * its own consent"): when the box was ticked and under which words. Mark sends the EUR 5 code
+   * by hand from #incoming-surveys, whose message reads the tick off this row.
+   *
+   * ITS OWN PATCH, never a key on the consent PATCH above: PostgREST refuses a whole body that
+   * names a missing column (see the option_order note), so a deploy that beats its migration
+   * would take consent_at and terms_version down with it. Here it costs only this stamp, logged.
+   * Best-effort like the rest: the submission already stands.
+   */
+  if (payload.stateOfDesireTicked === true) {
+    try {
+      const response = await supabaseServiceFetch(
+        `/rest/v1/survey_submission?id=eq.${submissionId}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({
+            state_of_desire_opt_in_at: new Date().toISOString(),
+            state_of_desire_opt_in_version: DESIRE_SHEET_COPY_VERSION,
+          }),
+          timeoutMs: 3000,
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        logger.warn(
+          { submissionId, status: response.status, detail: detail.slice(0, 200) },
+          "State of Desire tick: consent stamp rejected (migration not applied?)"
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, submissionId }, "State of Desire tick: failed to stamp its consent");
+    }
   }
 
   return { submissionId, isExisting: false };

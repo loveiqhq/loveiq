@@ -2,10 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import {
-  assignQuestionOrderArm,
-  QUESTION_ORDER_ARM_KEY,
-} from "@shared/experiments/questionOrderArm";
+import { QUESTION_ORDER_ARM_KEY, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
 import {
   EMAIL_QUESTION_ARM_KEY,
   EMAIL_QUESTION_WINNER,
@@ -29,6 +26,7 @@ import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { tryPostJourneyViaBot } from "@features/attribution/server/journey-message";
+import { noteReaderReturn } from "@features/attribution/server/return-ping";
 import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
@@ -337,15 +335,16 @@ const surveySchema = z.object({
     .nullable()
     .catch(null),
   /**
-   * "sheet" when the Q16015 Yes was given in the opt-in's "Sure you want to miss out?"
-   * sheet (features/survey/optInSheet.ts). Picks the consent version the Yes is filed under;
-   * ignored for a No. Anything else is dropped, never refused.
+   * "sheet" when the Q16015 Yes came once the opt-in's "Sure you want to miss out?" sheet
+   * had been shown (features/survey/optInSheet.ts). Picks the consent version the Yes is
+   * filed under; ignored for a No. Anything else is dropped, never refused.
    */
   marketingOptInVia: z.enum(["sheet"]).optional().nullable().catch(null),
   /**
    * The State of Desire sheet's box was ticked (Mark, 13 Nov: "just record the tick for now").
-   * It goes on the submission's #incoming-surveys message; Mark sends the study by hand.
-   * Anything but `true` is dropped, never refused.
+   * Kept on the submission with its consent record (submitSurveyOnce) and named on its
+   * #incoming-surveys message; Mark sends the code by hand. Anything but `true` is dropped,
+   * never refused.
    */
   stateOfDesireTicked: z.literal(true).optional().nullable().catch(null),
   website: z.string().max(0).optional().nullable(),
@@ -417,24 +416,36 @@ const notifySlackSurvey = async ({
   // rail here can only ever show step 1 of 5 — nothing downstream exists yet).
   // Falls through to the webhook when unconfigured or on failure, so behaviour is
   // unchanged without a token.
-  if (
-    await tryPostJourneyViaBot({
-      submissionId,
-      questionCount,
-      message,
-      milestones: journey.milestones,
-    })
-  ) {
-    return;
+  const viaBot = await tryPostJourneyViaBot({
+    submissionId,
+    questionCount,
+    message,
+    milestones: journey.milestones,
+  });
+  if (!viaBot) {
+    await notifySlack({
+      channel: "survey",
+      kind: "survey_completed",
+      text: message.text,
+      blocks: message.blocks,
+      username: "survey_response",
+      context: { submissionId, sessionId },
+    });
   }
 
-  await notifySlack({
-    channel: "survey",
-    kind: "survey_completed",
-    text: message.text,
-    blocks: message.blocks,
-    username: "survey_response",
-    context: { submissionId, sessionId },
+  // A survey begun on an earlier day was a draft they came back to finish: the one return a
+  // thread can only hear of now, the moment it exists (return-ping.ts). Kept for AP-Analytics
+  // whichever way the message went; only the bot's has a thread to reply in.
+  await noteReaderReturn({
+    submissionId,
+    source: "draft",
+    at: new Date(journey.timings.completedAt ?? Date.now()),
+    reader: {
+      finishedAt: journey.timings.completedAt,
+      startedAt: journey.timings.startedAt,
+      internal: journey.internal,
+      emailMasked: journey.emailMasked,
+    },
   });
 };
 
@@ -545,10 +556,11 @@ export async function POST(request: Request) {
    */
   /**
    * The C13 opening-order arm is DERIVED here rather than sent by the client.
-   * `assignQuestionOrderArm` is pure and deterministic over the session id, and
-   * the session id is already in this payload — so recomputing it server-side
-   * agrees with what the respondent actually saw, and a client cannot misreport
-   * its arm.
+   * `questionOrderArmAt` is pure and deterministic over the session id and the run's
+   * start, both already in this payload — so recomputing it server-side agrees with
+   * what the respondent actually saw, and a client cannot misreport its arm. A run
+   * begun during the test gets the arm its session id drew; one begun from the test's
+   * end (QUESTION_ORDER_TEST_END, 21 Nov 2026) gets the new order, as every run is asked.
    *
    * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
    * either arm on dev and staging; a previewer whose session hashes the other way
@@ -569,7 +581,7 @@ export async function POST(request: Request) {
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct
    * hit still produces no utm_tracker at all rather than a bare {} .
    */
-  const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
+  const questionOrderArm = sessionId ? questionOrderArmAt(sessionId, Date.parse(startedAt)) : null;
   /**
    * Mark's 50/50 of his new EUR 1.99 page (gateRevealArm.ts), while its switch is on: from the
    * same session id, so it is the half the browser's sheets followed and the report's gate will
@@ -598,8 +610,8 @@ export async function POST(request: Request) {
    * inflating that bucket by more than half. So the C13 arm only joins a tracker
    * that exists already: the client's, or the one the landing stamp made.
    *
-   * The arm is a pure function of the session id, which is stored on the
-   * submission, so nothing is lost: an unstamped respondent's arm is recomputed
+   * The arm is a pure function of the session id and the run's start, both stored on
+   * the submission, so nothing is lost: an unstamped respondent's arm is recomputed
    * rather than read. The stamp is a convenience for grouping, never the record.
    *
    * It commits only if it still fits the 1000-char budget, AFTER the landing arm,
@@ -700,6 +712,7 @@ export async function POST(request: Request) {
       optionOrder,
       marketingOptIn,
       marketingOptInVia,
+      stateOfDesireTicked: stateOfDesireTicked === true,
     });
     const tSubmit = performance.now();
 

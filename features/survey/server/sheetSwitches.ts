@@ -5,12 +5,13 @@
  * true turns one on without a row (shared/flags/system-flags.ts). In production each stays
  * off until it is cleared. Fatih, 14 Nov: 1, 2 and 5 now (both C13 orders meet them alike);
  * 3, the expert, after the C13 check-in (20 Nov 2026), because C13's control order asks its
- * question too early for it, so only one C13 half would see it; 4 and 6 with Mark's 50/50 of
+ * question too early for it, so only one C13 half would see it (the test has ended since, and
+ * every new run is asked the order where it opens); 4 and 6 with Mark's 50/50 of
  * his new EUR 1.99 page, when both halves meet them, each in its page's words (surveySheets.ts,
  * Mark 16 Nov).
  */
 
-import { isFeatureEnabled, type SystemFlagKey } from "@shared/flags/system-flags";
+import { areFeaturesEnabled, type SystemFlagKey } from "@shared/flags/system-flags";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import {
   GATE_TEST_SHEETS,
@@ -34,12 +35,14 @@ export const SURVEY_SHEET_SWITCHES = {
  * `report_gate_archetype_reveal`, whatever their own say: they run with the test, never alone.
  */
 export async function enabledSurveySheets(): Promise<SurveySheetId[]> {
-  const [on, revealOn] = await Promise.all([
-    Promise.all(SURVEY_SHEET_IDS.map((id) => isFeatureEnabled(SURVEY_SHEET_SWITCHES[id], false))),
-    isFeatureEnabled("report_gate_archetype_reveal", false),
-  ]);
+  // One read for the seven switches, not seven (areFeaturesEnabled).
+  const on = await areFeaturesEnabled(
+    [...SURVEY_SHEET_IDS.map((id) => SURVEY_SHEET_SWITCHES[id]), "report_gate_archetype_reveal"],
+    false
+  );
+  const revealOn = on[SURVEY_SHEET_IDS.length] === true;
   return SURVEY_SHEET_IDS.filter(
-    (id, i) => on[i] === true && (revealOn === true || !GATE_TEST_SHEETS.has(id))
+    (id, i) => on[i] === true && (revealOn || !GATE_TEST_SHEETS.has(id))
   );
 }
 

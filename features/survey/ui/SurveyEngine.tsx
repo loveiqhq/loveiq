@@ -242,13 +242,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
    * The opt-in's "Sure you want to miss out?" sheet (OptInSheet, Mark, 10 Nov). Open: the
    * state draws it; the ref answers at once for the handlers that run in the same tick.
    * Shown: once per run, also across a reload (optInSheetShownFor). Yes: the opt-in's own
-   * Yes, taken from the question when the sheet opens. Via: the reader said Yes in it.
+   * Yes, taken from the question when the sheet opens.
    */
   const [optInSheetOpen, setOptInSheetOpen] = useState(false);
   const optInSheetOpenRef = useRef(false);
   const optInSheetShown = useRef(false);
   const optInSheetYes = useRef<string | null>(null);
-  const optInViaSheet = useRef(false);
   /** The sheet goes; the caller then handles the reader's choice, if any. */
   const closeOptInSheet = useCallback(() => {
     optInSheetOpenRef.current = false;
@@ -307,8 +306,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // C13 — the opening-order experiment. Resolved once per run by useSurveyState and kept
   // in the draft: the order must not change under a respondent who reloads, goes back or
   // resumes, so a draft begun before C13 keeps the control order (its saved position
-  // would otherwise skip the questions the variant moves forward). A fresh run is
-  // bucketed by its session id; no session id (storage blocked) means control.
+  // would otherwise skip the questions the variant moves forward), and a draft begun in
+  // either arm keeps it. A fresh run is asked the new order (QUESTION_ORDER_WINNER): the
+  // test ended, so its session id no longer decides it, storage blocked included.
   // `?order=control|variant` previews either arm on dev and staging, never on production.
   // The email test's copy goes onto the question in the same pass, so the heading, the
   // screen-reader line and the jump menu all read the same words.
@@ -711,8 +711,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       // answer and this submit are two clicks apart, and the closure can predate the
       // first of them. See the note in useSurveyState.
       const latest = getLatestAnswers();
-      // A Yes given in the sheet is filed under the sheet's consent version (server.ts).
-      const viaSheet = optInViaSheet.current && isOptInYes(latest[OPT_IN_QID]);
+      // A Yes given once the sheet has been shown, in it or on the question after closing
+      // it (also after a reload: optInSheetShownFor), is filed under the sheet's consent
+      // version (server.ts): that reader saw the question's words and the sheet's.
+      const viaSheet =
+        isOptInYes(latest[OPT_IN_QID]) &&
+        (optInSheetShown.current || optInSheetShownFor(startedAt));
       const desireTicked = desireTickedFor(startedAt);
       submitSurvey(
         latest,
@@ -945,10 +949,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "yes" });
     const yes = optInSheetYes.current;
-    if (yes) {
-      setAnswer(OPT_IN_QID, yes);
-      optInViaSheet.current = true;
-    }
+    if (yes) setAnswer(OPT_IN_QID, yes);
     goNextRef.current();
   }, [closeOptInSheet, setAnswer]);
 
@@ -982,8 +983,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // Closed without the button (the scrim, Esc, a swipe down). These sheets ask nothing, so it
   // carries on as Keep going does.
   const handleSheetDismiss = useCallback(
-    (via: SheetDismissVia) => {
-      const id = closeSheet(via);
+    (via: SheetDismissVia, extra?: { ticked?: boolean }) => {
+      const id = closeSheet(via, extra);
       if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
     },
     [closeSheet]

@@ -117,8 +117,11 @@ describe("buildSurveyQuestions", () => {
     source: "other",
     device: null,
   });
-  /** Every question today, in today's order: what a run through to the end reaches. */
-  const EVERY = askedQuestions(400).map((q) => q.qId);
+  /**
+   * Every question asked now, in the old order: what a run through to the end reached before the
+   * opening order test ended, which these runs (October) did.
+   */
+  const EVERY = askedQuestions(400, "control").map((q) => q.qId);
   const without = (id: string) => EVERY.filter((x) => x !== id);
   // 16016 first asked at noon on 2 Oct: after "a" began, before "b".
   const FIRST_ASKED = { "16016": "2026-10-02T12:00:00Z" };
@@ -239,7 +242,8 @@ describe("buildSurveyQuestions, along each run's own way", () => {
     source: "other",
     device: null,
   });
-  const EVERY = askedQuestions(400).map((q) => q.qId);
+  // The old order: these runs began before the opening order test ended.
+  const EVERY = askedQuestions(400, "control").map((q) => q.qId);
   const n = (q: ReturnType<typeof buildSurveyQuestions>, k: number) =>
     q.rows.find((r) => r.n === k)!;
   const build = (

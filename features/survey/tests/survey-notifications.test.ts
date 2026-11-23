@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockAfter,
@@ -13,6 +13,7 @@ const {
   mockEnsurePersonalReportForSubmission,
   mockSubmitSurveyOnce,
   mockSupabaseFetch,
+  mockNoteReaderReturn,
 } = vi.hoisted(() => ({
   mockAfter: vi.fn(),
   mockLogger: {
@@ -30,6 +31,7 @@ const {
   mockEnsurePersonalReportForSubmission: vi.fn(),
   mockSubmitSurveyOnce: vi.fn(),
   mockSupabaseFetch: vi.fn(),
+  mockNoteReaderReturn: vi.fn(),
 }));
 
 vi.mock("next/server", async () => {
@@ -72,6 +74,11 @@ vi.mock("@features/survey/server/server", () => ({
   isSurveyClosed: () => Promise.resolve(false),
   // No earlier submission under this session: the replay path stays out of the way.
   fetchSubmissionBySessionId: () => Promise.resolve(null),
+}));
+
+// The "Came back" reply a resumed survey sets off: what it is handed (its rules are its own tests').
+vi.mock("@features/attribution/server/return-ping", () => ({
+  noteReaderReturn: (...args: unknown[]) => mockNoteReaderReturn(...args),
 }));
 
 vi.mock("@features/report/server/personalReport", () => ({
@@ -251,6 +258,63 @@ describe("POST /api/survey notifications", () => {
       }),
       "Sending Slack survey notification"
     );
+  });
+
+  describe("a survey begun on an earlier day: handed to the 'Came back' reply", () => {
+    const BEGUN_EARLIER = {
+      ...SUBMISSION_ROW,
+      start_date_time: "2026-08-22T18:00:00.000Z",
+    };
+
+    afterEach(() => {
+      delete process.env.SLACK_BOT_TOKEN;
+      delete process.env.SLACK_JOURNEY_CHANNEL_ID;
+    });
+
+    it("hands the finished survey to the reply, with the times and the masked address", async () => {
+      process.env.SLACK_BOT_TOKEN = "xoxb-test";
+      process.env.SLACK_JOURNEY_CHANNEL_ID = "C0TEST";
+      mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 123, isExisting: false });
+      routeJourneyAndSlack(BEGUN_EARLIER);
+      // The bot's post answers with the message's id (chat.postMessage), so it is stored.
+      mockFetchWithTimeout.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, ts: "1724500000.000100", channel: "C0TEST" }),
+      });
+
+      expect((await POST(makeRequest())).status).toBe(200);
+      await vi.waitFor(() => expect(mockNoteReaderReturn).toHaveBeenCalledTimes(1));
+      expect(mockNoteReaderReturn).toHaveBeenCalledWith({
+        submissionId: 123,
+        source: "draft",
+        at: new Date("2026-08-24T10:12:00.000Z"),
+        reader: {
+          finishedAt: "2026-08-24T10:12:00.000Z",
+          startedAt: "2026-08-22T18:00:00.000Z",
+          internal: false,
+          emailMasked: "a***@example.com",
+        },
+      });
+    });
+
+    it("without a bot too, after the webhook's message: AP counts the day back all the same", async () => {
+      // Its own id: the webhook drops a repeat of the same text within a minute.
+      mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 124, isExisting: false });
+      routeJourneyAndSlack({ ...BEGUN_EARLIER, id: 124 });
+      expect((await POST(makeRequest())).status).toBe(200);
+      await vi.waitFor(() => expect(mockNoteReaderReturn).toHaveBeenCalledTimes(1));
+      // The webhook's message went first; the reply finds no thread and only keeps the day.
+      expect(
+        mockFetchWithTimeout.mock.calls.some((c) =>
+          String(c[0]).startsWith("https://hooks.slack.test/")
+        )
+      ).toBe(true);
+      expect(mockNoteReaderReturn.mock.calls[0]![0]).toMatchObject({
+        submissionId: 124,
+        source: "draft",
+      });
+    });
   });
 
   it("still notifies with a plain fallback when the journey cannot be read", async () => {

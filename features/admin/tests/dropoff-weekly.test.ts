@@ -10,6 +10,7 @@ import {
 } from "@features/admin/server/dropoff-weekly";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
+import { QUESTION_ORDER_WINNER } from "@shared/experiments/questionOrderArm";
 import { surveyQuestions } from "@/data/survey-data";
 
 const iso = (d: Date) => d.toISOString();
@@ -54,7 +55,8 @@ describe("dropoffWeeks", () => {
 
 describe("askedQuestions", () => {
   it("numbers today's asked questions in order and leaves the hidden ones out", () => {
-    const asked = orderAskedQuestions(surveyQuestions, "control").filter(
+    // Today's order: the new one, which every run is asked since the opening order test ended.
+    const asked = orderAskedQuestions(surveyQuestions, QUESTION_ORDER_WINNER).filter(
       (q) => !HIDDEN_QIDS.has(q.qId)
     );
     const qs = askedQuestions(46);
@@ -67,7 +69,7 @@ describe("askedQuestions", () => {
 
 describe("buildDropoffWeeklyPayload", () => {
   const weeks = dropoffWeeks(new Date("2026-10-12T06:00:00Z"));
-  const asked = orderAskedQuestions(surveyQuestions, "control").filter(
+  const asked = orderAskedQuestions(surveyQuestions, QUESTION_ORDER_WINNER).filter(
     (q) => !HIDDEN_QIDS.has(q.qId)
   );
   const rowOf = (p: ReturnType<typeof buildDropoffWeeklyPayload>, qId: string) =>
