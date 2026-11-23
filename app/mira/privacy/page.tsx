@@ -626,7 +626,8 @@ export default function MiraPrivacyPage() {
             <a href="mailto:ec@loveiq.org" className="underline">
               ec@loveiq.org
             </a>
-            . A request covers all your Mira data.
+            . A request covers all your Mira data. A copy leaves out what was done in a browser
+            before you signed in, as on a shared browser that can be someone else&apos;s.
           </li>
           <li>
             You can complain to a data protection authority, for example the Berlin Commissioner for

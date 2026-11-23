@@ -395,7 +395,9 @@ controller service ([business.safety.google/adsservices](https://business.safety
 - **Rights**: chats and the account can be deleted in Settings; data requests (access, copy,
   deletion) cover all Mira data, from 2026-11-22 also passkeys (ids, labels, public keys), devices
   and a pending change of email (never a code's hash or a challenge); the DPO is named in both
-  notices. The staff data-subject tool (`features/admin/server/data-subject.ts`) exports the
+  notices. From 2026-11-23 a copy leaves out what a browser did before signing in, which on a
+  shared browser can be someone else's (Art. 15(4)); the export's note says so, and the chat
+  carried into the account at sign-in is the account's own and included. The staff data-subject tool (`features/admin/server/data-subject.ts`) exports the
   weekly session's `mira_session_slot` and `mira_session_reminder` rows and erases them with the
   account (by cascade); a weekly session is changed, its reminders paused or the session cancelled
   in Settings, and every session email has a stop link.

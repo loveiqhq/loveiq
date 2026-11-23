@@ -60,6 +60,10 @@ describe("Mira's privacy notice, made true", () => {
 
   it("keeps the promises the code now keeps: a request covers everything, deletion unlinks", () => {
     expect(text).toContain("A request covers all your Mira data.");
+    // Round 4: a copy keeps to rows tied to the person (GDPR Art. 15(4)), and says so.
+    expect(text).toContain(
+      "A copy leaves out what was done in a browser before you signed in, as on a shared browser that can be someone else's."
+    );
     expect(text).toContain(
       "Deleting your account deletes any words in the log, and the rest is no longer linked to you."
     );

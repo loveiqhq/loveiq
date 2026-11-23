@@ -80,8 +80,10 @@ points. What the rows above leave out:
   chat and goal words, journal notes and ratings, voice key points and names included; its answers
   reach the staff member through Claude (Anthropic). Whether to leave `mira_*` out, as the team
   export does, is an open decision for Eman ([DPIA.md](DPIA.md) §7.3, §7.9 point 7).
-- **Data requests** (access, copy, deletion) cover all Mira data, and team members' own browsers
-  are left out of Mira's statistics.
+- **Data requests** (access, copy, deletion) cover all Mira data. A copy leaves out what a
+  browser did before signing in: on a shared browser that can be someone else's (GDPR
+  Art. 15(4)), and the export's note says so; the chat carried into the account at sign-in is the
+  account's own and included. Team members' own browsers are left out of Mira's statistics.
 - **Self-checks** (activity 26, from 2026-11-22) are health questionnaires: their intended purpose,
   risks, the medical device question and the open points are in DPIA §7.16.
 
@@ -376,6 +378,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 
 ## 7. Change log
 
+- 2026-11-23: Mira's data requests: a copy no longer includes what the person's browsers logged before they signed in (added on 2026-11-22), as on a shared browser that can be someone else's (GDPR Art. 15(4)); it keeps to rows tied to the person, the chat carried into the account at sign-in among them, and its note says what it leaves out. Deletion is unchanged.
 - 2026-11-22: Mira's round-2 data audit: the account keeps the latest sign-in's consent with its time and version, not each one (activity 20); the note a person may add when stopping nudges is named in LAWFUL_BASIS A18 and DPIA §7.2 as it already was here (activity 22); data requests now also return what a person's browsers logged before they signed in, and deleting an account clears the browser id from what stays in the log, so "cover all Mira data" and "unlinks the rest" hold.
 - 2026-11-22: Mira's rows made true to the code after a privacy audit: PostHog and Clarity see every Mira screen, nothing masked (the journal row had said otherwise); Jarvis's live-data tool can read the `mira_*` tables (open for Eman); "Notify me" and the finder's outcome are Art. 9 data on the coaching consent, not legitimate interest; no rated reply's text since 2026-11-21 (activity 22); the voice tick, the self-checks' unlinked support count and `use_checks_set`, the weekly session's crisis pause; each row cites its own LAWFUL_BASIS entry and DPIA section.
 - 2026-11-22: Mira's coaches, suggestions and search (activity 19 extended): "Notify me" per coming-soon coach, the finder's outcome, picks from the person's own chat topics, and the guide's "Ask Mira about this"; LAWFUL_BASIS A21, DPIA §7.12.
