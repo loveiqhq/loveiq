@@ -5,6 +5,7 @@
  */
 import { assessmentScope } from "./assessment";
 import { deviceClass, type Facts, type IntroFact, type SubFact } from "./facts";
+import { withoutGuide } from "./guide";
 import {
   bucketCaption,
   type ApFilters,
@@ -97,7 +98,10 @@ export interface SurveyPayload extends PageHead {
     note: string;
   };
   intro: {
-    /** The intro, slides 1 to 4 and the consent, in order. */
+    /**
+     * The intro, slides 1 to 4 and the consent, in order. Its consent and question 1 rows leave
+     * out Survey 2.0's guide visitors (withoutGuide), who have their own table below.
+     */
     cards: IntroCard[];
     clicks: PostHogResult<IntroClicks> | null;
     /** The day Skip, Back, Exit and the intro's and consent's cards start, when the range starts earlier. */
@@ -108,6 +112,8 @@ export interface SurveyPayload extends PageHead {
      */
     tiles: Tile[];
   };
+  /** Survey 2.0's short guide: its three cards and its consent, when the range has its runs. */
+  guide: { cards: IntroCard[] } | null;
   questions: SurveyQuestions | null;
   questionsError: string | null;
   /**
@@ -244,49 +250,130 @@ function deviceCard(mine: SubFact[], bench: SubFact[], from: string, benchFrom: 
   return { ...card, rows: [...rows, ...card.rows.filter((r) => r.label === "Unknown")] };
 }
 
+/** A card before question 1: its funnel_event step and how it is gone back from or skipped. */
+interface CardDef {
+  step: string;
+  name: string;
+  purpose: string;
+  back?: string;
+  skip?: string;
+}
+
 /** The cards before question 1, by their funnel_event steps and how each is gone back from or skipped. */
-const CARDS: Array<{ step: string; name: string; purpose: string; back?: string; skip?: string }> =
-  [
-    {
-      step: "intro_view",
-      name: "Intro · Let’s prepare you to discover your sexual archetypes",
-      purpose: "Short guide; start with Continue or a tap on the silhouette",
-    },
-    {
-      step: "intro_slide_1",
-      name: "Slide 1 · Quality In → Magic Out",
-      purpose: "Accurate answers make an accurate report",
-      back: "intro_back_1",
-      skip: "intro_skip_1",
-    },
-    {
-      step: "intro_slide_2",
-      name: "Slide 2 · Judgment-Free Zone",
-      purpose: "No good or bad answers; answer what is true",
-      back: "intro_back_2",
-      skip: "intro_skip_2",
-    },
-    {
-      step: "intro_slide_3",
-      name: "Slide 3 · Your Privacy Matters",
-      purpose: "Encryption, alias email, link to the Trust Zone",
-      back: "intro_back_3",
-      skip: "intro_skip_3",
-    },
-    {
-      step: "intro_slide_4",
-      name: "Slide 4 · How the Test Works",
-      purpose: "~15 min, one question at a time, Dynamic Guidance",
-      back: "intro_back_4",
-      skip: "intro_skip_4",
-    },
-    {
-      step: "consent_view",
-      name: "Consent · Before we begin",
-      purpose: "18+ confirmation and terms; I agree or Return to site",
-      back: "consent_back",
-    },
-  ];
+const CARDS: CardDef[] = [
+  {
+    step: "intro_view",
+    name: "Intro · Let’s prepare you to discover your sexual archetypes",
+    purpose: "Short guide; start with Continue or a tap on the silhouette",
+  },
+  {
+    step: "intro_slide_1",
+    name: "Slide 1 · Quality In → Magic Out",
+    purpose: "Accurate answers make an accurate report",
+    back: "intro_back_1",
+    skip: "intro_skip_1",
+  },
+  {
+    step: "intro_slide_2",
+    name: "Slide 2 · Judgment-Free Zone",
+    purpose: "No good or bad answers; answer what is true",
+    back: "intro_back_2",
+    skip: "intro_skip_2",
+  },
+  {
+    step: "intro_slide_3",
+    name: "Slide 3 · Your Privacy Matters",
+    purpose: "Encryption, alias email, link to the Trust Zone",
+    back: "intro_back_3",
+    skip: "intro_skip_3",
+  },
+  {
+    step: "intro_slide_4",
+    name: "Slide 4 · How the Test Works",
+    purpose: "~15 min, one question at a time, Dynamic Guidance",
+    back: "intro_back_4",
+    skip: "intro_skip_4",
+  },
+  {
+    step: "consent_view",
+    name: "Consent · Before we begin",
+    purpose: "18+ confirmation and terms; I agree or Return to site",
+    back: "consent_back",
+  },
+];
+
+/** Survey 2.0's short guide (Mark's Pre Survey Wizard): three cards, then its consent. */
+const GUIDE_CARDS: CardDef[] = [
+  {
+    step: "guide_card_1",
+    name: "Card 1 · Three rules to increase your report quality",
+    purpose: "Be honest, answer freely, stay to the end (about 9 minutes)",
+    skip: "guide_skip_1",
+  },
+  {
+    step: "guide_card_2",
+    name: "Card 2 · Answer from the perspective of today",
+    purpose: "Answer as you are now, not as before or as you wish to be",
+    back: "guide_back_2",
+    skip: "guide_skip_2",
+  },
+  {
+    step: "guide_card_3",
+    name: "Card 3 · Your Privacy Matters",
+    purpose: "Everything encrypted; a nickname and an alias email are fine; the Trust Zone",
+    back: "guide_back_3",
+    skip: "guide_skip_3",
+  },
+  {
+    step: "consent_view",
+    name: "Consent · Before we begin",
+    purpose: "18+ and the use of the answers as two ticks; I agree or Return to site",
+    back: "consent_back",
+  },
+];
+
+/**
+ * A table of the cards before question 1, the intro's or Survey 2.0's short guide's: per card who
+ * reached it and as a share of the first card, who went on, the median time to the next card, and
+ * Skip, Back and Exit. `known` says whether a card's own figures exist for the range; Skip, Back
+ * and Exit need `tracked`.
+ */
+function cardTable(
+  defs: CardDef[],
+  rows: IntroFact[],
+  opts: { tracked: boolean; firstStep: string; known: (step: string) => boolean }
+): IntroCard[] {
+  const rowsOf = (step: string) => rows.filter((x) => x.step === step);
+  const count = (step: string) => rowsOf(step).reduce((n, x) => n + x.n, 0);
+  /** Over the days; null when a day lacks the figure (a reader older than it). */
+  const sum = (step: string, pick: (x: IntroFact) => number | null): number | null => {
+    const v = rowsOf(step).map(pick);
+    return v.every((n): n is number => typeof n === "number") ? v.reduce((a, n) => a + n, 0) : null;
+  };
+  const first = count(opts.firstStep);
+  // The consent's visitors who saw no intro that day: they started from the landing page's card.
+  const direct = rowsOf("consent_view").reduce((n, x) => n + x.direct, 0);
+  return defs.map((c) => {
+    const known = opts.known(c.step);
+    const reached = count(c.step);
+    const of = (n: number | null) => (known ? ratio(n, reached) : null);
+    const later = (n: number | null) => (opts.tracked ? of(n) : null);
+    return {
+      step: c.step,
+      name: c.name,
+      purpose: c.purpose,
+      reached: known ? reached : null,
+      reachedShare: known
+        ? ratio(c.step === "consent_view" ? reached - direct : reached, first)
+        : null,
+      cont: of(sum(c.step, (x) => x.wentOn)),
+      medianMs: known ? median(rowsOf(c.step).flatMap((x) => x.ms)) : null,
+      skip: c.skip ? later(count(c.skip)) : null,
+      back: c.back ? later(count(c.back)) : null,
+      exit: later(sum(c.step, (x) => x.left)),
+    };
+  });
+}
 
 export function buildSurveyPage(input: {
   facts: Facts;
@@ -304,8 +391,21 @@ export function buildSurveyPage(input: {
   /** The sheets' switches now (null: unreadable) and PostHog's figures (null: not read). */
   sheetsOn?: SurveySheetId[] | null;
   sheetsSeen?: PostHogResult<SurveySheetsByOrder> | null;
+  /**
+   * Survey 2.0's short guide, the range's and the period before's (ap_guide_facts; null: not
+   * read). Its visitors also leave the intro's consent and question 1 rows.
+   */
+  guide?: IntroFact[] | null;
+  prevGuide?: IntroFact[] | null;
 }): SurveyPayload {
-  const { facts, filters: f, today, now } = input;
+  const { filters: f, today, now } = input;
+  // The intro's rows are the intro's visitors' (and the landing card's): ap_facts counts every
+  // visitor's consent and question 1, Survey 2.0's guide visitors' too.
+  const facts = { ...input.facts, intro: withoutGuide(input.facts.intro, input.guide ?? null) };
+  const introPrevious = input.previous && {
+    ...input.previous,
+    intro: withoutGuide(input.previous.intro, input.prevGuide ?? null),
+  };
   const scope = assessmentScope(f);
   // An earlier period the filters can't follow (tablets before they were told apart, sources
   // before they were recorded, new or returning before finishers kept their visit) is not
@@ -446,39 +546,25 @@ export function buildSurveyPage(input: {
   // Skip, Back, Exit and the intro's and consent's own rows start on SURVEY_TRACKING_FROM: a
   // range starting earlier would read them low, so the page says when they start instead.
   const tracked = facts.from >= SURVEY_TRACKING_FROM;
-  const rowsOf = (step: string) => (on ? facts.intro.filter((x) => x.step === step) : []);
-  const count = (step: string) => rowsOf(step).reduce((n, x) => n + x.n, 0);
-  /** Over the days; null when a day lacks the figure (a reader older than it). */
-  const sum = (step: string, pick: (x: IntroFact) => number | null): number | null => {
-    const v = rowsOf(step).map(pick);
-    return v.every((n): n is number => typeof n === "number") ? v.reduce((a, n) => a + n, 0) : null;
-  };
-  const first = count(tracked ? "intro_view" : "intro_slide_1");
-  // The consent's visitors who saw no intro that day: they started from the landing page's card.
-  const direct = rowsOf("consent_view").reduce((n, x) => n + x.direct, 0);
-  const cards: IntroCard[] = CARDS.map((c) => {
-    const known = on && (tracked || c.step.startsWith("intro_slide_"));
-    const reached = count(c.step);
-    const of = (n: number | null) => (known ? ratio(n, reached) : null);
-    const later = (n: number | null) => (tracked ? of(n) : null);
-    return {
-      step: c.step,
-      name: c.name,
-      purpose: c.purpose,
-      reached: known ? reached : null,
-      reachedShare: known
-        ? ratio(c.step === "consent_view" ? reached - direct : reached, first)
-        : null,
-      cont: of(sum(c.step, (x) => x.wentOn)),
-      medianMs: known ? median(rowsOf(c.step).flatMap((x) => x.ms)) : null,
-      skip: c.skip ? later(count(c.skip)) : null,
-      back: c.back ? later(count(c.back)) : null,
-      exit: later(sum(c.step, (x) => x.left)),
-    };
+  const cards = cardTable(CARDS, on ? facts.intro : [], {
+    tracked,
+    firstStep: tracked ? "intro_view" : "intro_slide_1",
+    known: (step) => on && (tracked || step.startsWith("intro_slide_")),
   });
+  // Survey 2.0's short guide: its own cards, recorded from its first day (Skip, Back, Exit too).
+  const guideRows = on ? (input.guide ?? []) : [];
+  const guide = guideRows.some((r) => r.step.startsWith("guide_card_"))
+    ? {
+        cards: cardTable(GUIDE_CARDS, guideRows, {
+          tracked: true,
+          firstStep: "guide_card_1",
+          known: () => true,
+        }),
+      }
+    : null;
   const introTiles = buildIntroTiles(
     facts,
-    input.previous,
+    introPrevious,
     input.introClicks,
     input.prevIntroClicks ?? null,
     on
@@ -503,6 +589,7 @@ export function buildSurveyPage(input: {
       recordedFrom: on && !tracked ? rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM) : null,
       tiles: introTiles,
     },
+    guide,
     questions: input.questions,
     questionsError: input.questionsError,
     sheets: {
