@@ -170,10 +170,12 @@ describe("Home's voice sessions card", () => {
     noRetry();
   });
 
+  // Home's one wording for a failed read, never in red (round-3 SET-11, kit/load-failed).
   it("says when they didn't load, and tries again", async () => {
     replies["GET /api/mira/recordings?limit=3"] = () => ({ status: 500, body: {} });
     render(<RecordingsCard />);
-    expect(await screen.findByText("Your voice sessions didn't load.")).toBeTruthy();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your voice sessions didn’t load.");
+    expect(document.body.innerHTML).not.toMatch(/text-ap-bad-ink/);
     replies["GET /api/mira/recordings?limit=3"] = () => ({
       body: { recordings: SESSIONS, more: false },
     });
@@ -194,7 +196,7 @@ describe("the voice sessions page", () => {
     expect(rows()[0]).toHaveTextContent(/22\s*Sep(?!t)/);
   });
 
-  it("lists every session, and sends a signed-out visitor to sign in", async () => {
+  it("lists every session", async () => {
     replies["GET /api/mira/recordings?limit=50"] = () => ({
       body: { recordings: SESSIONS, more: true },
     });
@@ -202,23 +204,82 @@ describe("the voice sessions page", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Voice sessions" })).toBeTruthy();
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(screen.getByRole("button", { name: "Show older sessions" })).toBeTruthy();
-    cleanup();
-    // A lost sign-in signs in again and comes back here (signInHref), not to Home.
+  });
+
+  // kit/load-failed outside a card: Try again keeps the focus while it retries, then the page's
+  // heading has it, never the page itself.
+  it("keeps Try again's focus while the list retries, then gives it to the page's heading", async () => {
+    replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 500, body: {} });
+    render(<RecordingsPage />);
+    const again = await screen.findByRole("button", { name: "Try again" });
+    again.focus();
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: false },
+    });
+    fireEvent.click(again);
+    expect(again).toHaveFocus();
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    const heading = screen.getByRole("heading", { level: 1, name: "Voice sessions" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(rows()).toHaveLength(2);
+  });
+
+  // Round 3's 401 loop: a move to sign-in of the page's own could bounce back and forth with
+  // /mira/start while that page still saw the session. It is said in place, with the way back.
+  it("says a lost sign-in in place, with the way back to this page, and never navigates", async () => {
+    const signedOutHere = async (path: string) => {
+      expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+        "href",
+        `/mira/start?next=${encodeURIComponent(path)}`
+      );
+      expect(rows()).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: /Try again|Show older|Delete/ })).toBeNull();
+    };
     window.history.replaceState(null, "", "/mira/recordings");
     replies["GET /api/mira/recordings?limit=50"] = () => ({ status: 401, body: {} });
     render(<RecordingsPage />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/mira/start?next=%2Fmira%2Frecordings")
-    );
+    expect(screen.getByRole("heading", { level: 1, name: "Voice sessions" })).toBeTruthy();
+    await signedOutHere("/mira/recordings");
     cleanup();
-    window.history.replaceState(null, "", `/mira/recordings/${ID}`);
+    // Gone while the page was open: "Show older sessions" says it the same way.
+    replies = {}; // the older page's key first: the fake answers the first key a request starts with
+    replies["GET /api/mira/recordings?limit=50&before="] = () => ({ status: 401, body: {} });
+    replies["GET /api/mira/recordings?limit=50"] = () => ({
+      body: { recordings: SESSIONS, more: true },
+    });
+    render(<RecordingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show older sessions" }));
+    await signedOutHere("/mira/recordings");
+    cleanup();
+    // Home's card goes quiet: Home says it once, above its cards.
+    replies["GET /api/mira/recordings?limit=3"] = () => ({ status: 401, body: {} });
+    const card = render(<RecordingsCard />);
+    await waitFor(() => expect(card.container).toBeEmptyDOMElement());
+    cleanup();
+    // One session's page, at its load and when a delete finds the sign-in gone.
+    const here = `/mira/recordings/${ID}`;
+    window.history.replaceState(null, "", here);
     replies[`GET /api/mira/recordings/${ID}`] = () => ({ status: 401, body: {} });
     render(<RecordingDetail id={ID} />);
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenLastCalledWith(
-        `/mira/start?next=${encodeURIComponent(`/mira/recordings/${ID}`)}`
-      )
-    );
+    expect(await screen.findByRole("heading", { level: 1, name: "Voice session" })).toBeTruthy();
+    await signedOutHere(here);
+    cleanup();
+    replies[`GET /api/mira/recordings/${ID}`] = () => ({
+      body: {
+        recording: { ...SESSIONS[0]!, chatId: CHAT, keyPoints: [] },
+        transcript: [{ role: "user", content: "Compliments never land." }],
+      },
+    });
+    replies[`DELETE /api/mira/recordings/${ID}`] = () => ({ status: 401, body: {} });
+    render(<RecordingDetail id={ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await signedOutHere(here);
+    expect(screen.queryByText("Compliments never land.")).toBeNull();
+
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
     window.history.replaceState(null, "", "/");
   });
 

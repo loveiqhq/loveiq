@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { CalendarLinks } from "./SlotPicker";
 import { slotLabel, upcoming, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
 const SECTION = "rounded-3xl border border-ap-line p-5";
+/** Focus lands on it after a Try again that loaded (kit/load-failed). */
+const HEADING = "font-serif text-[20px] font-semibold outline-none";
 const OUTLINE_PILL =
   "inline-flex min-h-[44px] items-center justify-center rounded-full border border-ap-line bg-white px-5 text-[14px] font-semibold text-ap-ink transition-colors hover:bg-ap-ground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ap-purple focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50";
 const INK_PILL =
@@ -24,6 +26,7 @@ const INK_PILL =
  */
 export function NextSessionCard() {
   const { state, load, book, setPaused } = useWeeklySession();
+  const again = useRetry(state.status === "loading", () => void load());
   const [sheet, setSheet] = useState(false);
   const [calendar, setCalendar] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +46,22 @@ export function NextSessionCard() {
   if (state.status === "unavailable") {
     return (
       <section aria-labelledby="weekly-h" className={SECTION}>
-        <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
+        <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
           Your weekly session
         </h2>
         <AdultsOnly className="mt-1" />
+      </section>
+    );
+  }
+
+  // A retry under way keeps the failed card, so Try again keeps the focus (kit/load-failed).
+  if (state.status === "error" || again.busy) {
+    return (
+      <section aria-labelledby="weekly-h" className={SECTION}>
+        <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
+          Your weekly session
+        </h2>
+        <LoadFailed what="Your weekly session" {...again} className="mt-2" />
       </section>
     );
   }
@@ -61,17 +76,6 @@ export function NextSessionCard() {
             <span className="h-4 w-56 max-w-full rounded-full bg-ap-track motion-safe:animate-pulse" />
           </span>
         </div>
-      </section>
-    );
-  }
-
-  if (state.status === "error") {
-    return (
-      <section aria-labelledby="weekly-h" className={SECTION}>
-        <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
-          Your weekly session
-        </h2>
-        <LoadFailed what="Your weekly session" onRetry={() => void load()} className="mt-2" />
       </section>
     );
   }
@@ -101,7 +105,7 @@ export function NextSessionCard() {
   if (!slot) {
     return withSheet(
       <section aria-labelledby="weekly-h" className={SECTION}>
-        <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
+        <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
           A weekly 15 minutes with Mira
         </h2>
         <p className="mt-1 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
@@ -146,7 +150,7 @@ export function NextSessionCard() {
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="weekly-h" className="font-serif text-[20px] font-semibold">
+          <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
             {next.now ? (
               "Your session is open now"
             ) : (

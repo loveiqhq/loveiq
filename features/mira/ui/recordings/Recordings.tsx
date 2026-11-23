@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MiraAppFrame } from "../MiraAppFrame";
-import { miraApi, signInHref } from "../api";
+import { SignedOutNotice } from "../account/SignedOut";
+import { miraApi, useSignedOut } from "../api";
 import { AdultsOnly, SectionLink } from "../kit";
 import { shortDate } from "../kit/dates";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { canRecognizeSpeech } from "../voice/speech";
 
 /**
@@ -37,25 +38,25 @@ type Load =
 
 /**
  * The account's sessions, newest first, with their loading, failed and refused states. A lost
- * sign-in goes to sign in and comes back to this page (signInHref).
+ * sign-in (401) changes nothing here: the page says so once (useSignedOut, SignedOutNotice), and
+ * nothing moves to sign-in on its own, as the sign-in page may still see the session and send the
+ * person straight back (round 3's 401 loop).
  */
 function useSessions(limit: number) {
-  const router = useRouter();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     void miraApi<List>(`/api/mira/recordings?limit=${limit}`).then((res) => {
-      if (res.status === 401) router.replace(signInHref());
-      else
-        setLoad(
-          res.ok
-            ? { state: "ready", ...res.data }
-            : res.minor
-              ? { state: "minor" }
-              : { state: "failed" }
-        );
+      if (res.signedOut) return;
+      setLoad(
+        res.ok
+          ? { state: "ready", ...res.data }
+          : res.minor
+            ? { state: "minor" }
+            : { state: "failed" }
+      );
     });
-  }, [limit, router, attempt]);
+  }, [limit, attempt]);
   const retry = () => {
     setLoad({ state: "loading" });
     setAttempt((n) => n + 1);
@@ -67,7 +68,6 @@ function useSessions(limit: number) {
     const res = await miraApi<List>(
       `/api/mira/recordings?limit=${limit}&before=${encodeURIComponent(last.startedAt)}`
     );
-    if (res.status === 401) router.replace(signInHref());
     if (res.minor) {
       setLoad({ state: "minor" }); // the list gives way to the one refusal
       return true;
@@ -296,21 +296,6 @@ function Empty() {
   );
 }
 
-function Failed({ retry }: { retry: () => void }) {
-  return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 py-2">
-      <p className="text-[14px] text-ap-bad-ink">Your voice sessions didn&apos;t load.</p>
-      <button
-        type="button"
-        onClick={retry}
-        className="inline-flex min-h-[44px] items-center rounded-full border border-ap-line px-4 text-[14px] font-semibold"
-      >
-        Try again
-      </button>
-    </div>
-  );
-}
-
 function Skeleton({ rows }: { rows: number }) {
   return (
     <ul aria-hidden="true" className="flex flex-col gap-3">
@@ -338,21 +323,31 @@ function Rows({ list }: { list: SessionRow[] }) {
  * (UX-10), and "Start a voice session" after them.
  */
 export function RecordingsCard() {
+  const signedOut = useSignedOut();
   const { load, retry } = useSessions(3);
+  const again = useRetry(load.state === "loading", retry);
   const any = load.state === "ready" && load.recordings.length > 0;
+  // Home says a lost sign-in once, above its cards (HAB-16): the card goes quiet.
+  if (signedOut) return null;
   return (
     <section aria-labelledby="mira-voice-sessions" className="mt-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div>
-          <h2 id="mira-voice-sessions" className="font-serif text-[20px] font-semibold">
+          <h2
+            id="mira-voice-sessions"
+            tabIndex={-1}
+            className="font-serif text-[20px] font-semibold outline-none"
+          >
             Voice sessions
           </h2>
           <p className="text-[13px] text-ap-muted">Kept as words, never audio.</p>
         </div>
         {any ? <SectionLink href="/mira/recordings" what="voice sessions" /> : null}
       </div>
-      {load.state === "loading" ? <Skeleton rows={2} /> : null}
-      {load.state === "failed" ? <Failed retry={retry} /> : null}
+      {load.state === "loading" && !again.busy ? <Skeleton rows={2} /> : null}
+      {load.state === "failed" || again.busy ? (
+        <LoadFailed what="Your voice sessions" {...again} />
+      ) : null}
       {load.state === "minor" ? <AdultsOnly /> : null}
       {load.state === "ready" ? any ? <Rows list={load.recordings} /> : <Empty /> : null}
       {any ? (
@@ -366,7 +361,9 @@ export function RecordingsCard() {
 
 /** /mira/recordings: every session, newest first, fifty at a time. */
 export default function RecordingsPage() {
+  const signedOut = useSignedOut();
   const { load, retry, loadOlder } = useSessions(50);
+  const again = useRetry(load.state === "loading", retry);
   const [older, setOlder] = useState<"idle" | "loading" | "failed">("idle");
   // Once older sessions come, the focus goes to the first of them: the button goes with the last
   // page, and the new rows are read from there (round-3 R3-CHAT-7).
@@ -387,7 +384,10 @@ export default function RecordingsPage() {
     <MiraAppFrame active="recordings">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-serif text-[34px] font-medium motion-safe:animate-mira-in">
+          <h1
+            tabIndex={-1}
+            className="font-serif text-[34px] font-medium outline-none motion-safe:animate-mira-in"
+          >
             Voice sessions
           </h1>
           <p className="mt-1 max-w-[52ch] text-[15px] leading-snug text-ap-body">
@@ -395,39 +395,49 @@ export default function RecordingsPage() {
             what was said, or to delete it.
           </p>
         </div>
-        {load.state === "ready" && load.recordings.length > 0 ? <StartVoiceLink /> : null}
-      </div>
-      <div ref={list} className="mt-6">
-        {load.state === "loading" ? <Skeleton rows={3} /> : null}
-        {load.state === "failed" ? <Failed retry={retry} /> : null}
-        {load.state === "minor" ? <AdultsOnly /> : null}
-        {load.state === "ready" ? (
-          load.recordings.length ? (
-            <>
-              <Rows list={load.recordings} />
-              {load.more ? (
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={showOlder}
-                    aria-busy={older === "loading"}
-                    className="inline-flex min-h-[44px] items-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink hover:bg-ap-ground"
-                  >
-                    {older === "loading" ? "Loading…" : "Show older sessions"}
-                  </button>
-                  {older === "failed" ? (
-                    <p role="alert" className="text-[14px] text-ap-bad-ink">
-                      Older sessions didn&apos;t load.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <Empty />
-          )
+        {!signedOut && load.state === "ready" && load.recordings.length > 0 ? (
+          <StartVoiceLink />
         ) : null}
       </div>
+      {/* A lost sign-in, here or anywhere on the page: said once in place of the list, with the
+          way back to this page (never a move to sign-in of its own). */}
+      {signedOut ? (
+        <SignedOutNotice />
+      ) : (
+        <div ref={list} className="mt-6">
+          {load.state === "loading" && !again.busy ? <Skeleton rows={3} /> : null}
+          {load.state === "failed" || again.busy ? (
+            <LoadFailed what="Your voice sessions" {...again} />
+          ) : null}
+          {load.state === "minor" ? <AdultsOnly /> : null}
+          {load.state === "ready" ? (
+            load.recordings.length ? (
+              <>
+                <Rows list={load.recordings} />
+                {load.more ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={showOlder}
+                      aria-busy={older === "loading"}
+                      className="inline-flex min-h-[44px] items-center rounded-full border border-ap-line bg-white px-4 text-[14px] font-semibold text-ap-ink hover:bg-ap-ground"
+                    >
+                      {older === "loading" ? "Loading…" : "Show older sessions"}
+                    </button>
+                    {older === "failed" ? (
+                      <p role="alert" className="text-[14px] text-ap-body">
+                        Older sessions didn&apos;t load.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <Empty />
+            )
+          ) : null}
+        </div>
+      )}
     </MiraAppFrame>
   );
 }

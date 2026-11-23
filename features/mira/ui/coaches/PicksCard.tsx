@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { picksFor } from "@features/mira/content/coaches";
 import { AdultsOnly } from "../kit";
-import { LoadFailed } from "../kit/load-failed";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { track, useCoachData } from "./data";
 import { ChevronIcon, CoachPortrait } from "./parts";
 import { FOCUS } from "./styles";
@@ -16,6 +16,7 @@ import { FOCUS } from "./styles";
  */
 export default function PicksCard() {
   const { state, retry } = useCoachData();
+  const again = useRetry(state.status === "loading", retry);
   const result = state.status === "ready" ? picksFor(state.data.topics) : null;
   const basis = result ? (result.personal ? "chats" : "start") : null;
   useEffect(() => {
@@ -28,12 +29,16 @@ export default function PicksCard() {
       aria-labelledby="picks-h"
       className="rounded-[24px] border border-ap-line bg-white p-5 sm:p-6"
     >
-      <h2 id="picks-h" className="font-serif text-[22px] font-medium leading-tight">
+      <h2
+        id="picks-h"
+        tabIndex={-1}
+        className="font-serif text-[22px] font-medium leading-tight outline-none"
+      >
         Picked for you
       </h2>
       {state.status === "closed" ? (
         <AdultsOnly className="mt-3" />
-      ) : state.status === "loading" ? (
+      ) : state.status === "loading" && !again.busy ? (
         <div className="mt-3 flex flex-col gap-2">
           <p role="status" className="sr-only">
             Loading your picks
@@ -46,8 +51,8 @@ export default function PicksCard() {
             />
           ))}
         </div>
-      ) : state.status === "error" ? (
-        <LoadFailed what="Your picks" onRetry={retry} className="mt-3" />
+      ) : state.status === "error" || again.busy ? (
+        <LoadFailed what="Your picks" {...again} className="mt-3" />
       ) : result ? (
         <>
           <ul className="mt-2 flex flex-col">
