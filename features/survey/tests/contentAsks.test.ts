@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
 
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden, isMultiline } from "@features/survey/questionFlags";
@@ -127,8 +128,10 @@ describe("completion with the optional asks skipped", () => {
   it("is not satisfied while a required answer is missing, however many optional ones exist", () => {
     const answers: Record<string, string> = { "16019": "an insight", "16020": "a book" };
     // Email is added back by withEmail, so the answer left out is the name (00001).
+    // A classic run's required questions: Survey 2.0's own closing questions are never asked in it.
+    const survey2Only: readonly string[] = SURVEY_2_ONLY_QIDS;
     const required = surveyQuestions.filter(
-      (e) => !isHidden(e.qId) && e.required && e.qId !== "00000"
+      (e) => !isHidden(e.qId) && e.required && e.qId !== "00000" && !survey2Only.includes(e.qId)
     );
     expect(required[0]!.qId).toBe("00001");
     for (const entry of required.slice(1)) answers[entry.qId] = "answer";

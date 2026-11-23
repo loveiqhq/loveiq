@@ -1,6 +1,6 @@
 import { optionGroupsFor, type OptionGroup } from "@features/survey/optionGroups";
 import { isRandomised } from "@features/survey/questionFlags";
-import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { SURVEY_2_ONLY_QIDS, type QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 import type { SurveyQuestion } from "@/data/survey-data";
 
@@ -220,11 +220,16 @@ export function orderAskedQuestions(
   questions: SurveyQuestion[],
   arm: QuestionOrderArm
 ): SurveyQuestion[] {
+  // The questions only Survey 2.0 asks never reach a classic order: these lists are what a
+  // classic draft resumes under, by saved position, so they must not grow.
+  const classic = questions.filter((q) => !SURVEY_2_ONLY.has(q.qId));
   const base = orderContentAsksBeforeDemandBlock(
-    orderDemandBlockBeforeEmail(orderEmailLast(questions))
+    orderDemandBlockBeforeEmail(orderEmailLast(classic))
   );
   return arm === "variant" ? orderC13Opening(base) : base;
 }
+
+const SURVEY_2_ONLY: ReadonlySet<string> = new Set(SURVEY_2_ONLY_QIDS);
 
 /**
  * FNV-1a, 32-bit. Turns a seed string into an integer for `mulberry32`.
