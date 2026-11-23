@@ -342,8 +342,9 @@ function EmailRow({
     >
       {!data.emailChange.allowed ? (
         <p className="text-[13px] text-ap-muted">
+          {/* Settings says why once, at its top (round-4 R4-UXA-5): here, what it means. */}
           {data.minor
-            ? "Mira is only for adults."
+            ? "Can’t be changed."
             : "This address is also a LoveIQ team login, so it can't be changed here."}
         </p>
       ) : null}

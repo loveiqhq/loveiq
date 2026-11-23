@@ -25,6 +25,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 import MiraSettings from "@features/mira/ui/MiraSettings";
 import SignUpFlow from "@features/mira/ui/SignUpFlow";
 import SecuritySettings, { lastActive } from "@features/mira/ui/account/SecuritySettings";
+import SharedReviewSettings from "@features/mira/ui/reviews/SharedReviewSettings";
 import { unlockMark, unlockName } from "@features/mira/ui/account/passkeys";
 
 type Reply = { status?: number; body: unknown };
@@ -403,6 +404,35 @@ describe("A sign-in Mira refuses as under 18", () => {
 
 // Round 4 (R4-CORE-1, lead decision): a browser stopped as under 18 was still asked to sign up,
 // with the 18+ tick, and sent a code before the refusal. The sign-in page now refuses at once.
+// Round 4 (R4-UXA-5): Settings for someone stopped as under 18 said "Mira is only for adults."
+// three times: its notice, under "Emailed code", and in the rating box. Once, like Home.
+describe("Settings for someone Mira stopped as under 18", () => {
+  it("says the refusal once, at the top", async () => {
+    replies["GET /api/mira/me"] = () => ({
+      body: { profile: { email: "lea@example.com", style: {} }, chats: [], minor: true },
+    });
+    replies["GET /api/mira/security"] = () => ({
+      body: {
+        ...SECURITY,
+        minor: true,
+        emailChange: { allowed: false },
+        google: { allowed: false, connected: false },
+        passkeys: { ...SECURITY.passkeys, allowed: false, list: [] },
+      },
+    });
+    replies["GET /api/mira/reviews/mine"] = () => ({
+      status: 403,
+      body: { error: "Not available.", minor: true },
+    });
+    render(
+      <MiraSettings security={<SecuritySettings />} sharedReview={<SharedReviewSettings />} />
+    );
+    await screen.findByRole("button", { name: "Remove my rating" });
+    await screen.findByText("Can’t be changed.");
+    expect(screen.getAllByText("Mira is only for adults.")).toHaveLength(1);
+  });
+});
+
 describe("The sign-in page in a browser Mira stopped as under 18", () => {
   const adultsOnly = () => screen.findByRole("heading", { name: "Mira is only for adults." });
 
@@ -996,7 +1026,9 @@ describe("Settings › Sign-in & security", () => {
       google: { allowed: false, connected: false },
       passkeys: { ...SECURITY.passkeys, allowed: false, list: [] },
     });
-    expect(screen.getByText("Mira is only for adults.")).toBeInTheDocument();
+    // Settings says the refusal once, at its top (R4-UXA-5); here, what it means for the address.
+    expect(screen.getByText("Can’t be changed.")).toBeInTheDocument();
+    expect(screen.queryByText("Mira is only for adults.")).toBeNull();
     expect(screen.queryByText(/team login/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Change email" })).toBeNull();
     // Never a reason that isn't the reason ("Sign in with the emailed code").

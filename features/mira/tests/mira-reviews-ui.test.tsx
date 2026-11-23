@@ -421,7 +421,11 @@ describe("Settings: what you shared", () => {
       body: { error: "Not available.", minor: true },
     });
     render(<SharedReviewSettings />);
-    expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    // Settings says the refusal once, at its top (R4-UXA-5): the box says what is left to do.
+    expect(
+      await screen.findByText(/If this account rated Mira, you can remove the rating/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Mira is only for adults.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(screen.queryByText(/couldn’t load/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Remove my rating" }));
