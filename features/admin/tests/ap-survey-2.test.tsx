@@ -174,9 +174,10 @@ const payload = buildSurveyPage({
   introClicks: null,
 });
 
+const view = { payload };
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (url: string) => ({
-    data: url === "/api/admin/ap/survey" ? payload : null,
+    data: url === "/api/admin/ap/survey" ? view.payload : null,
     loading: false,
     error: null,
     refetch: () => {},
@@ -194,7 +195,10 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
 import ApSurvey from "@features/admin/ui/ap/ApSurvey";
 
 Element.prototype.scrollIntoView = vi.fn();
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  view.payload = payload;
+});
 
 const funnelOrder = () => within(screen.getByRole("group", { name: "Question order" }));
 const funnelRows = () =>
@@ -226,5 +230,46 @@ describe("the Survey page with Survey 2.0 runs", () => {
     render(<ApSurvey />);
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(exported.sections.map((s) => s.name)).toContain("Questions · Survey 2.0");
+  });
+});
+
+describe("the Survey page with only Survey 2.0 runs", () => {
+  it("opens on Survey 2.0's funnel, never on an order the range has no runs in", () => {
+    // As staging with the switch on, or every range once 2.0 is everyone's survey.
+    view.payload = buildSurveyPage({
+      facts: factsFixture({ from: "2026-11-23", to: "2026-11-29" }),
+      previous: null,
+      benchmark: factsFixture(),
+      benchmarkKind: "all",
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-23", to: "2026-11-29" },
+        "2026-11-30"
+      ),
+      today: "2026-11-30",
+      now: new Date("2026-11-30T10:00:00Z"),
+      questions: buildSurveyQuestions(
+        [run("s1", orders.survey2.slice(0, 6)), run("s2", orders.survey2.slice(0, 3))],
+        {
+          steps: [],
+          exits: [],
+          orders: [
+            { s: "s1", q: orders.survey2.slice(0, 6) },
+            { s: "s2", q: orders.survey2.slice(0, 3) },
+          ],
+        },
+        "2026-11-23",
+        "2026-11-29",
+        "All traffic",
+        null
+      ),
+      questionsError: null,
+      introClicks: null,
+    });
+    render(<ApSurvey />);
+    expect(funnelOrder().getByRole("button", { name: "Survey 2.0 · 2 runs" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(funnelRows()[0]!.textContent).toContain("10003");
   });
 });

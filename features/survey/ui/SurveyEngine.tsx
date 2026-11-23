@@ -39,8 +39,8 @@ import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
-import { SURVEY_2_AREAS_QID } from "@features/survey/survey2/order";
-import type { DetailsField } from "@features/survey/survey2/details";
+import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
+import { detailsComplete, type DetailsField } from "@features/survey/survey2/details";
 import DetailsStep, { type DetailsStepHandle } from "./questions/DetailsStep";
 
 /** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
@@ -356,6 +356,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
+  /** Survey 2.0 tells its own time (its guide's), the classic survey the progress's default. */
+  const totalMinutes = orderArm === SURVEY_2_ARM ? SURVEY_2_MINUTES : undefined;
+  /** On Survey 2.0's details screen (the miss-out sheet's handlers read it). */
+  const onDetails = question?.answerType === "details";
 
   // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
   // "white" for everyone. The `?survey=dark` preview went with the 2026-10-04
@@ -1010,20 +1014,31 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     trackOptInSheetShown();
   }, [startedAt, cancelAutoAdvance]);
 
+  /**
+   * On from the miss-out sheet, as Next would. On Survey 2.0's details screen the sheet opens on
+   * picking No, which can come before the country is in (the question shows once the email is):
+   * there it goes on only once every field is filled, else back to the page to finish it, with
+   * no "missing" said for a field the reader has not reached yet.
+   */
+  const carryOnFromOptInSheet = useCallback(() => {
+    if (onDetails && !detailsComplete(getLatestAnswers())) return;
+    goNextRef.current();
+  }, [onDetails, getLatestAnswers]);
+
   const handleOptInSheetYes = useCallback(() => {
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "yes" });
     const yes = optInSheetYes.current;
     if (yes) setAnswer(OPT_IN_QID, yes);
-    goNextRef.current();
-  }, [closeOptInSheet, setAnswer]);
+    carryOnFromOptInSheet();
+  }, [closeOptInSheet, setAnswer, carryOnFromOptInSheet]);
 
   // "Not now": the No stands and the run is submitted, one tap, as Next would.
   const handleOptInSheetNotNow = useCallback(() => {
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "not_now" });
-    goNextRef.current();
-  }, [closeOptInSheet]);
+    carryOnFromOptInSheet();
+  }, [closeOptInSheet, carryOnFromOptInSheet]);
 
   // Closed without a choice (outside, Esc, a swipe down): back on the question, the No
   // still picked. It has been shown, so the next Next submits.
@@ -1510,7 +1525,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                 onPrevious={goPrev}
                 onNext={goNext}
                 nextHintId={NEXT_HINT_ID}
-                progress={<SurveyProgress index={currentIndex} total={totalQuestions} />}
+                progress={
+                  <SurveyProgress
+                    index={currentIndex}
+                    total={totalQuestions}
+                    totalMinutes={totalMinutes}
+                  />
+                }
               />
             </div>
             <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
@@ -1534,7 +1555,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
             enabled={sheets}
             open={openSheet}
             offer={sheetOffer}
-            minutesLeft={minutesLeft(currentIndex + 1, totalQuestions)}
+            minutesLeft={minutesLeft(currentIndex + 1, totalQuestions, totalMinutes)}
             progressIndex={currentIndex}
             total={totalQuestions}
             onKeepGoing={handleSheetKeepGoing}
