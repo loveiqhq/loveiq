@@ -81,6 +81,16 @@ export const MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2 = `${MARKETING_OPT_IN
  */
 export const CONSENT_TERMS_VERSION = "2026-06-04";
 
+/**
+ * The same record for Survey 2.0's consent (features/survey/ui/SurveyPage.tsx, ConsentScreen with
+ * `survey2`): "I'm 18 years of age or older." and "I agree that LoveIQ uses my answers, including
+ * about my sex life, to create my report. I can withdraw anytime." as two ticks, and the terms in
+ * the line under its buttons ("By continuing, you accept our Terms & Conditions, Terms of Use,
+ * Digital Content & Subscription Terms and Medical & Psychological Disclaimer."). Mark's Pre
+ * Survey Wizard, built 23 Nov 2026. A 2.0 run (isSurvey2Run) is filed under it.
+ */
+export const CONSENT_TERMS_VERSION_SURVEY_2 = "2026-11-23";
+
 export interface SurveySubmissionPayload {
   email: string;
   firstName: string;
@@ -294,10 +304,11 @@ export async function submitSurveyOnce(
   // terms version is added only when the user opted in. Best-effort: a failure
   // is logged and swallowed — the submission itself already succeeded and the
   // audit-trail gap can be backfilled if needed.
+  const termsVersion = payload.survey2 ? CONSENT_TERMS_VERSION_SURVEY_2 : CONSENT_TERMS_VERSION;
   try {
     const consentPatch: Record<string, string | Record<string, string[]>> = {
       consent_at: new Date().toISOString(),
-      terms_version: CONSENT_TERMS_VERSION,
+      terms_version: termsVersion,
     };
     if (payload.marketingOptIn === true) {
       const viaSheet = payload.marketingOptInVia === "sheet";
@@ -379,7 +390,7 @@ export async function submitSurveyOnce(
     }
   } catch (err) {
     logger.warn(
-      { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
+      { err, submissionId, termsVersion },
       "Audit M2 / T-11: failed to stamp consent fields"
     );
   }

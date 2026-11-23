@@ -66,6 +66,15 @@ function orderArmFor(draft: Draft, freshArm: QuestionOrderArm): QuestionOrderArm
   return preview ?? resolveDraftQuestionOrderArm(draft, freshArm);
 }
 
+/**
+ * The order arm the questions open on now, decided as `useSurveyState` decides it: the page reads
+ * it to show the guide and consent of that version (Survey 2.0's or today's), so a run is never
+ * asked to agree to one version's words and then answer the other's questions. Server: `freshArm`.
+ */
+export function runOrderArm(freshArm: QuestionOrderArm): QuestionOrderArm {
+  return orderArmFor(loadDraft(), freshArm);
+}
+
 function loadState(freshArm: QuestionOrderArm): SurveyState {
   const saved = loadDraft();
   // A fresh run on a draft dated before C13 ended (a landing card answered then) begins now,
