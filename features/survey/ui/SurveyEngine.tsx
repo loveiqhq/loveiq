@@ -38,6 +38,11 @@ import {
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
+import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
+import { SURVEY_2_AREAS_QID } from "@features/survey/survey2/order";
+
+/** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
+const TOPICS_QID = "16016";
 import { askedScreens, EMAIL_QID, OPT_IN_QID } from "./questionOrder";
 import {
   forgetOptInSheetShown,
@@ -320,12 +325,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // screen-reader line and the jump menu all read the same words.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
+  // Survey 2.0 asks 16016's topics only inside the areas picked on the screen before it
+  // (features/survey/survey2/areas.ts). Keyed by the areas, so only a change to them redraws.
+  const areasKey = JSON.stringify(answers[SURVEY_2_AREAS_QID] ?? null);
   const orderedQuestions = useMemo(
     () =>
-      askedScreens(surveyQuestions, orderArm, prefilledKey.split(",")).map((q) =>
-        applyEmailQuestionArm(q, emailArm)
+      withPickedAreas(
+        askedScreens(surveyQuestions, orderArm, prefilledKey.split(",")).map((q) =>
+          applyEmailQuestionArm(q, emailArm)
+        ),
+        { [SURVEY_2_AREAS_QID]: JSON.parse(areasKey) as unknown }
       ),
-    [prefilledKey, orderArm, emailArm]
+    [prefilledKey, orderArm, emailArm, areasKey]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -1007,6 +1018,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     (value: AnswerValue) => {
       if (!question) return;
       setAnswer(question.qId, value);
+      // New areas on Survey 2.0's first 16016 screen: topics outside them are dropped, so the
+      // topics answer only ever holds what its screen can show.
+      if (question.qId === SURVEY_2_AREAS_QID) {
+        const topics = getLatestAnswers()[TOPICS_QID];
+        if (Array.isArray(topics)) {
+          const areas = Array.isArray(value) ? value.map(String) : [];
+          const kept = pruneTopics(topics.map(String), areas);
+          if (kept.length !== topics.length) setAnswer(TOPICS_QID, kept);
+        }
+      }
 
       cancelAutoAdvance();
       if (
@@ -1026,7 +1047,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         goNextRef.current();
       }, 350);
     },
-    [question, setAnswer, autoAdvance, cancelAutoAdvance]
+    [question, setAnswer, getLatestAnswers, autoAdvance, cancelAutoAdvance]
   );
 
   // Once the last question is answered there is nothing to navigate: the processing
