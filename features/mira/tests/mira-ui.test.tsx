@@ -523,6 +523,24 @@ describe("Chat", () => {
     expect(calls("POST /api/mira/chat")[0]!.chatId).toBe(SAVED); // still this chat
   });
 
+  // R4-CORE-5: the chat's own read answering 401 turned the page into the welcome with its
+  // eight prompts and "Please sign in again.", as if it were a new chat.
+  it("says a lost sign-in on a saved chat's read with the one notice, not the welcome", async () => {
+    window.history.replaceState(null, "", `/mira?chat=${SAVED}`);
+    onTestFinished(() => window.history.replaceState(null, "", "/"));
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({ status: 401, body: { error: "x" } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent(`/mira?chat=${SAVED}`)}`
+    );
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    expect(screen.queryByText("Please sign in again.")).toBeNull();
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
+  });
+
   it("lists a new chat under the title the server gave it, never words it held back", async () => {
     const earlier = { id: SAVED, title: "Lights off", updated_at: "2026-11-21T10:00:00Z" };
     replies["GET /api/mira/me"] = () => ({ body: { profile: { style: {} }, chats: [earlier] } });

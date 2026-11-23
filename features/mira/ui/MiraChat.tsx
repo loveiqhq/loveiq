@@ -15,6 +15,7 @@ import { ADULTS_ONLY, ConfirmDelete } from "./kit";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import { ReviewsWelcome } from "./reviews/PublicReviews";
+import { SignedOutNotice } from "./account/SignedOut";
 import { ReviewAsk, THUMBS_FOR_ASK, reviewAskDue } from "./reviews/ReviewAsk";
 import { TalkButton, VoiceEnded, VoicePanel } from "./voice/VoicePanel";
 import { useVoice } from "./voice/useVoice";
@@ -133,6 +134,9 @@ export default function MiraChat({
   // The saved chat didn't load: said with Try again, whatever else fails meanwhile (a send's
   // error doesn't replace it), and it stays the chat being continued (CHAT-16, R3-CHAT-10).
   const [unloaded, setUnloaded] = useState(false);
+  // The saved chat's own read found the sign-in gone: the one notice in its place, never the
+  // welcome and its prompts, which read as a new chat (round-4 R4-CORE-5).
+  const [lost, setLost] = useState(false);
   // A calm line about the chat itself (it isn't here any more), read out as a status.
   const [notice, setNotice] = useState<string | null>(stopped ? ADULTS_ONLY : null);
   // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
@@ -244,7 +248,7 @@ export default function MiraChat({
       window.history.replaceState(null, "", "/mira");
       setNotice("That chat isn't here any more. It may have been deleted.");
     } else if (chat.status === 401) {
-      setError({ text: "Please sign in again.", signIn: true });
+      setLost(true);
     } else {
       setUnloaded(true);
     }
@@ -769,8 +773,8 @@ export default function MiraChat({
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
   // A chat opened by its link loads first: the welcome would only flash before it.
-  const showWelcome = empty && (ready || !initialChatId) && !unloaded;
-  const showChips = ready && empty && !gate && !unloaded && !minor;
+  const showWelcome = empty && (ready || !initialChatId) && !unloaded && !lost;
+  const showChips = ready && empty && !gate && !unloaded && !minor && !lost;
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">
@@ -909,6 +913,11 @@ export default function MiraChat({
                   : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:rgb(var(--ap-mist))_transparent] [scrollbar-width:thin]"
               }
             >
+              {lost ? (
+                <div className="mx-auto w-full max-w-[760px]">
+                  <SignedOutNotice />
+                </div>
+              ) : null}
               {showWelcome ? (
                 <div className="mx-auto flex max-w-[760px] flex-col items-center gap-3 py-6 text-center sm:gap-3.5 sm:pb-7 sm:pt-0">
                   <h1 className="text-balance font-serif text-[30px] font-medium leading-[1.2] tracking-[-0.01em] motion-safe:animate-mira-in sm:text-[40px] [@media(max-height:480px)]:text-[24px]">
