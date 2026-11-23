@@ -673,6 +673,25 @@ describe("Settings › Sign-in & security", () => {
     expect(calls("DELETE /api/mira/security")[1]!.url).toBe("/api/mira/security?device=all");
   });
 
+  // R4-CORE-3: only Settings' own Sign out forgot this tab's pending sign-in and change of email;
+  // "Sign out this device" and "Sign out everywhere" kept both, addresses and all.
+  for (const [which, name, confirmed] of [
+    ["this device", "Sign out this device", false],
+    ["everywhere", "Sign out everywhere", true],
+  ] as const) {
+    it(`forgets a pending sign-in and change of email on signing out ${which}`, async () => {
+      sessionStorage.setItem("mira.signin.code.v1", JSON.stringify({ email: "a@example.com" }));
+      sessionStorage.setItem("mira.email.code.v1", JSON.stringify({ address: "b@example.com" }));
+      const devices = await show();
+      replies["DELETE /api/mira/security"] = () => ({ body: { success: true, signedOut: true } });
+      fireEvent.click(within(devices).getByRole("button", { name }));
+      if (confirmed) fireEvent.click(within(devices).getAllByRole("button", { name })[0]!);
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/start"));
+      expect(sessionStorage.getItem("mira.signin.code.v1")).toBeNull();
+      expect(sessionStorage.getItem("mira.email.code.v1")).toBeNull();
+    });
+  }
+
   // Round-3 R3-ACCT-6: when the control that had the focus went away, the focus fell to the page:
   // signing out another device, removing a passkey, and the re-sign-in box (opening and Not now).
   it("never drops the focus on the page when its control goes away", async () => {

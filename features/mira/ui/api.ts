@@ -101,6 +101,23 @@ export async function miraApi<T = Record<string, unknown>>(
 }
 
 /**
+ * After a sign-out from this tab (Settings' Sign out, Devices' "Sign out this device" or "Sign out
+ * everywhere"), nothing of a pending sign-in or change of email (addresses in them) stays for the
+ * next person on the tab, nor a check-in kept through a lost sign-in (round-4 R4-CORE-3).
+ */
+export function forgetPendingSteps(): void {
+  try {
+    sessionStorage.removeItem("mira.signin.code.v1");
+    sessionStorage.removeItem("mira.email.code.v1");
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("mira.journal.draft.v1:")) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Blocked storage: nothing was kept there.
+  }
+}
+
+/**
  * The sign-in page, coming back afterwards to this page, with its query and its Settings section
  * (the sign-in page lets `next` through only where server/session.ts safeNext allows it).
  */

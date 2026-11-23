@@ -18,7 +18,7 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, useSignedOut, type ApiResult } from "./api";
+import { forgetPendingSteps, miraApi, useSignedOut, type ApiResult } from "./api";
 import { AdultsOnly, ConfirmDelete } from "./kit";
 import { LoadFailed, useRetry } from "./kit/load-failed";
 import { SignedOutNotice } from "./account/SignedOut";
@@ -358,10 +358,7 @@ export default function MiraSettings({
       });
     }
     // Nothing of a pending sign-in or change of email stays in this tab for the next person.
-    try {
-      sessionStorage.removeItem("mira.signin.code.v1");
-      sessionStorage.removeItem("mira.email.code.v1");
-    } catch {}
+    forgetPendingSteps();
     router.replace("/mira");
     router.refresh();
   }
