@@ -51,7 +51,25 @@
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { sessionArmHash } from "@shared/experiments/sessionHash";
 
-export type QuestionOrderArm = "control" | "variant";
+/**
+ * The order a run is asked. `control` and `variant` are C13's two (the old order, and the test's,
+ * everyone's since it ended). `survey2` is Mark's Survey 2.0 (Survey Review, 19 Nov 2026): its own
+ * screens, wording, closing questions and details page (features/survey/survey2/). A run gets it
+ * only when it starts while the `survey_2` switch is on, and keeps whichever order it began in.
+ */
+export type QuestionOrderArm = "control" | "variant" | "survey2";
+
+/** C13's two orders, the ones a classic run can be asked. */
+export type ClassicOrderArm = Exclude<QuestionOrderArm, "survey2">;
+
+/** Survey 2.0's arm. */
+export const SURVEY_2_ARM = "survey2" satisfies QuestionOrderArm;
+
+/**
+ * The questions only Survey 2.0 asks: its three closing questions, which every 2.0 run answers
+ * (they are required), so a submitted run that holds one was a 2.0 run (questionOrderArmOfSubmission).
+ */
+export const SURVEY_2_ONLY_QIDS = ["17001", "17002", "17003"] as const;
 
 /** The experiment's key in `survey_submission.utm_tracker`. */
 export const QUESTION_ORDER_ARM_KEY = "question_order_arm";
@@ -67,14 +85,14 @@ export const QUESTION_ORDER_ARM_KEY = "question_order_arm";
 export const QUESTION_ORDER_TEST_END = "2026-11-21T11:43:00Z";
 
 /** The order every new survey run is asked since the test ended. */
-export const QUESTION_ORDER_WINNER = "variant" satisfies QuestionOrderArm;
+export const QUESTION_ORDER_WINNER = "variant" satisfies ClassicOrderArm;
 
 export function isQuestionOrderArm(value: unknown): value is QuestionOrderArm {
-  return value === "control" || value === "variant";
+  return value === "control" || value === "variant" || value === SURVEY_2_ARM;
 }
 
 /**
- * Preview override. `?order=control` or `?order=variant` on `/survey`, so either
+ * Preview override. `?order=control`, `?order=variant` or `?order=survey2` on `/survey`, so any
  * arm can be inspected deterministically on dev and staging. Returns null on
  * production, where it must never influence a real respondent's bucketing — the
  * same guard `resolveSurveyDevOverride` uses.
@@ -98,7 +116,7 @@ export function resolveQuestionOrderOverride(
  * Only for runs begun before QUESTION_ORDER_TEST_END: since the end nobody is dealt it
  * (questionOrderArmAt).
  */
-export function assignQuestionOrderArm(sessionId: string | null | undefined): QuestionOrderArm {
+export function assignQuestionOrderArm(sessionId: string | null | undefined): ClassicOrderArm {
   if (!sessionId?.trim()) return "control";
   return sessionArmHash(`c13-opening-order:${sessionId}`) % 2 === 0 ? "control" : "variant";
 }
@@ -112,10 +130,27 @@ export function assignQuestionOrderArm(sessionId: string | null | undefined): Qu
 export function questionOrderArmAt(
   sessionId: string | null | undefined,
   startedAtMs: number
-): QuestionOrderArm {
+): ClassicOrderArm {
   return startedAtMs >= Date.parse(QUESTION_ORDER_TEST_END)
     ? QUESTION_ORDER_WINNER
     : assignQuestionOrderArm(sessionId);
+}
+
+/**
+ * The order a SUBMITTED run was asked, for the server's stamp: Survey 2.0 when its answers hold one
+ * of the questions only 2.0 asks (SURVEY_2_ONLY_QIDS), else what questionOrderArmAt gives. The
+ * switch that gave the run 2.0 can't be read back for a past start, so the answers decide; they are
+ * the run itself, and every 2.0 run answers all three.
+ */
+export function questionOrderArmOfSubmission(
+  sessionId: string | null | undefined,
+  startedAtMs: number,
+  answeredQIds: readonly string[]
+): QuestionOrderArm {
+  const only: readonly string[] = SURVEY_2_ONLY_QIDS;
+  return answeredQIds.some((qId) => only.includes(qId))
+    ? SURVEY_2_ARM
+    : questionOrderArmAt(sessionId, startedAtMs);
 }
 
 /**
@@ -137,10 +172,18 @@ export function questionOrderArmAt(
  * ASKED THE WINNER. While the test ran it was bucketed by its session id; since the end every
  * new run gets the new order, whatever its id. A draft that recorded an arm during the test
  * keeps it, even with nothing answered, for the same reason a draft from before C13 does.
+ *
+ * `freshArm` is what a fresh run gets: Survey 2.0 while the `survey_2` switch is on
+ * (features/survey/server/survey2Switch.ts), the winner otherwise. Only a fresh run reads it: a
+ * draft in a classic order keeps that order when the switch comes on, and a 2.0 draft keeps 2.0
+ * when it goes off.
  */
-export function resolveDraftQuestionOrderArm(draft: DraftOrder): QuestionOrderArm {
+export function resolveDraftQuestionOrderArm(
+  draft: DraftOrder,
+  freshArm: QuestionOrderArm = QUESTION_ORDER_WINNER
+): QuestionOrderArm {
   if (isQuestionOrderArm(draft.orderArm)) return draft.orderArm;
-  return hasProgress(draft) ? "control" : QUESTION_ORDER_WINNER;
+  return hasProgress(draft) ? "control" : freshArm;
 }
 
 /** What a saved draft holds that decides its order. */

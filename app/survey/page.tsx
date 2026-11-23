@@ -7,6 +7,7 @@ import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
 import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { survey2ForVisit } from "@features/survey/server/survey2Switch";
 import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -66,7 +67,7 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
 
 interface SurveyRouteProps {
   /** Next always passes it; a direct call (features/pay-to-start/tests) may not. */
-  searchParams?: Promise<{ sheets?: string | string[] }>;
+  searchParams?: Promise<{ sheets?: string | string[]; order?: string | string[] }>;
 }
 
 export default async function Page({ searchParams }: SurveyRouteProps = {}) {
@@ -88,12 +89,14 @@ export default async function Page({ searchParams }: SurveyRouteProps = {}) {
     after(() => recordSurveyPageView(newSurveyVariant, utmSource));
   }
 
-  const [journey, sheets] = await Promise.all([
+  const params = searchParams ?? Promise.resolve({ sheets: undefined, order: undefined });
+  const [journey, sheets, survey2] = await Promise.all([
     payToStartJourney(headersList.get("cookie")),
     // The sheets between questions: their switches, or a staging preview (?sheets=all).
-    (searchParams ?? Promise.resolve({ sheets: undefined })).then((params) =>
-      surveySheetsForVisit(params.sheets)
-    ),
+    params.then((p) => surveySheetsForVisit(p.sheets)),
+    // Survey 2.0: its switch, or a staging preview (?order=survey2). One answer for the guide and
+    // for the order a fresh run is asked, so the two never mix.
+    params.then((p) => survey2ForVisit(p.order)),
   ]);
-  return <SurveyPage journey={journey} sheets={sheets} />;
+  return <SurveyPage journey={journey} sheets={sheets} survey2={survey2} />;
 }
