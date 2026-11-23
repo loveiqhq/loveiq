@@ -2,7 +2,10 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { QUESTION_ORDER_ARM_KEY, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
+import {
+  QUESTION_ORDER_ARM_KEY,
+  questionOrderArmOfSubmission,
+} from "@shared/experiments/questionOrderArm";
 import {
   EMAIL_QUESTION_ARM_KEY,
   EMAIL_QUESTION_WINNER,
@@ -580,8 +583,15 @@ export async function POST(request: Request) {
    * Only stamped when a session id is present, which preserves the
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct
    * hit still produces no utm_tracker at all rather than a bare {} .
+   *
+   * SURVEY 2.0 (Mark's Survey Review, 19 Nov 2026) is a third order, given by a switch rather
+   * than the session id, so it can't be recomputed from the start. Its answers say it instead:
+   * every 2.0 run answers its three closing questions (17001-17003), which no other order asks
+   * (questionOrderArmOfSubmission).
    */
-  const questionOrderArm = sessionId ? questionOrderArmAt(sessionId, Date.parse(startedAt)) : null;
+  const questionOrderArm = sessionId
+    ? questionOrderArmOfSubmission(sessionId, Date.parse(startedAt), Object.keys(answers))
+    : null;
   /**
    * Mark's 50/50 of his new EUR 1.99 page (gateRevealArm.ts), while its switch is on: from the
    * same session id, so it is the half the browser's sheets followed and the report's gate will

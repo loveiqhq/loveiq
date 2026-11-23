@@ -53,24 +53,25 @@ function readDraftExtras(): Pick<Draft, "prefilled" | "orderArm"> {
 }
 
 /**
- * C13's arm for a run: `?order=` where previews are allowed (never production), else
- * what the draft says, and the new order for a fresh run since the test ended. Without a
- * window (server render) there is no draft, so a fresh run's order.
+ * The order arm for a run: `?order=` where previews are allowed (never production), else
+ * what the draft says, and `freshArm` for a fresh run: Survey 2.0 while its switch is on
+ * (the page reads it: features/survey/server/survey2Switch.ts), the C13 winner otherwise.
+ * Without a window (server render) there is no draft, so a fresh run's order.
  */
-function orderArmFor(draft: Draft): QuestionOrderArm {
-  if (typeof window === "undefined") return QUESTION_ORDER_WINNER;
+function orderArmFor(draft: Draft, freshArm: QuestionOrderArm): QuestionOrderArm {
+  if (typeof window === "undefined") return freshArm;
   const preview = resolveQuestionOrderOverride(
     new URLSearchParams(window.location.search).get("order")
   );
-  return preview ?? resolveDraftQuestionOrderArm(draft);
+  return preview ?? resolveDraftQuestionOrderArm(draft, freshArm);
 }
 
-function loadState(): SurveyState {
+function loadState(freshArm: QuestionOrderArm): SurveyState {
   const saved = loadDraft();
   // A fresh run on a draft dated before C13 ended (a landing card answered then) begins now,
   // so the server stamps it with the order it is asked (beginsNow).
   const draft = beginsNow(saved) ? { ...saved, startedAt: new Date().toISOString() } : saved;
-  return { ...draft, orderArm: orderArmFor(draft) };
+  return { ...draft, orderArm: orderArmFor(draft, freshArm) };
 }
 
 function loadDraft(): Draft {
@@ -109,8 +110,13 @@ function loadDraft(): Draft {
   return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString(), prefilled: [] };
 }
 
-export function useSurveyState() {
-  const [state, setState] = useState<SurveyState>(loadState);
+export interface SurveyStateOptions {
+  /** What a fresh run is asked: Survey 2.0 while its switch is on, the C13 winner otherwise. */
+  freshArm?: QuestionOrderArm;
+}
+
+export function useSurveyState({ freshArm = QUESTION_ORDER_WINNER }: SurveyStateOptions = {}) {
+  const [state, setState] = useState<SurveyState>(() => loadState(freshArm));
 
   /**
    * The answers, readable SYNCHRONOUSLY — before React has committed the render that
@@ -176,8 +182,8 @@ export function useSurveyState() {
       startedAt: new Date().toISOString(),
       prefilled: [],
     };
-    setState({ ...fresh, orderArm: orderArmFor(fresh) });
-  }, []);
+    setState({ ...fresh, orderArm: orderArmFor(fresh, freshArm) });
+  }, [freshArm]);
 
   return {
     answers: state.answers,

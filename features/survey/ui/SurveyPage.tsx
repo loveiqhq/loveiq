@@ -1328,11 +1328,20 @@ interface SurveyPageProps {
    * staging preview). None by default.
    */
   sheets?: readonly SurveySheetId[];
+  /**
+   * Survey 2.0 (app/survey/page.tsx: its switch, or a staging preview): a fresh run is asked the
+   * 2.0 screens. Off by default.
+   */
+  survey2?: boolean;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
 
-const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS }) => {
+const SurveyPage: FC<SurveyPageProps> = ({
+  journey = null,
+  sheets = NO_SHEETS,
+  survey2 = false,
+}) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -1535,6 +1544,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS })
         onStartOver={handleStartOver}
         payToStart={journey !== null}
         sheets={sheets}
+        survey2={survey2}
       />
     );
   }
