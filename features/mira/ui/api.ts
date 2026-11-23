@@ -26,7 +26,7 @@ export const SIGNED_OUT = "You were signed out. Please sign in again.";
 /** After "Send a new code" (sign-in or a new address): the code before no longer works. */
 export const NEW_CODE = "A new code is on its way. Only the newest code works.";
 /** Told on the window whenever a Mira route answers 401, so a page can say so once. */
-const SIGNED_OUT_EVENT = "mira:signed-out";
+export const SIGNED_OUT_EVENT = "mira:signed-out";
 
 /**
  * Where this browser's visit came from, from the site's campaign tracker (shared/url/utm.ts):
