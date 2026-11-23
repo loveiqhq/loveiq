@@ -73,6 +73,8 @@ import logger from "@shared/observability/logger";
 import {
   __resetSurveyStatusCacheForTests,
   __setSubmitLandPollMsForTests,
+  CONSENT_TERMS_VERSION,
+  CONSENT_TERMS_VERSION_SURVEY_2,
   MARKETING_OPT_IN_SHEET_TERMS_VERSION,
   MARKETING_OPT_IN_TERMS_VERSION,
   MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2,
@@ -802,6 +804,24 @@ describe("POST /api/survey", () => {
       expect(consentPatch().marketing_opt_in_terms_version).toBe(
         `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-2026-11-10`
       );
+    });
+
+    // Survey 2.0's consent asks for the 18+ and for the use of the answers (sex life included)
+    // in two ticks of their own, with the terms in the line under its buttons: other words, so
+    // a 2.0 run's consent is filed under their version, and every other run under today's.
+    it("dates Survey 2.0's consent text", () => {
+      expect(CONSENT_TERMS_VERSION_SURVEY_2).toBe("2026-11-23");
+      expect(CONSENT_TERMS_VERSION_SURVEY_2).not.toBe(CONSENT_TERMS_VERSION);
+    });
+
+    it("files a Survey 2.0 run's consent under 2.0's consent text", async () => {
+      await submitOptIn(NO, { answers: survey2Answers(NO) });
+      expect(consentPatch().terms_version).toBe(CONSENT_TERMS_VERSION_SURVEY_2);
+    });
+
+    it("keeps today's consent version for every other run", async () => {
+      await submitOptIn(NO);
+      expect(consentPatch().terms_version).toBe(CONSENT_TERMS_VERSION);
     });
   });
 
