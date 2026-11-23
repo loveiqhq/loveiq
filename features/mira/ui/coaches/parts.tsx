@@ -103,7 +103,8 @@ if (typeof window !== "undefined") {
 /**
  * "Notify me" on a coming-soon coach, and its "Stop" once asked. Each shows at once and is put
  * back if the request fails; the coach's button stays focusable either way, and Stop hands the
- * keyboard back to it, so a keyboard never loses its place.
+ * keyboard back to it, so a keyboard never loses its place. `done` null: not known yet (the
+ * roster's read is on its way), so a quiet placeholder, never a guessed "Notify me" (CHK-F6).
  */
 export function NotifyButton({
   coach,
@@ -111,7 +112,7 @@ export function NotifyButton({
   onChange,
 }: {
   coach: Coach;
-  done: boolean;
+  done: boolean | null;
   onChange: (id: CoachId, on: boolean) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +120,14 @@ export function NotifyButton({
   const [said, setSaid] = useState("");
   const main = useRef<HTMLButtonElement | null>(null);
   const taps = useRef(0);
+  if (done === null) {
+    return (
+      <span
+        aria-hidden="true"
+        className="inline-block h-11 w-[132px] rounded-full bg-ap-ground motion-safe:animate-pulse"
+      />
+    );
+  }
   async function change(on: boolean) {
     if (on === done) return;
     setError(null);
