@@ -1188,6 +1188,33 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     expect(tip()).toBeNull();
   });
 
+  // R4-CORE-2: the tip was drawn over the conversation (fixed on phones, absolute from sm), right
+  // where the chat scrolls a new reply's first line, hiding it; and it came under Mira's own
+  // question, two asks at once.
+  it("takes its own room above the conversation, never over the reply, and waits out her question", async () => {
+    const answers = ["Which of the two feels more doable for you?", "Try this."];
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: answers.shift()!, chatId: null } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Which of the two feels more doable for you?");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(tip()).toBeNull();
+    typeAndSend("the first");
+    await screen.findByText("Try this.");
+    const note = await screen.findByRole("note", { name: "Tip" });
+    // In the page's flow: nothing on its way up is laid over the conversation.
+    for (let el: HTMLElement | null = note; el; el = el.parentElement) {
+      expect(el.className).not.toMatch(/(^|\s)(sm:)?(fixed|absolute)(\s|$)/);
+    }
+    // Between the header and the conversation, so the conversation starts below it.
+    const conversation = screen.getByRole("region", { name: "Conversation" });
+    expect(note.closest("header")).toBeNull();
+    expect(
+      note.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(conversation.contains(note)).toBe(false);
+  });
+
   it("Not now puts it away for good in that browser", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn initialChatId={null} />);

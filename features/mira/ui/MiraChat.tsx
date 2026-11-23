@@ -725,7 +725,8 @@ export default function MiraChat({
   }, [started]);
 
   // "Make Mira yours": once per browser, after a reply of Mira's when nothing else asks for the
-  // person's attention (no question with answer buttons, card, check, panel or crisis).
+  // person's attention (no question with answer buttons, card, check, panel or crisis), nor her own
+  // question (round-4 R4-CORE-2: two asks at once).
   const showTip =
     tipSeen === false &&
     !sending &&
@@ -741,6 +742,7 @@ export default function MiraChat({
     !isInvitation(last) &&
     !last.ask &&
     !last.goal &&
+    !endsAsking(last.content) &&
     !crisisIn(messages);
 
   useEffect(() => {
@@ -801,38 +803,6 @@ export default function MiraChat({
                       />
                     ) : null}
                   </button>
-                  {showTip ? (
-                    <div
-                      role="note"
-                      aria-label="Tip"
-                      className="fixed inset-x-3 top-[64px] z-20 rounded-[18px] border border-ap-line bg-white p-4 text-left shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-in sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2.5 sm:w-[300px]"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="absolute -top-[6px] right-[60px] hidden h-3 w-3 rotate-45 border-l border-t border-ap-line bg-white sm:block"
-                      />
-                      <p className="font-serif text-[17px] font-semibold">Make Mira yours</p>
-                      <p className="mt-1 text-[14px] leading-snug text-ap-body">
-                        Choose how she coaches you: softer or more direct, solutions or root causes.
-                      </p>
-                      <div className="mt-3 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={closeTip}
-                          className="min-h-[40px] px-3 text-[14px] font-semibold text-ap-muted"
-                        >
-                          Not now
-                        </button>
-                        <button
-                          type="button"
-                          onClick={openStyle}
-                          className="inline-flex min-h-[40px] items-center rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
-                        >
-                          Set it up
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                 </span>
                 <button
                   type="button"
@@ -864,6 +834,40 @@ export default function MiraChat({
             )}
           </div>
         </header>
+
+        {/* "Make Mira yours", in its own room under the header, beside the highlighted button:
+            drawn over the conversation it hid the start of the reply it came with (round-4
+            R4-CORE-2), as the chat shows a new reply from its first line. */}
+        {showTip ? (
+          <div className="relative z-[2] shrink-0 px-3 pb-2 min-[360px]:px-4 sm:flex sm:justify-end sm:px-8">
+            <div
+              role="note"
+              aria-label="Tip"
+              className="rounded-[18px] border border-ap-line bg-white p-4 text-left shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-in sm:w-[300px]"
+            >
+              <p className="font-serif text-[17px] font-semibold">Make Mira yours</p>
+              <p className="mt-1 text-[14px] leading-snug text-ap-body">
+                Choose how she coaches you: softer or more direct, solutions or root causes.
+              </p>
+              <div className="mt-3 flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={closeTip}
+                  className="min-h-[40px] px-3 text-[14px] font-semibold text-ap-muted"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={openStyle}
+                  className="inline-flex min-h-[40px] items-center rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                >
+                  Set it up
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="relative z-[1] flex min-h-0 flex-1">
           {/* Wide screens, signed in: the chat list, once there is more than one chat to go back
