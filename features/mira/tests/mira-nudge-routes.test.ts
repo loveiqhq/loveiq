@@ -5,6 +5,8 @@ vi.mock("@features/admin/server/supabase", () => ({
   fetchAllRows: vi.fn(),
 }));
 vi.mock("@features/mira/server/store", () => ({ logMiraEvent: vi.fn(), addMessages: vi.fn() }));
+// Signed in or not; the preference routes ask only for anything beyond a stop (SEC-R4-2).
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 vi.mock("@shared/http/csrf", () => ({ verifyCsrfToken: vi.fn().mockResolvedValue(true) }));
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 9, resetAt: new Date() }),
@@ -38,6 +40,7 @@ vi.mock("@features/mira/server/nudges", async (importOriginal) => ({
 
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { makeToken, runNudges } from "@features/mira/server/nudges";
+import { getMiraAccount } from "@features/mira/server/session";
 import { logMiraEvent } from "@features/mira/server/store";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -89,6 +92,35 @@ describe("nudge preference routes", () => {
     vi.mocked(supabaseFetch).mockImplementation(async (_path, init) =>
       init?.method === "PATCH" ? json([]) : json([PREFS])
     );
+    // The link's own account is signed in, unless a test says otherwise.
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: USER_ID, email: "lea@example.com" });
+  });
+
+  // Round-4 security SEC-R4-2: the token is the account id signed, never expires, and stays in
+  // every inbox the email reached, an address the person has since left too. Without a sign-in
+  // it could read the choices and turn nudges back on against the person's own stop.
+  it("with the link alone only stop: reading, saving and turning back on need the sign-in", async () => {
+    for (const someone of [null, { id: "22222222-3333-4444-8555-666666666666", email: "x@y.z" }]) {
+      vi.mocked(getMiraAccount).mockResolvedValue(someone);
+      for (const body of [
+        { action: "read", t: t() },
+        { action: "resume", t: t() },
+        { action: "save", t: t(), choice: "pause" },
+      ]) {
+        const res = await post(body);
+        expect(res.status).toBe(401);
+        expect(await res.json()).toEqual({
+          error: "Please sign in to change your nudges.",
+          signIn: true,
+        });
+      }
+    }
+    expect(patches()).toHaveLength(0);
+    expect(vi.mocked(supabaseFetch)).not.toHaveBeenCalled(); // not even a read
+    // A stop needs nothing more than the link, and tells nothing back.
+    const stop = await post({ action: "stop", t: t() });
+    expect(await stop.json()).toEqual({ success: true });
+    expect(patches()[0]!.body).toMatchObject({ nudges_on: false });
   });
 
   // DATA-1: the page sends the token in a POST's body, never in an address (logs, analytics), so

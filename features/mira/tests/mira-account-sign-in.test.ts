@@ -52,6 +52,7 @@ import { getMiraAccount } from "@features/mira/server/session";
 import { mintSignInCode } from "@features/mira/server/sign-in";
 import { logMiraEvent, upsertProfileAtSignIn } from "@features/mira/server/store";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { checkCooldown, checkRateLimit } from "@shared/http/ratelimit";
 
 const LEA = "6f2c4a1e-1111-4222-8333-944455556666";
 const SID = "0b1c2d3e-4f50-4617-8829-3a4b5c6d7e8f";
@@ -270,22 +271,48 @@ describe("a sign-in from a browser Mira stopped as under 18", () => {
     expect(db.tables.mira_chat).toEqual([{ id: "c-old", user_id: LEA, title: "Before" }]);
   });
 
-  it("brings the stop to the new account Google makes, never to an existing one", async () => {
+  // Round-4 core R4-CORE-1: a stopped browser could ask for a code for a new address, which
+  // emailed it and made an account (stopped only after the code). Now it gets no code at all,
+  // for any address, so the answer can't tell who has an account.
+  it("gets no sign-in code: nothing emailed, no login made, no allowance spent", async () => {
     browser.set("mira_minor", "1");
-    browser.set("mira-google", packStart(S, { useAssessment: false, next: null }));
-    googleSays("lea@gmail.com");
-    const signIn = () =>
-      googleCallback(
-        new Request(`https://www.loveiq.org/api/mira/auth/google/callback?code=c&state=${S.state}`)
+    for (const email of ["new.person@gmail.com", "lea@gmail.com"]) {
+      const res = await auth(
+        new Request("https://www.loveiq.org/api/mira/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "start", email, adult: true, terms: true, consent: true }),
+        })
       );
-    profileMade(LONG_AGO);
-    await signIn();
-    expect(db.tables.mira_user![0]!.minor_at).toBeNull();
-    profileMade(NOW());
-    browser.set("mira-google", packStart(S, { useAssessment: false, next: null }));
-    googleSays("lea@gmail.com"); // a Response's body reads once
-    await signIn();
-    expect(db.tables.mira_user![0]!.minor_at).toEqual(expect.any(String));
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "Mira is only for adults.", minor: true });
+    }
+    expect(mintSignInCode).not.toHaveBeenCalled();
+    expect(vi.mocked(supabaseFetch)).not.toHaveBeenCalled();
+    expect(db.tables.mira_sign_in_code ?? []).toEqual([]);
+    // The inbox's wait and day slots and the network's codes stay unspent.
+    expect(checkCooldown).not.toHaveBeenCalled();
+    expect(vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket)).not.toContain(
+      "mira-code-ip"
+    );
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("makes no account with Google and signs nobody in, new or existing", async () => {
+    browser.set("mira_minor", "1");
+    browser.set("mira-google", packStart(S, { useAssessment: false, next: "/mira/home" }));
+    googleSays("new.person@gmail.com");
+    const res = await googleCallback(
+      new Request(`https://www.loveiq.org/api/mira/auth/google/callback?code=c&state=${S.state}`)
+    );
+    expect(res.headers.get("location")).toBe(
+      "https://www.loveiq.org/mira/start?google=minor&next=%2Fmira%2Fhome"
+    );
+    expect(mintSignInCode).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(upsertProfileAtSignIn).not.toHaveBeenCalled();
+    expect(db.tables.mira_session ?? []).toEqual([]);
+    expect(db.tables.mira_user).toEqual([lea]);
   });
 
   it("leaves an account alone when the browser carries no such mark", async () => {

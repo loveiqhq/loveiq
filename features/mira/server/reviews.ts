@@ -60,23 +60,19 @@ export function refreshPublicReviews(): void {
 }
 
 /**
- * Whether the account has talked with Mira: MESSAGES_TO_RATE messages of its own in its saved
- * chats or, as "Remember our conversations" off saves none, in the server's own message_sent
- * events (the browser can't log those). Each read stops at that many rows. Every rating comes
- * through this check, so the public threshold counts only such accounts. A failed read throws:
- * nobody is let in on an error.
+ * Whether the account has talked with Mira: MESSAGES_TO_RATE messages of its own, counted in the
+ * message_sent events only the chat route writes, saved or not ("Remember our conversations"
+ * off saves none). Never the saved chats: a chat carried in at sign-in is stored as the browser
+ * sent it, so its turns can be made up (round-4 security SEC-R4-3). The read stops at that many
+ * rows. Every rating comes through this check, so the public threshold counts only such
+ * accounts. A failed read throws: nobody is let in on an error.
  */
 export async function hasTalkedWithMira(userId: string): Promise<boolean> {
-  const id = enc(userId);
-  for (const path of [
-    `/rest/v1/mira_message?select=id,mira_chat!inner(user_id)&mira_chat.user_id=eq.${id}&role=eq.user`,
-    `/rest/v1/mira_event?user_id=eq.${id}&name=eq.message_sent&select=id`,
-  ]) {
-    const res = await supabaseFetch(`${path}&limit=${MESSAGES_TO_RATE}`);
-    if (!res.ok) throw new Error(`mira message count failed (${res.status})`);
-    if (((await res.json()) as unknown[]).length >= MESSAGES_TO_RATE) return true;
-  }
-  return false;
+  const res = await supabaseFetch(
+    `/rest/v1/mira_event?user_id=eq.${enc(userId)}&name=eq.message_sent&select=id&limit=${MESSAGES_TO_RATE}`
+  );
+  if (!res.ok) throw new Error(`mira message count failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length >= MESSAGES_TO_RATE;
 }
 
 /** What a person shared, as Settings shows it. */

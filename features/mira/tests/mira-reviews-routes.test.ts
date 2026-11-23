@@ -288,6 +288,16 @@ describe("only people who have talked with Mira can rate her", () => {
     expect((await rate({ stars: 3 })).status).toBe(200);
   });
 
+  // Round-4 security SEC-R4-3: a chat carried in at sign-in is stored as the browser sent it, so
+  // its "user" turns can be made up; only messages the chat route itself saw count.
+  it("never counts a chat the browser carried in at sign-in", async () => {
+    db.messages = [];
+    db.events = [];
+    talk(LEA.id, 3, 0); // three of "their" turns in a saved chat, none ever sent to Mira
+    expect((await rate({ stars: 1 })).status).toBe(403);
+    expect(db.rows).toEqual([]);
+  });
+
   it("tells Settings and the ask whether the person may rate", async () => {
     const mine = async () => (await getMine(call("GET", "/api/mira/reviews/mine"))).json();
     expect(await mine()).toEqual({ review: null, name: "Lea", canRate: true });
