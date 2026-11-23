@@ -15,7 +15,7 @@ import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
  * every count a classic run is measured against, stay exactly as they were.
  */
 const ROOT = join(__dirname, "..", "..", "..");
-const MIGRATION = "supabase/migrations/20261123120000_survey_2_feedback_questions.sql";
+const MIGRATION = "supabase/migrations/20261123215058_survey_2_feedback_questions.sql";
 const sql = readFileSync(join(ROOT, MIGRATION), "utf8");
 const byId = (qId: string) => surveyQuestions.find((q) => q.qId === qId);
 
@@ -95,7 +95,7 @@ describe("their database rows", () => {
 
   it("ships a rollback", () => {
     const down = readFileSync(
-      join(ROOT, "supabase/rollbacks/20261123120000_survey_2_feedback_questions_down.sql"),
+      join(ROOT, "supabase/rollbacks/20261123215058_survey_2_feedback_questions_down.sql"),
       "utf8"
     );
     for (const qId of SURVEY_2_ONLY_QIDS) expect(down).toContain(`'${qId}'`);

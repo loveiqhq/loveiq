@@ -1,7 +1,7 @@
--- Rollback for supabase/migrations/20261123120000_survey_2_feedback_questions.sql
+-- Rollback for supabase/migrations/20261123215058_survey_2_feedback_questions.sql
 -- (creates questions 17001, 17002 and 17003, 17003's seven options, and their survey mappings).
 --
--- Apply:  psql "$DATABASE_URL" -f supabase/rollbacks/20261123120000_survey_2_feedback_questions_down.sql
+-- Apply:  psql "$DATABASE_URL" -f supabase/rollbacks/20261123215058_survey_2_feedback_questions_down.sql
 --
 -- DATA LOSS: only if a question has been answered, and in that case its delete is REFUSED. Once
 -- real answers exist, prefer `UPDATE survey_question SET status = 'retired'` over removal:
