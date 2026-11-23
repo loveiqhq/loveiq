@@ -599,8 +599,8 @@ export default function MiraPrivacyPage() {
             clear your browser data. This does not make what we did before unlawful.
           </li>
           <li>
-            Daily nudges come with your free account. You can pause or stop them with the link in
-            any nudge, or in Settings.
+            Daily nudges come with your free account. You can stop them with the link in any nudge,
+            or in Settings. To pause them or get fewer instead, sign in from that link.
           </li>
           <li>You can delete one goal, or all your goals, on your goals page at any time.</li>
           <li>
@@ -626,7 +626,8 @@ export default function MiraPrivacyPage() {
             <a href="mailto:ec@loveiq.org" className="underline">
               ec@loveiq.org
             </a>
-            . A request covers all your Mira data.
+            . A request covers all your Mira data. A copy leaves out what was done in a browser
+            before you signed in, as on a shared browser that can be someone else&apos;s.
           </li>
           <li>
             You can complain to a data protection authority, for example the Berlin Commissioner for

@@ -8,8 +8,9 @@ export const LINK = "font-semibold text-ap-plum underline underline-offset-2";
 /**
  * The pages behind Mira's email links (features/mira/email-link.ts): a nudge's preferences
  * (`MiraNudges`), the journal reminder's stop (`journal/ReminderStop`) and a weekly session's
- * (`weekly-session/SessionStop`). No sign-in, as the link's token stands for the person: one
- * frame for all three.
+ * (`weekly-session/SessionStop`). No sign-in to stop, as the link's token stands for the person;
+ * anything more needs the account's own sign-in (round-4 security SEC-R4-2). One frame for all
+ * three.
  */
 export function EmailLinkPage({ children }: { children: ReactNode }) {
   return (

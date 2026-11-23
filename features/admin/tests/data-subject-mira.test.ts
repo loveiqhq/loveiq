@@ -139,34 +139,23 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     );
   });
 
-  it("exports what the person did signed out in the browsers they signed in from (DATA-4)", async () => {
-    // Account deletion treats these as theirs (store.ts forgetEventText), so access does too.
-    const BROWSER = "browser_aaaaaaaaaaaa1";
-    const SIGN_INS = `/rest/v1/mira_event?user_id=in.(${UID})&name=eq.signup_completed&select=anon_id&order=id.asc`;
-    const BEFORE = `/rest/v1/mira_event?anon_id=in.(${BROWSER})&user_id=is.null&select=*&order=id.asc`;
-    const rows = [{ name: "chat_topic", anon_id: BROWSER, user_id: null, props: { topic: "x" } }];
-    db.all.mockImplementation(async (path: string) =>
-      path === SIGN_INS
-        ? // The same browser twice, one without an id, and one id that isn't a browser's.
-          [{ anon_id: BROWSER }, { anon_id: BROWSER }, { anon_id: null }, { anon_id: "x),y" }]
-        : path === BEFORE
-          ? rows
-          : [{ from: path.split("?")[0] }]
-    );
+  // Round 4: DATA-4 had added the rows the person's browsers logged before they signed in. On a
+  // shared browser those can be someone else's, and a copy must not reveal others' data (GDPR
+  // Art. 15(4)), so the export keeps to rows tied to the person: the account's own, the chat it
+  // carried in at sign-in among them (mira_chat and mira_message), and says what it leaves out.
+  it("leaves out what a browser did before signing in, and says so in the export's note", async () => {
     const result = await exportDataSubject("lea@example.com");
     expect(result.ok).toBe(true);
-    expect(result.exportData?.mira_event_signed_out).toEqual(rows);
-    expect(db.all.mock.calls.map(([p]) => p)).toContain(BEFORE);
-
-    // Unreadable: the export says so rather than look complete.
-    db.all.mockImplementation(async (path: string) =>
-      path === BEFORE ? null : path === SIGN_INS ? [{ anon_id: BROWSER }] : []
-    );
-    const partial = await exportDataSubject("lea@example.com");
-    expect(partial.ok).toBe(false);
-    expect(partial.warnings).toContain(
-      "mira_event_signed_out: could not be read in full; run the export again"
-    );
+    expect(result.exportData).not.toHaveProperty("mira_event_signed_out");
+    const paths = db.all.mock.calls.map(([p]) => p as string);
+    expect(paths.filter((p) => p.includes("anon_id"))).toEqual([]);
+    expect(paths.filter((p) => p.includes("signup_completed"))).toEqual([]);
+    // The chat carried in at sign-in is the account's own: exported with its other chats.
+    expect(result.exportData?.mira_chat).toEqual([{ from: "/rest/v1/mira_chat" }]);
+    expect(result.exportData?.mira_message).toEqual([{ from: "/rest/v1/mira_message" }]);
+    expect(result.warnings).toEqual([
+      "mira_event: not included: what a browser did before signing in, which on a shared browser can be someone else's (GDPR Art. 15(4)); the chat carried into the account at sign-in is in mira_chat and mira_message",
+    ]);
   });
 
   it("reads nothing more when there is no Mira account", async () => {

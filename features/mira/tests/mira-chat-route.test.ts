@@ -25,7 +25,10 @@ vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 vi.mock("@features/mira/server/model", () => ({ askModel: vi.fn() }));
-vi.mock("@features/mira/server/alerts", () => ({ alertDailyCeiling: vi.fn() }));
+vi.mock("@features/mira/server/alerts", () => ({
+  alertDailyCeiling: vi.fn(),
+  alertAnonShare: vi.fn(),
+}));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([11, 12]),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
@@ -40,10 +43,11 @@ vi.mock("@features/mira/server/store", () => ({
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { POST, maxDuration } from "@/app/api/mira/chat/route";
-import { alertDailyCeiling } from "@features/mira/server/alerts";
+import { alertAnonShare, alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
+  ANON_GLOBAL_DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   MODEL_BUDGET_MS,
   MODEL_FIRST_TRY_MS,
@@ -657,12 +661,74 @@ describe("POST /api/mira/chat", () => {
     expect(askModel).toHaveBeenCalledTimes(1);
   });
 
-  it("doesn't spend a free message on a resting day", async () => {
-    limitHit("mira-global-day");
-    const res = await post({ message: "hi", consent: true });
+  // Round-4 security SEC-R4-1: everyone's ceiling was counted before the free message, so a
+  // browser past it, which never reaches the model, spent the ceiling and could rest Mira for
+  // every account until midnight UTC.
+  it("counts everyone's ceiling only for a message that reaches the model", async () => {
+    const buckets = () => vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    limitHit("mira-anon-messages");
+    for (const body of [
+      { message: "hi", consent: true },
+      { message: "and then?", consent: true, history: openChat },
+    ]) {
+      expect(await (await post(body)).json()).toEqual({ gate: true, freeLeft: 0 });
+    }
+    expect(buckets()).toContain("mira-anon-messages");
+    expect(buckets()).not.toContain("mira-global-day");
+    expect(askModel).not.toHaveBeenCalled();
+
+    // The free message itself reaches the model, and counts.
+    vi.mocked(checkRateLimit).mockClear();
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 0,
+      resetAt: new Date(),
+    });
+    expect((await post({ message: "hi", consent: true })).status).toBe(200);
+    expect(askModel).toHaveBeenCalledTimes(1);
+    expect(buckets().filter((b) => b === "mira-global-day")).toHaveLength(1);
+  });
+
+  // SEC-R4-1, the audit's second fix: signed-out messages that reach the model also count
+  // against their own half of everyone's ceiling, so signed-in accounts always keep the other.
+  it("rests signed-out chats once their half of the ceiling is used, never signed-in ones", async () => {
+    const buckets = () => vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(ANON_GLOBAL_DAILY_MESSAGES).toBe(GLOBAL_DAILY_MESSAGES / 2);
+    limitHit("mira-global-anon-day");
+    const res = await post({ message: "and then?", consent: true, history: openChat });
     expect(res.status).toBe(503);
-    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
-    expect(buckets).not.toContain("mira-anon-messages");
+    expect((await res.json()).error).toBe("Mira is resting for today. Please come back tomorrow.");
+    expect(askModel).not.toHaveBeenCalled();
+    expect(checkRateLimit).toHaveBeenCalledWith(`anon:${new Date().toISOString().slice(0, 10)}`, {
+      bucket: "mira-global-anon-day",
+      limit: ANON_GLOBAL_DAILY_MESSAGES,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    expect(buckets()).not.toContain("mira-global-day"); // the signed-in half stays whole
+    expect(alertAnonShare).toHaveBeenCalledTimes(1); // the team hears, as for the whole ceiling
+    // A crisis message is still answered.
+    const crisis = await post({ message: "I want to kill myself", consent: true });
+    expect((await crisis.json()).crisis).toBe(true);
+
+    // A signed-in message still reaches the model, and never counts against the signed-out half.
+    vi.mocked(checkRateLimit).mockClear();
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-21",
+    } as never);
+    expect((await post({ message: "hi", consent: true })).status).toBe(200);
+    expect(askModel).toHaveBeenCalledTimes(1);
+    expect(buckets()).toContain("mira-global-day");
+    expect(buckets()).not.toContain("mira-global-anon-day");
   });
 
   it("refuses an absurdly large body before reading it for anything", async () => {

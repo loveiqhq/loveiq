@@ -4,7 +4,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
-import { GLOBAL_DAILY_MESSAGES } from "./config";
+import { ANON_GLOBAL_DAILY_MESSAGES, GLOBAL_DAILY_MESSAGES } from "./config";
 
 /**
  * Mira's alerts to her owner (20 Nov 2026): a plain email to MIRA_ALERT_EMAIL and a post in the
@@ -91,6 +91,18 @@ export function alertDailyCeiling(): void {
     text:
       `Mira hit her daily ceiling (${GLOBAL_DAILY_MESSAGES} AI replies for everyone together): ` +
       `people see "resting" until midnight UTC.`,
+  });
+}
+
+/** Signed-out chats used their half of the ceiling, ANON_GLOBAL_DAILY_MESSAGES (the chat route). */
+export function alertAnonShare(): void {
+  later({
+    key: `anon-share:${new Date().toISOString().slice(0, 10)}`,
+    subject: "Mira's signed-out half is used up",
+    text:
+      `Signed-out chats used their half of Mira's daily ceiling (${ANON_GLOBAL_DAILY_MESSAGES} AI ` +
+      `replies): new visitors see "resting" until midnight UTC, while signed-in people keep ` +
+      `theirs. A launch spike, or one source sending many: check message_sent in mira_event.`,
   });
 }
 

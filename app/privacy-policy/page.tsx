@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import WNavSection from "@features/landing/ui/white/WNavSection";
 import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
@@ -163,12 +164,12 @@ export default function PrivacyPolicyPage() {
                 good on that account or in that browser, turns her emails off and deletes the chats
                 saved in that account. In a browser without an account, the chat there is cleared.
                 Everything about Mira, including who receives what, is in{" "}
-                <a
+                <Link
                   href="/mira/privacy"
                   className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   How Mira handles your data
-                </a>
+                </Link>
                 .
               </p>
             </section>
@@ -284,14 +285,14 @@ export default function PrivacyPolicyPage() {
                 include your IP address, your device or which link you clicked. We use it to see
                 which emails are useful and to make them better. Our legal basis is our legitimate
                 interest (Art. 6(1)(f) GDPR). Mira&apos;s daily emails come with a free Mira
-                account, at most one a day; you can pause or stop them with the link in each email
-                or in Mira&apos;s settings. For them we record the same way whether each email was
-                delivered and first opened, linked to your Mira account, to see which kinds of email
-                help. Some email apps load images by themselves, so an email can count as opened
-                without being read. To avoid tracking, turn off image loading in your email app. You
-                can also visit our website directly instead of clicking a link, or unsubscribe with
-                the link in our emails. You may object under Art. 21 GDPR using the contact details
-                in section 1.
+                account, at most one a day; you can stop them with the link in each email or in
+                Mira&apos;s settings, and pause them or get fewer after signing in from that link.
+                For them we record the same way whether each email was delivered and first opened,
+                linked to your Mira account, to see which kinds of email help. Some email apps load
+                images by themselves, so an email can count as opened without being read. To avoid
+                tracking, turn off image loading in your email app. You can also visit our website
+                directly instead of clicking a link, or unsubscribe with the link in our emails. You
+                may object under Art. 21 GDPR using the contact details in section 1.
               </p>
               <p className="mb-4">
                 If you do not unlock your full report, we may email you once to ask why, usually a

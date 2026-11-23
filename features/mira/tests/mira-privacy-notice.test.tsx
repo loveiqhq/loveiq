@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import MiraPrivacyPage from "@/app/mira/privacy/page";
@@ -50,8 +51,30 @@ describe("Mira's privacy notice, made true", () => {
     expect(text).toContain("a cookie marks that browser for a year");
   });
 
+  // Round-4 security SEC-R4-2: a nudge's link alone only stops (app/api/mira/nudges/preferences).
+  it("says a nudge's link stops them, and pausing or fewer needs the sign-in", () => {
+    expect(text).not.toContain("You can pause or stop them with the link");
+    expect(text).toContain(
+      "You can stop them with the link in any nudge, or in Settings. To pause them or get fewer instead, sign in from that link."
+    );
+  });
+
+  it("is matched by the site's privacy policy on pausing Mira's nudges", () => {
+    const site = readFileSync("app/privacy-policy/page.tsx", "utf8")
+      .replace(/\s+/g, " ")
+      .replace(/&apos;/g, "'");
+    expect(site).not.toContain("pause or stop them with the link");
+    expect(site).toContain(
+      "you can stop them with the link in each email or in Mira's settings, and pause them or get fewer after signing in from that link."
+    );
+  });
+
   it("keeps the promises the code now keeps: a request covers everything, deletion unlinks", () => {
     expect(text).toContain("A request covers all your Mira data.");
+    // Round 4: a copy keeps to rows tied to the person (GDPR Art. 15(4)), and says so.
+    expect(text).toContain(
+      "A copy leaves out what was done in a browser before you signed in, as on a shared browser that can be someone else's."
+    );
     expect(text).toContain(
       "Deleting your account deletes any words in the log, and the rest is no longer linked to you."
     );
