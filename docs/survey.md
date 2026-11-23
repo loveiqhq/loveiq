@@ -463,9 +463,9 @@ live before checking in with us", Mark 2026-11-19).
   `intro_completed` counts the guide's last card as the intro's last slide. The weekly drop-off
   digests and the old daily rollup still count the classic survey: split them before 2.0 becomes
   everyone's survey.
-- **Apply before deploying.** `20261123120000_survey_2_feedback_questions.sql` (the three closing
-  questions; the `survey-db-sync` check reads the production database, so they go there before the
-  push), `20261123130000_funnel_event_guide_steps.sql` (the guide's records) and
+- **Apply before deploying.** `20261123215058_survey_2_feedback_questions.sql` (the three closing
+  questions; on the production database since 23 Nov 2026, because the `survey-db-sync` check reads
+  it), `20261123130000_funnel_event_guide_steps.sql` (the guide's records) and
   `20261123140000_ap_guide_facts.sql` (AP's reader for them). Each has its rollback in
   `supabase/rollbacks/`.
 
