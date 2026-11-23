@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import MiraPrivacyPage from "@/app/mira/privacy/page";
@@ -55,6 +56,16 @@ describe("Mira's privacy notice, made true", () => {
     expect(text).not.toContain("You can pause or stop them with the link");
     expect(text).toContain(
       "You can stop them with the link in any nudge, or in Settings. To pause them or get fewer instead, sign in from that link."
+    );
+  });
+
+  it("is matched by the site's privacy policy on pausing Mira's nudges", () => {
+    const site = readFileSync("app/privacy-policy/page.tsx", "utf8")
+      .replace(/\s+/g, " ")
+      .replace(/&apos;/g, "'");
+    expect(site).not.toContain("pause or stop them with the link");
+    expect(site).toContain(
+      "you can stop them with the link in each email or in Mira's settings, and pause them or get fewer after signing in from that link."
     );
   });
 

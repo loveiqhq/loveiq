@@ -503,8 +503,9 @@ Microsoft is an independent controller in the USA with no per-person deletion.
 #### M8 — Nudges on by default (owner's accepted risk)
 
 - **Measures**: said on the sign-up's "About you" step, in Mira's notice and the terms, and in every
-  nudge ("Daily nudges from Mira come with your free account"); at most one a day; pause and
-  one-click stop in every email and in Settings; none while chatting, for 14 days after a crisis
+  nudge ("Daily nudges from Mira come with your free account"); at most one a day; a one-click
+  stop in every email and in Settings, and a pause after signing in from the email's link (from
+  2026-11-23 a link alone only stops); none while chatting, for 14 days after a crisis
   or a mood check that showed support lines (7.16, S2), to suppressed addresses or without
   remembered chats.
 - **Residual**: medium. Whether a nudge counts as advertising that needs prior consent (§7 UWG) has
