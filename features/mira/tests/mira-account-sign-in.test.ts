@@ -353,7 +353,7 @@ describe("Connect Google, from Settings", () => {
     expect(browser.size).toBe(0);
   });
 
-  it("is refused to staff, under-18s and the signed-out", async () => {
+  it("is refused to under-18s and the signed-out, never to staff", async () => {
     const at = async () =>
       (await googleStart(own("https://www.loveiq.org/api/mira/auth/google?connect=1"))).headers.get(
         "location"
@@ -362,7 +362,7 @@ describe("Connect Google, from Settings", () => {
     expect(await at()).toBe("https://www.loveiq.org/mira/settings?google=minor#security");
     db.tables.mira_user![0]!.minor_at = null;
     db.tables.admin_users!.push({ email: "lea@gmail.com" });
-    expect(await at()).toBe("https://www.loveiq.org/mira/settings?google=other#security");
+    expect(await at()).toMatch(/^https:\/\/accounts\.google\.com\//); // staff connect too (23 Nov)
     vi.mocked(getMiraAccount).mockResolvedValue(null);
     expect(await at()).toBe("https://www.loveiq.org/mira/start?next=%2Fmira%2Fsettings");
   });

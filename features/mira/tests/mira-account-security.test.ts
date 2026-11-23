@@ -146,7 +146,7 @@ describe("GET /api/mira/security", () => {
     expect(body.emailChange.allowed).toBe(false); // a Jarvis login shares the address
     db.tables.admin_users = [{ email: "lea@example.com" }];
     ({ body } = await read(await GET(at())));
-    expect([body.passkeys.allowed, body.google.allowed]).toEqual([false, false]);
+    expect([body.passkeys.allowed, body.google.allowed]).toEqual([false, true]); // Google, not passkeys
     db.tables.admin_users = [];
     vi.mocked(memberByEmail).mockResolvedValue(null);
     expect(body.minor).toBe(false);
