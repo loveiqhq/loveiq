@@ -7,7 +7,7 @@
  * Signed in: turns come from the account's stored chat, and the exchange is stored when
  * "Remember our conversations" is on. Both need the first-message consent (18+ and the
  * sensitive-data yes), sent with every message. Over everyone together, GLOBAL_DAILY_MESSAGES
- * caps the model calls a day.
+ * caps the model calls a day, signed-out chats at most half of it (ANON_GLOBAL_DAILY_MESSAGES).
  *
  * A crisis message is read before anything can stop it: whatever the limits, the rest of the
  * body or the database say, it gets Sanjin's message E and the support lines (crisisReply).
@@ -31,6 +31,7 @@ import { alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
+  ANON_GLOBAL_DAILY_MESSAGES,
   DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   HISTORY_TURNS,
@@ -151,6 +152,19 @@ const everyoneMayAsk = async () => {
   if (!allowed) alertDailyCeiling();
   return allowed;
 };
+/**
+ * Signed-out messages that go to the model count here first, against their half of everyone's
+ * ceiling (ANON_GLOBAL_DAILY_MESSAGES), so signed-in accounts always keep the other half,
+ * however many browsers or networks someone uses (SEC-R4-1).
+ */
+const signedOutMayAsk = async () =>
+  (
+    await checkRateLimit(`anon:${new Date().toISOString().slice(0, 10)}`, {
+      bucket: "mira-global-anon-day",
+      limit: ANON_GLOBAL_DAILY_MESSAGES,
+      windowMs: DAY_MS,
+    })
+  ).allowed;
 /**
  * The last chat Mira remembers, for a weekly session's opening. None after the support lines
  * showed in the last 14 days (as nudges and reminders pause then), none when that chat holds the
@@ -408,10 +422,10 @@ export async function POST(request: Request) {
         logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
         return NextResponse.json({ gate: true, freeLeft: 0 });
       }
-      // Only now, as this message goes to the model (SEC-R4-1). ponytail: a resting day spends
-      // the browser's free message; give it back (a release in shared/http/ratelimit.ts) if
-      // resting days ever become common.
-      if (!(await everyoneMayAsk())) return RESTING();
+      // Only now, as this message goes to the model, its half of the ceiling first (SEC-R4-1).
+      // ponytail: a resting day spends the browser's free message; give it back (a release in
+      // shared/http/ratelimit.ts) if resting days ever become common.
+      if (!(await signedOutMayAsk()) || !(await everyoneMayAsk())) return RESTING();
       freeLeft = free.remaining;
     }
   } catch (err) {

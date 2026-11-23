@@ -44,6 +44,7 @@ import { alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
+  ANON_GLOBAL_DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   MODEL_BUDGET_MS,
   MODEL_FIRST_TRY_MS,
@@ -683,6 +684,47 @@ describe("POST /api/mira/chat", () => {
     expect((await post({ message: "hi", consent: true })).status).toBe(200);
     expect(askModel).toHaveBeenCalledTimes(1);
     expect(buckets().filter((b) => b === "mira-global-day")).toHaveLength(1);
+  });
+
+  // SEC-R4-1, the audit's second fix: signed-out messages that reach the model also count
+  // against their own half of everyone's ceiling, so signed-in accounts always keep the other.
+  it("rests signed-out chats once their half of the ceiling is used, never signed-in ones", async () => {
+    const buckets = () => vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    expect(ANON_GLOBAL_DAILY_MESSAGES).toBe(GLOBAL_DAILY_MESSAGES / 2);
+    limitHit("mira-global-anon-day");
+    const res = await post({ message: "and then?", consent: true, history: openChat });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("Mira is resting for today. Please come back tomorrow.");
+    expect(askModel).not.toHaveBeenCalled();
+    expect(checkRateLimit).toHaveBeenCalledWith(`anon:${new Date().toISOString().slice(0, 10)}`, {
+      bucket: "mira-global-anon-day",
+      limit: ANON_GLOBAL_DAILY_MESSAGES,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    expect(buckets()).not.toContain("mira-global-day"); // the signed-in half stays whole
+    // A crisis message is still answered.
+    const crisis = await post({ message: "I want to kill myself", consent: true });
+    expect((await crisis.json()).crisis).toBe(true);
+
+    // A signed-in message still reaches the model, and never counts against the signed-out half.
+    vi.mocked(checkRateLimit).mockClear();
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+    vi.mocked(getProfile).mockResolvedValue({
+      id: "u1",
+      email: "lea@example.com",
+      name: null,
+      country: null,
+      gender: null,
+      style: {},
+      remember_chats: false,
+      use_assessment: false,
+      consent_at: "2026-11-18T10:00:00Z",
+      consent_version: "mira-2026-11-21",
+    } as never);
+    expect((await post({ message: "hi", consent: true })).status).toBe(200);
+    expect(askModel).toHaveBeenCalledTimes(1);
+    expect(buckets()).toContain("mira-global-day");
+    expect(buckets()).not.toContain("mira-global-anon-day");
   });
 
   it("refuses an absurdly large body before reading it for anything", async () => {

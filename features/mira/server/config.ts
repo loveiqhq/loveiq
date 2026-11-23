@@ -24,6 +24,12 @@ export const DAILY_MESSAGES = 50;
  * roughly $0.01 to $0.06). It counts model calls only: a crisis message is never counted or stopped.
  */
 export const GLOBAL_DAILY_MESSAGES = 800;
+/**
+ * Signed-out messages' half of that ceiling: their model calls count here as well, so however
+ * many browsers or networks someone uses, signed-in accounts always keep the other half (round-4
+ * security SEC-R4-1).
+ */
+export const ANON_GLOBAL_DAILY_MESSAGES = GLOBAL_DAILY_MESSAGES / 2;
 
 /** One message, as typed. Longer is refused, not cut, so nothing is silently lost. */
 export const MAX_MESSAGE_CHARS = 2000;
