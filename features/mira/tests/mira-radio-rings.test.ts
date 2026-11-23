@@ -40,7 +40,8 @@ describe("a radio's focus ring", () => {
     };
     const withRadios = files(UI)
       .filter((f) => readFileSync(f, "utf8").includes('type="radio"'))
-      .map((f) => path.relative(UI, f))
+      // As the list below writes them, with "/" on Windows too.
+      .map((f) => path.relative(UI, f).split(path.sep).join("/"))
       .sort();
     // A new radio group joins the list, and so this check.
     expect(withRadios).toEqual(Object.keys(groups).sort());
