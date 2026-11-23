@@ -68,6 +68,8 @@ export default function JournalPage({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [status, account]);
   const daysList = useRef<HTMLOListElement | null>(null);
+  // The sheet was opened from a day's Edit in "Day by day", not from the check-in button.
+  const fromDay = useRef(false);
 
   const openDay = day ?? (startCheckIn && !dismissed && status === "ready" && today ? today : null);
   const doneToday = entries.some((e) => e.day === today);
@@ -210,7 +212,10 @@ export default function JournalPage({
                       confirming={confirm === e.day}
                       busy={busy}
                       error={failed}
-                      onEdit={() => setDay(e.day)}
+                      onEdit={() => {
+                        fromDay.current = true;
+                        setDay(e.day);
+                      }}
                       onAsk={() => {
                         setFailed(null);
                         setConfirm(e.day);
@@ -246,11 +251,24 @@ export default function JournalPage({
           account={account}
           draft={draft?.day === openDay ? draft : null}
           onClose={() => {
+            const edited = fromDay.current ? openDay : null;
+            fromDay.current = false;
             setDay(null);
             setDraft(null);
             setDismissed(true);
-            // The check-in button, or the page's notice once the sign-in has gone.
-            refocus(() => checkInRef.current?.querySelector("button") ?? byId(SIGNED_OUT_ID));
+            // Back to the day's Edit when the sheet came from it: its button is new when the day
+            // was deleted elsewhere and put back (R4-HABITS-1). Else the check-in button (A11Y-2),
+            // or the page's notice once the sign-in has gone.
+            refocus(
+              () =>
+                (edited
+                  ? daysList.current?.querySelector<HTMLElement>(
+                      `button[aria-label="Edit ${dayName(edited, today)}"]`
+                    )
+                  : null) ??
+                checkInRef.current?.querySelector("button") ??
+                byId(SIGNED_OUT_ID)
+            );
             // The email's ?checkin=1 has done its job: a reload shouldn't open the sheet again.
             if (startCheckIn) window.history.replaceState(null, "", "/mira/journal");
           }}

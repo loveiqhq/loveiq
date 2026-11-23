@@ -236,6 +236,30 @@ describe("the Home card", () => {
     expect(second).toMatchObject({ day: day(-5), note: "Typed here", base: null, restore: true });
   });
 
+  // R4-HABITS-1: the 409 took the day off the list, so its Edit went; Done then landed on "Do
+  // today’s check-in" at the top instead of the day put back.
+  it("hands the focus back to the day's Edit after Done, once a day deleted elsewhere is back", async () => {
+    const old = entry(day(-5), { mood: 3, note: "Before", updated_at: "2026-11-17T20:00:00Z" });
+    replies = journalReply([old]);
+    let puts = 0;
+    replies["PUT /api/mira/journal"] = () =>
+      ++puts === 1
+        ? { status: 409, body: { conflict: true, current: null, error: "x" } }
+        : { body: { success: true, updatedAt: "2026-11-22T09:05:00Z" } };
+    render(<JournalPage />);
+    const edit = await screen.findByRole("button", { name: /^Edit (?!Today)/ });
+    const name = edit.getAttribute("aria-label")!;
+    edit.focus();
+    fireEvent.click(edit);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+    await dialog.findByRole("alert");
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved to your journal.");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByRole("button", { name })).toHaveFocus());
+  });
+
   it("opens the chat's support lines for a note with crisis words", async () => {
     replies["PUT /api/mira/journal"] = () => ({
       body: {
