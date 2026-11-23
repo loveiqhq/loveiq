@@ -560,8 +560,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   }, [startedAt]);
 
   const sheetContext = useCallback(
-    (): SheetContext => ({ enabled: sheets, shown: shownSheets(), payToStart }),
-    [sheets, shownSheets, payToStart]
+    (): SheetContext => ({ enabled: sheets, shown: shownSheets(), payToStart, arm: orderArm }),
+    [sheets, shownSheets, payToStart, orderArm]
   );
 
   /** Opens a sheet over the question `qId`: once per run, and an answer's pending move goes. */

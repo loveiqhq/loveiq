@@ -182,3 +182,22 @@ describe("Survey 2.0's details screen", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("Survey 2.0's report map", () => {
+  it("opens after 17002 and counts the two screens left", async () => {
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers: { "17002": 5 },
+        currentIndex: at("17002"),
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["reportMap"]} />);
+    await user.click(await screen.findByRole("button", { name: /^next/i }));
+    expect(await screen.findByText(/2 questions left/)).toBeTruthy();
+  });
+});
