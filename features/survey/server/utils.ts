@@ -1,5 +1,6 @@
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
+import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
 import type { SurveyAnswers, SurveyAnswerValue } from "./types";
 
 /**
@@ -9,8 +10,14 @@ import type { SurveyAnswers, SurveyAnswerValue } from "./types";
  * hiding one: `isCompletionReady` below tests `answerCount >= SURVEY_TOTAL_QUESTIONS`, so
  * counting a question nobody is shown would wait forever for an answer that cannot
  * arrive, and no survey would ever register as complete.
+ *
+ * This is the CLASSIC survey's count. The questions only Survey 2.0 asks (SURVEY_2_ONLY_QIDS)
+ * are left out: a classic run never meets them.
  */
-export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.filter((q) => !isHidden(q.qId)).length;
+const SURVEY_2_ONLY: ReadonlySet<string> = new Set(SURVEY_2_ONLY_QIDS);
+export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.filter(
+  (q) => !isHidden(q.qId) && !SURVEY_2_ONLY.has(q.qId)
+).length;
 
 /**
  * Questions a respondent may leave blank: `required: false` in the survey data, which
@@ -29,7 +36,7 @@ const OPTIONAL_QIDS: ReadonlySet<string> = new Set(
  * finished, and counting the asks would keep them off the admin recovery list.
  */
 const SURVEY_REQUIRED_QUESTIONS = surveyQuestions.filter(
-  (q) => !isHidden(q.qId) && !OPTIONAL_QIDS.has(q.qId)
+  (q) => !isHidden(q.qId) && !OPTIONAL_QIDS.has(q.qId) && !SURVEY_2_ONLY.has(q.qId)
 ).length;
 
 /** Answers that count toward completion: everything except `_other` text and optional asks. */
@@ -39,7 +46,7 @@ function countRequiredAnswers(answers: SurveyAnswers): number {
 }
 
 const ASKED_QIDS: ReadonlySet<string> = new Set(
-  surveyQuestions.filter((q) => !isHidden(q.qId)).map((q) => q.qId)
+  surveyQuestions.filter((q) => !isHidden(q.qId) && !SURVEY_2_ONLY.has(q.qId)).map((q) => q.qId)
 );
 
 /**
