@@ -2,7 +2,8 @@
  * POST /api/mira/auth — the free account, by emailed code (boards 04 and 05).
  *
  *   { action: "start", email, adult: true, terms: true, consent: true, website? } → emails a
- *       sign-in code (`website` is a hidden field only a bot fills)
+ *       sign-in code (`website` is a hidden field only a bot fills); never from a browser Mira
+ *       stopped as under 18 (403 `minor: true`, whatever the address)
  *   { action: "verify", email, code, carry?, useAssessment? }  → signs in (Mira's
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), records the device (devices.ts; Mira honours only recorded sessions), moves the
@@ -215,6 +216,13 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "start") {
+    // A browser Mira stopped as under 18 gets no code, for any address (round-4 R4-CORE-1): a new
+    // one would make an account for someone who said they are under 18, and refusing new ones
+    // only would tell anyone who sets the cookie which addresses have an account. Nothing is sent
+    // and no allowance is spent; passkeys and Google refuse this browser too.
+    if (await isMinor(null)) {
+      return NextResponse.json({ error: ADULTS_ONLY, minor: true }, { status: 403 });
+    }
     // The hidden field is filled: a bot. Nothing is sent and no allowance is spent.
     if (body.website?.trim()) return sentNothing();
     // A code email costs us mail and makes an auth user for any address, so it has caps of its
