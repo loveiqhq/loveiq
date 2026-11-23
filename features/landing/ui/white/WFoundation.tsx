@@ -1,4 +1,4 @@
-import type { FC, ReactNode } from "react";
+import type { CSSProperties, FC, ReactNode } from "react";
 import Image from "next/image";
 
 /**
@@ -81,12 +81,21 @@ interface WFoundationProps {
   sectionClassName?: string;
   shellClassName?: string;
   headingClassName?: string;
+  /**
+   * Landing page v2 (Hana's board): each step's icon pops in and the rail fills to the next,
+   * one after another (CSS in app/globals.css, .pp-rail-*). Unset on the video page.
+   */
+  railMotion?: boolean;
 }
+
+/** Seconds, without float noise ("1.2s", not "1.2000000000000002s"). */
+const secs = (n: number) => `${Math.round(n * 100) / 100}s`;
 
 const WFoundation: FC<WFoundationProps> = ({
   sectionClassName,
   shellClassName,
   headingClassName,
+  railMotion = false,
 }) => (
   <section
     className={sectionClassName ?? "bg-white py-16 lg:py-[84px]"}
@@ -126,10 +135,26 @@ const WFoundation: FC<WFoundationProps> = ({
                 {i < steps.length - 1 && (
                   <span
                     aria-hidden
-                    className={`absolute left-[18px] top-[38px] w-0.5 bg-gradient-to-b ${RAIL[i]} bottom-0`}
+                    className={`absolute left-[18px] top-[38px] w-0.5 bg-gradient-to-b ${RAIL[i]} bottom-0${
+                      railMotion ? " pp-rail-line" : ""
+                    }`}
+                    style={
+                      railMotion
+                        ? ({ "--pp-line-d": secs(0.45 + 0.75 * i) } as CSSProperties)
+                        : undefined
+                    }
                   />
                 )}
-                <span className="relative z-10 h-[38px] w-[38px] shrink-0 rounded-full border-[1.5px] border-accent-orange">
+                <span
+                  className={`relative z-10 h-[38px] w-[38px] shrink-0 rounded-full border-[1.5px] border-accent-orange${
+                    railMotion ? " pp-rail-icon" : ""
+                  }`}
+                  style={
+                    railMotion
+                      ? ({ "--pp-icon-d": secs(i === 0 ? 0.15 : 0.4 + 0.75 * i) } as CSSProperties)
+                      : undefined
+                  }
+                >
                   {/* Figma stacks a soft gradient tile over the ring; flattened
                       to opaque so the rail can't show through the badge. */}
                   <span className="absolute -left-[1.5px] -top-[2.6px] flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fee9e3] to-[#f7ecfa]">

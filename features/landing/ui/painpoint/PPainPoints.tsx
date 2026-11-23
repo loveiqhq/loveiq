@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import type { CSSProperties, FC } from "react";
 import PCta from "./PCta";
 import PPainPointArrows from "./PPainPointArrows";
 import PPainPointDots from "./PPainPointDots";
@@ -24,7 +24,7 @@ const PPainPoints: FC = () => (
   >
     <div className={`${PP_INNER} flex flex-col gap-10`}>
       <div className="flex items-end justify-between gap-6">
-        <h2 className={`${PP_H2} max-w-[720px]`}>
+        <h2 className={`animate-on-scroll pp-rise ${PP_H2} max-w-[720px]`}>
           {PAIN_POINTS.titleLead}
           <span className={PP_ACCENT}>{PAIN_POINTS.titleAccent}</span>
           {PAIN_POINTS.titleTail}
@@ -35,28 +35,40 @@ const PPainPoints: FC = () => (
         <ol
           id={TRACK_ID}
           aria-label="Six patterns"
+          // The one trigger for the cards' cascade (Hana's board): a phone's later cards sit
+          // beside the screen, where a reveal of their own would never be seen to play.
+          data-reveal
           // A phone swipes the row; a keyboard scrolls it once it is focused.
           tabIndex={0}
           className={`-mx-4 my-0 flex list-none snap-x snap-mandatory scroll-pl-4 gap-5 overflow-x-auto overflow-y-hidden px-4 pb-6 pt-2 [scrollbar-width:none] lg:mx-0 lg:scroll-pl-0 lg:px-0 [&::-webkit-scrollbar]:hidden ${PP_FOCUS}`}
         >
-          {PAIN_POINTS.cards.map((card) => (
+          {PAIN_POINTS.cards.map((card, i) => (
+            // The item flies in (its place in the cascade, --pp-i); the card inside it lifts
+            // under a mouse, so the two transforms never share one transition.
             <li
               key={card.quote}
-              className={`${PP_CARD} flex flex-[0_0_84%] snap-start flex-col gap-[18px] p-7 sm:flex-[0_0_calc((100%-20px)/2)] lg:flex-[0_0_calc((100%-40px)/3)]`}
+              style={{ "--pp-i": i } as CSSProperties}
+              className="pp-card-in flex flex-[0_0_84%] snap-start sm:flex-[0_0_calc((100%-20px)/2)] lg:flex-[0_0_calc((100%-40px)/3)]"
             >
-              <p className="m-0 font-serif text-[19px] font-semibold italic leading-[28px] text-[#161021] lg:text-[21px] lg:leading-[30px]">
-                {card.quote}
-              </p>
-              <p className="m-0 mt-auto border-t border-solid border-[#e9e6ee] pt-4 text-[15px] leading-6 text-[#3f3a4d]">
-                <strong className="font-bold text-[#161021]">{card.lead}</strong>
-                {card.rest}
-              </p>
+              <div className={`${PP_CARD} flex w-full flex-col gap-[18px] p-7`}>
+                <p className="m-0 font-serif text-[19px] font-semibold italic leading-[28px] text-[#161021] lg:text-[21px] lg:leading-[30px]">
+                  {card.quote}
+                </p>
+                <p className="m-0 mt-auto border-t border-solid border-[#e9e6ee] pt-4 text-[15px] leading-6 text-[#3f3a4d]">
+                  <strong className="font-bold text-[#161021]">{card.lead}</strong>
+                  {card.rest}
+                </p>
+              </div>
             </li>
           ))}
         </ol>
         <PPainPointDots trackId={TRACK_ID} count={PAIN_POINTS.cards.length} />
       </div>
-      <div className="flex flex-wrap items-center gap-4">
+      {/* After the six cards: 0.25s + 0.12s each (Hana's board). */}
+      <div
+        className="animate-on-scroll pp-rise flex flex-wrap items-center gap-4"
+        style={{ "--pp-d": "0.97s" } as CSSProperties}
+      >
         <PCta
           label={HERO.ctaStart}
           place="pain points"
