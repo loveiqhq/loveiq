@@ -1665,7 +1665,37 @@ SELECT key, enabled, updated_at
       },
     ],
     query: { lang: "SQL", text: CARDS },
-    related: ["survey.wizReached", "survey.introSaw", "survey.wizEngagement"],
+    related: ["survey.wizReached", "survey.introSaw", "survey.wizEngagement", "survey.guide"],
+  },
+  "survey.guide": {
+    label: "Short guide (Survey 2.0)",
+    what: "The cards Survey 2.0 shows before question 1 in the intro's place (three rules, the perspective of today, privacy, then the consent in 2.0's words) and how many go on, skip, go back or leave on each.",
+    stat: "Count and share",
+    per: "per visitor and day",
+    formula: { num: "Visitors who saw a guide card that day, who reached each card" },
+    caveat:
+      "Our own visit log, every visitor, from Survey 2.0's first runs (its switch, survey_2). Only the visitors who saw a guide card that day: its consent row is theirs alone, and the intro's consent and question 1 rows leave them out, so no visitor counts in both tables. Skip intro on card 3 lands on the consent: a skip, not going on. A Back after question 1 that day is the browser's Back through the cards, not counted. None of it follows the filters.",
+    tables: [
+      {
+        source: "production",
+        table: "funnel_event",
+        columns: "visitor_id, day, event_type, first_seen",
+        filters: "Period (day). No other filter.",
+        watch: "One row per visitor, day and card.",
+      },
+    ],
+    query: {
+      lang: "SQL",
+      text: `-- Survey 2.0's short guide, per day and step: the visitors who reached it, each one's time to
+-- the next card, those who went on to it and those who left there (ap_guide_facts, the
+-- function the page reads; 20261123140000_ap_guide_facts.sql has its body).
+SELECT x->>'day' AS day, x->>'step' AS step, (x->>'n')::int AS visitors,
+       (x->>'wentOn')::int AS went_on, (x->>'left')::int AS left_here, x->'ms' AS ms_to_next
+  FROM json_array_elements(ap_guide_facts(:from::date, :to::date)) AS x
+ ORDER BY 1, 2;
+`,
+    },
+    related: ["survey.wizard", "survey.wizReached", "survey.wizContinue"],
   },
   "survey.introSaw": {
     label: "Saw the intro",

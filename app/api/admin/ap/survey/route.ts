@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { assessmentScope } from "@features/admin/server/ap/assessment";
 import { fetchFacts, fetchFactsFor } from "@features/admin/server/ap/facts";
+import { fetchGuideFacts } from "@features/admin/server/ap/guide";
 import {
   DATA_START,
   beforeData,
@@ -43,32 +44,44 @@ export async function GET(request: Request) {
   const scope = assessmentScope(filters);
 
   try {
-    const [facts, previous, questions, introClicks, prevIntroClicks, sheetsSeen, sheetsOn] =
-      await Promise.all([
-        fetchFactsFor(filters.from, filters.to, filters),
-        cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
-        fetchSurveyQuestions(filters.from, filters.to, scope).then(
-          (q) => ({ q, error: null as string | null }),
-          (err: unknown) => {
-            logger.warn({ err }, "AP survey: questions unavailable");
-            return { q: null, error: "The questions could not be read." };
-          }
-        ),
-        fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
-        // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
-        // when PostHog saw all of it.
-        cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
-          ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
-          : Promise.resolve(null),
-        // The sheets between the questions, from their first day (17 Nov 2026).
-        filters.to >= SHEETS_FROM
-          ? fetchSurveySheets(filters.from, filters.to).catch(postHogFailed)
-          : Promise.resolve(null),
-        enabledSurveySheets().catch((err: unknown) => {
-          logger.warn({ err }, "AP survey: the sheets' switches could not be read");
-          return null;
-        }),
-      ]);
+    const [
+      facts,
+      previous,
+      questions,
+      introClicks,
+      prevIntroClicks,
+      sheetsSeen,
+      sheetsOn,
+      guide,
+      prevGuide,
+    ] = await Promise.all([
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
+      fetchSurveyQuestions(filters.from, filters.to, scope).then(
+        (q) => ({ q, error: null as string | null }),
+        (err: unknown) => {
+          logger.warn({ err }, "AP survey: questions unavailable");
+          return { q: null, error: "The questions could not be read." };
+        }
+      ),
+      fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
+      // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
+      // when PostHog saw all of it.
+      cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
+        ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
+        : Promise.resolve(null),
+      // The sheets between the questions, from their first day (17 Nov 2026).
+      filters.to >= SHEETS_FROM
+        ? fetchSurveySheets(filters.from, filters.to).catch(postHogFailed)
+        : Promise.resolve(null),
+      enabledSurveySheets().catch((err: unknown) => {
+        logger.warn({ err }, "AP survey: the sheets' switches could not be read");
+        return null;
+      }),
+      // Survey 2.0's short guide (null when unreadable: the page leaves it out).
+      fetchGuideFacts(filters.from, filters.to),
+      cmp && !beforeData(cmp) ? fetchGuideFacts(cmp.from, cmp.to) : Promise.resolve(null),
+    ]);
     // The previous period as the benchmark (the comparison's own facts when it has them).
     const prevRange = previousRange(filters);
     const benchmark =
@@ -96,6 +109,8 @@ export async function GET(request: Request) {
         prevIntroClicks,
         sheetsOn,
         sheetsSeen,
+        guide,
+        prevGuide,
       }),
       { headers: NO_STORE }
     );
