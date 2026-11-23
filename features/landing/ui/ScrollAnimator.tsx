@@ -5,7 +5,11 @@ import { useEffect } from "react";
 const ScrollAnimator = () => {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const elements = Array.from(document.querySelectorAll<HTMLElement>(".animate-on-scroll"));
+    // `.animate-on-scroll` hides itself until `.animate`; a `[data-reveal]` group stays put and
+    // only passes `.animate` to its children's CSS (landing page v2's cascades, Hana's board).
+    const elements = Array.from(
+      document.querySelectorAll<HTMLElement>(".animate-on-scroll, [data-reveal]")
+    );
     if (!elements.length) return;
 
     // A browser without the observer (and jsdom) gets the content at once, not a page of
