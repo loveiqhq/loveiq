@@ -1445,3 +1445,75 @@ describe("the EUR 1.99 page's 50/50 on the survey's message", () => {
     );
   });
 });
+
+/**
+ * The experiments a reader was in, on every post (sync, 23 Nov 2026). Before, #payments named
+ * only the landing page, the EUR 1.99 page's half reached no post but #incoming-surveys, a
+ * reader who came straight to /survey read "Not recorded", and E07 showed nowhere.
+ */
+describe("the experiments a reader was in, on every post", () => {
+  const surveyLines = (over: Partial<SubmissionJourney>) =>
+    (
+      (
+        buildJourneyMessage(journey(over), { kind: "survey_completed", questionCount: 58 })
+          .blocks as Array<{ type: string; text?: { text?: string } }>
+      ).find((b) => b.type === "section")?.text?.text ?? ""
+    ).split("\n");
+  const purchaseText = (over: Partial<SubmissionJourney>) =>
+    JSON.stringify(
+      buildJourneyMessage(journey(over), {
+        kind: "purchase",
+        planLabel: "Your Core Archetype",
+        archetype: null,
+        amountText: "EUR 1.99",
+      }).blocks
+    );
+  // #2891: came straight to /survey, no campaign, no landing cookie.
+  const straightToSurvey: Partial<SubmissionJourney> = {
+    arms: { landing: null, survey: null, pricing: null, paywall: null },
+    traffic: {
+      ...journey().traffic,
+      bucket: "Direct",
+      source: null,
+      medium: null,
+      landingPath: "/survey",
+    },
+  };
+
+  it("says a reader who came straight to /survey saw no landing page", () => {
+    expect(surveyLines(straightToSurvey)).toContain(
+      "Landing page design: *No landing page* (started on `/survey`)"
+    );
+  });
+
+  it("still says Not recorded when the first page was the landing page itself", () => {
+    expect(
+      surveyLines({
+        ...straightToSurvey,
+        traffic: { ...straightToSurvey.traffic!, landingPath: "/" },
+      })
+    ).toContain("Landing page design: *Not recorded*");
+  });
+
+  it("names the E07 gift email's arm once it is drawn", () => {
+    expect(surveyLines({ giftArm: "gift" })).toContain(
+      "Gift email (E07): *Gifted* (Core Archetype free on day 1)"
+    );
+    expect(surveyLines({ giftArm: "holdout" })).toContain(
+      "Gift email (E07): *Held out* (no gift email)"
+    );
+    expect(surveyLines({}).some((l) => l.startsWith("Gift email"))).toBe(false);
+  });
+
+  it("lists the EUR 1.99 page's half under the buyer's experiments on #payments", () => {
+    const text = purchaseText({ gateCohort: true, gateRevealArm: "reveal" });
+    expect(text).toContain("Experiments they were in");
+    expect(text).toContain("*€1.99 page*\\nCore Archetype shown (new page)");
+  });
+
+  it("lists the landing page and E07 on #payments the same way", () => {
+    const text = purchaseText({ ...straightToSurvey, giftArm: "holdout" });
+    expect(text).toContain("*Landing page design*\\nNo landing page (started on `/survey`)");
+    expect(text).toContain("*Gift email (E07)*\\nHeld out (no gift email)");
+  });
+});

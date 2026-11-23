@@ -90,6 +90,11 @@ reasons and reviews.
   in both halves, once per gate view; `utm_tracker.gate_reveal_arm` on submissions made while it
   runs (the same arm comes back from `session_id`). Count from the day the switch went on, leave out
   readers who paid before the survey, and judge on EUR 1.99 sales per gate view.
+  - Since 23 Nov 2026 a payment carries its buyer's half too, `payment.metadata.gateRevealArm`
+    (off the survey's stamp, so Metabase and exports split sales without a join), and every
+    Slack post names it: #incoming-surveys, #payments' "Experiments they were in" and
+    #report-reactivations. A survey begun straight on /survey was stamped no arm until then: its
+    first page now starts the tracker before the arms join it.
 - **Live since 17 Nov 2026, 09:01:50 UTC** (`GATE_REVEAL_START_AT`; the page, the sheets that
   follow the arm and the stamp all began with the switch). Registry #11 decides it on EUR 1.99
   payments per free finisher. Read it on AP-Analytics › Payment › "€1.99 page test": per half,

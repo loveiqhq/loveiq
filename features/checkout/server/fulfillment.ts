@@ -87,26 +87,43 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   email: string | null;
   firstName: string | null;
   utmTracker: string | null;
+  /** When the survey was finished: Pricing 3.0's arm is named only for a survey before its end. */
+  submittedAt: string | null;
+  /** The report's E07 gift email arm (`personal_report.initial_gift_arm`), once the cron drew it. */
+  giftArm: string | null;
 }> {
+  const none = { email: null, firstName: null, utmTracker: null, submittedAt: null, giftArm: null };
   try {
+    // The report is embedded by its constraint's name, so PostgREST never has two relations
+    // between the tables to choose between.
     const response = await supabaseServiceFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,app_user!fk_survey_submission_user(email,first_name)&limit=1`
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,created_date_time,` +
+        `app_user!fk_survey_submission_user(email,first_name),` +
+        `personal_report!fk_personal_report_submission(initial_gift_arm)&limit=1`
     );
-    if (!response.ok) return { email: null, firstName: null, utmTracker: null };
+    if (!response.ok) return none;
 
+    type ReportRow = { initial_gift_arm?: string | null };
     const rows = (await response.json()) as Array<{
       utm_tracker?: string | null;
+      created_date_time?: string | null;
       app_user?: { email?: string | null; first_name?: string | null } | null;
+      // An array for a one-to-many embed, an object if the column is ever made unique.
+      personal_report?: ReportRow[] | ReportRow | null;
     }>;
     const user = rows[0]?.app_user;
+    const embedded = rows[0]?.personal_report;
+    const report = Array.isArray(embedded) ? embedded[0] : embedded;
     return {
       email: user?.email?.toLowerCase().trim() || null,
       firstName: user?.first_name?.trim() || null,
       utmTracker: rows[0]?.utm_tracker ?? null,
+      submittedAt: rows[0]?.created_date_time ?? null,
+      giftArm: report?.initial_gift_arm ?? null,
     };
   } catch (err) {
     logger.warn({ err, submissionId }, "lookupRecipientForSubmission failed");
-    return { email: null, firstName: null, utmTracker: null };
+    return none;
   }
 }
 
@@ -118,7 +135,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
-import { classifyTraffic } from "@features/attribution/server/traffic";
+import { classifyTraffic, readGateRevealStamp } from "@features/attribution/server/traffic";
 
 export { classifyTraffic };
 
@@ -138,11 +155,13 @@ async function notifySlackPurchase({
   email,
   experimentGroup,
   firstName,
+  giftArm,
   internal,
   paymentId,
   plan,
   purchaseTitle,
   submissionId,
+  submittedAt,
   utmTracker,
 }: {
   amount: number | null;
@@ -154,6 +173,8 @@ async function notifySlackPurchase({
   email: string | null;
   experimentGroup: string | null;
   firstName: string | null;
+  /** The report's E07 gift email arm, when drawn. */
+  giftArm: string | null;
   /** `isInternalPayment` — the verdict `is_test` and the ops lines' tag carry. */
   internal: boolean;
   paymentId: number;
@@ -164,6 +185,8 @@ async function notifySlackPurchase({
    */
   purchaseTitle: string;
   submissionId: number;
+  /** When the survey was finished (`survey_submission.created_date_time`). */
+  submittedAt: string | null;
   utmTracker: string | null;
 }) {
   const planLabel = purchaseTitle;
@@ -189,6 +212,8 @@ async function notifySlackPurchase({
     amount,
     currency,
     plan,
+    submittedAt,
+    giftArm,
   });
 
   const message = buildJourneyMessage(journey, {
@@ -1428,6 +1453,10 @@ async function syncCheckoutSessionPayment({
           : null
       );
 
+  // The buyer's survey: who they are, its tracker and the report's E07 arm. Read once and
+  // before the row, so the row carries the EUR 1.99 page's half and the purchase ping reuses it.
+  const recipient = await lookupRecipientForSubmission(context.submissionId);
+
   const metadata = {
     archetype: unlockedArchetype,
     checkoutSessionId: settledSession.id,
@@ -1440,6 +1469,10 @@ async function syncCheckoutSessionPayment({
     // self-describing for CSV/exports; the admin funnel groups via the submission's
     // utm_tracker (source of truth), this is the convenience copy.
     landingVariant: settledSession.metadata?.landingVariant ?? null,
+    // Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp (utm_tracker stays the
+    // record, as for landingVariant), so a payment says which half its buyer met without a
+    // join to the survey: Metabase and exports could not split the test (sync, 23 Nov 2026).
+    gateRevealArm: readGateRevealStamp(recipient.utmTracker),
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
     pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,
@@ -1629,7 +1662,6 @@ async function syncCheckoutSessionPayment({
         unlockedArchetype,
       });
 
-      const recipient = await lookupRecipientForSubmission(context.submissionId);
       await notifySlackPurchase({
         amount,
         archetype: unlockedArchetype,
@@ -1640,11 +1672,13 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
+        giftArm: recipient.giftArm,
         internal: isInternalPayment,
         paymentId,
         plan,
         purchaseTitle,
         submissionId: context.submissionId,
+        submittedAt: recipient.submittedAt,
         utmTracker: recipient.utmTracker,
       });
       if (isInitialUnlockPlan(plan) && (amount ?? 0) > 0) {

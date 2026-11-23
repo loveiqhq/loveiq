@@ -68,7 +68,14 @@ function backend({
   existingPayment = false,
   gifted = false,
   giftLookupFails = false,
-}: { existingPayment?: boolean; gifted?: boolean; giftLookupFails?: boolean } = {}) {
+  tracker = null,
+}: {
+  existingPayment?: boolean;
+  gifted?: boolean;
+  giftLookupFails?: boolean;
+  /** The survey's utm_tracker, as the recipient lookup reads it. */
+  tracker?: string | null;
+} = {}) {
   const seen: Seen[] = [];
   mockFetchWithTimeout.mockImplementation(
     async (url: string, options?: { body?: string; method?: string }) => {
@@ -92,7 +99,7 @@ function backend({
       }
       if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
         return json([
-          { utm_tracker: null, app_user: { email: "alice@example.com", first_name: "Alice" } },
+          { utm_tracker: tracker, app_user: { email: "alice@example.com", first_name: "Alice" } },
         ]);
       }
       if (url.includes("/rest/v1/report_access_token?survey_submission_id=eq.70")) {
@@ -203,6 +210,17 @@ describe("a paid EUR 1.99 Core Archetype", () => {
       checkoutSessionId: "cs_initial_1",
       reportToken: TOKEN,
     });
+  });
+
+  // Sync, 23 Nov: the EUR 1.99 payment is what Mark's 50/50 is judged on, and its row named no
+  // half, so Metabase could not split the test by it.
+  it("carries the buyer's EUR 1.99 page half on the payment row", async () => {
+    const seen = backend({
+      tracker: JSON.stringify({ landing_path: "/survey", gate_reveal_arm: "control" }),
+    });
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
+    expect(row?.metadata).toMatchObject({ plan: "initial", gateRevealArm: "control" });
   });
 
   it("has one payment item, the Core Archetype", async () => {

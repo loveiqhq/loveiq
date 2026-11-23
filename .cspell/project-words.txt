@@ -28,6 +28,7 @@ JSYR
 Lenis
 Lora
 Manrope
+Metabase
 Marcus
 PGRST
 PITR
