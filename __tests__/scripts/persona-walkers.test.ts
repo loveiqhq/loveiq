@@ -9,6 +9,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { surveyQuestions } from "@/data/survey-data";
+import { OPTION_GROUPS } from "@features/survey/optionGroups";
+import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { getScoringConfig, getScoringConfigSha } from "@features/scoring/logic/config";
 import { scoreArchetypes } from "@features/scoring/logic/engine";
 
@@ -39,6 +41,7 @@ import {
   PLAN_CTA,
   PLAN_TITLE,
   findQuestion,
+  shownLabels,
   redact,
   MAIN_ON_STAGING,
   PROOF_PAGE_SCRIPT,
@@ -324,6 +327,61 @@ describe("a walk", () => {
       } else if (q.answerType === "country") expect(a).toBe("Germany");
       else expect(a).toEqual((persona.answers as Record<string, unknown>)[q.qId]);
     }
+  });
+});
+
+/**
+ * Survey 2.0 (behind the `survey_2` switch): its short guide, its reworded questions and options,
+ * its 16016 areas screen and its one-page details screen. The walker drives both versions.
+ */
+describe("a walk through Survey 2.0", () => {
+  const screens = orderAskedQuestions(surveyQuestions, "survey2");
+  const screen = (qId: string) => screens.find((s) => s.qId === qId)!;
+  const persona = personasFile.personas[0]!;
+  const answers = persona.answers as Record<string, unknown>;
+
+  it("recognises every 2.0 screen by its heading, its own two too", () => {
+    expect(screens).toHaveLength(61);
+    for (const s of screens) expect(findQuestion([s.question])?.qId, s.qId).toBe(s.qId);
+  });
+
+  it("still finds a classic question as itself where 2.0 asks it in the same words", () => {
+    const classic = surveyQuestions.find((q) => q.qId === "02001")!;
+    expect(screen("02001").question).toBe(classic.question);
+    expect(findQuestion([classic.question])).toBe(classic);
+  });
+
+  it("finds a stored answer under 2.0's new words as well as under its own", () => {
+    const stored = "Physical stuff — touch, rhythm, build-up, body sensation";
+    expect(shownLabels(screen("03005"), stored)).toEqual([stored, "Touch and physical build-up"]);
+    expect(
+      shownLabels(
+        surveyQuestions.find((q) => q.qId === "03004")!,
+        "x"
+      )
+    ).toEqual(["x"]);
+  });
+
+  it("answers 2.0's areas screen with the areas of the persona's 16016 topics", () => {
+    const topics = (answers["16016"] ?? []) as string[];
+    const picked = answerFor(screen("16016a"), answers, "w@resend.dev", "Walker") as string[];
+    const groups = OPTION_GROUPS.get("16016")!;
+    expect(picked.length).toBeGreaterThan(0);
+    expect(picked.length).toBeLessThanOrEqual(2);
+    for (const area of picked)
+      expect(groups.find((g) => g.label === area)!.options.some((o) => topics.includes(o))).toBe(
+        true
+      );
+  });
+
+  it("fills the details screen with its own name, email and place, and the persona's newsletter answer", () => {
+    expect(answerFor(screen("00010"), answers, "w@resend.dev", "Walker")).toEqual({
+      name: "Walker",
+      email: "w@resend.dev",
+      optIn: answers["16015"],
+      country: "Germany",
+      postal: "10967",
+    });
   });
 });
 
