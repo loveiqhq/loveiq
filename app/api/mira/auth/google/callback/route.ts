@@ -24,10 +24,8 @@ import {
   GOOGLE_COOKIE,
   GOOGLE_COOKIE_PATH,
   googleClient,
-  isStaffEmail,
   returnOrigin,
   sameState,
-  staffStatus,
   unpackStart,
 } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
@@ -92,7 +90,7 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/mira/start?next=%2Fmira%2Fsettings", origin), 303);
     }
     if (who.email !== account.email) return back("mismatch");
-    if (!who.googleRuns || (await isStaffEmail(who.email))) return back("other");
+    if (!who.googleRuns) return back("other");
     if (await isMinor(account.id)) return back("minor");
     try {
       await updateProfile(account.id, { google_connected_at: new Date().toISOString() });
@@ -103,16 +101,10 @@ export async function GET(request: Request) {
     logMiraEvent("google_connected", { userId: account.id });
     return back("connected");
   }
-  // Only addresses Google runs, and never staff: everyone else gets the emailed code. Staff are
-  // told so (a team member read the plain "use your email" as broken, 23 Nov 2026); a staff list
-  // that can't be read still refuses, as something that didn't work.
+  // Only addresses Google runs (Gmail, or Workspace on its own domain); everyone else gets the
+  // emailed code. Staff too, since 23 Nov 2026: Mira's session is in its own cookie, which the
+  // admin panel never reads, and staff could already sign in with the emailed code.
   if (!who.googleRuns) return back("other");
-  const staff = await staffStatus(who.email);
-  if (staff === "staff") return back("staff");
-  if (staff === "unsure") {
-    logger.warn("mira: Google sign-in could not read the staff list");
-    return back("failed");
-  }
   const code = await mintSignInCode(who.email);
   if (!code) return back("failed");
   const supabase = await createMiraSupabase();

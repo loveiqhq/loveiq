@@ -416,10 +416,10 @@ describe("GET /api/mira/auth/google/callback", () => {
     expect(verifyOtp).not.toHaveBeenCalled();
   });
 
-  // 23 Nov 2026: Marcus chose his work account (on the staff list) and read "Please sign in with
-  // your email for this address" with no reason why, so it looked broken. Staff get their own
-  // answer now; an unsure staff check still refuses (fails closed) but says it didn't work.
-  it("sends addresses Google doesn't run, and staff, to the emailed code, each told why", async () => {
+  // 23 Nov 2026 (Eman): team addresses may use Google too. Mira's session sits in its own cookie,
+  // which the admin panel never reads, and staff could already sign in with the emailed code; for a
+  // Gmail or Workspace address Google is as sure of the inbox as that code is.
+  it("sends addresses Google doesn't run to the emailed code, and signs staff in like anyone", async () => {
     const at = async () => (await back(`code=abc&state=${S.state}`)).headers.get("location");
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       new Response(JSON.stringify({ id_token: idToken({ ...good, email: "lea@yahoo.com" }) }), {
@@ -427,14 +427,14 @@ describe("GET /api/mira/auth/google/callback", () => {
       })
     );
     expect(await at()).toMatch(/google=other$/);
-    vi.mocked(supabaseFetch).mockResolvedValueOnce(
-      new Response(JSON.stringify([{ email: "lea.k@gmail.com" }]), { status: 200 })
-    );
-    expect(await at()).toMatch(/google=staff$/);
-    vi.mocked(supabaseFetch).mockResolvedValueOnce(new Response("oops", { status: 500 }));
-    expect(await at()).toMatch(/google=failed$/); // unsure still refuses, and says so
     expect(mintSignInCode).not.toHaveBeenCalled();
-    expect(verifyOtp).not.toHaveBeenCalled();
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string) =>
+      String(path).includes("admin_users")
+        ? new Response(JSON.stringify([{ email: "lea.k@gmail.com" }]), { status: 200 })
+        : new Response("[]", { status: 200 })
+    );
+    expect(await at()).toBe("https://www.loveiq.org/mira/start?google=done&about=1");
+    expect(mintSignInCode).toHaveBeenCalledWith("lea.k@gmail.com");
   });
 
   it("signs out again when the profile can't be saved, so the next try starts clean", async () => {

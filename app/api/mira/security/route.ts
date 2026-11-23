@@ -80,7 +80,7 @@ export async function GET(request: Request) {
         minor,
         recent: Boolean(account.session && isRecentSignIn(account.session.signedInAt)),
         emailChange: { allowed: !shared && !minor },
-        google: { allowed: !staff && !minor, connected },
+        google: { allowed: !minor, connected },
         passkeys: {
           allowed: !staff && !minor && rp !== null,
           rpID: rp?.rpID ?? null,

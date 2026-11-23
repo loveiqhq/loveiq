@@ -50,8 +50,6 @@ const GOOGLE_ERRORS: Record<string, string> = {
   off: "Google sign-in isn't available right now. Please use your email.",
   ticks: "Please tick the three boxes first.",
   other: "Please sign in with your email for this address. We'll send you a code.",
-  staff:
-    "LoveIQ team addresses sign in with a code we email, not with Google. Type yours below and we'll send one.",
 };
 
 /** A new account's zone until the browser's is sent (migration 20261118210000_mira_nudges_and_memory). */

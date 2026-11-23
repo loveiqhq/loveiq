@@ -19,7 +19,6 @@ import {
   GOOGLE_COOKIE_PATH,
   authorizeUrl,
   googleClient,
-  isStaffEmail,
   newGoogleStart,
   packStart,
   returnOrigin,
@@ -81,7 +80,6 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/mira/start?next=%2Fmira%2Fsettings", url.origin), 303);
     }
     if (await isMinor(account.id)) return back("minor");
-    if (await isStaffEmail(account.email)) return back("other");
     hint = account.email;
   } else if (!ticks.safeParse(Object.fromEntries(url.searchParams)).success) {
     return back("ticks");
