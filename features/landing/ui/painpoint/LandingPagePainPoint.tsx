@@ -77,6 +77,7 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
             sectionClassName="bg-white py-[84px]"
             shellClassName={PP_REUSED_SHELL}
             headingClassName={`animate-on-scroll stagger-1 ${PP_REUSED_H2} [text-wrap:balance]`}
+            railMotion
           />
           <div className={PP_TYPE}>
             <PFaq />
