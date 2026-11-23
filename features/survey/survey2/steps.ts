@@ -1,6 +1,7 @@
 import type { SurveyQuestion } from "@/data/survey-data";
 import { OPTION_GROUPS } from "@features/survey/optionGroups";
 
+import { withSurvey2Copy } from "./copy";
 import { SURVEY_2_AREAS_QID, SURVEY_2_DETAILS_QID, SURVEY_2_ORDER } from "./order";
 
 /**
@@ -47,8 +48,8 @@ export function areasStep(topics: SurveyQuestion): SurveyQuestion {
 }
 
 /**
- * Survey 2.0's screens, in SURVEY_2_ORDER. A question the data doesn't hold is left out rather
- * than drawn empty (survey2Order.test.ts holds the list to all 61).
+ * Survey 2.0's screens, in SURVEY_2_ORDER, each in its 2.0 wording (copy.ts). A question the data
+ * doesn't hold is left out rather than drawn empty (survey2Order.test.ts holds the list to all 61).
  */
 export function survey2Screens(questions: readonly SurveyQuestion[]): SurveyQuestion[] {
   const byId = new Map(questions.map((q) => [q.qId, q]));
@@ -59,6 +60,6 @@ export function survey2Screens(questions: readonly SurveyQuestion[]): SurveyQues
       return topics ? [areasStep(topics)] : [];
     }
     const q = byId.get(qId);
-    return q ? [q] : [];
+    return q ? [withSurvey2Copy(q)] : [];
   });
 }
