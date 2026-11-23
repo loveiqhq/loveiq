@@ -241,6 +241,20 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
     await expect(numbers).toHaveText(["47%", "56%", "42%", "77%"], { timeout: 10_000 });
   });
 
+  test("crosses each old habit out through its own lines, even where it wraps", async ({
+    page,
+  }) => {
+    await openPage(page);
+    // A struck habit that wraps must stay inline, so its drawn line slices across each line it
+    // covers; as a flex item it became a block, and the line ran under its first line (23 Nov).
+    const struck = page.locator('section[data-landing-section="promise"] s');
+    await expect(struck).toHaveCount(4);
+    const displays = await struck.evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).display)
+    );
+    expect(displays).toEqual(["inline", "inline", "inline", "inline"]);
+  });
+
   test("steps the six patterns on with the next button on a desktop", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openPage(page);
