@@ -244,6 +244,17 @@ describe("A chat the account doesn't keep", () => {
   });
 });
 
+// 23 Nov 2026: a team address back from Google was told only "sign in with your email", which read
+// as an error; it now says why, and that the emailed code works for it.
+describe("Back from Google with a team address", () => {
+  it("says team addresses sign in with the emailed code, not Google", () => {
+    render(<SignUpFlow googleResult="staff" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "LoveIQ team addresses sign in with a code we email, not with Google. Type yours below and we'll send one."
+    );
+  });
+});
+
 // Round-3 R3-UXA-6: in Dark on Chromium the sign-up's fields kept the browser's own grey
 // (rgb(59,59,59)), a slab on the plum page; Mira's paper and the field's edge, as the feedback
 // form's (UX-7), and the passkey's Name field in Settings the same.
