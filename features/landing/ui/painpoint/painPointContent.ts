@@ -127,19 +127,24 @@ export const PROMISE = {
   // "less emotional and more clear".
   body: "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot calmer.",
   rows: [
+    // Each change's ring icon (v2, Mark, 12 Nov: "use an icon for each").
     {
+      icon: "message",
       before: "Hoping your partner will guess",
       after: "Ask for what you want in one clear sentence.",
     },
     {
+      icon: "thermometer",
       before: "Wondering what's going on with you",
       after: "Know the conditions your desire needs, and create them on purpose.",
     },
     {
+      icon: "rings",
       before: "The same argument about frequency",
       after: "Talk about the gap between you without blame on either side.",
     },
     {
+      icon: "flame",
       before: "Sex on autopilot",
       after: "Know which new things are worth trying for you, and which aren't.",
     },

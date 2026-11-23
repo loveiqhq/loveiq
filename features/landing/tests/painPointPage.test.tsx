@@ -163,6 +163,31 @@ describe("pain-point page — reveals never hide content", () => {
       /@media \(scripting: none\) \{\s*\.pp-root \.animate-on-scroll \{\s*opacity: 1;\s*transform: none;/
     );
   });
+
+  it("draws v2's cross-outs and shows their new lines without JavaScript and under reduced motion", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    /** The text of every `@media (<media>)` block, braces matched. */
+    const blocks = (media: string) => {
+      const out: string[] = [];
+      const open = `@media (${media}) {`;
+      for (let at = css.indexOf(open); at !== -1; at = css.indexOf(open, at + 1)) {
+        let depth = 0;
+        for (let i = at + open.length - 1; i < css.length; i += 1) {
+          if (css[i] === "{") depth += 1;
+          if (css[i] === "}" && --depth === 0) {
+            out.push(css.slice(at, i + 1));
+            break;
+          }
+        }
+      }
+      return out.join("\n");
+    };
+    for (const media of ["prefers-reduced-motion: reduce", "scripting: none"]) {
+      const block = blocks(media);
+      expect(block).toMatch(/\.pp-root \.pp-pop \{\s*opacity: 1;\s*transform: none;/);
+      expect(block).toMatch(/\.pp-root \.pp-strike \{\s*background-size: 100% 1\.5px;/);
+    }
+  });
 });
 
 describe("pain-point page — trust band and the three steps", () => {
@@ -268,6 +293,22 @@ describe("pain-point page — what changes", () => {
     ]) {
       expect(section.textContent).toContain(after);
     }
+  });
+
+  it("lays the four changes out as tiles, each led by its ring icon (Mark, 12 Nov)", () => {
+    // "this reads as a step by step instructions, which it isn't… maybe use 4 tiles next to each
+    // other and use an icon for each": the video page's ring icons, in the order of the changes.
+    renderPage();
+    const section = screen
+      .getByRole("heading", { level: 2, name: "What changes with LoveIQ." })
+      .closest("section") as HTMLElement;
+    const tiles = within(section).getAllByRole("listitem");
+    expect(tiles).toHaveLength(4);
+    expect(
+      tiles.map((t) => t.querySelector("[data-ring-icon]")?.getAttribute("data-ring-icon"))
+    ).toEqual(["message", "thermometer", "rings", "flame"]);
+    // Each tile is its own trigger: a row that enters together plays as Hana's cascade.
+    for (const tile of tiles) expect(tile.hasAttribute("data-reveal")).toBe(true);
   });
 });
 
