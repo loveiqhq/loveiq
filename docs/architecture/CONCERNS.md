@@ -76,7 +76,7 @@
 - Was: Cannot view survey submissions or waitlist signups without database access
 - Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
 - Since 2026-10-16: the admin is AP-Analytics only (`/admin/ap`). The submission browser, CSV export and survey status toggle were removed; closing the survey means setting `survey.status` in the database
-- Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
+- Auth: one team password (since 2026-11-22), checked by Supabase Auth for the team account in the `admin_users` allowlist table
 - Evidence: `app/admin/`, `app/api/admin/`, `features/admin/server/`, `features/admin/ui/`
 
 ## Known Bugs
@@ -159,7 +159,7 @@
 - Current workaround: Email-based identification on survey submission only
 - Blocks: Member area, personalized content
 - Implementation complexity: Medium (Supabase Auth available)
-- Note: Admin panel now has authentication via Supabase Auth magic links (see resolved item below)
+- Note: Admin panel has authentication via Supabase Auth: the team password since 2026-11-22, magic links before (see resolved item below)
 
 **No email verification:**
 

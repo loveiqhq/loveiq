@@ -41,9 +41,11 @@ would reject. Anything rendering one into Slack mrkdwn must escape it —
 - Read routes require `viewer` access or higher.
 - Mutating routes also require CSRF validation and are rate-limited.
 - Some write routes need a higher role, listed per method below.
-- `/api/admin/login` is the public entrypoint for requesting an allowlisted magic link. Its
-  body may carry `next`, the admin page the sign-in is for: the magic link returns there when it
-  is a same-site `/admin/` path (`safeAdminNext`), else to `/admin/ap`.
+- `/api/admin/login` is the public entrypoint for the team password (since 2026-11-22): Supabase
+  Auth checks it as the password of the team account `ap-team@loveiq.org` (set in `features/admin/server/sign-in.ts`),
+  which must be in `admin_users`. CSRF first, 5 tries a minute per address. Its body may carry
+  `next`, the admin page the sign-in is for: the answer names it when it is a same-site `/admin/`
+  path (`safeAdminNext`), else `/admin/ap`.
 
 Canonical role hierarchy from [`features/admin/server/roles.ts`](../features/admin/server/roles.ts):
 

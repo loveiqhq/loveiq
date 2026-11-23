@@ -137,7 +137,7 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
 - CSP (R-11 report-uri), HSTS preload (R-12), CORP (T-16), COOP, X-Frame-Options DENY
 - CSRF double-submit cookie + rotation on admin login (R-03)
 - Rate-limiting per-IP + per-IP+submission (R-08 IPv6 /64 collapse, R-18 per-submission cap)
-- Admin idle timeout 30 min (R-13); concurrent-session cap (T-15)
+- Admin sign-in: one team password for a single admin account, mixed with a server-only secret before Supabase checks it, rate-limited and audited (since 22 Nov 2026, replacing personal emailed links and their concurrent-session cap, T-15); idle timeout 30 min (R-13)
 - RLS service_role-only on all PII tables (F-18 integration test)
 - Webhook signature verification + livemode guard (Stripe T-01) + idempotency (Stripe payment_webhook_event UNIQUE; Resend resend_webhook_event UNIQUE; per-email events keyed per email and kind, so a retry adds no row)
 - Optimistic locking on admin PATCH (F-05)

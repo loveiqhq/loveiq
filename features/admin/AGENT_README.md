@@ -1,12 +1,12 @@
 # features/admin
 
-**Purpose:** The internal admin. Since 16 Oct 2026 it is AP-Analytics only: the team's analytics pages at `/admin/ap` and the sign-in to them. Its server code also serves the remaining admin API routes, the Slack digest crons and the company brain. Protected by Supabase Auth magic-link sessions. Allowlist in `admin_users` table.
+**Purpose:** The internal admin. Since 16 Oct 2026 it is AP-Analytics only: the team's analytics pages at `/admin/ap` and the sign-in to them. Its server code also serves the remaining admin API routes, the Slack digest crons and the company brain. Protected by Supabase Auth sessions of the team account, opened by the team password (since 22 Nov 2026). Allowlist in `admin_users` table.
 
 **Subtrees:**
 
 - `ui/` — `ap/` (AP-Analytics: shell, sidebar, filter bar and one component per page), `AdminLoginForm.tsx`, `DashboardErrorBoundary.tsx`, `hooks/useAdminFetch.ts`.
 - `server/` — `ap/` (AP's figures), sign-in, roles and audit, GDPR export and erasure, and the modules the digest crons and the brain import.
-- `server/emails/admin-magic-link.ts` — magic-link email template.
+- `server/sign-in.ts` — the team account, the auth client and what every sign-in does (audit, cookies).
 - `tests/` — ~50 admin tests (AP pages and routes, sign-in, GDPR, digests).
 
 **Entry points:**

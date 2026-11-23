@@ -17,8 +17,15 @@ export function createSupabaseMiddleware(request: NextRequest, response: NextRes
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          // A refreshed session keeps the sign-in's cookie flags (features/admin/server/sign-in.ts):
+          // nothing in the browser reads it, so page scripts never may.
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, {
+              ...options,
+              httpOnly: true,
+              sameSite: "lax",
+              secure: process.env.NODE_ENV === "production",
+            })
           );
         },
       },

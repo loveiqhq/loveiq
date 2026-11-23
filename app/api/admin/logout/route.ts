@@ -20,7 +20,9 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createSupabaseServer();
-  await supabase.auth.signOut();
+  // This browser only: the team password signs everyone in to one account (22 Nov 2026), and the
+  // default (global) sign-out would end every teammate's session with this one's.
+  await supabase.auth.signOut({ scope: "local" });
 
   const response = NextResponse.redirect(new URL("/admin/login", request.url));
   // Clear the old admin_session cookie if still present (backward compat cleanup)
