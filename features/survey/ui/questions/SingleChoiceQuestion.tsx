@@ -36,7 +36,7 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
         {options.map((option) => (
           <ChoiceCard
             key={option}
-            label={option}
+            label={question.optionLabels?.[option] ?? option}
             description={value === option ? getOptionExplanation(question, option) : undefined}
             selected={value === option}
             onClick={() => onChange(option)}
