@@ -18,7 +18,7 @@ import {
   QUESTION_ORDER_TEST_END,
   QUESTION_ORDER_WINNER,
   questionOrderArmAt,
-  type QuestionOrderArm,
+  type ClassicOrderArm,
 } from "@shared/experiments/questionOrderArm";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -141,9 +141,9 @@ function skipped(qs: string[], order: string[]): number | null {
 export function runOrder(
   sessionId: string,
   firstQuestions: Map<string, string[]>,
-  orders: Record<QuestionOrderArm, string[]>,
+  orders: Record<ClassicOrderArm, string[]>,
   startedAt: number
-): QuestionOrderArm {
+): ClassicOrderArm {
   const qs = firstQuestions.get(sessionId);
   if (!qs)
     return startedAt >= Date.parse(QUESTION_ORDER_TEST_END) ? QUESTION_ORDER_WINNER : "control";
@@ -324,7 +324,7 @@ export function buildSurveyQuestions(
     !(r.lastAt !== null && r.lastAt !== undefined && now - r.lastAt < IN_PROGRESS_MS);
   let unplaced = 0;
 
-  const funnel = (arm: QuestionOrderArm): { rows: QuestionRow[]; people: number } => {
+  const funnel = (arm: ClassicOrderArm): { rows: QuestionRow[]; people: number } => {
     // Questions first asked after the range weren't asked in it: not rows.
     const order = asked[arm].filter((q) => !(firstDay(q.qId)! > to));
     const at = new Map(order.map((q, i) => [q.qId, i]));

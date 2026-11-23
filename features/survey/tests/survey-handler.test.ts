@@ -969,6 +969,20 @@ describe("POST /api/survey", () => {
       );
     });
 
+    it("stamps survey2 on a run that answered a question only Survey 2.0 asks", async () => {
+      // The switch that gave the run 2.0 can't be read back for a past start, so the answers
+      // decide (questionOrderArmOfSubmission): every 2.0 run answers 17001-17003.
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: SESSION,
+          answers: { ...validBody().answers, "17001": 6 },
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe("survey2");
+    });
+
     it("adds the arm to a tracker that already exists", async () => {
       const utmJson = JSON.stringify({ utm_source: "google" });
       await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: utmJson }));

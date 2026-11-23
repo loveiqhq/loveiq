@@ -192,6 +192,38 @@ describe("useSurveyState", () => {
       expect(lastPersisted().orderArm).toBe("control");
     });
 
+    it("asks a fresh run Survey 2.0 when the page says the switch is on, and records that", () => {
+      const { result } = renderHook(() => useSurveyState({ freshArm: "survey2" }));
+      expect(result.current.orderArm).toBe("survey2");
+      expect(lastPersisted().orderArm).toBe("survey2");
+    });
+
+    it("asks Survey 2.0 again after starting over while the switch is on", () => {
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: { "00001": "x" },
+        currentIndex: 30,
+        startedAt: "2026-11-22T10:00:00.000Z",
+        prefilled: [],
+        orderArm: "variant",
+      });
+      const { result } = renderHook(() => useSurveyState({ freshArm: "survey2" }));
+      act(() => result.current.clearState());
+      expect(result.current.orderArm).toBe("survey2");
+    });
+
+    it("keeps a classic draft in its order when the switch is on", () => {
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: { "00001": "x" },
+        currentIndex: 30,
+        startedAt: "2026-11-22T10:00:00.000Z",
+        prefilled: [],
+        orderArm: "variant",
+      });
+      const { result } = renderHook(() => useSurveyState({ freshArm: "survey2" }));
+      expect(result.current.orderArm).toBe("variant");
+      expect(result.current.currentIndex).toBe(30);
+    });
+
     it("asks a fresh run the new order whatever its session drew, and records that", () => {
       // A session that drew control, so "variant" can only come from the test's end.
       sessionStorage.setItem("loveiq-survey-session", CONTROL_ID);

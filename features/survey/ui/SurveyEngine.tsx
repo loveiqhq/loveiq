@@ -38,6 +38,7 @@ import {
 } from "@features/analytics/client";
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
+import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 import { EMAIL_QID, OPT_IN_QID, orderAskedQuestions } from "./questionOrder";
 import {
   forgetOptInSheetShown,
@@ -116,6 +117,11 @@ interface SurveyEngineProps {
    * switches, or a staging preview (app/survey/page.tsx). None by default.
    */
   sheets?: readonly SurveySheetId[];
+  /**
+   * Survey 2.0's switch for this visit (app/survey/page.tsx): a FRESH run is asked the 2.0
+   * screens. A draft keeps the order it began in (resolveDraftQuestionOrderArm). Off by default.
+   */
+  survey2?: boolean;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -169,6 +175,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onStartOver,
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
+  survey2 = false,
 }) => {
   // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
   // meets every sheet, and the halfway sheet and the report map tell the EUR 1.99 offer in the
@@ -199,7 +206,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     getAnswer,
     getLatestAnswers,
     setCurrentIndex,
-  } = useSurveyState();
+  } = useSurveyState({ freshArm: survey2 ? SURVEY_2_ARM : QUESTION_ORDER_WINNER });
   const {
     submit: submitSurvey,
     retryPending,
