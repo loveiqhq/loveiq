@@ -328,3 +328,65 @@ describe("the pins on the charts", () => {
     ]);
   });
 });
+
+/**
+ * Survey 2.0 (behind the `survey_2` switch) meets the same six sheets at Mark's own spots
+ * (survey2Placement) and has its own runs: its first answer is 10003, and it never sends the
+ * name question's id (its details page answers as 00010), which every classic run answers first.
+ */
+describe("the sheets in Survey 2.0's runs", () => {
+  const survey2 = askedQuestions(400, "survey2").map((q) => q.qId);
+
+  it("reads Survey 2.0's runs apart, by their opening", async () => {
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: false,
+      rows: [
+        ["survey2", "halfway", 12, 12, 1, 11, 5100, 0],
+        ["survey2", "", 20, 19, 1, 18, 4000, 0],
+        ["test", "halfway", 34, 34, 0, 34, 6327, 0],
+      ],
+    });
+    const r = await fetchSurveySheets("2026-11-24", "2026-11-30");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.survey2.bySheet.halfway?.saw).toBe(12);
+    expect(r.value.survey2.all.saw).toBe(20);
+    expect(r.value.test.bySheet.halfway?.saw).toBe(34);
+    expect(r.value.survey.all.saw).toBe(0);
+    const [query] = mockHogql.mock.calls[0]!;
+    expect(query).toContain("properties.question_id = '10003'");
+    expect(query).toContain("properties.question_id = '00001'");
+    // Tested before the classic orders: a 2.0 run also answers 03011 before 01005.
+    expect(query.indexOf("'survey2'")).toBeLessThan(query.indexOf("'test'"));
+  });
+
+  it("puts each sheet at Mark's 2.0 spot in 2.0's funnel", () => {
+    const after = (id: SurveySheetId) =>
+      survey2[sheetSpots(rowsOf(survey2), "survey2").find((s) => s.id === id)!.after];
+    expect(SURVEY_SHEET_IDS.map(after)).toEqual([
+      "02004",
+      "03013",
+      "03012",
+      "14021",
+      "16005",
+      "17002",
+    ]);
+    // The classic funnels keep their own spots.
+    expect(sheetSpots(rowsOf(newOrder))).toEqual(sheetSpots(rowsOf(newOrder), "test"));
+  });
+
+  it("pins 2.0's sheets on its charts", () => {
+    const chart = timeDropChart(rowsOf(survey2), { sheets: true, order: "survey2" });
+    const pinned = chart.cols.flatMap((c) => c.sheets.map((s) => [c.row.id, s.id]));
+    // In 2.0's screen order: Trustpilot (after screen 5) comes before Science (screen 13).
+    expect(pinned).toEqual([
+      ["03013", "trustpilot"],
+      ["02004", "science"],
+      ["03012", "expert"],
+      ["14021", "halfway"],
+      ["16005", "desire"],
+      ["17002", "reportMap"],
+    ]);
+  });
+});

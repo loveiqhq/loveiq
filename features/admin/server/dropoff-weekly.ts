@@ -16,7 +16,11 @@ import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
-import { QUESTION_ORDER_WINNER, type QuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import {
+  QUESTION_ORDER_WINNER,
+  SURVEY_2_ARM,
+  type QuestionOrderArm,
+} from "@shared/experiments/questionOrderArm";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
 
@@ -93,16 +97,26 @@ export type QuestionEnds = Map<string, { sessions: number; quits: number }>;
  * The questions people are asked today, in the order they are asked (the new order, which
  * every run gets since the question-order test ended), numbered the way the survey counts
  * them. Hidden questions are still defined but no longer asked, so they are left out.
+ *
+ * Survey 2.0's screens (`arm` "survey2") are named as 2.0 asks them: Mark's simpler wording, and
+ * its own screens (the 16016 areas, the details page), which the survey's data doesn't hold.
  */
 export function askedQuestions(
   nameLength: number,
-  /** The opening-order test's arm whose order to give (C13); the survey's own by default. */
+  /** The order to give: C13's arms, or Survey 2.0's; the survey's own by default. */
   arm: QuestionOrderArm = QUESTION_ORDER_WINNER
 ): Array<{ qId: string; n: number; name: string }> {
   const names = surveyQuestionNames(nameLength);
+  const shortened = (text: string) =>
+    text.length > nameLength ? `${text.slice(0, nameLength - 1)}…` : text;
   return orderAskedQuestions(surveyQuestions, arm)
     .filter((q) => q.qId && !HIDDEN_QIDS.has(q.qId))
-    .map((q, i) => ({ qId: q.qId, n: i + 1, name: names.get(q.qId) ?? q.qId }));
+    .map((q, i) => ({
+      qId: q.qId,
+      n: i + 1,
+      name:
+        arm === SURVEY_2_ARM && q.question ? shortened(q.question) : (names.get(q.qId) ?? q.qId),
+    }));
 }
 
 export interface DropoffWeeklyPayload {
