@@ -176,7 +176,8 @@ describe("every route and page reads the account through getMiraAccount", () => 
       ...files("app/mira"),
       ...files("features/mira/server"),
     ]
-      .filter((f) => !f.endsWith("features/mira/server/session.ts"))
+      // join() writes "\" on Windows; compare the path as written here.
+      .filter((f) => !f.replace(/\\/g, "/").endsWith("features/mira/server/session.ts"))
       .filter((f) => /auth\.(getUser|getSession|getClaims)\(/.test(readFileSync(f, "utf8")));
     expect(offenders).toEqual([]);
   });
