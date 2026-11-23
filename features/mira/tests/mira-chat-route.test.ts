@@ -657,12 +657,32 @@ describe("POST /api/mira/chat", () => {
     expect(askModel).toHaveBeenCalledTimes(1);
   });
 
-  it("doesn't spend a free message on a resting day", async () => {
-    limitHit("mira-global-day");
-    const res = await post({ message: "hi", consent: true });
-    expect(res.status).toBe(503);
-    const buckets = vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
-    expect(buckets).not.toContain("mira-anon-messages");
+  // Round-4 security SEC-R4-1: everyone's ceiling was counted before the free message, so a
+  // browser past it, which never reaches the model, spent the ceiling and could rest Mira for
+  // every account until midnight UTC.
+  it("counts everyone's ceiling only for a message that reaches the model", async () => {
+    const buckets = () => vi.mocked(checkRateLimit).mock.calls.map(([, cfg]) => cfg.bucket);
+    limitHit("mira-anon-messages");
+    for (const body of [
+      { message: "hi", consent: true },
+      { message: "and then?", consent: true, history: openChat },
+    ]) {
+      expect(await (await post(body)).json()).toEqual({ gate: true, freeLeft: 0 });
+    }
+    expect(buckets()).toContain("mira-anon-messages");
+    expect(buckets()).not.toContain("mira-global-day");
+    expect(askModel).not.toHaveBeenCalled();
+
+    // The free message itself reaches the model, and counts.
+    vi.mocked(checkRateLimit).mockClear();
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 0,
+      resetAt: new Date(),
+    });
+    expect((await post({ message: "hi", consent: true })).status).toBe(200);
+    expect(askModel).toHaveBeenCalledTimes(1);
+    expect(buckets().filter((b) => b === "mira-global-day")).toHaveLength(1);
   });
 
   it("refuses an absurdly large body before reading it for anything", async () => {

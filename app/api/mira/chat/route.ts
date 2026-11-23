@@ -136,9 +136,9 @@ const RESTING = () =>
   );
 /**
  * Everyone's model calls together, per UTC day (so resting ends at midnight UTC; the team is
- * alerted once that day). Checked after the person's own daily caps (so someone at their cap
- * can't spend everyone's) and before an anonymous free message is counted (so a resting day
- * doesn't use one of their ten).
+ * alerted once that day). Checked only for a message that goes to the model: after the person's
+ * own daily caps and, without an account, after the free message, so someone at a cap or past
+ * the free message can't spend everyone's (round-4 security SEC-R4-1).
  */
 const everyoneMayAsk = async () => {
   const allowed = (
@@ -395,10 +395,10 @@ export async function POST(request: Request) {
           { status: 429 }
         );
       }
-      if (!(await everyoneMayAsk())) return RESTING();
       // Every message is counted per browser id, then the sign-up card. ponytail: a cleared
-      // cookie is a new id with ten more (the per-network daily cap above bounds that), and a
-      // reply the model then fails to write still used one. Upgrade: count after the reply.
+      // cookie is a new id with another free message (the per-network daily cap above bounds
+      // that), and a reply the model then fails to write still used it. Upgrade: count after
+      // the reply.
       const free = await checkRateLimit(anon!, {
         bucket: "mira-anon-messages",
         limit: ANON_FREE_MESSAGES,
@@ -408,6 +408,10 @@ export async function POST(request: Request) {
         logMiraEvent("gate_shown", who, { limit: ANON_FREE_MESSAGES });
         return NextResponse.json({ gate: true, freeLeft: 0 });
       }
+      // Only now, as this message goes to the model (SEC-R4-1). ponytail: a resting day spends
+      // the browser's free message; give it back (a release in shared/http/ratelimit.ts) if
+      // resting days ever become common.
+      if (!(await everyoneMayAsk())) return RESTING();
       freeLeft = free.remaining;
     }
   } catch (err) {
