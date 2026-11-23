@@ -40,9 +40,18 @@ import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/sur
 import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
 import { SURVEY_2_AREAS_QID } from "@features/survey/survey2/order";
+import type { DetailsField } from "@features/survey/survey2/details";
+import DetailsStep, { type DetailsStepHandle } from "./questions/DetailsStep";
 
 /** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
 const TOPICS_QID = "16016";
+
+/**
+ * The newsletter question and the country question, which Survey 2.0's details screen asks.
+ * Looked up when used, never at import: the survey data is read at render (a test swaps it).
+ */
+const optInQuestion = () => surveyQuestions.find((q) => q.qId === OPT_IN_QID);
+const countryQuestion = () => surveyQuestions.find((q) => q.qId === "15001");
 import { askedScreens, EMAIL_QID, OPT_IN_QID } from "./questionOrder";
 import {
   forgetOptInSheetShown,
@@ -210,7 +219,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     getAnswer,
     getLatestAnswers,
     setCurrentIndex,
-  } = useSurveyState({ freshArm: survey2 ? SURVEY_2_ARM : QUESTION_ORDER_WINNER });
+    // A buyer who paid before the survey is in no survey test, so stays on today's survey.
+  } = useSurveyState({
+    freshArm: survey2 && !payToStart ? SURVEY_2_ARM : QUESTION_ORDER_WINNER,
+  });
   const {
     submit: submitSurvey,
     retryPending,
@@ -259,6 +271,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const optInSheetOpenRef = useRef(false);
   const optInSheetShown = useRef(false);
   const optInSheetYes = useRef<string | null>(null);
+  /** Survey 2.0's details screen, which Next asks to move through its fields. */
+  const detailsRef = useRef<DetailsStepHandle>(null);
+  /** The details field to open: the email, once the server refused it. */
+  const [detailsFocus, setDetailsFocus] = useState<DetailsField | undefined>(undefined);
   /** The sheet goes; the caller then handles the reader's choice, if any. */
   const closeOptInSheet = useCallback(() => {
     optInSheetOpenRef.current = false;
@@ -480,12 +496,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   );
 
   const hasAnswer = useMemo(() => {
+    // Survey 2.0's details screen: Next always does something there (opens the next field or
+    // says what is missing, DetailsStep), so it is drawn ready.
+    if (question?.answerType === "details") return true;
     if (currentAnswer === null || currentAnswer === undefined) return false;
     if (typeof currentAnswer === "string") return currentAnswer.trim().length > 0;
     if (Array.isArray(currentAnswer)) return currentAnswer.length > 0;
     if (typeof currentAnswer === "number") return true;
     return false;
-  }, [currentAnswer]);
+  }, [question, currentAnswer]);
 
   const isEmailValid = useMemo(() => {
     if (question?.inputType !== "email") return true;
@@ -675,6 +694,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       }
       setBlocked(missingAnswer ? "missing" : "invalid");
       return;
+    }
+    // Survey 2.0's details screen moves through its own fields first (DetailsStep), and only
+    // goes on, to the last step's sheet and submit below, once every one is filled.
+    if (question?.answerType === "details") {
+      const step = detailsRef.current?.advance(getLatestAnswers());
+      if (!step || step.kind === "moved") return;
+      if (step.kind === "blocked") {
+        trackSurveyFormError({ question_id: question.qId, error_kind: "required" });
+        return;
+      }
     }
     // A sheet after this question (Mark's placements, features/survey/surveySheets.ts) holds
     // the move, once per run. Every way on lands here (Next, Auto-advance, Enter, ArrowRight,
@@ -961,6 +990,26 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // "Yes, I want to keep learning": the answer becomes the opt-in's own Yes, word for word
   // (submit_survey matches the option text), through setAnswer so the submit reads it at
   // once, and the run is submitted as Next would. Then filed with the sheet's version.
+  /**
+   * Survey 2.0's details screen: a No on its newsletter question offers "Sure you want to miss
+   * out?" at once (Mark's board "alt · Yes/No opt-in"), once per run like the classic last step.
+   * Its Yes and Not now carry on as there (Next), which on the details screen opens the next
+   * empty field or, with every field filled, submits.
+   */
+  const offerOptInSheet = useCallback(() => {
+    if (optInSheetOpenRef.current) return;
+    if (optInSheetShown.current || optInSheetShownFor(startedAt)) return;
+    const optInYes = optInYesOption(optInQuestion()?.options);
+    if (!optInYes) return;
+    optInSheetShown.current = true;
+    rememberOptInSheetShown(startedAt);
+    optInSheetYes.current = optInYes;
+    optInSheetOpenRef.current = true;
+    cancelAutoAdvance();
+    setOptInSheetOpen(true);
+    trackOptInSheetShown();
+  }, [startedAt, cancelAutoAdvance]);
+
   const handleOptInSheetYes = useCallback(() => {
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "yes" });
@@ -1223,8 +1272,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // The server refused the email (an old page, or a rule that changed): back to that
   // question with every other answer kept, where only Start Over was on offer.
   const handleFixEmail = useCallback(() => {
-    const emailIndex = orderedQuestions.findIndex((q) => q.inputType === "email");
+    // Survey 2.0 asks the email on its details screen, which then opens on it.
+    const emailIndex = orderedQuestions.findIndex(
+      (q) => q.inputType === "email" || q.answerType === "details"
+    );
     if (emailIndex < 0) return;
+    if (orderedQuestions[emailIndex]!.answerType === "details") setDetailsFocus("email");
     clearPendingCompletion();
     hasCompleted.current = false;
     setCompletionPhase("processing");
@@ -1398,6 +1451,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                   question={question}
                   value={currentAnswer as string | null}
                   onChange={handleChange}
+                />
+              )}
+              {question.answerType === "details" && (
+                <DetailsStep
+                  ref={detailsRef}
+                  answers={answers}
+                  onAnswer={setAnswer}
+                  onOptInNo={offerOptInSheet}
+                  optInOptions={optInQuestion()?.options ?? []}
+                  countryQuestion={countryQuestion() ?? question}
+                  focusField={detailsFocus}
                 />
               )}
 

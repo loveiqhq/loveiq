@@ -23,9 +23,10 @@ vi.mock("@features/analytics/client", () => ({
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
 }));
+const run = vi.hoisted(() => ({ submit: vi.fn() }));
 vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
   useSubmitSurvey: () => ({
-    submit: vi.fn(),
+    submit: run.submit,
     retryPending: vi.fn(),
     status: "idle",
     hasPendingCompletion: false,
@@ -45,6 +46,7 @@ import { surveyQuestions } from "@/data/survey-data";
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
+import { optInLabels } from "@features/survey/survey2/details";
 
 const SCREENS = orderAskedQuestions(surveyQuestions, "survey2");
 const at = (qId: string) => SCREENS.findIndex((q) => q.qId === qId);
@@ -58,6 +60,8 @@ const draft = () =>
   };
 
 beforeEach(() => {
+  // jsdom draws no layout: the country search scrolls its highlighted option into view.
+  Element.prototype.scrollIntoView = vi.fn();
   sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000001");
   localStorage.setItem(
     "loveiq-survey-answers",
@@ -114,5 +118,67 @@ describe("Survey 2.0's two 16016 screens", () => {
     await user.click(screen.getByText(WORK)); // unpick the area STUCK sits in
     await waitFor(() => expect(draft().answers["16016"]).toEqual([]));
     expect(draft().answers["16016a"]).toEqual([DATING]);
+  });
+});
+
+describe("Survey 2.0's details screen", () => {
+  const OPT_IN = surveyQuestions.find((q) => q.qId === "16015")!;
+  const { yes: YES } = optInLabels(OPT_IN.options);
+  const onDetails = (answers: Record<string, unknown>) =>
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers,
+        currentIndex: at("00010"),
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+
+  it("steps through the fields on Next and submits the five answers under today's ids", async () => {
+    run.submit.mockClear();
+    onDetails({});
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    const next = () => user.click(screen.getByRole("button", { name: /^next/i }));
+
+    await user.type(await screen.findByLabelText("Name or nickname"), "Sam");
+    await next();
+    await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
+    await next();
+    await user.type(
+      await screen.findByRole("combobox", { name: "Which country do you live in?" }),
+      "Germany"
+    );
+    await user.click(await screen.findByRole("option", { name: /Germany/ }));
+    await user.type(await screen.findByPlaceholderText("e.g. 10115"), "101");
+    await next();
+    expect(run.submit).not.toHaveBeenCalled(); // the newsletter answer is still missing
+    await screen.findByText("Choose yes or no to finish.");
+    await user.click(screen.getByRole("radio", { name: "Yes, keep learning" }));
+    await next();
+
+    await waitFor(() => expect(run.submit).toHaveBeenCalledTimes(1));
+    expect(run.submit.mock.calls[0]![0]).toMatchObject({
+      "00001": "Sam",
+      "00000": "sam.private@example.com",
+      "15001": "Germany",
+      "15002": "101",
+      "16015": YES,
+    });
+  });
+
+  it("offers the miss-out sheet once, when No is picked", async () => {
+    onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await user.click(screen.getByRole("radio", { name: "Yes, keep learning" }));
+    await user.click(screen.getByRole("radio", { name: "No, thanks" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

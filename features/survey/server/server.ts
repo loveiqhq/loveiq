@@ -61,6 +61,17 @@ export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
 
 /**
+ * T-11 for Survey 2.0, which asks the newsletter question on its details screen in its own words
+ * (DETAILS_COPY in features/survey/survey2/details.ts: "Free LoveIQ hints and insights by email?
+ * Research, small practices, first access to new tests. We track opens and clicks to improve
+ * them. Unsubscribe any time." Yes, keep learning / No, thanks). Dated when those words were
+ * written (Mark's Survey Review, built 23 Nov 2026); bump it with them. A Yes once the miss-out
+ * sheet has been shown names both texts, as MARKETING_OPT_IN_SHEET_TERMS_VERSION does.
+ */
+export const MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2 = "2026-11-23";
+export const MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2 = `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
+
+/**
  * Audit M2: GDPR Art. 5(2)/9(2)(a) accountability. Version of the consent terms
  * shown on the survey ConsentScreen (age confirmation + terms acceptance).
  * Stored on `survey_submission.terms_version` alongside `consent_at` so a
@@ -104,6 +115,11 @@ export interface SurveySubmissionPayload {
    * answer is Yes.
    */
   marketingOptInVia?: MarketingOptInVia | null;
+  /**
+   * A Survey 2.0 run (its closing questions answered, isSurvey2Run): its consent texts are 2.0's,
+   * so its versions are too.
+   */
+  survey2?: boolean | null;
   /**
    * The State of Desire sheet's box was ticked ("Email me a 5€ off code"). Stamps
    * `state_of_desire_opt_in_at` and `state_of_desire_opt_in_version` (the box's words,
@@ -284,8 +300,12 @@ export async function submitSurveyOnce(
       terms_version: CONSENT_TERMS_VERSION,
     };
     if (payload.marketingOptIn === true) {
-      consentPatch.marketing_opt_in_terms_version =
-        payload.marketingOptInVia === "sheet"
+      const viaSheet = payload.marketingOptInVia === "sheet";
+      consentPatch.marketing_opt_in_terms_version = payload.survey2
+        ? viaSheet
+          ? MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2
+          : MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2
+        : viaSheet
           ? MARKETING_OPT_IN_SHEET_TERMS_VERSION
           : MARKETING_OPT_IN_TERMS_VERSION;
     }

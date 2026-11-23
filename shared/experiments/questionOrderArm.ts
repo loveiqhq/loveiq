@@ -147,10 +147,13 @@ export function questionOrderArmOfSubmission(
   startedAtMs: number,
   answeredQIds: readonly string[]
 ): QuestionOrderArm {
+  return isSurvey2Run(answeredQIds) ? SURVEY_2_ARM : questionOrderArmAt(sessionId, startedAtMs);
+}
+
+/** Whether a submitted run was Survey 2.0: it answered a question only 2.0 asks. */
+export function isSurvey2Run(answeredQIds: readonly string[]): boolean {
   const only: readonly string[] = SURVEY_2_ONLY_QIDS;
-  return answeredQIds.some((qId) => only.includes(qId))
-    ? SURVEY_2_ARM
-    : questionOrderArmAt(sessionId, startedAtMs);
+  return answeredQIds.some((qId) => only.includes(qId));
 }
 
 /**
