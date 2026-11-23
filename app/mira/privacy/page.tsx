@@ -599,8 +599,8 @@ export default function MiraPrivacyPage() {
             clear your browser data. This does not make what we did before unlawful.
           </li>
           <li>
-            Daily nudges come with your free account. You can pause or stop them with the link in
-            any nudge, or in Settings.
+            Daily nudges come with your free account. You can stop them with the link in any nudge,
+            or in Settings. To pause them or get fewer instead, sign in from that link.
           </li>
           <li>You can delete one goal, or all your goals, on your goals page at any time.</li>
           <li>

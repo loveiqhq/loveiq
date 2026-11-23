@@ -136,4 +136,15 @@ describe("changing the account's email", () => {
     expect(String(mail.text)).not.toContain("lea.new@example.com"); // the old inbox may be shared
     expect(String(mail.text)).not.toMatch(/is cancelled/);
   });
+
+  // Round-4 security SEC-R4-2: the address being left keeps whatever it receives, and a stop
+  // token never expires, so its last email carries none (no stop link, no one-click header).
+  it("sends the old address no token: no stop link and no one-click unsubscribe", async () => {
+    await changeAccountEmail(LEA.id, LEA.email, "lea.new@example.com");
+    await flushAfterResponse();
+    const { mail, ics } = sent();
+    expect(mail.headers ?? {}).not.toHaveProperty("List-Unsubscribe");
+    const everything = [mail.html, mail.text, JSON.stringify(mail.headers ?? {}), ...ics];
+    expect(everything.join("\n")).not.toMatch(/[?&]t=|\/stop\b/);
+  });
 });

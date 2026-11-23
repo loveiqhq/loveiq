@@ -152,6 +152,8 @@ describe("where a sign-in returns to (next)", () => {
       "/mira/settings#weekly",
       "/mira/settings#security",
       `/mira/recordings/${CHAT}`,
+      // A nudge's preferences: beyond a stop they need the sign-in, then back (SEC-R4-2).
+      "/mira/nudges",
     ]) {
       expect(safeNext(ok)).toBe(ok);
     }
@@ -163,6 +165,7 @@ describe("where a sign-in returns to (next)", () => {
       "/mira/settings#weekly?x=//evil.example",
       "/mira/settings#../../admin",
       "/mira/home#weekly",
+      "/mira/nudges?t=x",
       "/mira/recordings/x",
       `/mira/recordings/${CHAT}/x`,
       `/mira/recordings/${CHAT}#x`,

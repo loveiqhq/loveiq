@@ -50,6 +50,14 @@ describe("Mira's privacy notice, made true", () => {
     expect(text).toContain("a cookie marks that browser for a year");
   });
 
+  // Round-4 security SEC-R4-2: a nudge's link alone only stops (app/api/mira/nudges/preferences).
+  it("says a nudge's link stops them, and pausing or fewer needs the sign-in", () => {
+    expect(text).not.toContain("You can pause or stop them with the link");
+    expect(text).toContain(
+      "You can stop them with the link in any nudge, or in Settings. To pause them or get fewer instead, sign in from that link."
+    );
+  });
+
   it("keeps the promises the code now keeps: a request covers everything, deletion unlinks", () => {
     expect(text).toContain("A request covers all your Mira data.");
     expect(text).toContain(

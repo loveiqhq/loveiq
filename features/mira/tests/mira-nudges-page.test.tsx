@@ -11,13 +11,19 @@ vi.mock("next/headers", () => ({
   }),
 }));
 vi.mock("@features/mira/ui/api", () => ({ miraApi: vi.fn() }));
+// Whether the link's own account is signed in: beyond a stop, the page needs it (SEC-R4-2).
+vi.mock("@features/mira/server/session", () => ({ getMiraAccount: vi.fn() }));
 
 import NudgesPage from "@/app/mira/nudges/page";
 import { makeToken } from "@features/mira/server/nudges";
+import { getMiraAccount } from "@features/mira/server/session";
 import { miraApi } from "@features/mira/ui/api";
 import MiraNudges from "@features/mira/ui/MiraNudges";
 
 process.env.UNSUBSCRIBE_SECRET = "test-secret-for-mira-nudges-0123456789";
+const LEA = "11111111-2222-4333-8444-555555555555";
+/** The sign-in, coming back to this page. */
+const SIGN_IN = "/mira/start?next=%2Fmira%2Fnudges";
 
 const PREFS = {
   frequency: "Every day",
@@ -29,6 +35,7 @@ const PREFS = {
 };
 
 beforeEach(() => {
+  vi.mocked(getMiraAccount).mockResolvedValue({ id: LEA, email: "lea@example.com" });
   vi.mocked(miraApi).mockReset();
   vi.mocked(miraApi).mockImplementation((async (_url: string, init?: { body?: unknown }) =>
     (init?.body as { action?: string } | undefined)?.action === "read"
@@ -72,7 +79,7 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
 
   it("moves focus to each new screen's heading, and the reason screen has a way back", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges token="signed-token" />);
+    render(<MiraNudges token="signed-token" signedIn />);
     const choose = await screen.findByRole("heading", { name: "Fewer nudges, not none?" });
     await waitFor(() => expect(choose).toHaveFocus());
     await user.click(screen.getByRole("button", { name: "Stop all nudges" }));
@@ -94,7 +101,7 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
 
   it("thanks only someone who told us why, and Talk to Mira opens the chat", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges token="signed-token" />);
+    render(<MiraNudges token="signed-token" signedIn />);
     await user.click(await screen.findByRole("button", { name: "Stop all nudges" }));
     await user.click(screen.getByRole("radio", { name: "Too many emails" }));
     await user.click(screen.getByRole("button", { name: "Skip and stop nudges" }));
@@ -109,7 +116,7 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
 
   it("says that journal and session reminders stop too, before and after, and where they come back", async () => {
     const user = userEvent.setup();
-    render(<MiraNudges token="signed-token" />);
+    render(<MiraNudges token="signed-token" signedIn />);
     await user.click(await screen.findByRole("button", { name: "Stop all nudges" }));
     expect(
       screen.getByText(
@@ -127,5 +134,50 @@ describe("the nudge preferences page (boards 2 to 4b)", () => {
       "href",
       "/mira/settings#notifications"
     );
+  });
+});
+
+// Round-4 security SEC-R4-2: the link is the account id signed, never expires and stays in every
+// inbox the email reached, an address the person has since left too. Alone it may only stop.
+describe("the link alone, without the account's own sign-in", () => {
+  it("can only stop, and sends the person to sign in, then back here, for the rest", async () => {
+    const user = userEvent.setup();
+    render(<MiraNudges token="signed-token" />);
+    const choose = screen.getByRole("heading", { name: "Fewer nudges, not none?" });
+    await waitFor(() => expect(choose).toHaveFocus());
+    expect(miraApi).not.toHaveBeenCalled(); // the choices are never read
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save my choice" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Sign in to choose" })).toHaveAttribute(
+      "href",
+      SIGN_IN
+    );
+    await user.click(screen.getByRole("button", { name: "Stop all nudges" }));
+    await user.click(screen.getByRole("button", { name: "Stop nudges" }));
+    await screen.findByRole("heading", { name: "Mira won’t email you anymore" });
+    expect(vi.mocked(miraApi).mock.calls.map(([, init]) => init?.body)).toEqual([
+      { t: "signed-token", action: "stop", reason: null, note: null },
+    ]);
+    expect(screen.queryByRole("button", { name: /back on/ })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Changed your mind? Sign in to turn nudges back on" })
+    ).toHaveAttribute("href", SIGN_IN);
+  });
+
+  it("is what the page gives a visitor who isn't that account, signed out or signed in as another", async () => {
+    jar.set("mira_link", makeToken("prefs", LEA)!);
+    const page = NudgesPage as () => Promise<never>;
+    for (const someone of [null, { id: "22222222-3333-4444-8555-666666666666", email: "x@y.z" }]) {
+      vi.mocked(getMiraAccount).mockResolvedValue(someone);
+      render(await page());
+      expect(screen.getByRole("link", { name: "Sign in to choose" })).toBeVisible();
+      cleanup();
+    }
+    expect(miraApi).not.toHaveBeenCalled();
+    // The link's own account: its choices, read and changed here.
+    vi.mocked(getMiraAccount).mockResolvedValue({ id: LEA, email: "lea@example.com" });
+    render(await page());
+    expect(await screen.findByRole("radio", { name: /Twice a week/ })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Sign in to choose" })).toBeNull();
   });
 });

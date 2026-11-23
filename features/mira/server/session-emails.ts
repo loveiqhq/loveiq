@@ -264,10 +264,16 @@ function message(
     subject: email.subject,
     html: email.html,
     text: email.text,
-    headers: {
-      "List-Unsubscribe": `<${links.oneClick}>`,
-      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    },
+    // A cancellation is the last email to that address, with nothing left to stop, and after a
+    // change of email the address being left must get no token (round-4 security SEC-R4-2).
+    ...(isCancellation(kind)
+      ? {}
+      : {
+          headers: {
+            "List-Unsubscribe": `<${links.oneClick}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+        }),
     ...(ics
       ? {
           attachments: [

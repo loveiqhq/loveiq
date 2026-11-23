@@ -1,9 +1,12 @@
 /**
  * POST /api/mira/nudges/preferences: the "Fewer nudges / Pause / Unsubscribe" pages behind every
  * nudge email (Marcus's boards 2 to 4b): `read` the choices, `save`, `stop` or `resume`. The
- * signed token in the email's link stands for the person, so no sign-in is needed; the page sends
- * it in the body, never in an address (DATA-1: addresses reach logs and analytics), which is why
- * reading is a POST too. CSRF-checked and rate limited.
+ * signed token in the email's link stands for the person, so a `stop` needs no sign-in; the page
+ * sends it in the body, never in an address (DATA-1: addresses reach logs and analytics), which
+ * is why reading is a POST too. Anything else needs that account signed in as well (401
+ * `signIn: true`): the token never expires and stays in every inbox the email reached, an address
+ * the person has since left too, so alone it may only stop (round-4 security SEC-R4-2).
+ * CSRF-checked and rate limited.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -15,6 +18,7 @@ import {
   stopNudges,
 } from "@features/mira/server/nudge-prefs";
 import { NUDGE_TYPES, readToken, type NudgeType } from "@features/mira/server/nudges";
+import { getMiraAccount } from "@features/mira/server/session";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -76,6 +80,22 @@ export async function POST(request: Request) {
   const body = parsed.data;
   const userId = readToken("prefs", body.t);
   if (!userId) return NextResponse.json({ error: "This link doesn't work." }, { status: 403 });
+  if (body.action === "stop") {
+    try {
+      const reason = [body.reason, body.note].filter(Boolean).join(" · ") || null;
+      await stopNudges(userId, reason, "page");
+      return NextResponse.json({ success: true });
+    } catch (err) {
+      logger.error({ err }, "mira: nudge prefs update failed");
+      return NextResponse.json({ error: "Unable to save your choice." }, { status: 500 });
+    }
+  }
+  if ((await getMiraAccount())?.id !== userId) {
+    return NextResponse.json(
+      { error: "Please sign in to change your nudges.", signIn: true },
+      { status: 401 }
+    );
+  }
   if (body.action === "read") {
     try {
       const prefs = await getNudgePrefs(userId);
@@ -92,9 +112,6 @@ export async function POST(request: Request) {
         userId,
         body.choice === "types" ? { kind: "types", types: body.types ?? [] } : { kind: body.choice }
       );
-    } else if (body.action === "stop") {
-      const reason = [body.reason, body.note].filter(Boolean).join(" · ") || null;
-      await stopNudges(userId, reason, "page");
     } else {
       await resumeNudges(userId);
     }

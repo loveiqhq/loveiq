@@ -73,6 +73,8 @@ const NEXT_PAGES = new Set([
   "/mira/coaches",
   "/mira/goals",
   "/mira/recordings",
+  // A nudge's preferences: its link alone only stops, the rest needs the sign-in (SEC-R4-2).
+  "/mira/nudges",
 ]);
 const CHAT_ID = /^[0-9a-fA-F-]{36}$/;
 /** A section of Settings by its anchor (`#weekly`, where the session emails link), lower case. */

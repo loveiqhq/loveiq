@@ -11,7 +11,9 @@ import { miraApi } from "./api";
  * Marcus's nudge unsubscribe boards (18 Nov 2026): 2 "Fewer nudges, not none?", 3 "What made you
  * stop?", 4a "Mira won't email you anymore", 4b "Saved". Reached from any of the three footer
  * links in a nudge email; the signed token in the link stands for the person. The page hands it
- * over from its cookie (app/mira/nudges/page.tsx): it is never in the address.
+ * over from its cookie (app/mira/nudges/page.tsx): it is never in the address. The link alone
+ * can only stop the nudges: reading and changing the choices, and turning nudges back on, need
+ * the account's own sign-in, which comes back here (round-4 security SEC-R4-2).
  */
 
 type Prefs = {
@@ -34,6 +36,10 @@ const REASONS = [
   "Something else",
 ];
 
+/** The ink pill, as a link. */
+const PILL =
+  "inline-flex h-[52px] w-full items-center justify-center rounded-full bg-ap-ink text-[16px] font-semibold text-white";
+
 const SAVED_COPY: Record<Choice | "resume", { title: string; line: string }> = {
   twice_weekly: {
     title: "Saved. Fewer, but still there.",
@@ -50,15 +56,25 @@ const SAVED_COPY: Record<Choice | "resume", { title: string; line: string }> = {
   resume: { title: "Nudges are back on.", line: "Mira will write again at your chosen time." },
 };
 
-/** `invalid`: the page found the link was not one we signed, so nothing is asked of the API. */
+/** The sign-in, coming back to this page (server/session.ts safeNext lets it through). */
+const SIGN_IN = "/mira/start?next=%2Fmira%2Fnudges";
+
+/**
+ * `invalid`: the page found the link was not one we signed, so nothing is asked of the API.
+ * `signedIn`: the link's own account is signed in, so its choices can be read and changed.
+ */
 export default function MiraNudges({
   token,
   invalid = false,
+  signedIn = false,
 }: {
   token: string;
   invalid?: boolean;
+  signedIn?: boolean;
 }) {
-  const [screen, setScreen] = useState<Screen>(invalid ? "invalid" : "loading");
+  const [screen, setScreen] = useState<Screen>(
+    invalid ? "invalid" : signedIn ? "loading" : "choose"
+  );
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [choice, setChoice] = useState<Choice>("twice_weekly");
   const [kept, setKept] = useState<string[]>(nudgeConfig.types.map((t) => t.id));
@@ -75,7 +91,7 @@ export default function MiraNudges({
   }, [screen]);
 
   useEffect(() => {
-    if (invalid) return;
+    if (invalid || !signedIn) return;
     void (async () => {
       // The token in the body, never in an address (DATA-1).
       const res = await miraApi<{ prefs: Prefs; types: string[] | null }>(
@@ -87,7 +103,7 @@ export default function MiraNudges({
       if (res.data.types?.length) setKept(res.data.types);
       setScreen(res.data.prefs.stopped ? "stopped" : "choose");
     })();
-  }, [token, invalid]);
+  }, [token, invalid, signedIn]);
 
   async function post(body: Record<string, unknown>): Promise<boolean> {
     setBusy(true);
@@ -161,73 +177,83 @@ export default function MiraNudges({
               Fewer nudges, not none?
             </h1>
             <p className="text-[15px] leading-relaxed text-ap-body">
-              Mira can stay in touch in a lighter way. Pick what suits you.
+              {signedIn
+                ? "Mira can stay in touch in a lighter way. Pick what suits you."
+                : "Mira can stay in touch in a lighter way: twice a week, a pause for 14 days, or only the kinds of nudges you choose. Sign in to pick one."}
             </p>
           </div>
-          <fieldset className="flex flex-col gap-2.5">
-            <legend className="sr-only">Your nudge choice</legend>
-            {(
-              [
+          {signedIn ? (
+            <fieldset className="flex flex-col gap-2.5">
+              <legend className="sr-only">Your nudge choice</legend>
+              {(
                 [
-                  "twice_weekly",
-                  "Twice a week",
-                  "Mira only writes when there’s something worth following up.",
-                ],
-                [
-                  "pause",
-                  "Pause for 14 days",
-                  "No nudges for two weeks, then Mira picks up where you left off.",
-                ],
-                ["types", "Only some nudges", "Keep the kinds that help you."],
-              ] as const
-            ).map(([id, title, line]) => (
-              <label
-                key={id}
-                className={`flex cursor-pointer items-start gap-3.5 rounded-[18px] border p-4 ${choice === id ? "border-ap-purple bg-ap-lilac" : "border-ap-line"}`}
-              >
-                <input
-                  type="radio"
-                  name="choice"
-                  checked={choice === id}
-                  onChange={() => setChoice(id)}
-                  className="mt-0.5 h-5 w-5 flex-none accent-ap-purple"
-                />
-                <span className="flex flex-col gap-1">
-                  <span className="text-[15px] font-bold">{title}</span>
-                  <span className="text-[13px] leading-normal text-ap-body">{line}</span>
-                  {id === "types" && choice === "types" ? (
-                    <span className="flex flex-wrap gap-1.5 pt-1.5">
-                      {nudgeConfig.types.map((t) => {
-                        const on = kept.includes(t.id);
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() =>
-                              setKept((k) => (on ? k.filter((x) => x !== t.id) : [...k, t.id]))
-                            }
-                            className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${on ? "border-[1.5px] border-ap-purple text-ap-plum" : "border border-ap-line text-ap-body"}`}
-                          >
-                            {t.title}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            ))}
-          </fieldset>
+                  [
+                    "twice_weekly",
+                    "Twice a week",
+                    "Mira only writes when there’s something worth following up.",
+                  ],
+                  [
+                    "pause",
+                    "Pause for 14 days",
+                    "No nudges for two weeks, then Mira picks up where you left off.",
+                  ],
+                  ["types", "Only some nudges", "Keep the kinds that help you."],
+                ] as const
+              ).map(([id, title, line]) => (
+                <label
+                  key={id}
+                  className={`flex cursor-pointer items-start gap-3.5 rounded-[18px] border p-4 ${choice === id ? "border-ap-purple bg-ap-lilac" : "border-ap-line"}`}
+                >
+                  <input
+                    type="radio"
+                    name="choice"
+                    checked={choice === id}
+                    onChange={() => setChoice(id)}
+                    className="mt-0.5 h-5 w-5 flex-none accent-ap-purple"
+                  />
+                  <span className="flex flex-col gap-1">
+                    <span className="text-[15px] font-bold">{title}</span>
+                    <span className="text-[13px] leading-normal text-ap-body">{line}</span>
+                    {id === "types" && choice === "types" ? (
+                      <span className="flex flex-wrap gap-1.5 pt-1.5">
+                        {nudgeConfig.types.map((t) => {
+                          const on = kept.includes(t.id);
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() =>
+                                setKept((k) => (on ? k.filter((x) => x !== t.id) : [...k, t.id]))
+                              }
+                              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${on ? "border-[1.5px] border-ap-purple text-ap-plum" : "border border-ap-line text-ap-body"}`}
+                            >
+                              {t.title}
+                            </button>
+                          );
+                        })}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
           <div className="mt-2 flex flex-col items-center gap-3">
-            <div className="w-full [&>button]:w-full">
-              <PrimaryButton
-                onClick={save}
-                disabled={busy || (choice === "types" && kept.length === 0)}
-              >
-                Save my choice
-              </PrimaryButton>
-            </div>
+            {signedIn ? (
+              <div className="w-full [&>button]:w-full">
+                <PrimaryButton
+                  onClick={save}
+                  disabled={busy || (choice === "types" && kept.length === 0)}
+                >
+                  Save my choice
+                </PrimaryButton>
+              </div>
+            ) : (
+              <Link href={SIGN_IN} className={PILL}>
+                Sign in to choose
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => setScreen("reason")}
@@ -343,14 +369,23 @@ export default function MiraNudges({
               Talk to Mira
             </Link>
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={resume}
-            className="mt-2 p-2.5 text-[14px] font-bold text-ap-body"
-          >
-            Changed your mind? Turn nudges back on
-          </button>
+          {signedIn ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={resume}
+              className="mt-2 p-2.5 text-[14px] font-bold text-ap-body"
+            >
+              Changed your mind? Turn nudges back on
+            </button>
+          ) : (
+            <Link
+              href={SIGN_IN}
+              className="mt-2 p-2.5 text-center text-[14px] font-bold text-ap-body"
+            >
+              Changed your mind? Sign in to turn nudges back on
+            </Link>
+          )}
         </>
       ) : null}
 
@@ -381,10 +416,7 @@ export default function MiraNudges({
             ))}
           </dl>
           <div className="mt-2 flex flex-col items-center gap-1.5">
-            <Link
-              href="/mira/home"
-              className="inline-flex h-[52px] w-full items-center justify-center rounded-full bg-ap-ink text-[16px] font-semibold text-white"
-            >
+            <Link href="/mira/home" className={PILL}>
               Back to Mira
             </Link>
             <button
