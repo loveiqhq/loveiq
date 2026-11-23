@@ -193,3 +193,52 @@ describe("sheet 1's words", () => {
     expect(SCIENCE_SHEET_COPY.share).toBeGreaterThan(SCIENCE_SHEET_COPY.contrastShare);
   });
 });
+
+/**
+ * Survey 2.0's spots (Mark's Survey Review, the Working-order board's SHEETS): Trustpilot after
+ * 03013, science after 02004, the expert after 03012, halfway after 14021, State of Desire after
+ * 16005, and the report map after 17002, just before the price question and the details page.
+ */
+describe("Survey 2.0's sheet spots", () => {
+  const screens2 = orderAskedQuestions(surveyQuestions, "survey2");
+  const ctx2: SheetContext = { ...all, arm: "survey2" };
+  const index = (qId: string) => screens2.findIndex((q) => q.qId === qId);
+  const after = (qId: string) => sheetAfterQuestion(qId, index(qId), screens2.length, ctx2);
+  const ANCHORS: Record<string, string> = {
+    "03013": "trustpilot",
+    "02004": "science",
+    "03012": "expert",
+    "14021": "halfway",
+    "16005": "desire",
+    "17002": "reportMap",
+  };
+
+  it("opens each sheet after Mark's question for it", () => {
+    for (const [qId, sheet] of Object.entries(ANCHORS)) expect(after(qId), qId).toBe(sheet);
+  });
+
+  it("opens nothing anywhere else, and nothing before a question", () => {
+    screens2.forEach((q, i) => {
+      if (!(q.qId in ANCHORS)) {
+        expect(sheetAfterQuestion(q.qId, i, screens2.length, ctx2), q.qId).toBeNull();
+      }
+      expect(sheetBeforeQuestion(q.qId, i, ctx2), q.qId).toBeNull();
+    });
+  });
+
+  it("puts the halfway sheet halfway: after screen 31 of 61", () => {
+    expect(index("14021") + 1).toBe(31);
+    expect(screens2).toHaveLength(61);
+  });
+
+  it("leaves the classic spots as they were", () => {
+    const variant = orderAskedQuestions(surveyQuestions, "variant").filter((q) => !isHidden(q.qId));
+    const at = (qId: string) => variant.findIndex((q) => q.qId === qId);
+    const classic = (qId: string) => sheetAfterQuestion(qId, at(qId), variant.length, all);
+    expect(classic("02004")).toBe("science");
+    expect(classic("03008")).toBe("trustpilot");
+    expect(classic("11003")).toBe("halfway");
+    expect(classic("03013")).toBeNull();
+    expect(sheetBeforeQuestion("01005", at("01005"), all)).toBe("expert");
+  });
+});

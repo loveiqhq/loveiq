@@ -13,13 +13,15 @@
  * Pure module: no React, no storage outside the helpers at the bottom.
  */
 
+import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
+
 export type SurveySheetId =
   "science" | "trustpilot" | "expert" | "halfway" | "desire" | "reportMap";
 
 /**
  * Where a sheet opens. Always by question id, never by position: the C13 test asked the same
  * questions in two orders (questionOrder.ts), a draft begun in the old one still resumes in it,
- * and Eman's reorder will move them again.
+ * and Survey 2.0 asks them in a third, with spots of its own (`survey2Placement`).
  *
  * - `after`: moving on from the question holds the move; the sheet opens over it, and
  *   "Keep going" moves on.
@@ -36,7 +38,13 @@ export type SurveySheetPlacement =
 
 export interface SurveySheetDef {
   id: SurveySheetId;
+  /** Where it opens in the classic survey (C13's two orders). */
   placement: SurveySheetPlacement;
+  /**
+   * Where it opens in Survey 2.0: Mark's Survey Review, the Working-order board's SHEETS
+   * (19 Nov 2026), each after a question of his new order.
+   */
+  survey2Placement: SurveySheetPlacement;
   /**
    * The sheet names a price (EUR 1.99, the State of Desire report). A reader who paid before
    * the survey never sees one.
@@ -55,29 +63,75 @@ export interface SurveySheetDef {
  * 3. Expert quote, before 01005 "I want more variety…": in the new order (C13's, everyone's
  *    since the test ended) it is question 27, just before the second leak; in the old order,
  *    which a draft begun in it keeps, it is question 3, too early, so `minIndex` keeps it closed
- *    there. Re-key it when Eman's reorder lands.
+ *    there. Survey 2.0 opens it after 03012 instead (survey2Placement).
  * 4. Halfway, after 11003 "During sex, I focus more on the other person's pleasure…" (32/62).
  * 5. State of Desire, after 16005 "Which of these best describes where your sexuality feels
  *    right now?"
- * 6. The report map, when three questions are left: before the name question once the
- *    reorder moves it to the end, and true in every order meanwhile.
+ * 6. The report map, when three questions are left: true in every classic order.
+ *
+ * Survey 2.0 (his Survey Review, 19 Nov 2026) has its own spot for each (`survey2Placement`):
+ * Trustpilot after 03013, science after 02004, the expert after 03012, halfway after 14021,
+ * State of Desire after 16005, the map after 17002.
  */
 /** The question sheet 1 speaks to: it shows the share of people who gave the reader's answer. */
 export const SCIENCE_QID = "02004";
 
 export const SURVEY_SHEETS: readonly SurveySheetDef[] = [
-  { id: "science", placement: { kind: "after", qId: SCIENCE_QID }, priced: false, layout: "sheet" },
-  { id: "trustpilot", placement: { kind: "after", qId: "03008" }, priced: false, layout: "sheet" },
   {
-    id: "expert",
-    placement: { kind: "before", qId: "01005", minIndex: 10 },
+    id: "science",
+    placement: { kind: "after", qId: SCIENCE_QID },
+    survey2Placement: { kind: "after", qId: SCIENCE_QID },
     priced: false,
     layout: "sheet",
   },
-  { id: "halfway", placement: { kind: "after", qId: "11003" }, priced: true, layout: "sheet" },
-  { id: "desire", placement: { kind: "after", qId: "16005" }, priced: true, layout: "sheet" },
-  { id: "reportMap", placement: { kind: "remaining", left: 3 }, priced: true, layout: "screen" },
+  {
+    id: "trustpilot",
+    placement: { kind: "after", qId: "03008" },
+    // Social proof after the first easy stretch, before satisfaction (01002) at Q11.
+    survey2Placement: { kind: "after", qId: "03013" },
+    priced: false,
+    layout: "sheet",
+  },
+  {
+    id: "expert",
+    placement: { kind: "before", qId: "01005", minIndex: 10 },
+    // Closes the Arousal block as a breather before Attachment starts.
+    survey2Placement: { kind: "after", qId: "03012" },
+    priced: false,
+    layout: "sheet",
+  },
+  {
+    id: "halfway",
+    placement: { kind: "after", qId: "11003" },
+    // Right before 01005, 02001 and 01006, the questions that still lose the most: screen 31 of 61.
+    survey2Placement: { kind: "after", qId: "14021" },
+    priced: true,
+    layout: "sheet",
+  },
+  {
+    id: "desire",
+    placement: { kind: "after", qId: "16005" },
+    survey2Placement: { kind: "after", qId: "16005" },
+    priced: true,
+    layout: "sheet",
+  },
+  {
+    id: "reportMap",
+    placement: { kind: "remaining", left: 3 },
+    // What the report holds, right before the price question and the details page.
+    survey2Placement: { kind: "after", qId: "17002" },
+    priced: true,
+    layout: "screen",
+  },
 ];
+
+/** Where a sheet opens for a run in `arm`: its 2.0 spot in Survey 2.0, its classic one otherwise. */
+export function placementFor(
+  def: SurveySheetDef,
+  arm: QuestionOrderArm | undefined
+): SurveySheetPlacement {
+  return arm === "survey2" ? def.survey2Placement : def.placement;
+}
 
 export const SURVEY_SHEET_IDS: readonly SurveySheetId[] = SURVEY_SHEETS.map((s) => s.id);
 
@@ -108,6 +162,8 @@ export interface SheetContext {
   shown: ReadonlySet<SurveySheetId>;
   /** A reader who paid before the survey: no sheet with a price. */
   payToStart: boolean;
+  /** The run's order: Survey 2.0's runs meet the sheets at its spots. Classic when absent. */
+  arm?: QuestionOrderArm;
 }
 
 function available(def: SurveySheetDef, ctx: SheetContext): boolean {
@@ -128,7 +184,7 @@ export function sheetAfterQuestion(
   const after = total - 1 - index;
   for (const def of SURVEY_SHEETS) {
     if (!available(def, ctx)) continue;
-    const p = def.placement;
+    const p = placementFor(def, ctx.arm);
     if (p.kind === "after" && p.qId === qId) return def.id;
     if (p.kind === "remaining" && after === p.left) return def.id;
   }
@@ -144,7 +200,7 @@ export function sheetBeforeQuestion(
   if (!qId) return null;
   for (const def of SURVEY_SHEETS) {
     if (!available(def, ctx)) continue;
-    const p = def.placement;
+    const p = placementFor(def, ctx.arm);
     if (p.kind === "before" && p.qId === qId && index >= p.minIndex) return def.id;
   }
   return null;
