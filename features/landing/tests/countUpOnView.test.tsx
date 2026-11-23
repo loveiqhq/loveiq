@@ -87,6 +87,9 @@ describe("CountUpOnView", () => {
   it("waits at 0 until 40% of it is on screen, then counts up to the value in 1.6s", () => {
     const { container } = render(<CountUpOnView value={47} suffix="%" />);
     expect(options?.threshold).toBe(0.4);
+    // Anywhere on screen (the design system's CountUp): a margin that trims the screen's foot
+    // left a number parked there at "0%" (WebKit, 23 Nov).
+    expect(options?.rootMargin ?? "0px").toBe("0px");
     expect(digits(container)).toBe("0%");
 
     enter(container);
