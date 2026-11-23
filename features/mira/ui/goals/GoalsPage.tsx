@@ -52,6 +52,10 @@ export default function GoalsPage() {
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || g.load === "signed-out";
   const [said, setSaid] = useState<string | null>(null);
+  // The same words set again would change nothing in the line, so a second "Goal added." or
+  // "Goal deleted." in a row went unheard (R4-HABITS-2): a repeat alternates a trailing no-break
+  // space, which a screen reader doesn't read but which changes the line.
+  const say = (text: string) => setSaid((was) => (was === text ? `${text}\u00a0` : text));
   const [popped, setPopped] = useState<string | null>(null);
   const today = g.today || localDay(new Date());
   const active = g.goals.filter(onTheGo);
@@ -128,7 +132,7 @@ export default function GoalsPage() {
                       g={g}
                       pop={popped === goal.id}
                       onTicked={(on) => setPopped(on ? goal.id : null)}
-                      say={setSaid}
+                      say={say}
                       leave={() => refocusRow(activeList, i, () => byId("on-the-go-h"))}
                     />
                   ))}
@@ -152,7 +156,7 @@ export default function GoalsPage() {
                     submitLabel="Add goal"
                     onSubmit={async (text, target) => {
                       const err = await g.create(text, target);
-                      if (!err) setSaid("Goal added.");
+                      if (!err) say("Goal added.");
                       return err;
                     }}
                   />
@@ -178,7 +182,7 @@ export default function GoalsPage() {
                   `Done ${shortDate(x.completed_at!)} · ${x.days.length === 1 ? "1 day" : `${x.days.length} days`} ticked`
                 }
                 g={g}
-                say={setSaid}
+                say={say}
               />
             ) : null}
             {away.length > 0 ? (
@@ -188,11 +192,11 @@ export default function GoalsPage() {
                 goals={away}
                 note={(x) => `Put away ${shortDate(x.archived_at!)}`}
                 g={g}
-                say={setSaid}
+                say={say}
               />
             ) : null}
 
-            <AboutYourGoals g={g} say={setSaid} />
+            <AboutYourGoals g={g} say={say} />
           </>
         )}
       </div>
