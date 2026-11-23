@@ -145,9 +145,10 @@ describe("Settings sections", () => {
       "#appearance",
       "#data",
     ]);
-    // Every entry lands below the sticky row of links: each target keeps the page's margin.
+    // Every entry lands below the sticky row of links: the page's scroll padding while the row is
+    // there (the row's own class, below xl), each target's margin from xl.
     for (const href of links) {
-      expect(document.querySelector(href), href).toHaveClass("scroll-mt-16");
+      expect(document.querySelector(href), href).toHaveClass("xl:scroll-mt-10");
     }
   });
 
@@ -191,11 +192,11 @@ describe("Settings sections", () => {
     const row = screen.getAllByRole("navigation", { name: "Settings sections" })[0]!;
     expect(row).toHaveClass("sticky", "xl:hidden");
     expect(row.querySelector("ol")!.className).toMatch(/\[mask-image:linear-gradient\(to_right,/);
-    // What scrolls under the row gives every control in it a top margin for focus scrolling,
-    // the row's own links none (they stick, so a margin there would only jump the page).
+    // While the row is on the page, the page scrolls with room for it above whatever takes the
+    // focus (round 4: WebKit ignored the controls' own top margin, R3-UXA-1's remainder).
+    expect(row).toHaveClass("max-xl:[:root:has(&)]:scroll-pt-[4.5rem]");
     const content = document.getElementById("account")!.parentElement!;
-    expect(content).toHaveClass("[&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16");
-    expect(row.contains(content)).toBe(false);
+    expect(content.className).not.toMatch(/scroll-mt/);
   });
 
   it("after an under-18 stop, says so once and keeps only what still works", async () => {

@@ -982,7 +982,7 @@ describe("Settings › Sign-in & security", () => {
     await screen.findByRole("region", { name: "Devices" });
     const anchors = document.querySelectorAll("#security");
     expect(anchors).toHaveLength(1);
-    expect(anchors[0]).toHaveClass("scroll-mt-16");
+    expect(anchors[0]).toHaveClass("xl:scroll-mt-10");
     expect(anchors[0]).toHaveTextContent("Sign-in & security");
   });
 

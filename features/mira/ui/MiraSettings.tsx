@@ -409,11 +409,7 @@ export default function MiraSettings({
               </div>
             ) : null}
             <SectionIndex sections={sections} active={active} variant="row" />
-            {/* A control the keyboard focuses scrolls clear of the phones' sticky row, as the
-                anchors do (WCAG 2.4.11, round-3 R3-UXA-1). On what scrolls under the row, never
-                the row itself. Once the frame's --mira-scroll-top hook is in, it can set that
-                instead. */}
-            <div className="mt-8 flex flex-col gap-12 [&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16">
+            <div className="mt-8 flex flex-col gap-12">
               {!minor ? (
                 <>
                   <SettingsSection
@@ -812,7 +808,7 @@ function useLandOnSection(ready: boolean) {
  * browser can tell (no IntersectionObserver: no highlight, the links still work).
  */
 /** Where a section becomes the one being read: just under where a link lands it (40 px from xl,
- *  64 px under the phones' sticky row). */
+ *  72 px under the phones' sticky row). */
 const READ_LINE = 120;
 
 /**
@@ -881,7 +877,11 @@ function SectionIndex({
     return (
       <nav
         aria-label="Settings sections"
-        className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden"
+        // While it is on the page, the page scrolls with room for it above whatever takes the
+        // focus or an index link lands on (WCAG 2.4.11, round-3 R3-UXA-1): the root's own scroll
+        // padding, as for the phones' bar, since WebKit's focus scrolling ignores a control's
+        // top margin (round 4). 4.5rem clears the 45 px row in WebKit too (Playwright).
+        className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden max-xl:[:root:has(&)]:scroll-pt-[4.5rem]"
       >
         {/* Its edges fade, so a label cut there reads as more to scroll to (round-3
             R3-UXA-10), as the chat's prompt row does. */}
@@ -957,7 +957,7 @@ export function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-16 xl:scroll-mt-10">
+    <section id={id} aria-labelledby={`${id}-title`} className="xl:scroll-mt-10">
       <div className="flex flex-wrap items-center justify-between gap-x-3">
         <div className="flex items-center gap-3">
           {/* Focus can land here: after a Try again that loaded (kit/load-failed). */}
@@ -1013,7 +1013,7 @@ export function SettingsSection({
  */
 function Slot({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <div id={id} className="scroll-mt-16 xl:scroll-mt-10">
+    <div id={id} className="xl:scroll-mt-10">
       {children}
     </div>
   );
