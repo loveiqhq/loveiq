@@ -151,18 +151,23 @@ export function checkIdToken(
   return { email, googleRuns: googleRunsAddress(email, c.hd) };
 }
 
-/** Staff addresses never sign in with Google here. Fails closed: unsure counts as staff. */
-export async function isStaffEmail(email: string): Promise<boolean> {
+/** Whether the address is on the staff list (`admin_users`), or the list couldn't be read. */
+export async function staffStatus(email: string): Promise<"staff" | "not" | "unsure"> {
   try {
     const res = await supabaseFetch(
       `/rest/v1/admin_users?email=ilike.${encodeURIComponent(email)}&select=email&limit=1`
     );
-    if (!res.ok) return true;
+    if (!res.ok) return "unsure";
     const rows = (await res.json()) as unknown[];
-    return !Array.isArray(rows) || rows.length > 0;
+    return !Array.isArray(rows) ? "unsure" : rows.length > 0 ? "staff" : "not";
   } catch {
-    return true;
+    return "unsure";
   }
+}
+
+/** Staff addresses never sign in with Google here. Fails closed: unsure counts as staff. */
+export async function isStaffEmail(email: string): Promise<boolean> {
+  return (await staffStatus(email)) !== "not";
 }
 
 /** Swaps Google's one-time code for the person's confirmed email, or null. */

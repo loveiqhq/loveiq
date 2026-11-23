@@ -20,13 +20,14 @@ import { anonId } from "@features/mira/server/anon";
 import { CONSENT_VERSION } from "@features/mira/server/config";
 import { recordSession } from "@features/mira/server/devices";
 import {
+  exchangeCode,
   GOOGLE_COOKIE,
   GOOGLE_COOKIE_PATH,
-  exchangeCode,
   googleClient,
   isStaffEmail,
   returnOrigin,
   sameState,
+  staffStatus,
   unpackStart,
 } from "@features/mira/server/google";
 import { isMinor } from "@features/mira/server/minor";
@@ -102,8 +103,16 @@ export async function GET(request: Request) {
     logMiraEvent("google_connected", { userId: account.id });
     return back("connected");
   }
-  // Only addresses Google runs, and never staff: everyone else gets the emailed code.
-  if (!who.googleRuns || (await isStaffEmail(who.email))) return back("other");
+  // Only addresses Google runs, and never staff: everyone else gets the emailed code. Staff are
+  // told so (a team member read the plain "use your email" as broken, 23 Nov 2026); a staff list
+  // that can't be read still refuses, as something that didn't work.
+  if (!who.googleRuns) return back("other");
+  const staff = await staffStatus(who.email);
+  if (staff === "staff") return back("staff");
+  if (staff === "unsure") {
+    logger.warn("mira: Google sign-in could not read the staff list");
+    return back("failed");
+  }
   const code = await mintSignInCode(who.email);
   if (!code) return back("failed");
   const supabase = await createMiraSupabase();
