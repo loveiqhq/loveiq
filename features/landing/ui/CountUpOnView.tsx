@@ -76,7 +76,9 @@ const CountUpOnView: FC<{
           frame = window.requestAnimationFrame(step);
         }, wait);
       },
-      { threshold: 0.4, rootMargin: "0px 0px -10% 0px" }
+      // 40% of the number anywhere on screen (the design system's CountUp), with no margin: a
+      // trimmed foot left a number parked there at "0%".
+      { threshold: 0.4 }
     );
     observer.observe(target);
 
