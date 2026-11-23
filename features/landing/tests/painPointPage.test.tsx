@@ -309,25 +309,56 @@ describe("pain-point page — sentences you can actually say", () => {
 });
 
 describe("pain-point page — the numbers", () => {
-  it("shows four numbers with what they count", () => {
-    renderPage();
-    const section = screen
+  // v2 (Mark, 12 Nov): "we had more engaging and more professionally looking designs for stats
+  // on the current landing page": the video page's stat cards, each share drawn as dots.
+  const section = () =>
+    screen
       .getByRole("heading", {
         level: 2,
         name: "Sex problems are common. Talking about them isn't.",
       })
       .closest("section") as HTMLElement;
-    expect(section.getAttribute("data-landing-section")).toBe("stats");
-    const cards = [...section.querySelectorAll("[data-stat]")].map((card) =>
-      card.textContent?.replace(/\s+/g, " ").trim()
-    );
-    expect(cards).toEqual([
-      "47%of adults have a sexual concern they've never raised with a partner.",
-      "56%of people who take our test need emotional closeness before desire shows up.",
-      "42%shut down when sex starts to feel like pressure.",
-      "77%want more variety in their sex life than they have now.",
+  const cards = () => [...section().querySelectorAll<HTMLElement>("[data-stat]")];
+
+  it("shows four numbers with what they count", () => {
+    renderPage();
+    expect(section().getAttribute("data-landing-section")).toBe("stats");
+    // What a screen reader hears for each number: its final value.
+    expect(cards().map((c) => c.querySelector(".sr-only")?.textContent)).toEqual([
+      "47%",
+      "56%",
+      "42%",
+      "77%",
+    ]);
+    expect(cards().map((c) => c.querySelector("[data-stat-body]")?.textContent)).toEqual([
+      "of adults have a sexual concern they've never raised with a partner.",
+      "of people who take our test need emotional closeness before desire shows up.",
+      "shut down when sex starts to feel like pressure.",
+      "want more variety in their sex life than they have now.",
     ]);
     // Mark (12 Nov): "Do we really want to show this?" Marcus: "will take out". Out in v2.
-    expect(section.textContent).not.toContain("Sources:");
+    expect(section().textContent).not.toContain("Sources:");
+  });
+
+  it("draws each share as 100 dots with that many lit, as the video page's 47% does", () => {
+    renderPage();
+    const dots = cards().map((c) => {
+      const svg = c.querySelector("svg[data-dots]")!;
+      return [
+        svg.querySelectorAll("circle").length,
+        svg.querySelectorAll("circle[data-lit]").length,
+      ];
+    });
+    expect(dots).toEqual([
+      [100, 47],
+      [100, 56],
+      [100, 42],
+      [100, 77],
+    ]);
+  });
+
+  it("rolls each number up from 0 as it comes into view", () => {
+    renderPage();
+    for (const card of cards()) expect(card.querySelector("[data-count-up]")).not.toBeNull();
   });
 });
