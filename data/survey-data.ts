@@ -1632,4 +1632,62 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
     formatGuidance: "Optional. Share as much or as little as you like.",
   },
+  {
+    qId: "17001",
+    cId: 17,
+    chapter: "Feedback",
+    question: "How much did you enjoy taking this survey?",
+    answerType: "scale",
+    options: [],
+    required: true,
+    guide: "Go with your overall feeling, not just the last few questions.",
+    supportAndGuidance: "Go with your overall feeling, not just the last few questions.",
+    scaleLabels: { low: "Not at all", high: "Extremely" },
+    comment: "Tells us how the survey felt to take, so we can keep making it better.",
+    howAnswerIsUsed: "Tells us how the survey felt to take, so we can keep making it better.",
+    formatGuidance: "Select one point on the scale.",
+  },
+  {
+    qId: "17002",
+    cId: 17,
+    chapter: "Feedback",
+    question: "How much did the questions help you reflect and learn about your sexuality?",
+    answerType: "scale",
+    options: [],
+    required: true,
+    guide: "Think of any question that made you pause or notice something new about yourself.",
+    supportAndGuidance:
+      "Think of any question that made you pause or notice something new about yourself.",
+    scaleLabels: { low: "Not at all", high: "Extremely" },
+    comment: "Tells us whether the questions themselves helped you, apart from the report.",
+    howAnswerIsUsed: "Tells us whether the questions themselves helped you, apart from the report.",
+    formatGuidance: "Select one point on the scale.",
+  },
+  {
+    qId: "17003",
+    cId: 17,
+    chapter: "Feedback",
+    question:
+      "What feels like a fair price for your full report to become a more intelligent lover?",
+    answerType: "single",
+    options: [
+      "Fair would be to have it for free",
+      "€1.99–€3.99",
+      "€4.00–€9.99",
+      "€10.00–€19.99",
+      "€20.00–€29.99",
+      "€30.00–€49.99",
+      "€50.00 or more",
+    ],
+    required: true,
+    guide:
+      "60 pages (~2 hours of insights), built from the leading research around sexuality. Consider it is a one-off payment and your answers don't influence the price of the report.",
+    supportAndGuidance:
+      "60 pages (~2 hours of insights), built from the leading research around sexuality. Consider it is a one-off payment and your answers don't influence the price of the report.",
+    comment:
+      "Helps us set a fair price for the full report. Your answer doesn't change what you pay.",
+    howAnswerIsUsed:
+      "Helps us set a fair price for the full report. Your answer doesn't change what you pay.",
+    formatGuidance: "Select one option.",
+  },
 ];

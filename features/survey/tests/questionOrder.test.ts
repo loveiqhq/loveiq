@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
 import {
   orderAskedQuestions,
   orderC13Opening,
@@ -16,6 +17,11 @@ import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 function q(qId: string): SurveyQuestion {
   return { qId } as unknown as SurveyQuestion;
 }
+
+/** The generated questions a classic order is built from: all but Survey 2.0's own. */
+const classicQuestions = surveyQuestions.filter(
+  (q) => !(SURVEY_2_ONLY_QIDS as readonly string[]).includes(q.qId)
+);
 
 describe("orderEmailLast", () => {
   it("the generated data still asks email FIRST (the thing this function fixes)", () => {
@@ -192,13 +198,13 @@ describe("orderAskedQuestions", () => {
     // The failure mode is a caller (or a future edit) applying only some of the pipeline.
     // Each stage below moves at least one question, so a composer missing any one of them
     // produces a different array than the full composition.
-    const withoutContentAsks = orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions));
+    const withoutContentAsks = orderDemandBlockBeforeEmail(orderEmailLast(classicQuestions));
     expect(asked.map((e) => e.qId)).toEqual(
       orderContentAsksBeforeDemandBlock(withoutContentAsks).map((e) => e.qId)
     );
     expect(asked.map((e) => e.qId)).not.toEqual(withoutContentAsks.map((e) => e.qId));
-    expect(asked.map((e) => e.qId)).not.toEqual(orderEmailLast(surveyQuestions).map((e) => e.qId));
-    expect(asked.map((e) => e.qId)).not.toEqual(surveyQuestions.map((e) => e.qId));
+    expect(asked.map((e) => e.qId)).not.toEqual(orderEmailLast(classicQuestions).map((e) => e.qId));
+    expect(asked.map((e) => e.qId)).not.toEqual(classicQuestions.map((e) => e.qId));
   });
 
   it("applies the C13 reorder in the variant arm, and only there", () => {
@@ -206,7 +212,7 @@ describe("orderAskedQuestions", () => {
     expect(variant.map((e) => e.qId)).toEqual(
       orderC13Opening(
         orderContentAsksBeforeDemandBlock(
-          orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))
+          orderDemandBlockBeforeEmail(orderEmailLast(classicQuestions))
         )
       ).map((e) => e.qId)
     );
@@ -225,10 +231,17 @@ describe("orderAskedQuestions", () => {
     expect(variant[variant.length - 1]!.qId).toBe(OPT_IN_QID);
   });
 
-  it("is a strict permutation of the generated set", () => {
+  it("is a strict permutation of the classic set", () => {
     expect([...asked.map((e) => e.qId)].sort()).toEqual(
-      [...surveyQuestions.map((e) => e.qId)].sort()
+      [...classicQuestions.map((e) => e.qId)].sort()
     );
-    expect(new Set(asked.map((e) => e.qId)).size).toBe(surveyQuestions.length);
+    expect(new Set(asked.map((e) => e.qId)).size).toBe(classicQuestions.length);
+  });
+
+  it("never asks the closing questions only Survey 2.0 asks", () => {
+    for (const arm of ["control", "variant"] as const) {
+      const ids = orderAskedQuestions(surveyQuestions, arm).map((e) => e.qId);
+      for (const qId of SURVEY_2_ONLY_QIDS) expect(ids, `${arm} ${qId}`).not.toContain(qId);
+    }
   });
 });
