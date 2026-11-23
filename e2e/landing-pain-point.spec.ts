@@ -180,7 +180,11 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
       page.evaluate(() => {
         // The band ScrollAnimator watches: the top 90 % of the screen.
         const bottom = window.innerHeight * 0.9;
-        return [...document.querySelectorAll<HTMLElement>(".animate-on-scroll:not(.animate)")]
+        return [
+          ...document.querySelectorAll<HTMLElement>(
+            ".animate-on-scroll:not(.animate), [data-reveal]:not(.animate)"
+          ),
+        ]
           .filter((el) => {
             const r = el.getBoundingClientRect();
             const shown = Math.min(r.bottom, bottom) - Math.max(r.top, 0);
@@ -192,15 +196,60 @@ test.describe("Landing arm B (round 4) — the pain-point page", () => {
       await page.evaluate((top) => window.scrollTo(0, top), y);
       await expect.poll(unplayedInView).toEqual([]);
     }
-    await expect.poll(() => page.locator(".animate-on-scroll:not(.animate)").count()).toBe(0);
+    await expect
+      .poll(() =>
+        page.locator(".animate-on-scroll:not(.animate), [data-reveal]:not(.animate)").count()
+      )
+      .toBe(0);
+    // v2 (Hana's board): every entrance then lands, the last cross-out about 3s after its row.
+    await expect
+      .poll(
+        () =>
+          page
+            .locator(".pp-card-in, .pp-pop, .pp-w, .pp-rail-icon")
+            .evaluateAll((els) => els.filter((el) => getComputedStyle(el).opacity !== "1").length),
+        { timeout: 10_000 }
+      )
+      .toBe(0);
   });
 
   test("under reduced motion, everything is there without a scroll", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openPage(page);
-    const faded = await page
-      .locator(".pp-root .animate-on-scroll")
-      .evaluateAll((els) => els.filter((el) => getComputedStyle(el).opacity !== "1").length);
-    expect(faded).toBe(0);
+    // At rest in place, not only visible: a start rule that outranks the fallback would leave
+    // an element faded in but 40px low.
+    const unsettled = await page
+      .locator(".pp-root .animate-on-scroll, .pp-card-in, .pp-pop, .pp-w, .pp-wipe, .pp-rail-icon")
+      .evaluateAll(
+        (els) =>
+          els.filter((el) => {
+            const style = getComputedStyle(el);
+            return style.opacity !== "1" || style.transform !== "none";
+          }).length
+      );
+    expect(unsettled).toBe(0);
+    // The numbers stand at their values, with no count.
+    await expect(page.locator("[data-count-up]")).toHaveText(["47%", "56%", "42%", "77%"]);
+  });
+
+  test("rolls the four numbers up to their values once they are in view", async ({ page }) => {
+    await openPage(page);
+    const numbers = page.locator("[data-count-up]");
+    await numbers.first().scrollIntoViewIfNeeded();
+    // Each number scrolls in on a phone, where the cards stack; then each lands exactly.
+    for (let i = 0; i < 4; i += 1) await numbers.nth(i).scrollIntoViewIfNeeded();
+    await expect(numbers).toHaveText(["47%", "56%", "42%", "77%"], { timeout: 10_000 });
+  });
+
+  test("steps the six patterns on with the next button on a desktop", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openPage(page);
+    const row = page.getByRole("list", { name: "Six patterns" });
+    await row.scrollIntoViewIfNeeded();
+    const previous = page.getByRole("button", { name: "Previous pattern" });
+    await expect(previous).toBeDisabled();
+    await page.getByRole("button", { name: "Next pattern" }).click();
+    await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await expect(previous).toBeEnabled();
   });
 });
