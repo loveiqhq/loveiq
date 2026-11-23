@@ -18,7 +18,9 @@ import {
   deviceClass,
   fetchFacts,
   type Facts,
+  type IntroFact,
 } from "@features/admin/server/ap/facts";
+import { fetchGuideFacts } from "@features/admin/server/ap/guide";
 import {
   beforeData,
   DATA_START,
@@ -124,13 +126,20 @@ export interface ApRead {
   /** The period as the dashboard reads it: within its records and at most MAX_DAYS long. */
   f: ApFilters;
   facts: Facts;
+  /** Survey 2.0's short guide (ap_guide_facts); null when unread. */
+  guide?: IntroFact[] | null;
   asked: Period;
   /**
    * compare_to's period; no facts when it lies before the records begin. `sameAge` when it is
    * the equal-length period just before, the one comparison the dashboard makes and the only
    * one whose "so far" figures can be read at the same age.
    */
-  other: { f: ApFilters; facts: Facts | null; sameAge: boolean } | null;
+  other: {
+    f: ApFilters;
+    facts: Facts | null;
+    guide?: IntroFact[] | null;
+    sameAge: boolean;
+  } | null;
   /** What the reading left out of the comparison, and why. */
   notes: string[];
   today: string;
@@ -215,15 +224,18 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
       }
     }
   }
-  const [facts, otherFacts] = await Promise.all([
+  const [facts, otherFacts, guide, otherGuide] = await Promise.all([
     fetchFacts(f.from, f.to),
     o ? fetchFacts(o.from, o.to) : Promise.resolve(null),
+    fetchGuideFacts(f.from, f.to),
+    o ? fetchGuideFacts(o.from, o.to) : Promise.resolve(null),
   ]);
   return {
     f,
     facts,
+    guide,
     asked,
-    other: o ? { f: o, facts: otherFacts, sameAge } : null,
+    other: o ? { f: o, facts: otherFacts, guide: otherGuide, sameAge } : null,
     notes,
     today,
     now,
@@ -234,7 +246,11 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
 type RollupDay = { day: string } & Partial<Record<(typeof NOT_ON_DASHBOARD)[number], unknown>>;
 
 /** Each day of the facts, newest first: the dashboard's counts for that day alone. */
-function dayRows(facts: Facts, extras: Map<string, RollupDay>): DayRow[] {
+function dayRows(
+  facts: Facts,
+  extras: Map<string, RollupDay>,
+  guide: IntroFact[] | null = null
+): DayRow[] {
   const rows: DayRow[] = [];
   for (let d = facts.to; d >= facts.from; d = addDays(d, -1)) {
     const t = totals(facts, ALL, d, d);
@@ -243,10 +259,15 @@ function dayRows(facts: Facts, extras: Map<string, RollupDay>): DayRow[] {
       day: d,
       unique_visitors: t.visits,
       survey_starts: t.starts,
-      // The Survey page's slide 4 "reached": the same funnel_event rows the rollup counted.
-      intro_completed: facts.intro
-        .filter((x) => x.day === d && x.step === "intro_slide_4")
-        .reduce((n, x) => n + x.n, 0),
+      // The Survey page's slide 4 "reached": the same funnel_event rows the rollup counted, and
+      // Survey 2.0's last guide card's (its short guide takes the intro's place).
+      intro_completed:
+        facts.intro
+          .filter((x) => x.day === d && x.step === "intro_slide_4")
+          .reduce((n, x) => n + x.n, 0) +
+        (guide ?? [])
+          .filter((x) => x.day === d && x.step === "guide_card_3")
+          .reduce((n, x) => n + x.n, 0),
       submissions: t.subs,
       reports_opened: t.opened,
       paid_so_far: t.paidCohort,
@@ -286,7 +307,7 @@ export interface ApView {
 export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
   const { f, facts, other, today, now } = read;
   const extras = new Map(rollup.map((r) => [String(r.day).slice(0, 10), r]));
-  const rows = dayRows(facts, extras);
+  const rows = dayRows(facts, extras, read.guide ?? null);
   const period = { since: f.from, until: f.to };
   const notes: string[] = [...read.notes];
 
@@ -298,7 +319,8 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
           // Only the equal-length period just before has a same age; for any other, the
           // figures that depend on it are left out below.
           other.sameAge ? ageMatched(other.facts, sameAge(facts, other.facts, now)) : other.facts,
-          extras
+          extras,
+          other.guide ?? null
         )
       : [];
     if (!other.sameAge) {
@@ -397,7 +419,7 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
     "Row keys, as the dashboard counts them: unique_visitors (its Visitors: unique daily " +
       "visits; null, unknown, before 15 Jun 2026, when the visit log began counting every " +
       "visitor); survey_starts (people who began the survey, by the day they began); " +
-      "intro_completed (reached the intro's last slide, the Survey page's slide 4); submissions " +
+      "intro_completed (reached the intro's last slide, the Survey page's slide 4, or Survey 2.0's last guide card); submissions " +
       "(finished surveys); reports_opened and paid_so_far (of that day's finishers, how many " +
       "have opened their report, and paid, so far); paid_sales and free_unlocks (sales above " +
       "EUR 0 and EUR 0 unlocks, by the day paid); revenue (EUR, what those sales charged).",
