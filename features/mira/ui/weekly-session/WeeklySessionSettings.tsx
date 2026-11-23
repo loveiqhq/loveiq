@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { SwitchRow } from "../checks/ChecksSettings";
 import { AskFirst, refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { ScheduleSheet } from "./ScheduleSheet";
 import { slotLabel, useWeeklySession, zoneLabel } from "./useWeeklySession";
 
@@ -19,6 +20,7 @@ const OUTLINE_PILL =
  */
 export function WeeklySessionSettings() {
   const { state, load, book, setPaused, cancel } = useWeeklySession();
+  const again = useRetry(state.status === "loading", () => void load());
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -75,23 +77,22 @@ export function WeeklySessionSettings() {
       aria-labelledby="weekly-session-h"
       className="flex scroll-mt-6 flex-col gap-3"
     >
-      <h2 id="weekly-session-h" className="font-serif text-[22px] font-medium">
+      <h2
+        id="weekly-session-h"
+        tabIndex={-1}
+        className="font-serif text-[22px] font-medium outline-none"
+      >
         Weekly session
       </h2>
 
-      {state.status === "loading" ? (
+      {state.status === "loading" && !again.busy ? (
         <div
           aria-busy="true"
           aria-label="Loading your weekly session"
           className="h-[76px] rounded-2xl bg-ap-track motion-safe:animate-pulse"
         />
-      ) : state.status === "error" ? (
-        <p role="alert" className="text-[14px] text-ap-body">
-          {state.message}{" "}
-          <button type="button" onClick={() => void load()} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+      ) : state.status === "error" || again.busy ? (
+        <LoadFailed what="Your weekly session" {...again} />
       ) : slot ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ap-line p-4">

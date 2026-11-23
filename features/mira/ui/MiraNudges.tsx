@@ -209,7 +209,7 @@ export default function MiraNudges({
                     name="choice"
                     checked={choice === id}
                     onChange={() => setChoice(id)}
-                    className="mt-0.5 h-5 w-5 flex-none accent-ap-purple"
+                    className="mt-0.5 h-5 w-5 flex-none accent-ap-purple focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ap-purple"
                   />
                   <span className="flex flex-col gap-1">
                     <span className="text-[15px] font-bold">{title}</span>
@@ -295,7 +295,7 @@ export default function MiraNudges({
                   name="reason"
                   checked={reason === r}
                   onChange={() => setReason(r)}
-                  className="h-[18px] w-[18px] accent-ap-purple"
+                  className="h-[18px] w-[18px] accent-ap-purple focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ap-purple"
                 />
                 {r}
               </label>

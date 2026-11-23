@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { REJECT_REASON_LABEL } from "@features/mira/reviews";
 import type { MyReview } from "@features/mira/server/reviews";
 import { miraApi } from "../api";
-import { AdultsOnly } from "../kit";
 import { shortDate } from "../kit/dates";
 import { RatingForm } from "./ReviewAsk";
 
@@ -115,26 +114,25 @@ export default function SharedReviewSettings() {
       {state === "loading" ? (
         <div aria-hidden="true" className="h-[92px] animate-pulse rounded-2xl bg-ap-ground" />
       ) : state === "minor" ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-ap-line p-4">
-          <AdultsOnly className="font-semibold text-ap-ink" />
-          {done ? null : (
-            <>
-              <p className="text-[14px] text-ap-body">
-                If this account rated Mira, you can remove the rating and any words with it.
-              </p>
-              <div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void takeBack("all")}
-                  className={BUTTON}
-                >
-                  Remove my rating
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        // Settings says "Mira is only for adults." once, at its top (round-4 R4-UXA-5): the box
+        // says what is still possible here.
+        done ? null : (
+          <div className="flex flex-col gap-3 rounded-2xl border border-ap-line p-4">
+            <p className="text-[14px] text-ap-body">
+              If this account rated Mira, you can remove the rating and any words with it.
+            </p>
+            <div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void takeBack("all")}
+                className={BUTTON}
+              >
+                Remove my rating
+              </button>
+            </div>
+          </div>
+        )
       ) : state === "failed" ? (
         <p role="alert" className="text-[14px] text-ap-bad-ink">
           What you shared didn’t load.{" "}

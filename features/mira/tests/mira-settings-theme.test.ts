@@ -246,6 +246,22 @@ describe("the phone's bar and keyboard focus (round 3)", () => {
     expect(decls(css, ":root:has([data-mira-bar])", "scroll-padding-bottom")).toEqual([]);
   });
 
+  // R3-UXA-1's remainder (round 4): Settings gave each control a top margin for the phones' sticky
+  // row, which WebKit's focus scrolling ignores; the name field landed 79–94 % under the row.
+  // The root scroller's own padding, while the row is on the page, holds in WebKit as the bar's
+  // does (checked with Playwright: WebKit lands the field 10 px clear of the 45 px row).
+  it("keeps Settings' focused controls clear of the phones' sticky row: the root's padding", async () => {
+    const ROW = "max-xl:[:root:has(&)]:scroll-pt-[4.5rem]";
+    const css = await compile(ROW);
+    const found: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (!rule.selector.startsWith(":root:has(.max-xl")) return;
+      const media = (rule.parent as postcss.AtRule).params;
+      rule.walkDecls("scroll-padding-top", (d) => void found.push(`${media} ${d.value}`));
+    });
+    expect(found).toEqual(["not all and (min-width: 1280px) 4.5rem"]);
+  });
+
   it("lets a page with a sticky header keep focus and jumps below it: --mira-scroll-top", async () => {
     const css = await compile("scroll-mt-16");
     expect(decls(css, ":where(.mira-root) *", "scroll-margin-top")).toEqual([

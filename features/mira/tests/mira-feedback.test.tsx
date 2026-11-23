@@ -3,7 +3,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@features/mira/ui/api", () => ({
+vi.mock("@features/mira/ui/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/mira/ui/api")>()),
   miraApi: vi.fn(async () => ({ ok: true, status: 200, data: { success: true } })),
   useReloadWhenRestored: () => undefined,
 }));
@@ -17,7 +18,7 @@ import type { ReactElement } from "react";
 import FeedbackPage from "@/app/mira/feedback/page";
 import { COACHES } from "@features/mira/content/coaches";
 import { isMinor } from "@features/mira/server/minor";
-import { miraApi } from "@features/mira/ui/api";
+import { SIGNED_OUT, miraApi } from "@features/mira/ui/api";
 import MiraFeedback from "@features/mira/ui/MiraFeedback";
 
 beforeEach(() => vi.mocked(miraApi).mockClear());
@@ -64,6 +65,30 @@ describe("the beta feedback form", () => {
     expect(vi.mocked(miraApi).mock.calls[0]![1]).toMatchObject({
       body: { challenges: [], wish: "Remember my goals" },
     });
+  });
+
+  // R4-CORE-6: Send after the sign-in went said "You were signed out. Please sign in again." with
+  // nothing to tap; the words stay and nothing navigates, which is right.
+  it("offers Sign in again, back to this page, when Send finds the sign-in gone", async () => {
+    window.history.replaceState(null, "", "/mira/feedback");
+    const user = userEvent.setup();
+    vi.mocked(miraApi).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      signedOut: true,
+      data: { error: SIGNED_OUT },
+    });
+    render(<MiraFeedback />);
+    const wish = screen.getByRole("textbox", { name: "What do you wish Mira could do?" });
+    await user.type(wish, "Remember my goals");
+    await user.click(screen.getByRole("button", { name: "Send feedback" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(SIGNED_OUT);
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      "/mira/start?next=%2Fmira%2Ffeedback"
+    );
+    expect(wish).toHaveValue("Remember my goals");
+    window.history.replaceState(null, "", "/");
   });
 
   // Decision 9: refused as under 18 (the route keeps nothing of it), it says the one refusal in

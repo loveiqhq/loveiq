@@ -8,7 +8,8 @@ import { ReminderStop } from "@features/mira/ui/journal/ReminderStop";
 import logger from "@shared/observability/logger";
 
 export const metadata: Metadata = {
-  title: "Email preferences | LoveIQ",
+  // One name with the session's reminder page (round-4 R4-UXA-6); the nudges keep theirs.
+  title: "Reminder emails | LoveIQ",
   robots: { index: false, follow: false },
   ...miraLinkPreview("/mira/journal/reminder"),
 };

@@ -12,6 +12,8 @@ import { metadata as privacy } from "@/app/mira/privacy/page";
 import { metadata as settings } from "@/app/mira/settings/page";
 import { metadata as start } from "@/app/mira/start/page";
 import { metadata as guide } from "@/app/mira/guide/page";
+import { metadata as journalReminder } from "@/app/mira/journal/reminder/page";
+import { metadata as sessionStop } from "@/app/mira/session/stop/page";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 const TITLE = "Mira, your AI coach for body confidence in sex | LoveIQ";
@@ -20,6 +22,16 @@ const DESCRIPTION =
 
 // Until 21 Nov 2026 Mira's pages inherited the home page's preview: the assessment's title, and
 // the home page as og:url and canonical.
+// Round 4 (R4-UXA-6): the two reminder-email pages were "Email preferences" (the journal's) and
+// "Reminder emails" (the session's): a screen reader announces the title first, so the same kind
+// of page was named two ways.
+describe("the reminder-email pages", () => {
+  it("share one name", () => {
+    expect(journalReminder.title).toBe("Reminder emails | LoveIQ");
+    expect(sessionStop.title).toBe(journalReminder.title);
+  });
+});
+
 describe("Mira's link previews", () => {
   it("gives /mira its own title, description, address, image and card", () => {
     expect(chat.title).toBe(TITLE);

@@ -148,7 +148,7 @@ export function CheckRunner({
                 onPointerDown={() => {
                   tapped.current = true;
                 }}
-                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-field bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ap-purple has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="group flex min-h-[52px] cursor-pointer items-center gap-3.5 rounded-2xl border border-ap-field bg-white px-4 py-3 text-[16px] text-ap-ink transition-[border-color,background-color,transform] duration-200 hover:border-ap-lavender active:scale-[0.99] has-[:checked]:border-ap-ink has-[:checked]:bg-ap-ground has-[:focus]:ring-2 has-[:focus]:ring-ap-purple has-[:focus]:ring-offset-2 has-[:focus]:ring-offset-white motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <input
                   type="radio"

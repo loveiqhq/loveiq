@@ -279,14 +279,16 @@ export function RatingForm({
                   value={n}
                   checked={stars === n}
                   onChange={() => setStars(n)}
-                  className="peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-full"
+                  // Mira's one ring, on :focus too: WebKit gives a radio reached with an arrow key
+                  // no :focus-visible (R4-UXA-3), as the session's time field does.
+                  className="peer absolute inset-0 m-0 cursor-pointer appearance-none rounded-full focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ap-purple"
                 />
                 <svg
                   aria-hidden="true"
                   width="28"
                   height="28"
                   viewBox="0 0 24 24"
-                  className={`pointer-events-none rounded-full transition-[color,transform] duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ap-lavender peer-focus-visible:ring-offset-2 ${
+                  className={`pointer-events-none rounded-full transition-[color,transform] duration-200 ${
                     lit ? "text-ap-orange" : "text-ap-mist"
                   } ${stars === n ? "motion-safe:animate-mira-pop" : ""}`}
                   fill="currentColor"

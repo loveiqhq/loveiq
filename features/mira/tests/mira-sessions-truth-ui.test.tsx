@@ -73,7 +73,8 @@ describe("a refused change is an error to retry, not the under-18 stop", () => {
     expect(await within(sheet).findByRole("alert")).toHaveTextContent(
       "That didn’t go through. Please try again."
     );
-    expect(screen.getByRole("heading", { name: /Tuesday, 19:00/ })).toBeInTheDocument();
+    // The booked card stays, its time under its name (R4-UXA-6).
+    expect(screen.getByText("Tuesday, 19:00")).toBeInTheDocument();
   });
 
   it("Settings: a reminder switch refused by the CSRF check keeps the section, and says so", async () => {

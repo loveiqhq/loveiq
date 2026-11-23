@@ -58,17 +58,53 @@ export function CoachPortrait({ coach, size }: { coach: Coach; size: number }) {
  * slow network a Stop never overtakes the Notify it takes back (round-3 R3-HAB-6).
  */
 const inLine = new Map<CoachId, Promise<unknown>>();
-function inTurn(coach: CoachId, send: () => Promise<string | null>): Promise<string | null> {
+/** Each coach's taps still waiting their turn, oldest first; `gone`: sent as the page went. */
+type Tap = { on: boolean; gone?: true };
+const waiting = new Map<CoachId, Tap[]>();
+function inTurn(coach: CoachId, on: boolean): Promise<string | null> {
+  const tap: Tap = { on };
+  waiting.set(coach, [...(waiting.get(coach) ?? []), tap]);
+  const send = () => {
+    waiting.set(
+      coach,
+      (waiting.get(coach) ?? []).filter((t) => t !== tap)
+    );
+    if (tap.gone) return Promise.resolve(null);
+    return on ? notify(coach) : stopNotifying(coach);
+  };
   const run = (inLine.get(coach) ?? Promise.resolve()).then(send);
-  const settled = run.catch(() => null);
-  inLine.set(coach, settled);
+  inLine.set(
+    coach,
+    run.catch(() => null)
+  );
   return run;
+}
+
+/**
+ * A tap still waiting for its coach's earlier request when the page goes (a reload, a closed tab)
+ * was never sent: a Stop the screen showed was lost and the request stayed stored (round-4
+ * R4-HABITS-4). Each coach's last waiting tap goes now, kept alive past the page; the earlier
+ * ones are its past, and none of them is sent again should the page come back.
+ * ponytail: a Stop sent here may still meet its Notify mid-way on the server; the server dropping
+ * a Notify older than a later Stop would close that too.
+ */
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    for (const [coach, taps] of waiting) {
+      const last = taps.at(-1);
+      if (!last) continue;
+      for (const t of taps) t.gone = true;
+      void (last.on ? notify(coach, true) : stopNotifying(coach, true));
+    }
+    waiting.clear();
+  });
 }
 
 /**
  * "Notify me" on a coming-soon coach, and its "Stop" once asked. Each shows at once and is put
  * back if the request fails; the coach's button stays focusable either way, and Stop hands the
- * keyboard back to it, so a keyboard never loses its place.
+ * keyboard back to it, so a keyboard never loses its place. `done` null: not known yet (the
+ * roster's read is on its way), so a quiet placeholder, never a guessed "Notify me" (CHK-F6).
  */
 export function NotifyButton({
   coach,
@@ -76,7 +112,7 @@ export function NotifyButton({
   onChange,
 }: {
   coach: Coach;
-  done: boolean;
+  done: boolean | null;
   onChange: (id: CoachId, on: boolean) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -84,13 +120,21 @@ export function NotifyButton({
   const [said, setSaid] = useState("");
   const main = useRef<HTMLButtonElement | null>(null);
   const taps = useRef(0);
+  if (done === null) {
+    return (
+      <span
+        aria-hidden="true"
+        className="inline-block h-11 w-[132px] rounded-full bg-ap-ground motion-safe:animate-pulse"
+      />
+    );
+  }
   async function change(on: boolean) {
     if (on === done) return;
     setError(null);
     if (!on) main.current?.focus(); // Stop goes away; the keyboard stays with this coach
     onChange(coach.id, on);
     const tap = ++taps.current;
-    const failed = await inTurn(coach.id, () => (on ? notify(coach.id) : stopNotifying(coach.id)));
+    const failed = await inTurn(coach.id, on);
     // A later tap has the last word: only its outcome is shown and said, once the server answered.
     if (tap !== taps.current) return;
     if (failed) {

@@ -26,7 +26,7 @@ export const SIGNED_OUT = "You were signed out. Please sign in again.";
 /** After "Send a new code" (sign-in or a new address): the code before no longer works. */
 export const NEW_CODE = "A new code is on its way. Only the newest code works.";
 /** Told on the window whenever a Mira route answers 401, so a page can say so once. */
-const SIGNED_OUT_EVENT = "mira:signed-out";
+export const SIGNED_OUT_EVENT = "mira:signed-out";
 
 /**
  * Where this browser's visit came from, from the site's campaign tracker (shared/url/utm.ts):
@@ -97,6 +97,23 @@ export async function miraApi<T = Record<string, unknown>>(
         error?: string;
       },
     };
+  }
+}
+
+/**
+ * After a sign-out from this tab (Settings' Sign out, Devices' "Sign out this device" or "Sign out
+ * everywhere"), nothing of a pending sign-in or change of email (addresses in them) stays for the
+ * next person on the tab, nor a check-in kept through a lost sign-in (round-4 R4-CORE-3).
+ */
+export function forgetPendingSteps(): void {
+  try {
+    sessionStorage.removeItem("mira.signin.code.v1");
+    sessionStorage.removeItem("mira.email.code.v1");
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("mira.journal.draft.v1:")) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Blocked storage: nothing was kept there.
   }
 }
 

@@ -16,6 +16,7 @@ import { SignedOutNotice } from "../account/SignedOut";
 import { CoachFinder } from "./CoachFinder";
 import { track, useCoachData, useEmptySearchCount } from "./data";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { CoachPortrait, CompassIcon, NotifyButton, SearchIcon, SparkIcon } from "./parts";
 import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
 
@@ -28,14 +29,22 @@ const FILTERS: Array<[AreaId | "all", string]> = [["all", "All areas"], ...AREAS
  * person's own words, areas, and "Find my challenge" when they aren't sure.
  */
 export default function CoachRoster() {
-  const { state } = useCoachData();
+  const { state, retry } = useCoachData();
+  const again = useRetry(state.status === "loading", retry);
   const data = state.status === "ready" ? state.data : null;
   const [query, setQuery] = useState("");
   const [area, setArea] = useState<AreaId | "all">("all");
   const [finder, setFinder] = useState(false);
-  // What the person asked for on this page, over what the server knew when it loaded.
+  // What the person asked for on this page, over what the server knew when it loaded; null until
+  // the read says, so no coach shows a "Notify me" it may already have (round-1 CHK-F6).
   const [asked, setAsked] = useState<CoachId[] | null>(null);
-  const known = asked ?? data?.notified ?? [];
+  const known = asked ?? data?.notified ?? null;
+  // The read failed, or is being tried again: no Notify state at all, and LoadFailed says why.
+  const failed = state.status === "error" || again.busy;
+  const notify = (c: Coach) =>
+    failed ? null : (
+      <NotifyButton coach={c} done={known ? known.includes(c.id) : null} onChange={setNotified} />
+    );
   const finderButton = useRef<HTMLButtonElement | null>(null);
 
   const shown = searchCoaches(query, area);
@@ -150,8 +159,7 @@ export default function CoachRoster() {
 
       {finder ? (
         <CoachFinder
-          known={known}
-          onNotify={setNotified}
+          notify={notify}
           onClose={() => {
             setFinder(false);
             finderButton.current?.focus();
@@ -167,13 +175,18 @@ export default function CoachRoster() {
 
       {soon.length ? (
         <section aria-labelledby="soon-h" className="mt-12">
-          <h2 id="soon-h" className="font-serif text-[24px] font-medium leading-tight">
+          <h2
+            id="soon-h"
+            tabIndex={-1}
+            className="font-serif text-[24px] font-medium leading-tight outline-none"
+          >
             On their way
           </h2>
           <p className="mt-1.5 max-w-[60ch] text-[15px] leading-relaxed text-ap-body">
             Each will focus on one challenge, like Mira. They can’t talk yet: ask to hear when one
             is ready, and talk to Mira meanwhile.
           </p>
+          {failed ? <LoadFailed what="Your coaches" {...again} className="mt-4" /> : null}
           <ul className="mt-4 grid gap-x-10 sm:grid-cols-2">
             {soon.map((c, i) => (
               <li
@@ -193,9 +206,7 @@ export default function CoachRoster() {
                       “{c.motto}”
                     </p>
                     <p className="mt-1.5 text-[14px] leading-relaxed text-ap-body">{c.desc}</p>
-                    <div className="mt-3">
-                      <NotifyButton coach={c} done={known.includes(c.id)} onChange={setNotified} />
-                    </div>
+                    <div className="mt-3">{notify(c)}</div>
                   </div>
                 </div>
               </li>

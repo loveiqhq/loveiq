@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { CHECKS, CHECK_IDS, type Check } from "@features/mira/content/checks";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { miraApi } from "../api";
 import { SignInAgain, SignedOutNotice } from "../account/SignedOut";
 import { SwitchRow, UseChecksSwitch } from "./ChecksSettings";
@@ -30,6 +31,7 @@ import {
  */
 export default function AssessmentsPage() {
   const { data, error, minor, signedOut, setData, retry } = useChecks();
+  const again = useRetry(!data && !error, retry);
   const found = useDrafts(data?.account, CHECK_IDS);
   const [useError, setUseError] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
@@ -50,7 +52,10 @@ export default function AssessmentsPage() {
 
   const header = (
     <header className="max-w-[640px] motion-safe:animate-mira-in">
-      <h1 className="font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+      <h1
+        tabIndex={-1}
+        className="font-serif text-[34px] font-medium leading-tight outline-none sm:text-[40px]"
+      >
         Assessments
       </h1>
       <p className="mt-2 text-[16px] leading-relaxed text-ap-body">
@@ -74,13 +79,8 @@ export default function AssessmentsPage() {
       {header}
       {minor ? (
         <AdultsOnly className="mt-6" />
-      ) : error ? (
-        <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+      ) : error || again.busy ? (
+        <LoadFailed what="Your assessments" {...again} className="mt-6" />
       ) : null}
 
       <section aria-labelledby="self-checks-h" className="mt-9">
@@ -102,7 +102,7 @@ export default function AssessmentsPage() {
                     results={summary.results}
                     state={stateOf(summary, found[check.id] ?? null)}
                   />
-                ) : error ? null : (
+                ) : error || again.busy ? null : (
                   <div
                     aria-hidden="true"
                     className="h-[212px] animate-pulse rounded-3xl bg-ap-ground motion-reduce:animate-none"

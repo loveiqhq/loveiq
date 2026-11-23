@@ -31,10 +31,10 @@ export default async function MiraStartPage({
   // Back from Google, signed in: stay to bring the chat along and ask "About you".
   if (signedIn && google !== "done") redirect(next ?? "/mira/home");
   const googleResult = google === "done" ? (signedIn ? "done" : "failed") : (google ?? null);
-  // Into an account this browser may not use (stopped as under 18, here or on the account): the
-  // page says "Mira is only for adults." at once, never "About you". Unsure is not stopped.
-  const minor =
-    googleResult === "done" && account ? await isMinor(account.id).catch(() => false) : false;
+  // A browser or account stopped as under 18 (the stop's cookie, the account, or Google's return
+  // refused for it): the page says "Mira is only for adults." at once, never a form, the 18+ tick,
+  // a code or "About you" (round-4 R4-CORE-1, as the chat starts stopped). Unsure is not stopped.
+  const minor = google === "minor" || (await isMinor(account?.id ?? null).catch(() => false));
   return (
     <SignUpFlow
       googleEnabled={googleClient() !== null}

@@ -18,8 +18,9 @@ import { CRISIS_COUNTRY_OPTIONS } from "./countries";
 import { MiraFrame, PrimaryButton } from "./MiraShell";
 import { MiraAppFrame } from "./MiraAppFrame";
 import { THEME_CHOICES, ThemeIcon, useMiraLook } from "./MiraLook";
-import { miraApi, useSignedOut, type ApiResult } from "./api";
+import { forgetPendingSteps, miraApi, useSignedOut, type ApiResult } from "./api";
 import { AdultsOnly, ConfirmDelete } from "./kit";
+import { LoadFailed, useRetry } from "./kit/load-failed";
 import { SignedOutNotice } from "./account/SignedOut";
 import type { TextSize, Theme } from "./prefs";
 import tokens from "./theme-tokens.js";
@@ -163,7 +164,8 @@ export default function MiraSettings({
   const [p, setP] = useState<Profile | null>(null);
   // The profile as the server has it, after the load and after each save.
   const stored = useRef<Profile | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The account didn't load: said with the kit's LoadFailed, never the route's words (round 4).
+  const [failed, setFailed] = useState(false);
   const [status, setStatusMap] = useState<Partial<Record<SectionId, Status>>>({});
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"chats" | "account" | null>(null);
@@ -216,11 +218,15 @@ export default function MiraSettings({
         stored.current = r.data.profile;
         setMinor(r.data.minor === true);
         setP(r.data.profile);
-      } else setLoadError(r.data.error ?? "Your settings didn't load.");
+      } else setFailed(true);
     });
   }
   // Once, on arrival.
   useEffect(load, []);
+  const again = useRetry(!p && !failed, () => {
+    setFailed(false);
+    load();
+  });
 
   // "Delete…" swaps the buttons for the question (the kit's ConfirmDelete, which opens on "Keep
   // it"); once it goes (kept, or done) the focus is back on the button that asked.
@@ -352,10 +358,7 @@ export default function MiraSettings({
       });
     }
     // Nothing of a pending sign-in or change of email stays in this tab for the next person.
-    try {
-      sessionStorage.removeItem("mira.signin.code.v1");
-      sessionStorage.removeItem("mira.email.code.v1");
-    } catch {}
+    forgetPendingSteps();
     router.replace("/mira");
     router.refresh();
   }
@@ -375,7 +378,9 @@ export default function MiraSettings({
 
   return (
     <MiraAppFrame active="settings" email={p?.email} name={p?.name}>
-      <h1 className="font-serif text-[34px] font-medium">Settings</h1>
+      <h1 tabIndex={-1} className="font-serif text-[34px] font-medium outline-none">
+        Settings
+      </h1>
       {minor ? null : (
         <p className="mt-1 text-[15px] text-ap-body">
           Changes save as you make them. Your account details have their own Save.
@@ -386,26 +391,11 @@ export default function MiraSettings({
           the page says so with a way back, instead of looking signed in and failing each save. */}
       {signedOut ? <SignedOutNotice /> : null}
 
-      {loadError && !signedOut ? (
-        <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
-          <p className="text-[15px] font-semibold">{loadError}</p>
-          <p className="mt-1 text-[14px] text-ap-body">
-            Check your connection, then try again. Your settings are safe.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <PrimaryButton
-              onClick={() => {
-                setLoadError(null);
-                load();
-              }}
-            >
-              Try again
-            </PrimaryButton>
-          </div>
-        </div>
+      {(failed || again.busy) && !signedOut ? (
+        <LoadFailed what="Your settings" {...again} className="mt-8" />
       ) : null}
 
-      {!p && !loadError && !signedOut ? <SettingsSkeleton /> : null}
+      {!p && !failed && !again.busy && !signedOut ? <SettingsSkeleton /> : null}
 
       {p && !signedOut ? (
         <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_176px] xl:gap-12">
@@ -419,11 +409,7 @@ export default function MiraSettings({
               </div>
             ) : null}
             <SectionIndex sections={sections} active={active} variant="row" />
-            {/* A control the keyboard focuses scrolls clear of the phones' sticky row, as the
-                anchors do (WCAG 2.4.11, round-3 R3-UXA-1). On what scrolls under the row, never
-                the row itself. Once the frame's --mira-scroll-top hook is in, it can set that
-                instead. */}
-            <div className="mt-8 flex flex-col gap-12 [&_:is(a,button,input,select,textarea,[tabindex])]:scroll-mt-16">
+            <div className="mt-8 flex flex-col gap-12">
               {!minor ? (
                 <>
                   <SettingsSection
@@ -822,7 +808,7 @@ function useLandOnSection(ready: boolean) {
  * browser can tell (no IntersectionObserver: no highlight, the links still work).
  */
 /** Where a section becomes the one being read: just under where a link lands it (40 px from xl,
- *  64 px under the phones' sticky row). */
+ *  72 px under the phones' sticky row). */
 const READ_LINE = 120;
 
 /**
@@ -891,7 +877,11 @@ function SectionIndex({
     return (
       <nav
         aria-label="Settings sections"
-        className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden"
+        // While it is on the page, the page scrolls with room for it above whatever takes the
+        // focus or an index link lands on (WCAG 2.4.11, round-3 R3-UXA-1): the root's own scroll
+        // padding, as for the phones' bar, since WebKit's focus scrolling ignores a control's
+        // top margin (round 4). 4.5rem clears the 45 px row in WebKit too (Playwright).
+        className="sticky top-0 z-10 -mx-4 mt-5 border-b border-ap-line bg-white px-2 sm:-mx-10 sm:px-8 xl:hidden max-xl:[:root:has(&)]:scroll-pt-[4.5rem]"
       >
         {/* Its edges fade, so a label cut there reads as more to scroll to (round-3
             R3-UXA-10), as the chat's prompt row does. */}
@@ -967,10 +957,15 @@ export function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-16 xl:scroll-mt-10">
+    <section id={id} aria-labelledby={`${id}-title`} className="xl:scroll-mt-10">
       <div className="flex flex-wrap items-center justify-between gap-x-3">
         <div className="flex items-center gap-3">
-          <h2 id={`${id}-title`} className="font-serif text-[22px] font-medium">
+          {/* Focus can land here: after a Try again that loaded (kit/load-failed). */}
+          <h2
+            id={`${id}-title`}
+            tabIndex={-1}
+            className="font-serif text-[22px] font-medium outline-none"
+          >
             {title}
           </h2>
           <span role="status" className="text-[13px]">
@@ -1018,7 +1013,7 @@ export function SettingsSection({
  */
 function Slot({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <div id={id} className="scroll-mt-16 xl:scroll-mt-10">
+    <div id={id} className="xl:scroll-mt-10">
       {children}
     </div>
   );
@@ -1189,7 +1184,7 @@ function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: Theme) =
             onChange={() => onChange(theme)}
             className="peer sr-only"
           />
-          <span className="relative block overflow-hidden rounded-2xl ring-1 ring-ap-line transition-shadow duration-200 group-hover:ring-ap-quiet peer-checked:ring-2 peer-checked:ring-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple">
+          <span className="relative block overflow-hidden rounded-2xl ring-1 ring-ap-line transition-shadow duration-200 group-hover:ring-ap-quiet peer-checked:ring-2 peer-checked:ring-ap-purple peer-focus:outline peer-focus:outline-2 peer-focus:outline-offset-2 peer-focus:outline-ap-purple">
             <ThemePreview palette={theme === "dark" ? tokens.MIRA_DARK : tokens.AP_LIGHT} />
             {theme === "system" ? (
               <span className="absolute inset-0 [clip-path:polygon(58%_0,100%_0,100%_100%,42%_100%)]">
@@ -1248,7 +1243,7 @@ function Segmented<T extends string>({
             onChange={() => onChange(v)}
             className="peer sr-only"
           />
-          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
+          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus:outline peer-focus:outline-2 peer-focus:outline-ap-purple">
             <span
               aria-hidden="true"
               className="hidden font-serif sm:inline"

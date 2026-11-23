@@ -700,7 +700,8 @@ describe("when the checks don't load", () => {
   it("the Assessments page stops its placeholders and offers Try again", async () => {
     failOnce();
     render(<AssessmentsPage />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    // Said as everywhere (kit/load-failed), never with the route's words (R4-CORE-4).
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your assessments didn’t load.");
     const list = screen.getByRole("region", { name: "Self-checks" });
     expect(list.querySelectorAll(".animate-pulse")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -712,7 +713,7 @@ describe("when the checks don't load", () => {
     failOnce();
     render(<ChecksSettings />);
     const section = await screen.findByRole("region", { name: /^Assessments/ });
-    expect(within(section).getByRole("alert")).toHaveTextContent("Unable to load your checks.");
+    expect(within(section).getByRole("alert")).toHaveTextContent("Your assessments didn’t load.");
     fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
     expect(
       await screen.findByRole("switch", { name: "Mira may use my check results" })

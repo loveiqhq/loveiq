@@ -38,11 +38,13 @@ export type ChecksData = {
  * still see the session and send the person straight back (round 3's 401 loop). Someone Mira
  * stopped as under 18 (403 `minor`) gets `minor`: each screen shows the kit's AdultsOnly and
  * nothing to retry (decision 9; `error` is set too, so every placeholder stops). After a failed
- * load, `retry` (each screen's "Try again") loads again, with the placeholders back meanwhile.
+ * load, `retry` (each screen's "Try again") loads again, loading (`!data && !error`) meanwhile.
+ * A failed read is said with the kit's LoadFailed, never with the route's words (round 4), so
+ * `error` only says that it failed.
  */
 export function useChecks() {
   const [data, setData] = useState<ChecksData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [minor, setMinor] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -52,12 +54,14 @@ export function useChecks() {
       else if (r.ok) setData(r.data);
       else {
         setMinor(r.minor === true);
-        setError(r.data.error ?? "Unable to load your checks.");
+        setError(true);
       }
     });
   }, [attempt]);
   const retry = () => {
-    setError(null);
+    setError(false);
+    // The body check's page retries a read that came without its body checks, too.
+    setData(null);
     setAttempt((n) => n + 1);
   };
   return { data, error, minor, signedOut, setData, retry };

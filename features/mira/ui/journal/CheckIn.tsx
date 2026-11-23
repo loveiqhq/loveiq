@@ -14,8 +14,9 @@ import {
 } from "@features/mira/journal";
 import { PrimaryButton } from "../MiraShell";
 import { Modal, SupportPanel, type SupportCountry } from "../SupportPanel";
+import { SIGNED_OUT, signInHref } from "../api";
 import { CHECK, Icon, WeekDots } from "./parts";
-import type { Journal } from "./useJournal";
+import { checkInDrafts, type CheckInDraft, type Journal } from "./useJournal";
 
 type Ratings = Record<AreaId, number | null>;
 
@@ -42,12 +43,18 @@ const NOTE_HINT = {
  * readers work as they expect), any of them skippable, then an optional line. A sheet at the foot
  * of a phone's screen, a calm dialog on a wider one (Modal). It ends on one moment: the day fills
  * in on the week. A note with crisis words opens the chat's own support panel.
+ *
+ * A Save that finds the sign-in gone keeps the sheet and what is in it, with the way back in, and
+ * keeps the check-in in this tab for the account (round-4 R4-HABITS-3), so the page that opens
+ * after signing in brings it back (`draft`).
  */
 export function CheckIn({
   journal,
   day,
   onClose,
   journalLink = false,
+  account = null,
+  draft = null,
 }: {
   journal: Journal;
   /** The day to check in for or change: today, or an earlier entry's. */
@@ -55,23 +62,33 @@ export function CheckIn({
   onClose: () => void;
   /** Offer "Open journal" when done (not on the journal page itself). */
   journalLink?: boolean;
+  /** The signed-in account's id, which a kept check-in belongs to. */
+  account?: string | null;
+  /** A check-in kept when the sign-in went, back as it was. */
+  draft?: CheckInDraft | null;
 }) {
   const existing = journal.entries.find((e) => e.day === day);
   const [ratings, setRatings] = useState<Ratings>(() =>
-    existing
-      ? {
-          mood: existing.mood,
-          body: existing.body,
-          closeness: existing.closeness,
-          energy: existing.energy,
-        }
-      : empty()
+    draft
+      ? draft.ratings
+      : existing
+        ? {
+            mood: existing.mood,
+            body: existing.body,
+            closeness: existing.closeness,
+            energy: existing.energy,
+          }
+        : empty()
   );
-  const [note, setNote] = useState(existing?.note ?? "");
+  const [note, setNote] = useState(draft?.note ?? existing?.note ?? "");
   // The version this sheet started from: a save never lands on one it hasn't seen (HAB-13).
-  const [base, setBase] = useState<string | null>(existing?.updated_at ?? null);
+  const [base, setBase] = useState<string | null>(
+    draft ? draft.base : (existing?.updated_at ?? null)
+  );
   // Deleted in another tab while open: the next Save puts this day back, an older one too.
-  const [restore, setRestore] = useState(false);
+  const [restore, setRestore] = useState(draft?.restore ?? false);
+  // The sign-in went at a Save: whether the tab keeps this check-in for after signing in.
+  const [signedOut, setSignedOut] = useState<{ kept: boolean } | null>(null);
   // Read as the sheet opens: once saved, the journal holds this check-in too.
   const [firstEver] = useState(journal.entries.length === 0);
   const [phase, setPhase] = useState<"edit" | "saving" | "done">("edit");
@@ -89,6 +106,13 @@ export function CheckIn({
     if (phase === "done") doneHeading.current?.focus();
   }, [phase]);
 
+  // Signed out, what changes after the Save is kept too, until the person is back.
+  useEffect(() => {
+    if (signedOut?.kept && account) {
+      checkInDrafts.keep(account, { day, ratings, note, base, restore });
+    }
+  }, [signedOut, account, day, ratings, note, base, restore]);
+
   async function save(e: FormEvent) {
     e.preventDefault();
     const rated = AREAS.some((a) => ratings[a.id] !== null);
@@ -100,6 +124,7 @@ export function CheckIn({
       return;
     }
     setError(null);
+    setSignedOut(null);
     setPhase("saving");
     const entry: JournalEntry = { day, ...ratings, note: line };
     const result = await journal.save(entry, base, restore);
@@ -116,11 +141,22 @@ export function CheckIn({
       setError(result.conflict.current ? CHANGED_ELSEWHERE : DELETED_ELSEWHERE);
       return;
     }
+    if (result.signedOut) {
+      // Nothing to try again: the way back in, with what is here kept for then.
+      setPhase("edit");
+      const kept = account
+        ? checkInDrafts.keep(account, { day, ratings, note, base, restore })
+        : false;
+      setSignedOut({ kept });
+      return;
+    }
     if (!result.ok) {
       setPhase("edit");
       setError(rated ? (result.error ?? "Your check-in didn’t save. Please try again.") : UNRATED);
       return;
     }
+    // Saved: nothing waits for a sign-in any more (one made in another tab, say).
+    if (account) checkInDrafts.take(account);
     setPhase("done");
   }
 
@@ -250,7 +286,17 @@ export function CheckIn({
                   </p>
                 </div>
               </fieldset>
-              {error ? (
+              {signedOut ? (
+                // Not red: nothing the person did is wrong. The link comes back to this page.
+                <p role="alert" className="mt-4 text-[14px] text-ap-body">
+                  {signedOut.kept
+                    ? "You were signed out. Your check-in is kept in this tab, to save once you’re back."
+                    : SIGNED_OUT}{" "}
+                  <a href={signInHref()} className="font-semibold text-ap-link underline">
+                    Sign in again
+                  </a>
+                </p>
+              ) : error ? (
                 <p role="alert" className="mt-4 text-[14px] text-ap-bad-ink">
                   {error}
                 </p>
@@ -324,7 +370,7 @@ function Scale({
               onClick={() => value === i + 1 && onChange(null)}
               className="peer sr-only"
             />
-            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-field bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-field bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus:outline peer-focus:outline-2 peer-focus:outline-offset-2 peer-focus:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
               {i + 1}
             </span>
           </label>

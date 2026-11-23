@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AREAS, SCALE, patterns, streak, type JournalEntry } from "@features/mira/journal";
 import { MiraAppFrame } from "../MiraAppFrame";
 import { useSignedOut } from "../api";
-import { SignedOutNotice } from "../account/SignedOut";
+import { SIGNED_OUT_ID, SignedOutNotice } from "../account/SignedOut";
 import { AdultsOnly, ConfirmDelete } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { PrimaryButton } from "../MiraShell";
 import { CheckIn } from "./CheckIn";
 import { JournalSettings } from "./JournalSettings";
@@ -21,7 +22,7 @@ import {
   refocusRow,
   thisWeek,
 } from "./parts";
-import { useJournal } from "./useJournal";
+import { checkInDrafts, useJournal, type CheckInDraft } from "./useJournal";
 
 /** Shown at once, then more on request. */
 const PAGE = 30;
@@ -30,11 +31,19 @@ const PAGE = 30;
  * /mira/journal (Mark's "Open journal →"): today's check-in and the week, each area's last four
  * weeks as a small chart with its pattern in words, every day's entry (edit or delete it), and the
  * journal's privacy and reminder settings. `startCheckIn`: the reminder email's button
- * (?checkin=1) opens today's check-in once the journal is in.
+ * (?checkin=1) opens today's check-in once the journal is in. `account`: the signed-in account's
+ * id, which a check-in kept through a lost sign-in belongs to (round-4 R4-HABITS-3).
  */
-export default function JournalPage({ startCheckIn = false }: { startCheckIn?: boolean }) {
+export default function JournalPage({
+  startCheckIn = false,
+  account = null,
+}: {
+  startCheckIn?: boolean;
+  account?: string | null;
+}) {
   const journal = useJournal();
   const { status, entries, today } = journal;
+  const again = useRetry(status === "loading", journal.reload);
   // A lost sign-in, here or anywhere on the page: the one notice, with the way back (HAB-16).
   const out = useSignedOut() || status === "signed-out";
   const [day, setDay] = useState<string | null>(null);
@@ -45,8 +54,22 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
   const [failed, setFailed] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A check-in kept when the sign-in went: back in its sheet once the journal is in.
+  const [draft, setDraft] = useState<CheckInDraft | null>(null);
   const checkInRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (status !== "ready" || !account) return;
+    const kept = checkInDrafts.take(account);
+    if (!kept) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- this tab's storage, read once it's in */
+    setDraft(kept);
+    setDay(kept.day);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [status, account]);
   const daysList = useRef<HTMLOListElement | null>(null);
+  // The sheet was opened from a day's Edit in "Day by day", not from the check-in button.
+  const fromDay = useRef(false);
 
   const openDay = day ?? (startCheckIn && !dismissed && status === "ready" && today ? today : null);
   const doneToday = entries.some((e) => e.day === today);
@@ -86,7 +109,10 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
 
   return (
     <MiraAppFrame active="journal">
-      <h1 className="font-serif text-[34px] font-medium leading-tight motion-safe:animate-mira-in">
+      <h1
+        tabIndex={-1}
+        className="font-serif text-[34px] font-medium leading-tight outline-none motion-safe:animate-mira-in"
+      >
         Daily journal
       </h1>
       <p className="mt-2 max-w-[56ch] text-[15px] leading-relaxed text-ap-body">
@@ -96,7 +122,7 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
 
       {out ? (
         <SignedOutNotice />
-      ) : status === "loading" ? (
+      ) : status === "loading" && !again.busy ? (
         <div aria-busy="true" className="mt-8 flex flex-col gap-4">
           <span className="sr-only">Loading your journal</span>
           <Skeleton className="h-[132px] w-full rounded-[28px]" />
@@ -104,17 +130,8 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : status === "error" ? (
-        <div className="mt-8">
-          <p className="text-[15px] text-ap-body">Your journal didn’t load just now.</p>
-          <button
-            type="button"
-            onClick={journal.reload}
-            className="mt-3 min-h-[44px] rounded-full border border-ap-line px-5 text-[14px] font-semibold"
-          >
-            Try again
-          </button>
-        </div>
+      ) : status === "error" || again.busy ? (
+        <LoadFailed what="Your journal" {...again} className="mt-8" />
       ) : status === "minor" ? (
         <AdultsOnly className="mt-8" />
       ) : (
@@ -195,7 +212,10 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
                       confirming={confirm === e.day}
                       busy={busy}
                       error={failed}
-                      onEdit={() => setDay(e.day)}
+                      onEdit={() => {
+                        fromDay.current = true;
+                        setDay(e.day);
+                      }}
                       onAsk={() => {
                         setFailed(null);
                         setConfirm(e.day);
@@ -228,10 +248,27 @@ export default function JournalPage({ startCheckIn = false }: { startCheckIn?: b
         <CheckIn
           journal={journal}
           day={openDay}
+          account={account}
+          draft={draft?.day === openDay ? draft : null}
           onClose={() => {
+            const edited = fromDay.current ? openDay : null;
+            fromDay.current = false;
             setDay(null);
+            setDraft(null);
             setDismissed(true);
-            refocus(() => checkInRef.current?.querySelector("button"));
+            // Back to the day's Edit when the sheet came from it: its button is new when the day
+            // was deleted elsewhere and put back (R4-HABITS-1). Else the check-in button (A11Y-2),
+            // or the page's notice once the sign-in has gone.
+            refocus(
+              () =>
+                (edited
+                  ? daysList.current?.querySelector<HTMLElement>(
+                      `button[aria-label="Edit ${dayName(edited, today)}"]`
+                    )
+                  : null) ??
+                checkInRef.current?.querySelector("button") ??
+                byId(SIGNED_OUT_ID)
+            );
             // The email's ?checkin=1 has done its job: a reload shouldn't open the sheet again.
             if (startCheckIn) window.history.replaceState(null, "", "/mira/journal");
           }}

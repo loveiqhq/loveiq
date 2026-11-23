@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JournalEntry, JournalShare } from "@features/mira/journal";
+import type { AreaId, JournalEntry, JournalShare } from "@features/mira/journal";
 import { miraApi } from "../api";
 import type { SupportCountry } from "../SupportPanel";
 import { useToday } from "../useToday";
@@ -59,6 +59,50 @@ export type SaveResult = {
    * deleted). Nothing was overwritten; the entries already show it.
    */
   conflict?: { current: SavedEntry | null };
+  /** The sign-in had gone (401): nothing was saved. */
+  signedOut?: true;
+};
+
+/**
+ * A check-in whose Save found the sign-in gone (round-4 R4-HABITS-3): what was rated and typed,
+ * and the version it started from, so the next Save still never lands on one it hasn't seen.
+ */
+export type CheckInDraft = {
+  day: string;
+  ratings: Record<AreaId, number | null>;
+  note: string;
+  base: string | null;
+  restore: boolean;
+};
+
+/**
+ * Kept in this tab only (sessionStorage), for its account and for a day, until the person is
+ * back: nothing is left on a shared device once the tab closes, and another account signing in
+ * here never sees it (as the self-checks keep their answers, checks/data.ts).
+ */
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+const draftKey = (account: string) => `mira.journal.draft.v1:${account}`;
+export const checkInDrafts = {
+  /** True once kept; false where the tab can't keep it (blocked storage). */
+  keep(account: string, draft: CheckInDraft): boolean {
+    try {
+      sessionStorage.setItem(draftKey(account), JSON.stringify({ ...draft, at: Date.now() }));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /** The account's kept check-in, taken out of the tab: the sheet holds it from here. */
+  take(account: string): CheckInDraft | null {
+    try {
+      const d = JSON.parse(sessionStorage.getItem(draftKey(account)) ?? "null") as
+        (CheckInDraft & { at: number }) | null;
+      sessionStorage.removeItem(draftKey(account));
+      return d && typeof d.at === "number" && Date.now() - d.at < DRAFT_TTL_MS ? d : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /** This browser's calendar day, "YYYY-MM-DD". */
@@ -127,6 +171,7 @@ export function useJournal(enabled = true): Journal {
         error: ok ? undefined : (r.data.error ?? "Your check-in didn’t save. Please try again."),
         crisisLines: r.data.crisis ? r.data.crisisLines : undefined,
         conflict,
+        ...(r.signedOut ? { signedOut: true as const } : {}),
       };
     },
     []
