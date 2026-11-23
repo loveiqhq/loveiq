@@ -143,12 +143,13 @@ describe("the Mira staff page", () => {
     const agreement = within(table).getByRole("rowheader", {
       name: "Follow up on the agreement",
     }).parentElement!;
-    // Opened, clicked, a conversation of 3 messages, no unsubscribe.
+    // Opened, clicked, a conversation of 3 messages, no unsubscribe. Staging's AP formatter
+    // writes a rate under 10% with two decimals ("0.00%"); main's writes one (#734).
     expect(
       within(agreement)
         .getAllByRole("cell")
         .map((c) => c.textContent)
-    ).toEqual(["1", "100.0%", "100.0%", "100.0%", "3.0", "0.0%"]);
+    ).toEqual(["1", "100.0%", "100.0%", "100.0%", "3.0", "0.00%"]);
   });
 
   it("names the 30-minute rule, and measures the chips, NPS, time spent and the consent step", () => {
