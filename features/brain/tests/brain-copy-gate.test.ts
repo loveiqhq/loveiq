@@ -46,6 +46,14 @@ describe("checkCopy — the rules asked for in words", () => {
     expect(f.evidence).toEqual(["They move fast — then stop.", "Another one – here."]);
   });
 
+  it("flags the three phrases the house voice names, robust, crucial and game-changer", () => {
+    const r = checkCopy({ text: "A robust plan is crucial. It is a game-changer for us." });
+    const msg = r.findings.find((f) => f.kind === "ai-phrase")?.message ?? "";
+    expect(msg).toContain('"robust" ×1');
+    expect(msg).toContain('"crucial" ×1');
+    expect(msg).toContain('"game-changer" ×1');
+  });
+
   it("reports machine-written phrases as one finding with a count for each", () => {
     const r = checkCopy(
       {

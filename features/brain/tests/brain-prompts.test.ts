@@ -44,6 +44,7 @@ describe("renderPrompt", () => {
       const args = Object.fromEntries(p.arguments.map((a) => [a.name, "x"]));
       const r = renderPrompt(p.name, args);
       expect("text" in r && r.text, p.name).toMatch(/Put a link or id beside every fact/);
+      expect("text" in r && r.text, p.name).toMatch(/Put the answer in the first line/);
     }
   });
 

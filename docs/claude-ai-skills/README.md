@@ -1,7 +1,7 @@
 # LoveIQ skills for claude.ai
 
-Four skills that teach Claude in claude.ai how LoveIQ does four jobs, using Jarvis (the
-loveiq-brain connector). They are the non-engineer half of the Jarvis pack; the Claude
+Five skills that teach Claude in claude.ai how LoveIQ does five jobs, four of them using
+Jarvis (the loveiq-brain connector). They are the non-engineer half of the Jarvis pack; the Claude
 Code half is `.claude/skills/` in this repo.
 
 | Skill                   | For                                                             |
@@ -10,13 +10,15 @@ Code half is `.claude/skills/` in this repo.
 | `loveiq-chapter-writer` | Drafting a report chapter for one archetype, the house way      |
 | `loveiq-numbers`        | KPI, funnel, revenue and cost questions, with period and source |
 | `loveiq-research`       | What the published research says, with every source named       |
+| `loveiq-voice`          | The house voice for everything written, for the team and users  |
 
 `PROJECT_INSTRUCTIONS.md` is the text for the claude.ai Project "LoveIQ", which exists since
 2026-10-05 and is shared with the whole organization. After changing the file, paste its new
 text into the project's instructions.
 
-All four skills have been in the organization library since 2026-10-05, installed by default
-for everyone.
+All five are in the organization library, installed by default for everyone: the first four
+since 2026-10-05, `loveiq-voice` since 2026-11-23. Its rules come from the Notion page
+"Editorial voice: everything we write"; change a rule there first, then here.
 
 ## Third-party skills, and the Claude Code half
 

@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { AI_PHRASES } from "@features/brain/server/copy-gate";
 import {
   ALLOWED_KEYS,
   frontMatter,
@@ -127,12 +128,13 @@ describe("the tool names the pack relies on", () => {
 });
 
 describe("the claude.ai skills upload", () => {
-  it("has the four skills, each one claude.ai would accept", () => {
+  it("has the five skills, each one claude.ai would accept", () => {
     expect(skillDirs()).toEqual([
       "loveiq-chapter-writer",
       "loveiq-copy-gate",
       "loveiq-numbers",
       "loveiq-research",
+      "loveiq-voice",
     ]);
     for (const d of skillDirs()) {
       expect(skillProblems(d, readFileSync(join(SKILLS_DIR, d, "SKILL.md"), "utf8")), d).toEqual(
@@ -202,3 +204,21 @@ describe("the Claude Code pack loads", () => {
     }
   });
 });
+
+/**
+ * The voice skill and the copy gate must agree: a word the skill tells Claude to avoid has to
+ * be one `check_copy` flags, or a draft passes the gate while breaking the voice.
+ */
+describe("the house voice", () => {
+  it("names only machine phrases that check_copy flags", () => {
+    const skill = read(join(SKILLS_DIR, "loveiq-voice", "SKILL.md"));
+    const list = skill.match(/where a machine phrase would go: ([^.]+)\./)?.[1] ?? "";
+    const named = list
+      .split(",")
+      .map((p) => p.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    expect(named.length).toBeGreaterThan(10);
+    expect(named.filter((p) => !AI_PHRASES.some(([, re]) => re.test(p)))).toEqual([]);
+  });
+});
+

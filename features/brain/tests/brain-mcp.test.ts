@@ -2147,6 +2147,19 @@ describe("/api/mcp", () => {
       expect(text).toMatch(/meta/);
     });
 
+    it("tells every Jarvis chat to write in the house voice, and where its rules live", async () => {
+      // Marcus and Mark, syncs of 11 and 23 Nov 2026: what Jarvis helps write, artifacts
+      // first, comes out result first and with zero noise. `initialize` is the one text every
+      // client reads, so the rule lives here and not only in an optional skill.
+      const body = await (await POST(rpc({ jsonrpc: "2.0", id: 9, method: "initialize" }))).json();
+      const text = String(body.result.instructions);
+      expect(text).toMatch(/HOW WE WRITE/);
+      expect(text).toMatch(/first line is the result, the decision or the ask/);
+      expect(text).toMatch(/loveiq-voice/);
+      expect(text).toMatch(/"Editorial voice: everything we write"/);
+      expect(text).toMatch(/Run check_copy on anything users will read/);
+    });
+
     it("returns 202 with no body for a notification, which expects no response", async () => {
       const res = await POST(rpc({ jsonrpc: "2.0", method: "notifications/initialized" }));
       expect(res.status).toBe(202);
