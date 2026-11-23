@@ -39,6 +39,7 @@ vi.mock("@shared/observability/logger", () => ({
 import {
   alertBudgetUsedUp,
   alertCodeCap,
+  alertAnonShare,
   alertDailyCeiling,
   alertTeam,
   costUsd,
@@ -119,6 +120,17 @@ describe("alertTeam", () => {
     expect(logger.error).toHaveBeenCalledWith(
       expect.anything(),
       "mira: an alert email was not sent"
+    );
+  });
+
+  it("words the signed-out share alert, after the response, once a day", async () => {
+    alertAnonShare();
+    alertAnonShare();
+    await flushAfterResponse();
+    expect(emails()).toHaveLength(1);
+    expect(emails()[0].subject).toBe("Mira's signed-out half is used up");
+    expect(emails()[0].text).toMatch(
+      /Signed-out chats used their half of Mira's daily ceiling \(400 AI replies\): new visitors see "resting" until midnight UTC, while signed-in people keep theirs\. A launch spike, or one source sending many: check message_sent in mira_event\./
     );
   });
 

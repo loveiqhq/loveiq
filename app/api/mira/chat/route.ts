@@ -27,7 +27,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
-import { alertDailyCeiling } from "@features/mira/server/alerts";
+import { alertAnonShare, alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
@@ -157,14 +157,17 @@ const everyoneMayAsk = async () => {
  * ceiling (ANON_GLOBAL_DAILY_MESSAGES), so signed-in accounts always keep the other half,
  * however many browsers or networks someone uses (SEC-R4-1).
  */
-const signedOutMayAsk = async () =>
-  (
+const signedOutMayAsk = async () => {
+  const allowed = (
     await checkRateLimit(`anon:${new Date().toISOString().slice(0, 10)}`, {
       bucket: "mira-global-anon-day",
       limit: ANON_GLOBAL_DAILY_MESSAGES,
       windowMs: DAY_MS,
     })
   ).allowed;
+  if (!allowed) alertAnonShare();
+  return allowed;
+};
 /**
  * The last chat Mira remembers, for a weekly session's opening. None after the support lines
  * showed in the last 14 days (as nudges and reminders pause then), none when that chat holds the

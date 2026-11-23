@@ -25,7 +25,10 @@ vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 vi.mock("@features/mira/server/model", () => ({ askModel: vi.fn() }));
-vi.mock("@features/mira/server/alerts", () => ({ alertDailyCeiling: vi.fn() }));
+vi.mock("@features/mira/server/alerts", () => ({
+  alertDailyCeiling: vi.fn(),
+  alertAnonShare: vi.fn(),
+}));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([11, 12]),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
@@ -40,7 +43,7 @@ vi.mock("@features/mira/server/store", () => ({
 
 import miraConfig from "@features/mira/content/mira-config.json";
 import { POST, maxDuration } from "@/app/api/mira/chat/route";
-import { alertDailyCeiling } from "@features/mira/server/alerts";
+import { alertAnonShare, alertDailyCeiling } from "@features/mira/server/alerts";
 import { anonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
@@ -702,6 +705,7 @@ describe("POST /api/mira/chat", () => {
       windowMs: 24 * 60 * 60 * 1000,
     });
     expect(buckets()).not.toContain("mira-global-day"); // the signed-in half stays whole
+    expect(alertAnonShare).toHaveBeenCalledTimes(1); // the team hears, as for the whole ceiling
     // A crisis message is still answered.
     const crisis = await post({ message: "I want to kill myself", consent: true });
     expect((await crisis.json()).crisis).toBe(true);
