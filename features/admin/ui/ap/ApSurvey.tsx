@@ -45,6 +45,13 @@ import {
 import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
 import SheetsSection, { clicks, SheetBadge } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
+import {
+  hasOrderChoice,
+  orderFunnel,
+  orderOptions,
+  ORDER_NAMES,
+  type SurveyOrder,
+} from "./surveyOrders";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -69,8 +76,11 @@ const DEMO_INFO: Array<{ title: string; k: string }> = [
   { title: "Device", k: "survey.demoDevice" },
 ];
 
-/** Which order the funnel counts in: the survey's old one, or the opening-order test's (C13). */
-type Order = "survey" | "test";
+/**
+ * Which order the funnel counts in: the survey's old one, the opening-order test's (C13), or
+ * Survey 2.0's screens.
+ */
+type Order = SurveyOrder;
 
 /**
  * The Berlin day the opening-order test ended: every run begun since is asked the new order,
@@ -143,13 +153,18 @@ export default function ApSurvey() {
 
   const questions = data?.questions ?? null;
   // Until one is picked: the new order for a range that reaches the test's end, when every run
-  // began to be asked it, and the old one for a range before it.
+  // began to be asked it, and the old one for a range before it. Survey 2.0's funnel is one pick
+  // away (its pill) while it runs beside them.
   const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
-  // The funnel in the order picked: the test's only while the range has runs in it.
-  const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
-  // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
+  // The funnel in the order picked: the test's or Survey 2.0's only while the range has runs in it.
+  const rows = orderFunnel(questions, order)?.rows ?? [];
+  // Everyone a question was put to, in any order: what its skips (every order's) are a share of.
   const shownBoth = new Map<string, number>();
-  for (const r of [...(questions?.rows ?? []), ...(questions?.test?.rows ?? [])])
+  for (const r of [
+    ...(questions?.rows ?? []),
+    ...(questions?.test?.rows ?? []),
+    ...(questions?.survey2?.rows ?? []),
+  ])
     shownBoth.set(r.id, (shownBoth.get(r.id) ?? 0) + r.shownAll);
   // Opens on the countable question most people leave on (a free-text one has no answers to show).
   const countableRows = rows.filter((r) => ["scale", "single", "multiple"].includes(r.type));
@@ -187,14 +202,26 @@ export default function ApSurvey() {
                       })),
                     },
                   })),
-                  // Both orders' funnels when the range has runs in the new order, each in its own.
-                  ...(questions?.test
+                  // Every order's funnel when the range has runs in more than one, each in its own.
+                  ...(questions && hasOrderChoice(questions)
                     ? [
                         { name: "Questions · old order", table: questionTable(questions.rows) },
-                        {
-                          name: "Questions · new order (C13)",
-                          table: questionTable(questions.test.rows),
-                        },
+                        ...(questions.test
+                          ? [
+                              {
+                                name: "Questions · new order (C13)",
+                                table: questionTable(questions.test.rows),
+                              },
+                            ]
+                          : []),
+                        ...(questions.survey2
+                          ? [
+                              {
+                                name: `Questions · ${ORDER_NAMES.survey2}`,
+                                table: questionTable(questions.survey2.rows),
+                              },
+                            ]
+                          : []),
                       ]
                     : [{ name: "Questions", table: questionTable(questions?.rows ?? []) }]),
                   {
@@ -258,7 +285,7 @@ export default function ApSurvey() {
           <TimeDropSection
             data={data}
             rows={rows}
-            order={questions?.test ? order : null}
+            order={hasOrderChoice(questions) ? order : null}
             onOrder={setOrder}
             onPick={(id) => {
               setSelected(id);
@@ -271,7 +298,7 @@ export default function ApSurvey() {
           <FunnelSection
             data={data}
             rows={rows}
-            order={questions?.test ? order : null}
+            order={hasOrderChoice(questions) ? order : null}
             onOrder={setOrder}
             selected={current?.id ?? null}
             onSelect={setSelected}
@@ -294,7 +321,7 @@ export default function ApSurvey() {
             data={data}
             rows={rows}
             // The funnel's order; without the questions, the order the range opens on.
-            order={questions?.test ? order : questions ? "survey" : order}
+            order={hasOrderChoice(questions) ? order : questions ? "survey" : order}
           />
 
           <Card id="demographics" labelledBy="h-demo">
@@ -1017,12 +1044,14 @@ function FunnelSection({
   // questions would read as theirs.
   const allTraffic = !q || q.segment === "All traffic";
   if (!first && !term && data.sheets.seen && allTraffic)
-    for (const spot of sheetSpots(rows)) {
+    for (const spot of sheetSpots(rows, order ?? "survey")) {
       const id = asked0[spot.after]!.id;
       sheetsAfter.set(id, [...(sheetsAfter.get(id) ?? []), spot]);
     }
   // The sheets' figures for this funnel's own runs: begun in the range, in the order shown.
-  const sheetsSeen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
+  const sheetsSeen = data.sheets.seen?.ok
+    ? (data.sheets.seen.value[order ?? "survey"] ?? null)
+    : null;
   const sheetsKnown = sheetsSeen !== null;
   // A column clicked becomes the first sort and the first becomes the second; the first clicked
   // again goes back to survey order.
@@ -1057,16 +1086,13 @@ function FunnelSection({
       />
       {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
       {/* No note under it (Marcus, 10 Nov 2026): its info card explains the two orders. */}
-      {order && q?.test && (
+      {order && q && hasOrderChoice(q) && (
         <div className="flex flex-wrap items-center gap-2">
           <Pills
             label="Question order"
             value={order}
             onChange={onOrder}
-            options={[
-              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
-              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
-            ]}
+            options={orderOptions(q)}
           />
           <Info k="survey.order" />
         </div>

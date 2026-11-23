@@ -6,7 +6,9 @@
  */
 import type { SheetFigures } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
-import { SURVEY_SHEETS, type SurveySheetId } from "@features/survey/surveySheets";
+import { placementFor, SURVEY_SHEETS, type SurveySheetId } from "@features/survey/surveySheets";
+
+import type { SurveyOrder } from "./surveyOrders";
 
 /**
  * Mark's names for the six sheets, numbered in his order (his boxes 1 to 6, the survey's own
@@ -46,14 +48,15 @@ export interface SheetSpot {
  * Where each sheet sits in one order's funnel, between two of the questions asked now: after
  * its question, before its question (only from the survey's `minIndex` on, so the expert's
  * sheet has no place in the old order, which asks its question third), or after the question
- * that leaves three to go. A sheet whose question is not asked in the order has none.
+ * that leaves three to go. A sheet whose question is not asked in the order has none. Survey
+ * 2.0's funnel (`order` "survey2") places them at its own spots (survey2Placement).
  */
-export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
+export function sheetSpots(rows: QuestionRow[], order: SurveyOrder = "survey"): SheetSpot[] {
   const asked = rows.filter((r) => r.n > 0);
   const at = new Map(asked.map((r, i) => [r.id, i]));
   const spots: SheetSpot[] = [];
   SURVEY_SHEETS.forEach((def, k) => {
-    const p = def.placement;
+    const p = placementFor(def, order === "survey2" ? "survey2" : undefined);
     if (p.kind === "after") {
       const i = at.get(p.qId);
       if (i !== undefined)

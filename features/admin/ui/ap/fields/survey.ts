@@ -9,10 +9,15 @@ import { reportingDay } from "@shared/time/reporting-day";
 
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
 
-/** The two orders the questions are asked in (the survey code's; stored nowhere else). */
+/**
+ * The orders the questions are asked in (the survey code's; stored nowhere else): C13's two, and
+ * Survey 2.0's screens (Mark's survey review, behind the `survey_2` switch), with its own 16016a
+ * (the areas) and 00010 (the details page). ap-survey-2.test.tsx holds them to the code.
+ */
 const ORDERS = `orders (arm, qs) AS (VALUES
   ('control', ARRAY['00001','01002','01005','01006','02001','02002','02003','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','10003','10004','10005','11001','11002','11003','11004','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
-  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
+  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
+  ('survey2', ARRAY['10003','11003','11002','11001','03013','10004','02003','10005','10002','11004','01002','02002','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','08002','08003','08004','08005','08006','08012','09013','14020','14021','01005','02001','01006','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16016a','16016','16017','16018','16011','16012','16013','16014','16019','16020','17001','17002','17003','00010'])
 )`;
 
 /** The day the opening-order test ended and everyone got the new order, as the page writes it. */
@@ -26,7 +31,8 @@ const ORDER_TEST_END_DAY = new Date(QUESTION_ORDER_TEST_END).toLocaleDateString(
 /**
  * The order the page opens on, in SQL: the new one for a range reaching the Berlin day the test
  * ended, the old one before it (ApSurvey's ORDER_TEST_END_DAY). The cards' queries read it, so
- * they give the funnel the page shows; swap in 'control' (old) or 'variant' (new) for the other.
+ * they give the funnel the page shows; swap in 'control' (old), 'variant' (new) or 'survey2'
+ * (Survey 2.0, its pill) for another.
  */
 const ORDER_SHOWN = `(CASE WHEN :to::date >= DATE '${reportingDay(new Date(QUESTION_ORDER_TEST_END))}' THEN 'variant' ELSE 'control' END)`;
 
@@ -35,7 +41,8 @@ const FUNNEL = `-- The question funnel, in one question order: per question, the
 -- reached it, and those whose last step it was and who never finished (exits). 'control' is
 -- the survey's old order (every run before the opening-order test, and the test's control
 -- half); 'variant' is the test's order (C13), which every run begun since the test's end
--- (${QUESTION_ORDER_TEST_END}) is asked. The range's Berlin days are written in.
+-- (${QUESTION_ORDER_TEST_END}) is asked; 'survey2' is Survey 2.0's screens, behind its switch.
+-- The range's Berlin days are written in.
 WITH b AS (
   SELECT (:from::date::timestamp AT TIME ZONE 'Europe/Berlin') AS since_ts,
          ((:to::date + 1)::timestamp AT TIME ZONE 'Europe/Berlin') AS until_ts
@@ -116,7 +123,8 @@ runs AS (
 -- asked the survey's. A later run: the order its first six questions (by their place on its
 -- screen) follow with the fewest questions passed over; a tie (it left within the shared
 -- opening) goes to the order its session was dealt (c13_arm) while the test ran, and to the
--- new order once it had ended.
+-- new order once it had ended. Survey 2.0 when its screens fit better than both classic orders:
+-- it opens on 10003 and asks the name last, so no classic run (which opens on it) fits it.
 firsts AS (
   SELECT f.session_id, (array_agg(f.q_id ORDER BY f.first_idx, f.first_at, f.q_id))[1:6] AS qs
     FROM reached f
@@ -140,6 +148,9 @@ arms AS (
          CASE WHEN fr.session_id IS NULL
                    THEN CASE WHEN r.started_at >= TIMESTAMPTZ '${QUESTION_ORDER_TEST_END}'
                              THEN 'variant' ELSE 'control' END
+              WHEN s.passed_over IS NOT NULL
+                   AND (c.passed_over IS NULL OR s.passed_over < c.passed_over)
+                   AND (v.passed_over IS NULL OR s.passed_over < v.passed_over) THEN 'survey2'
               WHEN v.passed_over IS NULL AND c.passed_over IS NOT NULL THEN 'control'
               WHEN c.passed_over IS NULL AND v.passed_over IS NOT NULL THEN 'variant'
               WHEN c.passed_over < v.passed_over THEN 'control'
@@ -150,6 +161,7 @@ arms AS (
     LEFT JOIN firsts fr ON fr.session_id = r.session_id
     LEFT JOIN fit c ON c.session_id = r.session_id AND c.arm = 'control'
     LEFT JOIN fit v ON v.session_id = r.session_id AND v.arm = 'variant'
+    LEFT JOIN fit s ON s.session_id = r.session_id AND s.arm = 'survey2'
 ),
 -- Each run's questions in the order it was asked them, and where each sits in its order.
 asked_in AS (
@@ -470,7 +482,7 @@ const FUNNEL_ROWS =
        round(100.0 * s.reached / nullif(s.before, 0), 1) AS of_prev_pct,
        s.added AS added_during_range
   FROM steps s
- WHERE s.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other, here and below
+ WHERE s.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old), 'variant' (new) or 'survey2' (Survey 2.0) for another, here and below
 UNION ALL
 -- Questions no longer asked that runs in the range still reached, after the asked ones.
 SELECT NULL, x.q_id, count(*), count(*), count(*) FILTER (WHERE a.left_at = x.q_id AND a.last_at < now() - interval '30 minutes'),
@@ -588,7 +600,7 @@ SELECT u.k AS n, u.q AS question, m.median_ms,
        round((sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0)::numeric, 1) AS minutes_so_far
   FROM orders o CROSS JOIN unnest(o.qs) WITH ORDINALITY AS u (q, k)
   LEFT JOIN medians m ON m.question = u.q
- WHERE o.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
+ WHERE o.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old), 'variant' (new) or 'survey2' (Survey 2.0) for another
  ORDER BY u.k;
 `;
 
@@ -600,7 +612,7 @@ SELECT q_id AS question,
        date_trunc(:grain, last_at AT TIME ZONE 'Europe/Berlin')::date AS period_from,
        count(*) AS exits
   FROM exit_runs
- WHERE arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
+ WHERE arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old), 'variant' (new) or 'survey2' (Survey 2.0) for another
  GROUP BY 1, 2
  ORDER BY 1, 2;
 `;
@@ -889,7 +901,7 @@ const FUNNEL_TABLES: FieldDef["tables"] = [
 ];
 
 const FUNNEL_CAVEAT =
-  "Counts survey runs (one browser's go at the survey) begun in the range, not people: someone who restarts in another browser counts twice. A run begun earlier and carried on in the range (a saved draft picked up again, or a survey that ran past midnight into it) belongs to the period it began in, as Survey starts counts it, so it is left out. Since 6 Oct 2026 half of the new runs are asked the opening questions in a different order (the C13 test); each order has its own funnel (the toggle). A run counts as reaching every question up to the furthest it got to, in its order (a step lost while the tab was in the background, an answer given on the landing page's card, steps recorded only from part-way before 18 Sep 2026), so no question has more runs than the one before it. The email question asked first (by a run begun before 17 Aug 2026) is not how far a run got. A run that leaves by walking back through the questions with the browser's Back (a fraction of a second on each) left where that walk began, and its Backs aren't Went back. The drop-out rate and Skipped are shares of the runs a question was put to. A question first asked during the range (marked) was put only to the runs begun after; one first asked after the range isn't listed. The team's runs are left out. Under a device filter the survey's steps class Android tablets as phones and iPads as computers.";
+  "Counts survey runs (one browser's go at the survey) begun in the range, not people: someone who restarts in another browser counts twice. A run begun earlier and carried on in the range (a saved draft picked up again, or a survey that ran past midnight into it) belongs to the period it began in, as Survey starts counts it, so it is left out. Since 6 Oct 2026 half of the new runs are asked the opening questions in a different order (the C13 test); each order has its own funnel (the toggle), and so has Survey 2.0 (its own screens, in its own order and words) while its switch is on. A run counts as reaching every question up to the furthest it got to, in its order (a step lost while the tab was in the background, an answer given on the landing page's card, steps recorded only from part-way before 18 Sep 2026), so no question has more runs than the one before it. The email question asked first (by a run begun before 17 Aug 2026) is not how far a run got. A run that leaves by walking back through the questions with the browser's Back (a fraction of a second on each) left where that walk began, and its Backs aren't Went back. The drop-out rate and Skipped are shares of the runs a question was put to. A question first asked during the range (marked) was put only to the runs begun after; one first asked after the range isn't listed. The team's runs are left out. Under a device filter the survey's steps class Android tablets as phones and iPads as computers.";
 
 /**
  * The sheets between the questions (Mark's Sheets section, 17 Nov 2026), as fetchSurveySheets
@@ -899,17 +911,21 @@ const FUNNEL_CAVEAT =
  */
 const SHEETS = `-- The sheets between the survey's questions, for the runs begun in the range, in each question
 -- order (run_order: 'test' is the new order, C13's and everyone's since the test ended; 'survey'
--- the old one): per sheet, the people it opened for, those who left the survey with it open
+-- the old one; 'survey2' Survey 2.0's screens, behind its switch): per sheet, the people it opened for, those who left the survey with it open
 -- (never closed it, answered nothing after it opened, 30 minutes since), those who closed it,
 -- how long it was open
 -- (median, ms) and the ticks of the State of Desire sheet's box. A run's order: it answered
--- 03011 before 01005 (new) or 01005 first (old). The rows with an empty sheet are every sheet
+-- 03011 before 01005 (new) or 01005 first (old); Survey 2.0's answered 10003 before the name
+-- question (00001), which every classic run answers first and 2.0 never sends (its details page
+-- answers as 00010), so it is told apart before the classic orders. The rows with an empty sheet are every sheet
 -- together. The team's people are left out.
 WITH runs AS (
   SELECT person_id,
          minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
          minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
          minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '10003') AS at_s2,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '00001') AS at_name,
          maxIf(timestamp, event = 'survey_answer') AS last_answer
   FROM events
   WHERE event IN ('survey_started', 'survey_answer')
@@ -942,7 +958,8 @@ per AS (
 seen AS (
   SELECT per.*,
          runs.last_answer > per.shown_at AS went_on,
-         multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+         multiIf(toUnixTimestamp(runs.at_s2) > 0 AND (toUnixTimestamp(runs.at_name) = 0 OR runs.at_s2 < runs.at_name), 'survey2',
+                 toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                  toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
   FROM per INNER JOIN runs ON per.person_id = runs.person_id
   WHERE per.shows > 0
@@ -1082,11 +1099,11 @@ export const fields: FieldRegistry = {
   },
   "survey.order": {
     label: "Old order and new order (C13)",
-    what: `From 6 Oct 2026 half of the new survey runs were asked five later questions first (the opening-order test, C13). The new order won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. Each order has its own funnel; the number beside it is how many runs were asked that way.`,
+    what: `From 6 Oct 2026 half of the new survey runs were asked five later questions first (the opening-order test, C13). The new order won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. Survey 2.0 (Mark's survey review, behind its switch) asks its own screens, in its own order and words. Each order has its own funnel; the number beside it is how many runs were asked that way.`,
     stat: "Count",
     per: "per survey run",
     formula: { num: "Survey runs begun in the range, by the order they were asked in" },
-    caveat: `A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt during the test, and to the new order from ${ORDER_TEST_END_DAY}. Runs begun before the test (6 Oct 2026, evening) were all asked the old order, and a draft begun in it keeps it when resumed. The team's runs are left out.`,
+    caveat: `A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt during the test, and to the new order from ${ORDER_TEST_END_DAY}. Runs begun before the test (6 Oct 2026, evening) were all asked the old order, and a draft begun in it keeps it when resumed. A run is Survey 2.0's when its first questions follow 2.0's screens better than either classic order: 2.0 opens on 10003 and asks the name on its last screen, so no classic run (which opens on the name) fits it. The team's runs are left out.`,
     tables: FUNNEL_TABLES,
     query: { lang: "SQL", text: ORDER_RUNS },
     related: ["survey.funnel", "survey.firstStep"],
