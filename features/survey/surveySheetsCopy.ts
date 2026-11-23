@@ -106,9 +106,11 @@ export const HALFWAY_SHEET_COPY = {
  * Sheet 5, after 16005. "15%" is true: "Steady — Sex feels normal and good in my life" is
  * 15.5% of finished surveys, the team's own runs left out (production, 12 Nov 2026, 403 of
  * 2,605; the query above, with '16005'). The board's "+2.500 participants" is the report's
- * 2,369. The tick box records nothing yet: what it promises waits on Marcus (the link, and
- * the EUR 5 code), and keeping it needs its own consent. Its switch stays off in production
- * until both exist.
+ * 2,369. A tick is kept on the submission with its own consent record
+ * (`state_of_desire_opt_in_at` and `_version`, features/survey/server/server.ts), and its
+ * #incoming-surveys message says so. Nothing sends the EUR 5 code by itself: the code is
+ * Mark's, and he sends it by hand from that message (Mark, 13 and 17 Nov: "just record the
+ * tick", "we don't automate"). Its switch stays off in production until the record is live.
  */
 export const DESIRE_SHEET_COPY = {
   eyebrow: "Did you know?",
@@ -121,6 +123,7 @@ export const DESIRE_SHEET_COPY = {
   titleEnd: ", and what holds them back",
   price: "€9.99",
   participants: "Insights from 2,369 participants in our State of Desire 2026 study.",
+  /** The words a tick consents to: change any of the three and bump DESIRE_SHEET_COPY_VERSION. */
   tickLead: "I am interested in the study. Email me a ",
   tickEmphasis: "5€ off",
   tickEnd: " code.",
@@ -135,6 +138,14 @@ export const DESIRE_SHEET_COPY = {
     brand: "LoveIQ",
   },
 } as const;
+
+/**
+ * The version of the State of Desire box's words (`tickLead` + `tickEmphasis` + `tickEnd`),
+ * stored with every tick as `survey_submission.state_of_desire_opt_in_version`, so a tick maps
+ * back to the exact words it was given under (GDPR Art. 7(1), as MARKETING_OPT_IN_TERMS_VERSION
+ * does for Q16015). ISO date of the words' last change: Mark's review of the sheets, 12 Nov.
+ */
+export const DESIRE_SHEET_COPY_VERSION = "2026-11-12";
 
 /**
  * Sheet 6, the report map when three questions are left. The parts and chapters are the

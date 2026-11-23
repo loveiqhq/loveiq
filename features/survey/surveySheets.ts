@@ -6,7 +6,7 @@
  * Six short cards open at fixed points in the survey: a research stat, a Trustpilot rating, an
  * expert's quote, a halfway marker, a State of Desire promotion and a map of the report. Each
  * has a "Keep going" that carries on, opens once per run, and sits behind its own switch
- * (features/survey/logic/sheetSwitches.ts), so staging can show them while production does
+ * (features/survey/server/sheetSwitches.ts), so staging can show them while production does
  * not. SurveyEngine opens and closes them; features/survey/ui/sheets draws them. Their words
  * are in features/survey/surveySheetsCopy.ts.
  *
@@ -17,8 +17,9 @@ export type SurveySheetId =
   "science" | "trustpilot" | "expert" | "halfway" | "desire" | "reportMap";
 
 /**
- * Where a sheet opens. Always by question id, never by position: the C13 test asks the same
- * questions in two orders (questionOrder.ts), and Eman's reorder will move them again.
+ * Where a sheet opens. Always by question id, never by position: the C13 test asked the same
+ * questions in two orders (questionOrder.ts), a draft begun in the old one still resumes in it,
+ * and Eman's reorder will move them again.
  *
  * - `after`: moving on from the question holds the move; the sheet opens over it, and
  *   "Keep going" moves on.
@@ -51,9 +52,10 @@ export interface SurveySheetDef {
  *
  * 1. Science, after 02004 "What kind of starting point usually leads to the best sex for you?"
  * 2. Trustpilot, after 03008 "I prefer sex that is intense and high-energy…"
- * 3. Expert quote, before 01005 "I want more variety…": in the C13 test order it is question
- *    27, just before the second leak; in today's control order it is question 3, too early, so
- *    `minIndex` keeps it closed there. Re-key it when Eman's reorder lands.
+ * 3. Expert quote, before 01005 "I want more variety…": in the new order (C13's, everyone's
+ *    since the test ended) it is question 27, just before the second leak; in the old order,
+ *    which a draft begun in it keeps, it is question 3, too early, so `minIndex` keeps it closed
+ *    there. Re-key it when Eman's reorder lands.
  * 4. Halfway, after 11003 "During sex, I focus more on the other person's pleasure…" (32/62).
  * 5. State of Desire, after 16005 "Which of these best describes where your sexuality feels
  *    right now?"

@@ -4,22 +4,44 @@
  * production for 21 Sep – 20 Oct 2026 and gave the page's own figures for "Last 30 days"
  * (the intro's skip, back and exit columns, recorded from 17 Oct 2026, for 17 – 20 Oct).
  */
+import { QUESTION_ORDER_TEST_END } from "@shared/experiments/questionOrderArm";
+import { reportingDay } from "@shared/time/reporting-day";
+
 import type { FieldDef, FieldRegistry, FieldTable } from "./types";
+
+/** The two orders the questions are asked in (the survey code's; stored nowhere else). */
+const ORDERS = `orders (arm, qs) AS (VALUES
+  ('control', ARRAY['00001','01002','01005','01006','02001','02002','02003','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','10003','10004','10005','11001','11002','11003','11004','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
+  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
+)`;
+
+/** The day the opening-order test ended and everyone got the new order, as the page writes it. */
+const ORDER_TEST_END_DAY = new Date(QUESTION_ORDER_TEST_END).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Europe/Berlin",
+});
+
+/**
+ * The order the page opens on, in SQL: the new one for a range reaching the Berlin day the test
+ * ended, the old one before it (ApSurvey's ORDER_TEST_END_DAY). The cards' queries read it, so
+ * they give the funnel the page shows; swap in 'control' (old) or 'variant' (new) for the other.
+ */
+const ORDER_SHOWN = `(CASE WHEN :to::date >= DATE '${reportingDay(new Date(QUESTION_ORDER_TEST_END))}' THEN 'variant' ELSE 'control' END)`;
 
 /** Shared by the queries below. */
 const FUNNEL = `-- The question funnel, in one question order: per question, the survey runs (sessions) that
 -- reached it, and those whose last step it was and who never finished (exits). 'control' is
--- the survey's own order (every run before the opening-order test, and the test's control
--- half); 'variant' is the test's order (C13). The range's Berlin days are written in.
+-- the survey's old order (every run before the opening-order test, and the test's control
+-- half); 'variant' is the test's order (C13), which every run begun since the test's end
+-- (${QUESTION_ORDER_TEST_END}) is asked. The range's Berlin days are written in.
 WITH b AS (
   SELECT (:from::date::timestamp AT TIME ZONE 'Europe/Berlin') AS since_ts,
          ((:to::date + 1)::timestamp AT TIME ZONE 'Europe/Berlin') AS until_ts
 ),
 -- The two orders the questions are asked in (the survey code's; stored nowhere else).
-orders (arm, qs) AS (VALUES
-  ('control', ARRAY['00001','01002','01005','01006','02001','02002','02003','02004','03003','03004','03005','03006','03008','03009','03010','03011','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','10003','10004','10005','11001','11002','11003','11004','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015']),
-  ('variant', ARRAY['00001','01002','03011','10005','11004','10004','02002','10003','02004','03003','03004','03005','03006','03008','03009','03010','03012','03013','08002','08003','08004','08005','08006','08012','09013','10002','01005','01006','02001','02003','11001','11002','11003','14020','14021','15001','15002','15003','15004','15005','15006','15007','15008','15009','15010','16001','16002','16005','16006','16007','16009','16011','16012','16013','16014','16019','16020','16016','16017','16018','00000','16015'])
-),
+${ORDERS},
 -- The team's runs: its own finished surveys, and unfinished runs from the networks they came from.
 staff_sessions AS (
   SELECT s.session_id FROM survey_submission s
@@ -93,7 +115,8 @@ runs AS (
 -- Which order each run was asked in. Runs begun before the test (6 Oct 2026, 18:40 UTC) were
 -- asked the survey's. A later run: the order its first six questions (by their place on its
 -- screen) follow with the fewest questions passed over; a tie (it left within the shared
--- opening) goes to the order its session was dealt (c13_arm).
+-- opening) goes to the order its session was dealt (c13_arm) while the test ran, and to the
+-- new order once it had ended.
 firsts AS (
   SELECT f.session_id, (array_agg(f.q_id ORDER BY f.first_idx, f.first_at, f.q_id))[1:6] AS qs
     FROM reached f
@@ -114,11 +137,14 @@ fit AS (
 ),
 arms AS (
   SELECT r.session_id, r.started_at, r.last_at, r.left_at,
-         CASE WHEN fr.session_id IS NULL THEN 'control'
+         CASE WHEN fr.session_id IS NULL
+                   THEN CASE WHEN r.started_at >= TIMESTAMPTZ '${QUESTION_ORDER_TEST_END}'
+                             THEN 'variant' ELSE 'control' END
               WHEN v.passed_over IS NULL AND c.passed_over IS NOT NULL THEN 'control'
               WHEN c.passed_over IS NULL AND v.passed_over IS NOT NULL THEN 'variant'
               WHEN c.passed_over < v.passed_over THEN 'control'
               WHEN c.passed_over > v.passed_over THEN 'variant'
+              WHEN r.started_at >= TIMESTAMPTZ '${QUESTION_ORDER_TEST_END}' THEN 'variant'
               ELSE c13_arm(r.session_id::text) END AS arm
     FROM runs r
     LEFT JOIN firsts fr ON fr.session_id = r.session_id
@@ -435,7 +461,7 @@ answers AS (
 )
 `;
 
-/** The question funnel, per question, in one order (the survey's; 'variant' for the test's). */
+/** The question funnel, per question, in one order: the one the page opens on (ORDER_SHOWN). */
 const FUNNEL_ROWS =
   FUNNEL +
   `SELECT s.n, s.q_id AS question, s.reached, s.shown, s.exits,
@@ -444,13 +470,13 @@ const FUNNEL_ROWS =
        round(100.0 * s.reached / nullif(s.before, 0), 1) AS of_prev_pct,
        s.added AS added_during_range
   FROM steps s
- WHERE s.arm = 'control'  -- the test's order: 'variant' (here and below)
+ WHERE s.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other, here and below
 UNION ALL
 -- Questions no longer asked that runs in the range still reached, after the asked ones.
 SELECT NULL, x.q_id, count(*), count(*), count(*) FILTER (WHERE a.left_at = x.q_id AND a.last_at < now() - interval '30 minutes'),
        round(100.0 * count(*) FILTER (WHERE a.left_at = x.q_id AND a.last_at < now() - interval '30 minutes') / count(*), 2), NULL, NULL, NULL
-  FROM reached x JOIN arms a ON a.session_id = x.session_id AND a.arm = 'control'
- WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.arm = 'control' AND x.q_id = ANY (o.qs))
+  FROM reached x JOIN arms a ON a.session_id = x.session_id AND a.arm = ${ORDER_SHOWN}
+ WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.arm = ${ORDER_SHOWN} AND x.q_id = ANY (o.qs))
  GROUP BY x.q_id
  ORDER BY 1 NULLS LAST, 2;
 `;
@@ -478,12 +504,8 @@ SELECT f.q_id AS question, sk.skipped, sum(f.shown) AS shown_both_orders,
  ORDER BY f.q_id;
 `;
 
-const MEDIAN_TIME =
-  `-- Each question's median time: half of the steps on it were quicker, half slower. A step is
--- one stay on the question's screen until moving on (forward, back, or leaving the page);
--- stays of 30 minutes or more (a tab left open) are left out, and so are the team's runs and
--- runs begun before the range.
-` +
+/** Median time's steps: the team's runs, earlier runs and walks back out of the questions left out. */
+const MEDIAN_CTES =
   TEAM.trimEnd() +
   `,
 earlier AS (
@@ -514,8 +536,10 @@ walk AS (
                         AND o.direction IN ('forward', 'complete')
                         AND (o.created_at, o.id) > (e.created_at, e.id))
    ORDER BY e.session_id, e.created_at, e.id
-)
-SELECT e.q_id AS question,
+)`;
+
+/** Each question's median time and Went back, over the steps MEDIAN_CTES keeps. */
+const MEDIAN_BY_QUESTION = `SELECT e.q_id AS question,
        round(percentile_cont(0.5) WITHIN GROUP (ORDER BY e.time_spent_ms)
                FILTER (WHERE e.time_spent_ms >= 0 AND e.time_spent_ms < 1800000 AND NOT e.after_walk)) AS median_ms,
        count(DISTINCT e.session_id) FILTER (WHERE e.direction = 'back' AND NOT e.walking_out) AS went_back
@@ -529,8 +553,43 @@ SELECT e.q_id AS question,
            AND e.session_id IS NOT NULL AND e.q_id IS NOT NULL
            AND e.session_id NOT IN (SELECT session_id FROM team)
            AND e.session_id NOT IN (SELECT session_id FROM earlier)) e
- GROUP BY e.q_id
+ GROUP BY e.q_id`;
+
+const MEDIAN_TIME =
+  `-- Each question's median time: half of the steps on it were quicker, half slower. A step is
+-- one stay on the question's screen until moving on (forward, back, or leaving the page);
+-- stays of 30 minutes or more (a tab left open) are left out, and so are the team's runs and
+-- runs begun before the range.
+` +
+  MEDIAN_CTES +
+  "\n" +
+  MEDIAN_BY_QUESTION +
+  `
  ORDER BY e.q_id;
+`;
+
+const TIME_SO_FAR =
+  `-- The survey time so far at each question: the questions' median times (as Median time reads
+-- them) added up in the order they are asked, from the first question to that one, in the order
+-- the page opens on. 'control' is the old order, 'variant' the new one (C13's, everyone's since the
+-- test ended). A question with no time adds nothing.
+` +
+  MEDIAN_CTES +
+  `,
+medians AS (
+` +
+  MEDIAN_BY_QUESTION +
+  `
+),
+` +
+  ORDERS +
+  `
+SELECT u.k AS n, u.q AS question, m.median_ms,
+       round((sum(coalesce(m.median_ms, 0)) OVER (ORDER BY u.k) / 60000.0)::numeric, 1) AS minutes_so_far
+  FROM orders o CROSS JOIN unnest(o.qs) WITH ORDINALITY AS u (q, k)
+  LEFT JOIN medians m ON m.question = u.q
+ WHERE o.arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
+ ORDER BY u.k;
 `;
 
 const EXITS_WEEK =
@@ -541,7 +600,7 @@ SELECT q_id AS question,
        date_trunc(:grain, last_at AT TIME ZONE 'Europe/Berlin')::date AS period_from,
        count(*) AS exits
   FROM exit_runs
- WHERE arm = 'control'  -- the test's order: 'variant'
+ WHERE arm = ${ORDER_SHOWN}  -- the order the page opens on; 'control' (old) or 'variant' (new) for the other
  GROUP BY 1, 2
  ORDER BY 1, 2;
 `;
@@ -832,6 +891,97 @@ const FUNNEL_TABLES: FieldDef["tables"] = [
 const FUNNEL_CAVEAT =
   "Counts survey runs (one browser's go at the survey) begun in the range, not people: someone who restarts in another browser counts twice. A run begun earlier and carried on in the range (a saved draft picked up again, or a survey that ran past midnight into it) belongs to the period it began in, as Survey starts counts it, so it is left out. Since 6 Oct 2026 half of the new runs are asked the opening questions in a different order (the C13 test); each order has its own funnel (the toggle). A run counts as reaching every question up to the furthest it got to, in its order (a step lost while the tab was in the background, an answer given on the landing page's card, steps recorded only from part-way before 18 Sep 2026), so no question has more runs than the one before it. The email question asked first (by a run begun before 17 Aug 2026) is not how far a run got. A run that leaves by walking back through the questions with the browser's Back (a fraction of a second on each) left where that walk began, and its Backs aren't Went back. The drop-out rate and Skipped are shares of the runs a question was put to. A question first asked during the range (marked) was put only to the runs begun after; one first asked after the range isn't listed. The team's runs are left out. Under a device filter the survey's steps class Android tablets as phones and iPads as computers.";
 
+/**
+ * The sheets between the questions (Mark's Sheets section, 17 Nov 2026), as fetchSurveySheets
+ * reads them: per sheet the people it opened for, those who left with it open, those who closed
+ * it, the median time it was open and the State of Desire box's ticks; the last row is every
+ * sheet together.
+ */
+const SHEETS = `-- The sheets between the survey's questions, for the runs begun in the range, in each question
+-- order (run_order: 'test' is the new order, C13's and everyone's since the test ended; 'survey'
+-- the old one): per sheet, the people it opened for, those who left the survey with it open
+-- (never closed it, answered nothing after it opened, 30 minutes since), those who closed it,
+-- how long it was open
+-- (median, ms) and the ticks of the State of Desire sheet's box. A run's order: it answered
+-- 03011 before 01005 (new) or 01005 first (old). The rows with an empty sheet are every sheet
+-- together. The team's people are left out.
+WITH runs AS (
+  SELECT person_id,
+         minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
+         minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+         maxIf(timestamp, event = 'survey_answer') AS last_answer
+  FROM events
+  WHERE event IN ('survey_started', 'survey_answer')
+    AND properties.$host = 'www.loveiq.org'
+    AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin') - INTERVAL 30 DAY
+    AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
+    AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits
+                                AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC'))
+  GROUP BY person_id
+  HAVING began >= toDateTime(':from 00:00:00', 'Europe/Berlin')
+     AND began < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 1 DAY
+),
+per AS (
+  SELECT person_id,
+         toString(properties.sheet) AS sheet,
+         countIf(event = 'survey_sheet_shown') AS shows,
+         minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
+         countIf(event = 'survey_sheet_closed') AS closes,
+         maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
+         maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
+  FROM events
+  WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
+    AND properties.$host = 'www.loveiq.org'
+    AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin')
+    AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
+    AND person_id NOT IN (SELECT person_id FROM events WHERE $session_id IN :team_visits
+                                AND timestamp >= toDateTime('2026-08-23 00:00:00', 'UTC'))
+  GROUP BY person_id, sheet
+),
+seen AS (
+  SELECT per.*,
+         runs.last_answer > per.shown_at AS went_on,
+         multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+                 toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
+  FROM per INNER JOIN runs ON per.person_id = runs.person_id
+  WHERE per.shows > 0
+)
+SELECT * FROM (
+  SELECT run_order, sheet, count() AS saw,
+         countIf(closes > 0 OR went_on OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
+         countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
+         countIf(closes > 0) AS closed,
+         quantileIf(0.5)(ms, closes > 0) AS median_ms,
+         countIf(ticked = 1) AS ticked
+  FROM seen WHERE run_order != '' GROUP BY run_order, sheet
+  UNION ALL
+  SELECT run_order, '' AS sheet, count() AS saw,
+         countIf(closes > 0 OR went_on OR shown_at < now() - INTERVAL 30 MINUTE) AS settled,
+         countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open,
+         countIf(closes > 0) AS closed,
+         quantileIf(0.5)(ms, closes > 0) AS median_ms,
+         countIf(ticked = 1) AS ticked
+  FROM seen WHERE run_order != '' GROUP BY run_order
+)
+LIMIT 30`;
+
+const SHEET_EVENTS: FieldDef["tables"] = [
+  {
+    source: "posthog",
+    table: "events",
+    columns:
+      "event (survey_sheet_shown, survey_sheet_closed, survey_started, survey_answer), properties.sheet, properties.ms_open, properties.ticked, properties.question_id, person_id, timestamp, properties.$host",
+    filters:
+      "Period, by when the run began (Berlin days), as the question funnel counts; the order picked above, from whether the run answered 03011 or 01005 first. Nothing else: the sheets are read from PostHog, while the page's other filters narrow the survey runs in our database.",
+    watch:
+      "PostHog is not consent-gated on the site, so it sees nearly every survey run; a browser that blocks it is missing. The sheets went live on 17 Nov 2026 (the expert's and State of Desire's on 18 Nov).",
+  },
+];
+
+const SHEET_PEOPLE =
+  "The runs begun in the range, in the order picked above, close to how the question funnel counts them: PostHog's person, once per sheet, by when they first began a survey (up to 30 days back), so someone who began again in the range after an earlier try counts with the earlier one. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The team's people are left out; all traffic whatever the filters.";
+
 export const fields: FieldRegistry = {
   "survey.starts": {
     label: "Survey starts",
@@ -931,13 +1081,12 @@ export const fields: FieldRegistry = {
     related: ["survey.reached", "survey.exits", "survey.ofPrev", "survey.order"],
   },
   "survey.order": {
-    label: "Survey order and test order (C13)",
-    what: "Since 6 Oct 2026 half of the new survey runs are asked five later questions first (the opening-order test, C13). Each order has its own funnel; the number beside it is how many runs were asked that way.",
+    label: "Old order and new order (C13)",
+    what: `From 6 Oct 2026 half of the new survey runs were asked five later questions first (the opening-order test, C13). The new order won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. Each order has its own funnel; the number beside it is how many runs were asked that way.`,
     stat: "Count",
     per: "per survey run",
     formula: { num: "Survey runs begun in the range, by the order they were asked in" },
-    caveat:
-      "A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt. Runs begun before the test (6 Oct 2026, evening) were all asked the survey's order. The team's runs are left out.",
+    caveat: `A run's order is read from its first six questions: the order they follow with the fewest questions passed over. A run that left within the opening both orders share goes to the half its session was dealt during the test, and to the new order from ${ORDER_TEST_END_DAY}. Runs begun before the test (6 Oct 2026, evening) were all asked the old order, and a draft begun in it keeps it when resumed. The team's runs are left out.`,
     tables: FUNNEL_TABLES,
     query: { lang: "SQL", text: ORDER_RUNS },
     related: ["survey.funnel", "survey.firstStep"],
@@ -1049,7 +1198,7 @@ export const fields: FieldRegistry = {
   },
   "survey.dropRate": {
     label: "Drop-out rate",
-    what: "Of the runs the question was put to, the share that left the survey there. Above 5% it is red.",
+    what: "Of the runs the question was put to, the share that left the survey there. Shown above 5.0% (5.1% and up), it is red in the table and orange in the chart.",
     good: "down",
     stat: "Share",
     per: "per survey run the question was put to",
@@ -1082,6 +1231,25 @@ export const fields: FieldRegistry = {
     query: { lang: "SQL", text: MEDIAN_TIME },
     related: ["survey.skipped", "survey.reached"],
   },
+  "survey.timeSoFar": {
+    label: "Survey time so far",
+    what: "The questions' median times added up in the order they are asked, from the first question to this one: about how long the survey has taken by the time someone reaches it.",
+    stat: "Sum of medians",
+    per: "per question, in the order picked",
+    formula: { num: "The median times of the first question to this one, added up" },
+    caveat:
+      "A sum of each question's median, not the median of people's own times: nobody need have taken exactly this long. It runs shorter than a whole survey's time from start to finish: medians leave out the slow stays, and the intro wizard before question 1 is not in it. Each median is all traffic's and both question orders', whatever the filters; a question with no time recorded in the range adds nothing. The team's runs are left out.",
+    tables: [
+      {
+        source: "production",
+        table: "survey_behavior_event",
+        columns: "session_id, q_id, time_spent_ms, direction, created_at",
+        filters: "Period (created_at). Not split by the other filters.",
+      },
+    ],
+    query: { lang: "SQL", text: TIME_SO_FAR },
+    related: ["survey.medianTime"],
+  },
   "survey.exitsTrend": {
     label: "Exits over time",
     what: "The question's exits week by week (day by day for a range up to two weeks, month by month past four months), so a question that suddenly loses people stands out.",
@@ -1106,6 +1274,111 @@ export const fields: FieldRegistry = {
     related: ["survey.exits", "survey.dropRate"],
   },
 
+  "survey.sheets": {
+    label: "Sheets",
+    what: "The short cards that open between the survey's questions: a research note, a Trustpilot review, an expert's quote, the halfway card, the State of Desire promo and the report map. Each opens once per run and has its own switch.",
+    stat: "Count",
+    per: "per person a sheet opened for",
+    formula: {
+      num: "People each sheet opened for, those who left with it open, its median time open, and its taps",
+    },
+    caveat: `${SHEET_PEOPLE} On the charts and in the question funnel each sheet sits between the questions where it opens, in the order picked: after its question, before the question it opens over (the expert's, from the 11th question on, so never in the old order), or with three questions left (the report map).`,
+    tables: SHEET_EVENTS,
+    query: { lang: "HogQL", text: SHEETS },
+    related: [
+      "survey.sheetsOn",
+      "survey.sheetSaw",
+      "survey.sheetBounce",
+      "survey.sheetTime",
+      "survey.sheetConversion",
+    ],
+  },
+  "survey.sheetsOn": {
+    label: "Sheets in the survey",
+    what: "How many of the six sheets are switched on now, so a survey run meets them.",
+    stat: "Count",
+    per: "per sheet, now",
+    formula: {
+      num: "Sheets whose switch is on; the halfway sheet and the report map only while the €1.99 page test's switch is on too",
+    },
+    caveat:
+      "Now, whatever the range. A sheet with a price (halfway, State of Desire, report map) never opens for someone who paid before the survey. A switch can also be forced on in a deployment's settings (SYSTEM_FLAG_…), which the table doesn't show.",
+    tables: [
+      {
+        source: "production",
+        table: "system_flags",
+        columns: "key, enabled, updated_at",
+        filters: "None: the switches as they stand now.",
+      },
+    ],
+    query: {
+      lang: "SQL",
+      text: `-- The sheets' switches now. The halfway sheet and the report map also need the EUR 1.99 page
+-- test's switch (report_gate_archetype_reveal): they run with that test, never alone.
+SELECT key, enabled, updated_at
+  FROM system_flags
+ WHERE key IN ('survey_sheet_science', 'survey_sheet_trustpilot', 'survey_sheet_expert',
+               'survey_sheet_halfway', 'survey_sheet_desire', 'survey_sheet_report_map',
+               'report_gate_archetype_reveal')
+ ORDER BY key;`,
+    },
+    related: ["survey.sheets"],
+  },
+  "survey.sheetSaw": {
+    label: "Saw it",
+    what: "How many people a sheet opened for in the range: it opens once per run, after (or, for the expert's quote, before) the question it sits by.",
+    good: "up",
+    stat: "Count",
+    per: "per person",
+    formula: { num: "People with a survey_sheet_shown for the sheet, in the range" },
+    caveat: SHEET_PEOPLE,
+    tables: SHEET_EVENTS,
+    query: { lang: "HogQL", text: SHEETS },
+    related: ["survey.sheetBounce", "survey.sheets"],
+  },
+  "survey.sheetBounce": {
+    label: "Bounce rate",
+    what: "Of the people a sheet opened for, the share who left the survey while it was open: they never closed it and answered nothing after. Shown above 5.0% it is red, as a question's drop-out is.",
+    good: "down",
+    stat: "Share",
+    per: "per person the sheet opened for",
+    formula: {
+      num: "Opened it, never closed it, answered nothing after, 30 minutes since",
+      den: "Opened it 30 minutes ago or more, closed it, or answered on",
+      mult: "× 100",
+    },
+    caveat: `Someone who left with the sheet open is also an exit of the question it opens over in the question funnel (the steps can't tell a sheet from its question); someone who closed it and then left is an exit of the question they were then on: the next one, or for a sheet that opens before its question (the expert's, before 01005), that question. A sheet opened in the last 30 minutes and not closed yet counts nowhere yet. All sheets together: every sheet's leavers over every sheet's settled people. ${SHEET_PEOPLE}`,
+    tables: SHEET_EVENTS,
+    query: { lang: "HogQL", text: SHEETS },
+    related: ["survey.sheetSaw", "survey.exits", "survey.dropRate"],
+  },
+  "survey.sheetTime": {
+    label: "Median time",
+    what: "How long a sheet stays open before it is closed: half close it quicker, half slower.",
+    stat: "Median",
+    per: "per person who closed the sheet",
+    formula: { num: "Time from the sheet opening to its close (ms_open), the middle one" },
+    caveat: `Over the people who closed it: someone who left with it open has no time. All sheets together: the middle of every close. The time a sheet is open also counts as time on the question it opens over, in that question's median time. ${SHEET_PEOPLE}`,
+    tables: SHEET_EVENTS,
+    query: { lang: "HogQL", text: SHEETS },
+    related: ["survey.sheetBounce", "survey.medianTime"],
+  },
+  "survey.sheetConversion": {
+    label: "Conversion",
+    what: "For a sheet with something to tap, the share of the people it opened for who tapped it, with how many did. Only the State of Desire sheet has one: its “Email me a 5€ off code” box.",
+    good: "up",
+    stat: "Share",
+    per: "per person the sheet opened for",
+    formula: {
+      num: "Closed it with its box ticked",
+      den: "People it opened for",
+      mult: "× 100",
+    },
+    caveat: `The tick is read when the sheet closes; someone who ticked it and left with it open isn't counted. ${SHEET_PEOPLE}`,
+    tables: SHEET_EVENTS,
+    query: { lang: "HogQL", text: SHEETS },
+    related: ["survey.sheetSaw", "survey.sheets"],
+  },
   "survey.skipped": {
     label: "Skipped",
     what: "The share of the runs the question was put to that went on without answering it. Only optional questions can be passed.",

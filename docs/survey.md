@@ -234,10 +234,12 @@ email sheet on Next") adds a second ask after a No:
   submits. Back goes to the email question and the sheet closes with it, as the Pause dialog
   does. Taps in its first 400 ms are ignored and focus lands on the sheet, not on Yes, so a
   double tap on Next or a held Enter never gives consent.
-- **What is recorded.** A Yes given in the sheet is sent as `marketingOptInVia: "sheet"`
+- **What is recorded.** A Yes given once the sheet has been shown, in it or on the question
+  after closing it (also after a reload), is sent as `marketingOptInVia: "sheet"`
   ([API](api.md#post-apisurvey)) and stored with the consent version
   `2026-10-14+sheet-2026-11-10` (`MARKETING_OPT_IN_SHEET_TERMS_VERSION`): that reader saw the
-  question's words and the sheet's. A Yes on the question keeps `2026-10-14`. PostHog and GA4
+  question's words and the sheet's. A Yes from a reader who never saw the sheet keeps
+  `2026-10-14`. PostHog and GA4
   get `survey_optin_sheet_shown`, then `survey_optin_sheet_closed`, whose `outcome` (`yes`,
   `not_now`, `dismissed`) and `via` go to PostHog only.
 - **The copy** lives in [`optInSheet.ts`](../features/survey/optInSheet.ts). A change there is a
@@ -248,8 +250,9 @@ email sheet on Next") adds a second ask after a No:
   `optInSheet.ts`; run it again before changing the number.
 
 - **Measuring it.** From 2026-10-14 to 2026-11-10, 66 of 200 submissions opted in (33%). The
-  16015 answer split is on AP-Analytics' Survey page; the sheet's own Yes rows are those whose
-  `marketing_opt_in_terms_version` contains `+sheet-`.
+  16015 answer split is on AP-Analytics' Survey page; the Yes rows from readers who were shown
+  the sheet are those whose `marketing_opt_in_terms_version` contains `+sheet-`, and PostHog's
+  `survey_optin_sheet_closed` with `outcome` `yes` counts the Yes given in the sheet itself.
 - **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
   most 480 px wide.
 
@@ -271,9 +274,11 @@ with a "Keep going" that carries on. The rules are in
 | State of Desire | after 16005 (where the reader's sexuality is) | "only 15% … steady", the report, and a tick box for a €5 code    |
 | Report map      | after the question that leaves three to go    | the report's 6 parts and 17 chapters, and what is free or €1.99  |
 
-- **Placed by question, not by position.** C13 asks the questions in two orders, and the
-  reorder still to come moves them again. In today's control order 01005 is question 3, so the
-  expert's sheet stays shut there; re-key it when the reorder lands.
+- **Placed by question, not by position.** C13 asked the questions in two orders, and the
+  reorder still to come moves them again. In C13's control order 01005 is question 3, so the
+  expert's sheet stayed shut there. Since the test ended (2026-11-21) every new run is asked
+  the new order, where it opens; a draft resumed in the old order still skips it. Re-key it
+  when the reorder lands.
 - **When they open.** A sheet "after" a question holds the move: Next, Auto-advance, Enter,
   ArrowRight and a swipe all go through `goNext`, which opens it instead. One "before" a
   question rises over it as it arrives. Each opens once per run (`loveiq-survey-sheets`, keyed
@@ -290,8 +295,9 @@ with a "Keep going" that carries on. The rules are in
   price (Halfway, State of Desire, the map). The Trustpilot sheet needs the site's Trustpilot
   switch and numbers, or it is skipped.
 - **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
-  C13 orders meet them alike. The expert's sheet waits for the C13 check-in (2026-11-20): C13's
-  control order asks 01005 too early for it, so until then only one C13 half would see it.
+  C13 orders meet them alike. The expert's sheet waited for the C13 check-in (2026-11-20): C13's
+  control order asks 01005 too early for it, so only one C13 half saw it. Fatih and Mark called
+  C13 for the new order that day, so every new run is asked it now.
   Halfway and the map belong to Mark's 50/50 of his new €1.99 page
   (`docs/runbooks/PRE_UNLOCK.md`), so they need its switch on as well as their own
   (`GATE_TEST_SHEETS`). Both halves meet them, each in its page's words (Mark's write-up,
@@ -304,8 +310,11 @@ with a "Keep going" that carries on. The rules are in
 - **The State of Desire tick.** Mark, 13 Nov: "just record the tick for now"; he sends the study
   by hand. A tick is kept for its run (`loveiq-survey-desire-tick`) and sent with the answers
   (`stateOfDesireTicked`); the submission's #incoming-surveys message then says "State of
-  Desire: ticked (send the study)", and /admin has the address by submission. It is not a
-  database field yet: storing it there, with its consent wording, is a migration still to do.
+  Desire: ticked (send the study)", and /admin has the address by submission. The submit keeps
+  it with its own consent record, `survey_submission.state_of_desire_opt_in_at` and
+  `state_of_desire_opt_in_version` (the box's words, `DESIRE_SHEET_COPY_VERSION`), in a PATCH
+  of its own, and the message reads it off the row, so every later edit keeps the line. The
+  EUR 5 code is Mark's, sent by hand: nothing sends it by itself (17 Nov).
 - **The numbers.** Sheet 1's shares (respond 36%, start 12%, naturally 44%, plan 6%) and sheet
   5's 15% are measured on finished surveys without the team's own runs, rounded down; the
   queries sit beside the copy. The design's "Most people love to respond" was not true (most

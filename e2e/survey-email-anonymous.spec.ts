@@ -13,7 +13,9 @@ import { pinSurveySession } from "./surveyArm";
  * test ran. A buyer who paid first keeps the old question and its confirm box; that needs a
  * paid purchase in the database, so SurveyEngine's unit tests cover it, not this spec.
  *
- * Both opening orders are pinned, each with a session id that drew the test's control arm.
+ * Both opening orders are walked: each seeded draft records the order it was begun in, as a
+ * draft with progress and no recorded order reopens in the old one. Each session id drew the
+ * email test's control arm.
  * Nothing is written: every survey write is answered locally.
  */
 
@@ -35,19 +37,20 @@ async function openEmailQuestion(page: Page, order: QuestionOrderArm = "control"
   }
   await pinSurveySession(page, order);
   await page.addInitScript(
-    (index) => {
+    ({ index, orderArm }) => {
       const state = {
         answers: {},
         currentIndex: index,
         startedAt: new Date().toISOString(),
         prefilled: [],
+        orderArm,
       };
       window.localStorage.setItem("loveiq-survey-answers", JSON.stringify(state));
       // A reader who already agreed on the consent screen; without it /survey opens there.
       window.localStorage.setItem("loveiq-survey-consent", new Date().toISOString());
       window.sessionStorage.setItem("loveiq-survey-step", "6");
     },
-    asked(order).findIndex((q) => q.qId === EMAIL_QID)
+    { index: asked(order).findIndex((q) => q.qId === EMAIL_QID), orderArm: order }
   );
   await page.goto("/survey");
 }

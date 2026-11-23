@@ -29,8 +29,15 @@ import {
   type Totals,
 } from "./metrics";
 import { head, type PageHead, type Tile } from "./common";
-import { POSTHOG_FROM, type PostHogResult, type SurveyIntroClicks } from "./posthog";
+import {
+  POSTHOG_FROM,
+  SHEETS_FROM,
+  type PostHogResult,
+  type SurveyIntroClicks,
+  type SurveySheetsByOrder,
+} from "./posthog";
 import type { SurveyQuestions } from "./survey";
+import type { SurveySheetId } from "@features/survey/surveySheets";
 
 export type Benchmark = "all" | "same" | "prev";
 
@@ -101,6 +108,18 @@ export interface SurveyPayload extends PageHead {
   };
   questions: SurveyQuestions | null;
   questionsError: string | null;
+  /**
+   * The sheets between the questions (Mark's Survey copy board, 17 Nov 2026): which are
+   * switched on now, and what PostHog saw of each in the range.
+   */
+  sheets: {
+    /** The sheets whose switch is on now, in Mark's order; null when the switches can't be read. */
+    on: SurveySheetId[] | null;
+    /** Null for a range that ends before the first sheet opened (SHEETS_FROM). */
+    seen: PostHogResult<SurveySheetsByOrder> | null;
+    /** The day the sheets began, when the range starts earlier: its figures are from then. */
+    from: string | null;
+  };
 }
 
 const GENDER: Record<string, string> = {
@@ -277,6 +296,9 @@ export function buildSurveyPage(input: {
   introClicks: PostHogResult<IntroClicks> | null;
   /** The period before's, for the intro tiles' change while they come from PostHog. */
   prevIntroClicks?: PostHogResult<IntroClicks> | null;
+  /** The sheets' switches now (null: unreadable) and PostHog's figures (null: not read). */
+  sheetsOn?: SurveySheetId[] | null;
+  sheetsSeen?: PostHogResult<SurveySheetsByOrder> | null;
 }): SurveyPayload {
   const { facts, filters: f, today, now } = input;
   const scope = assessmentScope(f);
@@ -478,6 +500,12 @@ export function buildSurveyPage(input: {
     },
     questions: input.questions,
     questionsError: input.questionsError,
+    sheets: {
+      on: input.sheetsOn ?? null,
+      seen: f.to < SHEETS_FROM ? null : (input.sheetsSeen ?? null),
+      from:
+        f.to >= SHEETS_FROM && f.from < SHEETS_FROM ? rangeLabel(SHEETS_FROM, SHEETS_FROM) : null,
+    },
   };
 }
 

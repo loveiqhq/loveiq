@@ -376,14 +376,43 @@ describe("the sheets between questions", () => {
     // One line of text on a wide sheet: no forced break before "5€ off" (Mark's review, 12 Nov).
     expect(box.closest("label")!.querySelector("br")).toBeNull();
     expect(box.closest("label")).toHaveTextContent("Email me a 5€ off code.");
+    await settle();
     fireEvent.click(box);
     expect(box).toBeChecked();
-    await settle();
     fireEvent.click(keepGoing());
 
     expect(analytics.closed).toHaveBeenCalledWith(
       { sheet: "desire", question_id: "16005" },
       expect.objectContaining({ via: "keep_going", ticked: true })
+    );
+  });
+
+  // A tick is consent: the tap that pressed Next must never tick it unseen (as the sheet's
+  // buttons, it waits OPEN_GUARD_MS), and closing the sheet some other way keeps it.
+  it("State of Desire: a tap in its first moments does not tick the box", async () => {
+    onQuestion(at("16005"), "Steady");
+    engine();
+    fireEvent.click(next());
+    const box = screen.getByRole("checkbox");
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    await settle();
+    fireEvent.click(box);
+    expect(box).toBeChecked();
+  });
+
+  it("State of Desire: the tick is kept when the sheet is closed with Esc", async () => {
+    onQuestion(at("16005"), "Steady");
+    engine();
+    fireEvent.click(next());
+    await settle();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await gone();
+
+    expect(analytics.closed).toHaveBeenCalledWith(
+      { sheet: "desire", question_id: "16005" },
+      expect.objectContaining({ via: "escape", ticked: true })
     );
   });
 

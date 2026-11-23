@@ -15,7 +15,9 @@ import {
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
-  assignQuestionOrderArm,
+  QUESTION_ORDER_TEST_END,
+  QUESTION_ORDER_WINNER,
+  questionOrderArmAt,
   type QuestionOrderArm,
 } from "@shared/experiments/questionOrderArm";
 import logger from "@shared/observability/logger";
@@ -61,19 +63,24 @@ export interface QuestionRow {
 }
 
 /**
- * The opening-order test (C13): from 6 Oct 2026 (20:46 Berlin) half of the new runs are asked
+ * The opening-order test (C13): from 6 Oct 2026 (20:46 Berlin) half of the new runs were asked
  * five later questions first and four of the first ones much later. Counted in one order, those
  * runs reach question 6 without question 5, and the funnel rises (21 Oct 2026 call). So each
- * order has its own funnel: `rows` the survey's order, `test` the test's.
+ * order has its own funnel: `rows` the survey's old order, `test` the test's. The new order won:
+ * every run begun from QUESTION_ORDER_TEST_END (21 Nov 2026) is asked it, so a range after that
+ * has its runs in `test`.
  */
 export const ORDER_TEST_FROM = "2026-10-06";
 
 export interface SurveyQuestions {
-  /** In the survey's own order: every run before the test, and its control arm after. */
+  /**
+   * In the survey's old order: every run before the test, its control arm during it, and a
+   * draft begun in that arm and resumed after the end.
+   */
   rows: QuestionRow[];
-  /** People who reached at least one question, in the survey's order. */
+  /** People who reached at least one question, in the survey's old order. */
   people: number;
-  /** The test's arm, in its own order, when the range has runs in it. */
+  /** The test's new order, everyone's since the end, when the range has runs in it. */
   test: { rows: QuestionRow[]; people: number } | null;
   segment: Segment;
   /** Why the filters could not be applied to the questions, if they could not. */
@@ -125,25 +132,28 @@ function skipped(qs: string[], order: string[]): number | null {
 }
 
 /**
- * The order a run was asked in. A run begun before the test has no entry: the survey's order.
- * Otherwise the order its first questions follow with the fewest passed over; when both fit as
- * well (it left within the shared opening), the arm a fresh run is dealt by its session
- * (assignQuestionOrderArm).
+ * The order a run was asked in. A run with no entry began before the test (the survey's order)
+ * or after its end (the new order). Otherwise the order its first questions follow with the
+ * fewest passed over; when both fit as well (it left within the shared opening), the order a
+ * fresh run begun then was given: the arm its session drew during the test, the new order
+ * after it (questionOrderArmAt).
  */
 export function runOrder(
   sessionId: string,
   firstQuestions: Map<string, string[]>,
-  orders: Record<QuestionOrderArm, string[]>
+  orders: Record<QuestionOrderArm, string[]>,
+  startedAt: number
 ): QuestionOrderArm {
   const qs = firstQuestions.get(sessionId);
-  if (!qs) return "control";
+  if (!qs)
+    return startedAt >= Date.parse(QUESTION_ORDER_TEST_END) ? QUESTION_ORDER_WINNER : "control";
   const control = skipped(qs, orders.control);
   const variant = skipped(qs, orders.variant);
   if (variant === null && control !== null) return "control";
   if (control === null && variant !== null) return "variant";
   if (control !== null && variant !== null && control !== variant)
     return control < variant ? "control" : "variant";
-  return assignQuestionOrderArm(sessionId);
+  return questionOrderArmAt(sessionId, startedAt);
 }
 
 /**
@@ -306,7 +316,9 @@ export function buildSurveyQuestions(
     variant: asked.variant.map((q) => q.qId),
   };
   const firstQuestions = new Map((steps.orders ?? []).map((o) => [o.s, o.q]));
-  const armOf = new Map(kept.map((r) => [r.sessionId, runOrder(r.sessionId, firstQuestions, ids)]));
+  const armOf = new Map(
+    kept.map((r) => [r.sessionId, runOrder(r.sessionId, firstQuestions, ids, r.startedAt)])
+  );
   // A run still on a question (a step in the last half hour) hasn't left it.
   const gone = (r: DropoffRun) =>
     !(r.lastAt !== null && r.lastAt !== undefined && now - r.lastAt < IN_PROGRESS_MS);

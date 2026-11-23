@@ -54,13 +54,14 @@ export const OPT_IN_SHEET_COPY = {
 } as const;
 
 /**
- * Date of the sheet's copy, for the consent record. A Yes given in the sheet is stored as
+ * Date of the sheet's copy, for the consent record. A Yes given once the sheet has been shown
+ * (in it, or on the question after closing it) is stored as
  * `<Q16015's MARKETING_OPT_IN_TERMS_VERSION>+sheet-<this>` (features/survey/server/
  * server.ts), so the words the reader saw can be found again (GDPR Art. 7(1), T-11).
  */
 export const OPT_IN_SHEET_COPY_VERSION = "2026-11-10";
 
-/** Where a Yes came from, sent with the submission. Only the sheet is named. */
+/** Sent with a Yes given once the sheet has been shown. Only the sheet is named. */
 export type MarketingOptInVia = "sheet";
 
 /** How the reader closed the sheet without choosing. */

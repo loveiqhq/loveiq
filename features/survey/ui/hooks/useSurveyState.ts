@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
+  beginsNow,
+  QUESTION_ORDER_WINNER,
   resolveDraftQuestionOrderArm,
   resolveQuestionOrderOverride,
   type QuestionOrderArm,
@@ -12,7 +14,6 @@ import {
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./surveyStorage";
-import { getSessionId } from "./surveySession";
 
 export type AnswerValue = SurveyAnswerValue;
 
@@ -53,18 +54,22 @@ function readDraftExtras(): Pick<Draft, "prefilled" | "orderArm"> {
 
 /**
  * C13's arm for a run: `?order=` where previews are allowed (never production), else
- * what the draft says. Without a window (server render) there is no session, so control.
+ * what the draft says, and the new order for a fresh run since the test ended. Without a
+ * window (server render) there is no draft, so a fresh run's order.
  */
 function orderArmFor(draft: Draft): QuestionOrderArm {
-  if (typeof window === "undefined") return "control";
+  if (typeof window === "undefined") return QUESTION_ORDER_WINNER;
   const preview = resolveQuestionOrderOverride(
     new URLSearchParams(window.location.search).get("order")
   );
-  return preview ?? resolveDraftQuestionOrderArm(getSessionId(), draft);
+  return preview ?? resolveDraftQuestionOrderArm(draft);
 }
 
 function loadState(): SurveyState {
-  const draft = loadDraft();
+  const saved = loadDraft();
+  // A fresh run on a draft dated before C13 ended (a landing card answered then) begins now,
+  // so the server stamps it with the order it is asked (beginsNow).
+  const draft = beginsNow(saved) ? { ...saved, startedAt: new Date().toISOString() } : saved;
   return { ...draft, orderArm: orderArmFor(draft) };
 }
 
@@ -162,7 +167,8 @@ export function useSurveyState() {
   const clearState = useCallback(() => {
     // Starting over drops the landing prefill too, so every question returns.
     answersRef.current = {};
-    // Cleared first: it drops the session id, and the new run's arm is its new id's.
+    // Cleared first: it drops the session id, so the new run gets its own, and is asked the
+    // new order like any fresh run.
     clearPersistedSurveyState({ clearPendingCompletion: true });
     const fresh: Draft = {
       answers: {},

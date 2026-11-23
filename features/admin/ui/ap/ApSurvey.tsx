@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
 import type { Table, Tile } from "@features/admin/server/ap/common";
-import { delta, EMPTY, fmt, tenths } from "@features/admin/server/ap/format";
+import { delta, EMPTY, fmt, rateRank, tenths } from "@features/admin/server/ap/format";
+import type { SheetFigures } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type {
   Benchmark,
@@ -13,6 +14,8 @@ import type {
   SurveyPayload,
 } from "@features/admin/server/ap/survey-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { QUESTION_ORDER_TEST_END } from "@shared/experiments/questionOrderArm";
+import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
@@ -39,6 +42,9 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
+import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
+import SheetsSection, { clicks, SheetBadge } from "./SurveySheets";
+import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -63,8 +69,14 @@ const DEMO_INFO: Array<{ title: string; k: string }> = [
   { title: "Device", k: "survey.demoDevice" },
 ];
 
-/** Which order the funnel counts in: the survey's own, or the opening-order test's (C13). */
+/** Which order the funnel counts in: the survey's old one, or the opening-order test's (C13). */
 type Order = "survey" | "test";
+
+/**
+ * The Berlin day the opening-order test ended: every run begun since is asked the new order,
+ * so a range reaching it opens on that order's funnel.
+ */
+const ORDER_TEST_END_DAY = reportingDay(new Date(QUESTION_ORDER_TEST_END));
 
 /** A tile's figure as the card's "This period" line writes it; nothing while it is blank. */
 const workedOf = (t: Tile): Worked | undefined =>
@@ -127,9 +139,12 @@ export default function ApSurvey() {
   );
   useHashScroll(Boolean(data));
   const [selected, setSelected] = useState<string | null>(null);
-  const [order, setOrder] = useState<Order>("survey");
+  const [picked, setOrder] = useState<Order | null>(null);
 
   const questions = data?.questions ?? null;
+  // Until one is picked: the new order for a range that reaches the test's end, when every run
+  // began to be asked it, and the old one for a range before it.
+  const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
   // The funnel in the order picked: the test's only while the range has runs in it.
   const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
   // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
@@ -172,12 +187,12 @@ export default function ApSurvey() {
                       })),
                     },
                   })),
-                  // Both orders' funnels while the opening-order test runs, each in its own order.
+                  // Both orders' funnels when the range has runs in the new order, each in its own.
                   ...(questions?.test
                     ? [
-                        { name: "Questions · survey order", table: questionTable(questions.rows) },
+                        { name: "Questions · old order", table: questionTable(questions.rows) },
                         {
-                          name: "Questions · test order (C13)",
+                          name: "Questions · new order (C13)",
                           table: questionTable(questions.test.rows),
                         },
                       ]
@@ -239,6 +254,20 @@ export default function ApSurvey() {
             ))}
           </TileGrid>
 
+          {/* Marcus's Survey copy board (10 Nov 2026): above the funnel, in the order picked. */}
+          <TimeDropSection
+            data={data}
+            rows={rows}
+            order={questions?.test ? order : null}
+            onOrder={setOrder}
+            onPick={(id) => {
+              setSelected(id);
+              document
+                .getElementById("question-detail")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+
           <FunnelSection
             data={data}
             rows={rows}
@@ -250,15 +279,23 @@ export default function ApSurvey() {
 
           {current && questions && (
             <QuestionDetail
-              key={current.id}
               q={current}
               total={rows.filter((r) => r.n > 0).length}
               rows={rows}
               shownBoth={shownBoth.get(current.id) ?? 0}
               segmented={questions.segment !== "All traffic"}
               unfiltered={questions.blocked !== null}
+              onSelect={setSelected}
             />
           )}
+
+          {/* Mark's Sheets section (Survey copy board, 17 Nov 2026): above the demographics. */}
+          <SheetsSection
+            data={data}
+            rows={rows}
+            // The funnel's order; without the questions, the order the range opens on.
+            order={questions?.test ? order : questions ? "survey" : order}
+          />
 
           <Card id="demographics" labelledBy="h-demo">
             <SectionHead
@@ -616,6 +653,7 @@ function QuestionDetail({
   shownBoth,
   segmented,
   unfiltered,
+  onSelect,
 }: {
   q: QuestionRow;
   total: number;
@@ -626,6 +664,8 @@ function QuestionDetail({
   segmented: boolean;
   /** A filter is on that the funnel can't follow: it shows all traffic. */
   unfiltered: boolean;
+  /** Picks another question (Mark's dropdown, 16–17 Nov 2026). */
+  onSelect: (id: string) => void;
 }) {
   const { params } = useApFilters();
   const [dim, setDim] = useState<Dimension>("none");
@@ -634,16 +674,28 @@ function QuestionDetail({
     (r) => r.id !== q.id && ["scale", "single", "multiple", "country"].includes(r.type)
   );
   const [other, setOther] = useState<string>(countable[0]?.id ?? "");
+  // A new question starts unsplit, as when this block was rebuilt per question. The block itself
+  // stays, so the Question dropdown in it keeps focus while it is used (review, 22 Nov 2026).
+  const [shown, setShown] = useState(q.id);
+  if (shown !== q.id) {
+    setShown(q.id);
+    setDim("none");
+    setOther(countable[0]?.id ?? "");
+    answerTip.close();
+  }
   const canSplit = ["scale", "single", "multiple", "country"].includes(q.type);
   const query = useMemo(
     () => ({ ...params, q: q.id, dim, ...(dim === "question" && other ? { other } : {}) }),
     [params, q.id, dim, other]
   );
-  const { data, loading, error } = useAdminFetch<AnswerSplit>(
-    "/api/admin/ap/survey/answers",
-    query,
-    canSplit
-  );
+  const {
+    data: fetched,
+    loading,
+    error,
+  } = useAdminFetch<AnswerSplit>("/api/admin/ap/survey/answers", query, canSplit);
+  // The last answers stay in the hook until the next arrive: another question's are not these
+  // (review, 22 Nov 2026: the block no longer rebuilds per question, which used to clear them).
+  const data = fetched && fetched.qid === q.id ? fetched : null;
   // Skips are all traffic's in both orders (the steps carry neither): a share of all it was put to.
   const skipShare = shownBoth ? q.skipped / shownBoth : null;
   // Under a filter the funnel can't follow, every figure here is all traffic's too.
@@ -654,16 +706,39 @@ function QuestionDetail({
       aria-labelledby="h-qd"
       className="flex scroll-mt-20 lg:scroll-mt-6 flex-col gap-4 rounded-[20px] bg-ap-lilac p-5 sm:p-6"
     >
-      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-plum">
-        Survey · Question detail · {q.id}
-        {q.n ? ` · Step ${q.n} of ${total}` : " · not asked now"}
-      </span>
-      <h2 id="h-qd" className="m-0 font-serif text-2xl font-semibold leading-snug">
-        {q.text}
-      </h2>
-      <p className="m-0 text-sm text-ap-muted">
-        Select a question in the funnel above to see it here.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-plum">
+            Survey · Question detail · {q.id}
+            {q.n ? ` · Step ${q.n} of ${total}` : " · not asked now"}
+          </span>
+          <h2 id="h-qd" className="m-0 font-serif text-2xl font-semibold leading-snug">
+            {q.text}
+          </h2>
+          <p className="m-0 text-sm text-ap-muted">
+            Pick a question from the list, or click one in the funnel or the charts above.
+          </p>
+        </div>
+        <label className="flex min-w-[min(260px,100%)] flex-[0_1_380px] flex-col gap-1 text-xs font-bold text-ap-muted">
+          Question
+          <select
+            value={q.id}
+            onChange={(e) => onSelect(e.target.value)}
+            className="min-h-11 w-full rounded-lg border border-ap-ink/[0.18] bg-white px-3 text-sm font-medium text-ap-ink"
+          >
+            {questionGroups(rows).map((g, i) => (
+              <optgroup key={`${i}-${g.label}`} label={g.label}>
+                {g.rows.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.n ? `#${r.n} · ` : ""}
+                    {r.id} · {r.text}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+      </div>
       <div
         className="grid max-w-[760px] gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))" }}
@@ -738,7 +813,8 @@ function QuestionDetail({
             )}
           </div>
           {loading && !data && <p className="m-0 text-sm text-ap-muted">Loading the answers…</p>}
-          {error && (
+          {/* The hook keeps an error until a load succeeds: not while the next question's loads. */}
+          {error && !loading && (
             <p className="m-0 text-sm text-ap-bad-ink">Could not load the answers: {error}</p>
           )}
           {data?.blocked && <p className="m-0 text-sm text-ap-muted">{data.blocked}</p>}
@@ -839,14 +915,32 @@ function QuestionDetail({
   );
 }
 
+/** Median time 112px wide for its bar beside the figure (Marcus, 10 Nov 2026). */
+/**
+ * The Question dropdown's groups: the questions asked now in the order shown, a group per run of
+ * one chapter (as under the charts), then those no longer asked.
+ */
+export function questionGroups(rows: QuestionRow[]): Array<{ label: string; rows: QuestionRow[] }> {
+  const groups: Array<{ label: string; rows: QuestionRow[] }> = [];
+  for (const r of rows.filter((x) => x.n > 0)) {
+    const label = chapterBand(r.id);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.rows.push(r);
+    else groups.push({ label, rows: [r] });
+  }
+  const gone = rows.filter((x) => x.n === 0);
+  if (gone.length) groups.push({ label: "Not asked now", rows: gone });
+  return groups;
+}
+
 const FUNNEL_GRID =
-  "44px minmax(260px,3fr) 72px minmax(110px,1.2fr) 76px 76px 64px 84px 64px minmax(110px,1fr)";
+  "44px minmax(260px,3fr) 72px minmax(110px,1.2fr) 76px 76px 64px 84px 112px minmax(110px,1fr)";
 
 /**
  * The design's "Question funnel" (16 Oct 2026): the funnel and the questions table in one.
  * Each question in its order with the people who reached it, the share of the first and of the
- * one before, the people who left there and its median time; a row opens Question detail. While
- * the opening-order test runs (`order` set), each order has its own funnel to pick.
+ * one before, the people who left there and its median time; a row opens Question detail. When
+ * the range has runs in both opening orders (`order` set), each has its own funnel to pick.
  */
 function FunnelSection({
   data,
@@ -865,8 +959,10 @@ function FunnelSection({
   onSelect: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [sort, setSort] =
-    useState<Sort<"text" | "reached" | "ofStart" | "ofPrev" | "exits" | "drop" | "time">>(null);
+  // Mark, 17 Nov 2026: sort by two columns, e.g. the highest drop-out, then the longest median
+  // time among questions with the same drop-out. None: survey order.
+  const [first, setFirst] = useState<FunnelKey | null>(null);
+  const [second, setSecond] = useState<FunnelKey | null>(null);
   const q = data.questions;
   const asked = rows.filter((r) => r.n > 0);
   const top = asked[0]?.reached ?? 0;
@@ -906,11 +1002,47 @@ function FunnelSection({
         heavy: false,
       })),
   ];
-  const shown = sortRows(
+  const shown = sortFunnel(
     steps.filter((x) => matches(x.r, term)),
-    sort
+    first,
+    second
   );
+  // The sheets between the questions, in survey order only and not while searching (as drawn):
+  // each after the question it follows.
+  const asked0 = rows.filter((r) => r.n > 0);
+  const sheetsAfter = new Map<string, SheetSpot[]>();
+  // Only for a range that reaches the sheets (they went live on 17 Nov 2026).
+  // Not under a source or device filter either: the sheets are read from PostHog, which those
+  // filters (on the database's runs) don't narrow, and an all-traffic row between filtered
+  // questions would read as theirs.
+  const allTraffic = !q || q.segment === "All traffic";
+  if (!first && !term && data.sheets.seen && allTraffic)
+    for (const spot of sheetSpots(rows)) {
+      const id = asked0[spot.after]!.id;
+      sheetsAfter.set(id, [...(sheetsAfter.get(id) ?? []), spot]);
+    }
+  // The sheets' figures for this funnel's own runs: begun in the range, in the order shown.
+  const sheetsSeen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
+  const sheetsKnown = sheetsSeen !== null;
+  // A column clicked becomes the first sort and the first becomes the second; the first clicked
+  // again goes back to survey order.
+  const pick = (k: FunnelKey) => {
+    if (first === k) {
+      setFirst(null);
+      setSecond(null);
+    } else {
+      setSecond(first);
+      setFirst(k);
+    }
+  };
+  const sortLabel = first
+    ? `${FUNNEL_SORT[first].label}${second ? `, then ${FUNNEL_SORT[second].label}` : ""}`
+    : "";
   const exitTitles = bucketTitles(data.range.from, data.range.to);
+  // The median time's bar, as drawn: one scale for the table, the slowest question a full bar.
+  const times = steps.flatMap((x) => (x.time === null ? [] : [x.time])).sort((a, b) => a - b);
+  const slowest = times[times.length - 1] ?? null;
+  const middle = times.length ? times[Math.floor(times.length / 2)]! : null;
   return (
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
@@ -924,25 +1056,19 @@ function FunnelSection({
         }
       />
       {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
+      {/* No note under it (Marcus, 10 Nov 2026): its info card explains the two orders. */}
       {order && q?.test && (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pills
-              label="Question order"
-              value={order}
-              onChange={onOrder}
-              options={[
-                { value: "survey", label: `Survey order · ${fmt("count", q.people)} runs` },
-                { value: "test", label: `Test order (C13) · ${fmt("count", q.test.people)} runs` },
-              ]}
-            />
-            <Info k="survey.order" />
-          </div>
-          <p className="m-0 text-xs leading-relaxed text-ap-muted">
-            Since 6 Oct 2026 half of new runs are asked the opening questions in a different order
-            (the C13 test). Each order has its own funnel, so the counts fall from one question to
-            the next.
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Pills
+            label="Question order"
+            value={order}
+            onChange={onOrder}
+            options={[
+              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
+              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
+            ]}
+          />
+          <Info k="survey.order" />
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-y border-ap-line py-3">
@@ -971,6 +1097,45 @@ function FunnelSection({
             className="min-h-11 w-full rounded-full border border-ap-ink/[0.18] bg-white pl-[38px] pr-4 text-sm text-ap-ink"
           />
         </label>
+        <div role="group" aria-label="Sort questions" className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
+            Sort by
+            <select
+              value={first ?? "order"}
+              onChange={(e) => {
+                const k = e.target.value === "order" ? null : (e.target.value as FunnelKey);
+                setFirst(k);
+                if (!k || k === second) setSecond(null);
+              }}
+              className="min-h-11 rounded-lg border border-ap-ink/[0.18] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ap-ink"
+            >
+              <option value="order">Survey order</option>
+              {FUNNEL_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {FUNNEL_SORT[k].option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
+            Then by
+            <select
+              value={second ?? "none"}
+              disabled={!first}
+              onChange={(e) =>
+                setSecond(e.target.value === "none" ? null : (e.target.value as FunnelKey))
+              }
+              className="min-h-11 rounded-lg border border-ap-ink/[0.18] bg-white px-3 text-sm font-medium normal-case tracking-normal text-ap-ink disabled:opacity-60"
+            >
+              <option value="none">No second sort</option>
+              {FUNNEL_KEYS.filter((k) => k !== first).map((k) => (
+                <option key={k} value={k}>
+                  {FUNNEL_SORT[k].option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="flex flex-wrap items-baseline gap-6">
           <span className="flex flex-col gap-0.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ap-label">
@@ -1009,177 +1174,238 @@ function FunnelSection({
         </div>
       </div>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 1180 }}>
+        <div role="table" aria-label="Survey question funnel" style={{ minWidth: 1228 }}>
           <div
             role="row"
             className="grid bg-ap-ground"
             style={{ gridTemplateColumns: FUNNEL_GRID }}
           >
             <Th label="#" />
-            <Th label="Question" sortKey="text" text sort={sort} onSort={setSort} />
-            <Th
+            <FunnelTh label="Question" k="text" first={first} second={second} onPick={pick} />
+            <FunnelTh
               label="Reached"
               info="survey.reached"
-              sortKey="reached"
-              sort={sort}
-              onSort={setSort}
+              k="reached"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
             <Th label="Funnel" info="survey.funnelBar" />
-            <Th
+            <FunnelTh
               label="% of start"
               info="survey.ofStart"
-              sortKey="ofStart"
-              sort={sort}
-              onSort={setSort}
+              k="ofStart"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
-            <Th
+            <FunnelTh
               label="% of prev."
               info="survey.ofPrev"
-              sortKey="ofPrev"
-              sort={sort}
-              onSort={setSort}
+              k="ofPrev"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
-            <Th
+            <FunnelTh
               label="Exits"
               info="survey.exits"
-              sortKey="exits"
-              sort={sort}
-              onSort={setSort}
+              k="exits"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
-            <Th
+            <FunnelTh
               label="Drop-out rate"
               info="survey.dropRate"
-              sortKey="drop"
-              sort={sort}
-              onSort={setSort}
+              k="drop"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
-            <Th
+            <FunnelTh
               label="Median time"
               info="survey.medianTime"
-              sortKey="time"
-              sort={sort}
-              onSort={setSort}
+              k="time"
+              first={first}
+              second={second}
+              onPick={pick}
               right
             />
             <Th label={`Exits per ${q?.trendGrain ?? "week"}`} info="survey.exitsTrend" />
           </div>
           {shown.map((x) => {
             const on = x.r.id === selected;
-            const dropRed = x.drop !== null && tenths(x.drop) > 50;
+            const dropRed = overFive(x.drop);
             // The picked row's purple tint leaves the brighter red under 4.5:1; its ink passes.
             const red = on ? "text-ap-bad-ink" : "text-ap-bad";
+            // The question's button stretches over its row, so a click anywhere on the row
+            // picks it while the table keeps its rows and cells for a screen reader.
             return (
-              // The question's button stretches over its row, so a click anywhere on the row
-              // picks it while the table keeps its rows and cells for a screen reader.
-              <div
-                key={x.r.id}
-                role="row"
-                className={`relative grid items-center border-t border-ap-line ${
-                  on
-                    ? "bg-ap-purple/10 shadow-[inset_3px_0_0_#795fc8]"
-                    : x.heavy
-                      ? "bg-ap-orange/[0.06] hover:bg-ap-ground"
-                      : "bg-white hover:bg-ap-ground"
-                }`}
-                style={{ gridTemplateColumns: FUNNEL_GRID }}
-              >
-                <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
-                  {x.r.n || ""}
-                </span>
-                <span role="rowheader" className="px-3 py-2">
-                  <button
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => {
-                      onSelect(x.r.id);
-                      document
-                        .getElementById("question-detail")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                    className="flex w-full cursor-pointer flex-col gap-px border-0 bg-transparent p-0 text-left font-[inherit] after:absolute after:inset-0"
-                  >
-                    <span
-                      className={`text-[13px] font-bold leading-snug ${on ? "text-ap-violet" : "text-ap-ink"}`}
-                    >
-                      {x.r.n === 0 && (
-                        <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
-                          not asked now
-                        </span>
-                      )}
-                      {x.r.n > 0 && x.r.newInRange && (
-                        <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
-                          added during the range
-                        </span>
-                      )}
-                      {x.text}
-                    </span>
-                    <span className="text-[11px] text-ap-muted">{x.r.id}</span>
-                  </button>
-                </span>
-                <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                  {fmt("count", x.reached)}
-                </span>
-                <span role="cell" className="px-3 py-2">
-                  <Bar pct={x.ofStart} height={12} />
-                </span>
-                <span
-                  role="cell"
-                  className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums"
+              <Fragment key={x.r.id}>
+                <div
+                  role="row"
+                  className={`relative grid items-center border-t border-ap-line ${
+                    on
+                      ? "bg-ap-purple/10 shadow-[inset_3px_0_0_#795fc8]"
+                      : x.heavy
+                        ? "bg-ap-orange/[0.06] hover:bg-ap-ground"
+                        : "bg-white hover:bg-ap-ground"
+                  }`}
+                  style={{ gridTemplateColumns: FUNNEL_GRID }}
                 >
-                  {fmt("pct", x.ofStart)}
-                </span>
-                <span
-                  role="cell"
-                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? `font-bold ${red}` : "text-ap-body"}`}
-                >
-                  {fmt("pct", x.ofPrev)}
-                </span>
-                <span
-                  role="cell"
-                  className="px-3 py-2 text-right text-[13px] font-bold tabular-nums"
-                >
-                  {fmt("count", x.exits)}
-                </span>
-                <span
-                  role="cell"
-                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? `font-bold ${red}` : "text-ap-body"}`}
-                >
-                  {fmt("pct", x.drop)}
-                </span>
-                <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                  {fmt("mmss", x.time)}
-                </span>
-                <span role="cell" className="px-3 py-2">
-                  {/* Over the row's button, the line only: the cell's edges still open the row. */}
-                  <span className="relative z-[1] block">
-                    <Spark
-                      values={x.r.exitsTrend}
-                      height={26}
-                      titles={exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined}
-                      name="Exits"
-                      focusable={false}
-                      // A tap reads the line; opening the question (and scrolling to it) is
-                      // the row's own tap, or a click here.
-                      tapReads
-                      onPick={() => {
+                  <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
+                    {x.r.n || ""}
+                  </span>
+                  <span role="rowheader" className="px-3 py-2">
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
                         onSelect(x.r.id);
                         document
                           .getElementById("question-detail")
                           ?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
-                    />
+                      className="flex w-full cursor-pointer flex-col gap-px border-0 bg-transparent p-0 text-left font-[inherit] after:absolute after:inset-0"
+                    >
+                      <span
+                        className={`text-[13px] font-bold leading-snug ${on ? "text-ap-violet" : "text-ap-ink"}`}
+                      >
+                        {x.r.n === 0 && (
+                          <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
+                            not asked now
+                          </span>
+                        )}
+                        {x.r.n > 0 && x.r.newInRange && (
+                          <span className="mr-1.5 rounded-full bg-ap-ground px-1.5 py-0.5 text-[10px] font-bold text-ap-muted">
+                            added during the range
+                          </span>
+                        )}
+                        {x.text}
+                      </span>
+                      <span className="text-[11px] text-ap-muted">{x.r.id}</span>
+                    </button>
                   </span>
-                </span>
-              </div>
+                  <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                    {fmt("count", x.reached)}
+                  </span>
+                  <span role="cell" className="px-3 py-2">
+                    <Bar pct={x.ofStart} height={12} />
+                  </span>
+                  <span
+                    role="cell"
+                    className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums"
+                  >
+                    {fmt("pct", x.ofStart)}
+                  </span>
+                  <span
+                    role="cell"
+                    className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? `font-bold ${red}` : "text-ap-body"}`}
+                  >
+                    {fmt("pct", x.ofPrev)}
+                  </span>
+                  <span
+                    role="cell"
+                    className="px-3 py-2 text-right text-[13px] font-bold tabular-nums"
+                  >
+                    {fmt("count", x.exits)}
+                  </span>
+                  <span
+                    role="cell"
+                    className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? `font-bold ${red}` : "text-ap-body"}`}
+                  >
+                    {fmt("pct", x.drop)}
+                  </span>
+                  <span
+                    role="cell"
+                    title={
+                      x.time === null || !slowest
+                        ? "No time recorded"
+                        : `${fmt("mmss", x.time)} median · ${fmt("pct", x.time / slowest)} of the slowest question (${fmt("mmss", slowest)}) · median of all questions ${fmt("mmss", middle)}`
+                    }
+                    className="flex items-center justify-end gap-2 px-3 py-2"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-1.5 w-12 flex-none justify-end overflow-hidden rounded-full bg-ap-track"
+                    >
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          width: `${x.time !== null && slowest ? ((x.time / slowest) * 100).toFixed(0) : 0}%`,
+                          background: x.time !== null && x.time === slowest ? "#5a42a6" : "#a99bd9",
+                        }}
+                      />
+                    </span>
+                    <span className="min-w-8 text-right text-[13px] tabular-nums">
+                      {fmt("mmss", x.time)}
+                    </span>
+                  </span>
+                  <span role="cell" className="px-3 py-2">
+                    {/* Over the row's button, the line only: the cell's edges still open the row. */}
+                    <span className="relative z-[1] block">
+                      <Spark
+                        values={x.r.exitsTrend}
+                        height={26}
+                        titles={
+                          exitTitles.length === x.r.exitsTrend.length ? exitTitles : undefined
+                        }
+                        name="Exits"
+                        focusable={false}
+                        // A tap reads the line; opening the question (and scrolling to it) is
+                        // the row's own tap, or a click here.
+                        tapReads
+                        onPick={() => {
+                          onSelect(x.r.id);
+                          document
+                            .getElementById("question-detail")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      />
+                    </span>
+                  </span>
+                </div>
+                {(sheetsAfter.get(x.r.id) ?? []).map((spot) => (
+                  <SheetFunnelRow
+                    key={spot.id}
+                    spot={spot}
+                    figures={sheetsSeen?.bySheet[spot.id]}
+                    known={sheetsKnown}
+                    from={data.sheets.from}
+                  />
+                ))}
+              </Fragment>
             );
           })}
         </div>
       </div>
+      {/* Said aloud when the sort changes: the table's rows move without a page change. */}
+      <p role="status" className="sr-only">
+        {first ? `Sorted by ${sortLabel}.` : "In survey order."}
+      </p>
+      {first && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ap-body">
+          <span>
+            Sorted by <strong>{sortLabel}</strong>. Sheets show only in survey order.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setFirst(null);
+              setSecond(null);
+            }}
+            className="min-h-11 cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-[13px] font-semibold text-ap-violet underline-offset-2 hover:underline"
+          >
+            Back to survey order
+          </button>
+        </div>
+      )}
       {term && shown.length === 0 && (
         <p className="m-0 text-sm text-ap-muted">No question matches “{search}”.</p>
       )}
@@ -1188,6 +1414,13 @@ function FunnelSection({
           {note}
         </p>
       ))}
+      {data.sheets.seen && !allTraffic && (
+        <p className="m-0 text-xs leading-relaxed text-ap-muted">
+          The sheets show between the questions with all traffic only: they are read from PostHog,
+          while the filters narrow the survey runs in our database. They are in the Sheets section
+          below.
+        </p>
+      )}
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
         Rows in orange lose more than 5% of the previous step. A question added during the range was
         asked only from the day it was added: its drop-out and skipped rates are over the runs asked
@@ -1195,6 +1428,226 @@ function FunnelSection({
         the last rows as drop-outs.
       </p>
     </Card>
+  );
+}
+
+/** The question funnel's sort keys, each in its one direction (Mark's Survey copy, 17 Nov 2026). */
+export type FunnelKey = "drop" | "time" | "exits" | "reached" | "ofStart" | "ofPrev" | "text";
+
+export const FUNNEL_KEYS: FunnelKey[] = [
+  "drop",
+  "time",
+  "exits",
+  "reached",
+  "ofStart",
+  "ofPrev",
+  "text",
+];
+
+export const FUNNEL_SORT: Record<FunnelKey, { label: string; option: string }> = {
+  drop: { label: "Drop-out rate", option: "Drop-out rate, highest first" },
+  time: { label: "Median time", option: "Median time, longest first" },
+  exits: { label: "Exits", option: "Exits, most first" },
+  reached: { label: "Reached", option: "Reached, most first" },
+  ofStart: { label: "% of start", option: "% of start, highest first" },
+  ofPrev: { label: "% of prev. (lowest first)", option: "% of prev., lowest first" },
+  text: { label: "Question (A–Z)", option: "Question, A–Z" },
+};
+
+type FunnelStep = { r: QuestionRow } & Record<FunnelKey, number | string | null>;
+
+/**
+ * A figure as the table shows it: a rate to a tenth of a percent, a time to the second. Two rows
+ * that read the same are tied, so the second key decides between them (Mark: "highest bounce,
+ * then highest median", 17 Nov; review, 22 Nov 2026: hidden decimals used to decide instead).
+ */
+const asShown = (k: FunnelKey, v: number) =>
+  k === "time"
+    ? Math.round(v / 1000)
+    : k === "drop" || k === "ofStart" || k === "ofPrev"
+      ? rateRank(v)
+      : v;
+
+/** Highest first, % of prev. lowest first, the question A to Z; a blank last whichever way. */
+function byKey(k: FunnelKey) {
+  return (a: FunnelStep, b: FunnelStep) => {
+    const x = a[k];
+    const y = b[k];
+    if (x === null) return y === null ? 0 : 1;
+    if (y === null) return -1;
+    if (k === "text") return String(x).localeCompare(String(y));
+    const [p, q] = [asShown(k, Number(x)), asShown(k, Number(y))];
+    return k === "ofPrev" ? p - q : q - p;
+  };
+}
+
+/**
+ * The funnel's rows by the first key, then the second, then in survey order (a question no
+ * longer asked last). No first key: survey order, as given.
+ */
+export function sortFunnel<T extends FunnelStep>(
+  steps: T[],
+  first: FunnelKey | null,
+  second: FunnelKey | null
+): T[] {
+  if (!first) return steps;
+  const one = byKey(first);
+  const two = second && second !== first ? byKey(second) : null;
+  const place = (x: T) => x.r.n || Number.POSITIVE_INFINITY;
+  return [...steps].sort((a, b) => one(a, b) || (two ? two(a, b) : 0) || place(a) - place(b));
+}
+
+/**
+ * A sortable heading of the question funnel: its button makes it the first sort (the old first
+ * becomes the second), or, as the first already, goes back to survey order. A small 1 or 2 says
+ * which sort it is.
+ */
+function FunnelTh({
+  label,
+  info,
+  k,
+  first,
+  second,
+  onPick,
+  right = false,
+}: {
+  label: string;
+  info?: string;
+  k: FunnelKey;
+  first: FunnelKey | null;
+  second: FunnelKey | null;
+  onPick: (k: FunnelKey) => void;
+  right?: boolean;
+}) {
+  const rank = first === k ? 1 : second === k ? 2 : 0;
+  const up = k === "ofPrev" || k === "text";
+  return (
+    <span
+      role="columnheader"
+      aria-sort={rank === 1 ? (up ? "ascending" : "descending") : "none"}
+      className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${right ? "text-right" : ""}`}
+    >
+      {label}
+      {info && (
+        <>
+          {" "}
+          <Info k={info} label={label} />
+        </>
+      )}
+      <button
+        type="button"
+        aria-pressed={rank > 0}
+        aria-label={`Sort by ${label}${rank ? `, now sort ${rank}` : ""}`}
+        title="Sort by this column. Click a second column to sort by it, then by this one."
+        onClick={() => onPick(k)}
+        className={`ml-0.5 ${ICON_BTN} ${rank === 1 ? "text-ap-violet" : rank === 2 ? "text-ap-purple" : "text-ap-muted"}`}
+      >
+        <SortIcon dir={rank ? (up ? 1 : -1) : null} />
+        {rank > 0 && (
+          <span aria-hidden="true" className="ml-px text-[10px] font-bold tabular-nums">
+            {rank}
+          </span>
+        )}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * A sheet's row between the questions (Mark, 17 Nov 2026): the sheet's own figures in the
+ * question columns. Reached: it opened; Exits: left with it open; Drop-out rate: its bounce
+ * rate; Median time: how long it stayed open; the last column its conversion, for the sheet
+ * with something to tap. A funnel share or a share of the step before means nothing for it.
+ */
+function SheetFunnelRow({
+  spot,
+  figures,
+  known,
+  from,
+}: {
+  spot: SheetSpot;
+  /** Missing: nobody met it in the range. */
+  figures: SheetFigures | undefined;
+  /** PostHog could be read: blanks otherwise, rather than noughts. */
+  known: boolean;
+  /** The day the sheets began, when the range starts earlier than they did. */
+  from: string | null;
+}) {
+  const meta = SHEET_NAMES[spot.id];
+  const bounce = sheetBounce(figures);
+  const count = (n: number | undefined) => (known ? fmt("count", n ?? 0) : "—");
+  return (
+    <div
+      role="row"
+      data-sheet={spot.id}
+      className="grid items-center border-t border-ap-line bg-ap-lilac/60"
+      style={{ gridTemplateColumns: FUNNEL_GRID }}
+    >
+      <span role="cell" className="px-3 py-2">
+        <SheetBadge n={spot.n} />
+      </span>
+      <span role="rowheader" className="flex flex-col gap-px px-3 py-2">
+        <span className="text-[13px] font-bold leading-snug text-ap-ink">
+          Sheet {spot.n} · {meta.name}
+        </span>
+        <a href="#sheets" className="text-[11px] font-semibold text-ap-violet">
+          Sheet {spot.where.charAt(0).toLowerCase() + spot.where.slice(1)}
+        </a>
+        {from && <span className="text-[11px] text-ap-muted">Counted from {from}</span>}
+      </span>
+      <span
+        role="cell"
+        title="Saw the sheet (it opened)"
+        className="px-3 py-2 text-right text-[13px] tabular-nums"
+      >
+        {count(figures?.saw)}
+      </span>
+      <span role="cell" className="px-3 py-2 text-xs text-ap-muted">
+        saw the sheet
+      </span>
+      <span role="cell" className="px-3 py-2 text-right text-[13px] text-ap-muted">
+        —
+      </span>
+      <span role="cell" className="px-3 py-2 text-right text-[13px] text-ap-muted">
+        —
+      </span>
+      <span
+        role="cell"
+        title="Left while the sheet was open"
+        className="px-3 py-2 text-right text-[13px] font-bold tabular-nums"
+      >
+        {count(figures?.leftOpen)}
+      </span>
+      <span
+        role="cell"
+        title="Bounce rate: left while the sheet was open, of those it opened for"
+        // The ink: the brighter red reads 4.49:1 on the sheet row's lilac (review, 22 Nov 2026).
+        className={`px-3 py-2 text-right text-[13px] tabular-nums ${overFive(bounce) ? "font-bold text-ap-bad-ink" : "text-ap-body"}`}
+      >
+        {fmt("pct", bounce)}
+      </span>
+      <span
+        role="cell"
+        title="Median time the sheet stayed open"
+        className="px-3 py-2 text-right text-[13px] tabular-nums"
+      >
+        {fmt("mmss", figures?.medianMs ?? null)}
+      </span>
+      <span
+        role="cell"
+        title={meta.tap ? "Conversion: share and number of taps on the sheet's box" : undefined}
+        className="flex flex-col gap-px px-3 py-2 text-[13px]"
+      >
+        {meta.tap && known && (
+          <>
+            <span className="font-semibold tabular-nums">
+              Conversion {fmt("pct", sheetConversion(figures))}
+            </span>
+            <span className="text-[11px] text-ap-muted">{clicks(figures?.ticked ?? 0)}</span>
+          </>
+        )}
+      </span>
+    </div>
   );
 }
 

@@ -22,7 +22,7 @@
  *   email_*                    — the email journeys' switches, one per new or redesigned email
  *                              (20261108230000; read default OFF: features/email-journeys)
  *   survey_sheet_*             — the sheets between survey questions, one per sheet (read
- *                              default OFF, no row needed: features/survey/logic/sheetSwitches.ts)
+ *                              default OFF, no row needed: features/survey/server/sheetSwitches.ts)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -105,6 +105,27 @@ async function fetchFlagRows(key: SystemFlagKey): Promise<Array<{ enabled: boole
   });
 }
 
+/** Several flags' rows in one request, or null when Supabase answered with an error. Throws when unreachable. */
+async function fetchFlagRowsFor(
+  keys: readonly SystemFlagKey[]
+): Promise<Array<{ key: string; enabled: boolean }> | null> {
+  const { url, serviceRoleKey } = getSupabaseConfig();
+  return getBreaker("supabase").fire(async () => {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/system_flags?key=in.(${keys.map(encodeURIComponent).join(",")})&select=key,enabled`,
+      {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        timeoutMs: FETCH_TIMEOUT_MS,
+      }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as Array<{ key: string; enabled: boolean }>;
+  });
+}
+
 async function fetchFlag(key: SystemFlagKey): Promise<boolean | null> {
   const rows = await fetchFlagRows(key);
   if (rows === null) return null;
@@ -147,6 +168,45 @@ export async function isFeatureEnabled(
     });
     return defaultWhenMissing;
   }
+}
+
+/**
+ * isFeatureEnabled for several flags with one request, into the same cache. The survey page reads
+ * its seven sheet switches on every render, and at our traffic their 30 s cache has usually run
+ * out, so seven reads meant seven connections: about 0.2 s more before the page's first byte on
+ * staging (17 Nov 2026). Each answer is isFeatureEnabled's: an environment override, the cached
+ * value, the row's value, or `defaultWhenMissing` for no row, an error answer or no answer.
+ */
+export async function areFeaturesEnabled(
+  keys: readonly SystemFlagKey[],
+  defaultWhenMissing = true
+): Promise<boolean[]> {
+  const now = Date.now();
+  const toRead = keys.filter((key) => {
+    const envOverride = process.env[`SYSTEM_FLAG_${key}`];
+    if (envOverride === "true" || envOverride === "false") return false;
+    const cached = cache.get(key);
+    return !(cached && cached.expiresAt > now);
+  });
+  if (toRead.length > 0) {
+    try {
+      const rows = await fetchFlagRowsFor(toRead);
+      const stored = new Map((rows ?? []).map((row) => [row.key, row.enabled]));
+      for (const key of toRead) {
+        cache.set(key, {
+          enabled: stored.get(key) ?? defaultWhenMissing,
+          expiresAt: now + CACHE_TTL_MS,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, keys: toRead }, "system_flags fetch failed - failing to default");
+      for (const key of toRead) {
+        cache.set(key, { enabled: defaultWhenMissing, expiresAt: now + FAIL_OPEN_TTL_MS });
+      }
+    }
+  }
+  // Every key is now cached or overridden, so these read no further.
+  return Promise.all(keys.map((key) => isFeatureEnabled(key, defaultWhenMissing)));
 }
 
 /** What readFeatureFlag read: the row's value, or null for no row. Failures are not kept. */

@@ -23,7 +23,8 @@ const run = (sessionId: string, startedAt: string, reached: string[]): DropoffRu
 // The range's first two runs went through to the end before 16019 was asked; the last one had
 // it: 16014 is reached by three, 16019 (next in today's order) by one, a fall to a third, but
 // 16019 was added in the range. The third run left on question 1, so 01002 really loses one.
-const every = askedQuestions(400).map((q) => q.qId);
+// In the old order: the runs began before the opening order test ended.
+const every = askedQuestions(400, "control").map((q) => q.qId);
 const before16019 = every.filter((id) => id !== "16019");
 const questions = buildSurveyQuestions(
   [
@@ -372,6 +373,66 @@ describe("the Survey page as drawn", () => {
     ).toHaveLength(1);
   });
 
+  it("intro: the design's reds follow the figure shown, to a tenth", () => {
+    // Skip intro is red from 15%, Exit from 8%: 14.6% and 7.6% are not; 14.96% reads "15.0%"
+    // and 7.96% reads "8.0%", so they are.
+    const cards = payload.intro.cards.map((c, i) =>
+      i === 1
+        ? { ...c, skip: 0.146, exit: 0.076 }
+        : i === 2
+          ? { ...c, skip: 0.1496, exit: 0.0796 }
+          : c
+    );
+    view.payload = { ...payload, intro: { ...payload.intro, cards } };
+    render(<ApSurvey />);
+    const intro = "Intro wizard cards";
+    const cell = (r: number, c: number) => within(rows(intro)[r]!).getAllByRole("cell")[c]!;
+    expect([cell(1, 4).textContent, cell(1, 6).textContent]).toEqual(["14.6%", "7.6%"]);
+    expect(cell(1, 4).className).not.toContain("text-ap-bad");
+    expect(cell(1, 6).className).not.toContain("text-ap-bad");
+    expect([cell(2, 4).textContent, cell(2, 6).textContent]).toEqual(["15.0%", "8.0%"]);
+    expect(cell(2, 4).className).toContain("font-bold text-ap-bad");
+    expect(cell(2, 6).className).toContain("font-bold text-ap-bad");
+  });
+
+  it("funnel: the orange and the red follow the figure shown, to a tenth", () => {
+    const built = buildSurveyQuestions(
+      [run("p", "2026-10-02T10:00:00Z", every)],
+      { steps: [], exits: [] },
+      "2026-10-01",
+      "2026-10-07",
+      "All traffic",
+      null
+    );
+    // 9,496 of 10,000 reads "95.0%" and 9,015 of 9,496 "94.9%": orange for more than 5% fewer
+    // only on the second. A drop-out of 5.04% reads "5.0%", 5.06% "5.1%": red above 5% only on
+    // the second.
+    const reached = [10_000, 9_496, 9_015];
+    const drop = [0.0504, 0.0506];
+    view.payload = {
+      ...payload,
+      questions: {
+        ...built,
+        rows: built.rows.map((r, i) => ({
+          ...r,
+          reached: reached[i] ?? 9_015,
+          dropRate: drop[i] ?? 0,
+        })),
+      },
+    };
+    render(<ApSurvey />);
+    const funnel = "Survey question funnel";
+    const cells = (id: string) =>
+      within(rows(funnel).find((r) => r.textContent!.includes(id))!).getAllByRole("cell");
+    expect(cells(every[1]!)[4]!.textContent).toBe("95.0%");
+    expect(cells(every[1]!)[4]!.className).not.toContain("text-ap-bad");
+    expect(cells(every[2]!)[4]!.textContent).toBe("94.9%");
+    expect(cells(every[2]!)[4]!.className).toContain("text-ap-bad");
+    expect(cells(every[0]!)[6]!.textContent).toBe("5.0%");
+    expect(cells(every[0]!)[6]!.className).not.toContain("text-ap-bad");
+    expect(cells(every[1]!)[6]!.textContent).toBe("5.1%");
+    expect(cells(every[1]!)[6]!.className).toContain("text-ap-bad");
+  });
   it("funnel: shades a real fall in a quiet range, though nobody reached it on the first day", () => {
     // Nobody began on 1 Oct. One run went to the end on the 2nd; one left on the 3rd after
     // question 31. Question 32 keeps one of the two, and was asked all along: shaded.

@@ -1,5 +1,8 @@
 /**
- * C13 — the first five questions. A 50/50 test of the survey's OPENING ORDER.
+ * C13 — the first five questions. A 50/50 test of the survey's OPENING ORDER, from
+ * 6 Oct 2026 to QUESTION_ORDER_TEST_END. Since then every new survey run is asked the
+ * new order (QUESTION_ORDER_WINNER). What follows describes the test while it ran, which is
+ * how its readouts still recompute each run's arm.
  *
  * The teardown's case: the current opening spends slots 3-7 on questions that
  * barely move the archetype, and one of them (`01006`, "Sex often hurts or feels
@@ -39,10 +42,10 @@
  * sd 3.30 — so it read as a solid, actionable result and was noise plus a bad
  * hash. Anyone running "last 30 days" would have shipped on it.
  *
- * NO SESSION ID MEANS CONTROL. When storage is blocked `getSessionId` returns
- * empty, and the submit path records nothing to slice by. Those respondents get
- * the current order rather than a silently unattributable variant — the same rule
- * `orderedOptions` follows when it declines to shuffle without a session id.
+ * NO SESSION ID MEANT CONTROL while the test ran. When storage is blocked `getSessionId`
+ * returns empty, and the submit path records nothing to slice by, so those respondents got
+ * the current order rather than a silently unattributable variant. Since the end they are
+ * asked the new order like everyone else.
  */
 
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
@@ -52,6 +55,19 @@ export type QuestionOrderArm = "control" | "variant";
 
 /** The experiment's key in `survey_submission.utm_tracker`. */
 export const QUESTION_ORDER_ARM_KEY = "question_order_arm";
+
+/**
+ * The test's end. Fatih and Mark called it on 20 Nov 2026 for the new order, on finishing: of
+ * the runs that reached question 3 from 6 Oct to 19 Nov, 46.3% finished in the new order
+ * against 42.2% in the current one (482 and 491 runs), so more people reach the EUR 1.99 page.
+ * Set just before the release merges, never after the moment it goes live: a run begun from
+ * here on is asked the new order, so the arm its session id recomputes to no longer says what
+ * it was shown, and it is outside every readout of the test.
+ */
+export const QUESTION_ORDER_TEST_END = "2026-11-21T11:43:00Z";
+
+/** The order every new survey run is asked since the test ended. */
+export const QUESTION_ORDER_WINNER = "variant" satisfies QuestionOrderArm;
 
 export function isQuestionOrderArm(value: unknown): value is QuestionOrderArm {
   return value === "control" || value === "variant";
@@ -77,12 +93,29 @@ export function resolveQuestionOrderOverride(
  */
 
 /**
- * This session's arm. Pure, deterministic and total: the same session id always
- * returns the same arm, and an absent one always returns control.
+ * The arm this session drew while the test ran. Pure, deterministic and total: the same
+ * session id always returns the same arm, and an absent one always returns control.
+ * Only for runs begun before QUESTION_ORDER_TEST_END: since the end nobody is dealt it
+ * (questionOrderArmAt).
  */
 export function assignQuestionOrderArm(sessionId: string | null | undefined): QuestionOrderArm {
   if (!sessionId?.trim()) return "control";
   return sessionArmHash(`c13-opening-order:${sessionId}`) % 2 === 0 ? "control" : "variant";
+}
+
+/**
+ * The order a run begun at `startedAtMs` was asked: the arm its session id drew while the
+ * test ran, the winner from the test's end on. For the server's stamp and the readouts; the
+ * survey itself decides a run's order once, in resolveDraftQuestionOrderArm. A start that is
+ * not a number reads as before the end.
+ */
+export function questionOrderArmAt(
+  sessionId: string | null | undefined,
+  startedAtMs: number
+): QuestionOrderArm {
+  return startedAtMs >= Date.parse(QUESTION_ORDER_TEST_END)
+    ? QUESTION_ORDER_WINNER
+    : assignQuestionOrderArm(sessionId);
 }
 
 /**
@@ -97,22 +130,46 @@ export function assignQuestionOrderArm(sessionId: string | null | undefined): Qu
  * held 260 unfinished drafts from the previous 14 days that were past the opening.
  *
  * So the arm a draft recorded wins. A draft with progress and no recorded arm predates C13
- * and stays in control. Only a fresh run (nothing answered, or only the landing card's
- * question) is bucketed by its session id. `useSurveyState` records the result in the
- * draft, so it is decided once per run.
+ * and stays in control. `useSurveyState` records the result in the draft, so it is decided
+ * once per run.
+ *
+ * A FRESH RUN (no arm recorded, and nothing answered or only the landing card's question) IS
+ * ASKED THE WINNER. While the test ran it was bucketed by its session id; since the end every
+ * new run gets the new order, whatever its id. A draft that recorded an arm during the test
+ * keeps it, even with nothing answered, for the same reason a draft from before C13 does.
  */
-export function resolveDraftQuestionOrderArm(
-  sessionId: string | null | undefined,
-  draft: {
-    orderArm?: unknown;
-    currentIndex: number;
-    answers: Readonly<Record<string, unknown>>;
-    prefilled: readonly string[];
-  }
-): QuestionOrderArm {
+export function resolveDraftQuestionOrderArm(draft: DraftOrder): QuestionOrderArm {
   if (isQuestionOrderArm(draft.orderArm)) return draft.orderArm;
-  const hasProgress =
+  return hasProgress(draft) ? "control" : QUESTION_ORDER_WINNER;
+}
+
+/** What a saved draft holds that decides its order. */
+type DraftOrder = {
+  orderArm?: unknown;
+  currentIndex: number;
+  answers: Readonly<Record<string, unknown>>;
+  prefilled: readonly string[];
+};
+
+/** A move past the first question, or an answer that is not the landing card's prefill. */
+function hasProgress(draft: DraftOrder): boolean {
+  return (
     draft.currentIndex > 0 ||
-    Object.keys(draft.answers).some((qId) => !draft.prefilled.includes(qId));
-  return hasProgress ? "control" : assignQuestionOrderArm(sessionId);
+    Object.keys(draft.answers).some((qId) => !draft.prefilled.includes(qId))
+  );
+}
+
+/**
+ * Whether a run opened over this draft begins now rather than at the draft's date: a fresh run
+ * (as above) dated before the test's end. That is a landing card answered back then, or a draft
+ * left untouched since before C13. It is asked the new order, but the server stamps a run's order
+ * from its start (questionOrderArmAt), so under its old date about half of them would be stamped
+ * with the arm their session drew. `useSurveyState` moves such a run's start to now.
+ */
+export function beginsNow(draft: DraftOrder & { startedAt: string }): boolean {
+  return (
+    !isQuestionOrderArm(draft.orderArm) &&
+    !hasProgress(draft) &&
+    Date.parse(draft.startedAt) < Date.parse(QUESTION_ORDER_TEST_END)
+  );
 }

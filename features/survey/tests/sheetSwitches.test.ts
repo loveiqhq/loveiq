@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const env = vi.hoisted(() => ({ nonProd: false, on: new Set<string>(), fail: false }));
 vi.mock("@shared/env/is-non-prod-deploy", () => ({ isNonProdDeploy: () => env.nonProd }));
 vi.mock("@shared/flags/system-flags", () => ({
-  isFeatureEnabled: async (key: string, fallback: boolean) => {
+  areFeaturesEnabled: async (keys: string[], fallback: boolean) => {
     if (env.fail) throw new Error("supabase down");
-    return env.on.has(key) ? true : fallback;
+    return keys.map((key) => (env.on.has(key) ? true : fallback));
   },
 }));
 

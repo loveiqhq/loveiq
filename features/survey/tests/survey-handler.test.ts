@@ -78,7 +78,8 @@ import {
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { DESIRE_SHEET_COPY_VERSION } from "@features/survey/surveySheetsCopy";
+import { QUESTION_ORDER_TEST_END, questionOrderArmAt } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
 
@@ -777,6 +778,75 @@ describe("POST /api/survey", () => {
     });
   });
 
+  // Eman's switch note on the State of Desire sheet: the tick is kept with its own consent.
+  // Mark sends the EUR 5 code by hand (17 Nov), so the record is all the server keeps.
+  describe("the State of Desire tick's own consent record", () => {
+    async function submit(extra: Record<string, unknown> = {}) {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+      const res = await POST(makeRequest({ ...validBody(), ...extra }));
+      expect(res.status).toBe(200);
+    }
+
+    const submissionPatches = () =>
+      mockFetchWithTimeout.mock.calls
+        .map((c) => ({
+          url: c[0] as string,
+          method: ((c[1] as { method?: string })?.method || "GET").toUpperCase(),
+          body: (c[1] as { body?: string })?.body ?? "",
+        }))
+        .filter((c) => c.url.includes("/rest/v1/survey_submission") && c.method === "PATCH")
+        .map((c) => JSON.parse(c.body) as Record<string, unknown>);
+    const tickPatch = () => submissionPatches().find((b) => "state_of_desire_opt_in_at" in b);
+
+    it("stamps when the box was ticked and under which words", async () => {
+      await submit({ stateOfDesireTicked: true });
+      expect(tickPatch()).toEqual({
+        state_of_desire_opt_in_at: expect.any(String),
+        state_of_desire_opt_in_version: DESIRE_SHEET_COPY_VERSION,
+      });
+      expect(DESIRE_SHEET_COPY_VERSION).toBe("2026-11-12");
+    });
+
+    it("keeps it out of the consent PATCH, which a missing column would otherwise refuse", async () => {
+      await submit({ stateOfDesireTicked: true });
+      const consent = submissionPatches().find((b) => "terms_version" in b);
+      expect(consent).toBeDefined();
+      expect(consent).not.toHaveProperty("state_of_desire_opt_in_at");
+      expect(consent).not.toHaveProperty("state_of_desire_opt_in_version");
+    });
+
+    it.each([
+      ["no tick", {}],
+      ["anything but true", { stateOfDesireTicked: "yes" }],
+    ])("stamps nothing for %s", async (_what, extra) => {
+      await submit(extra);
+      expect(tickPatch()).toBeUndefined();
+    });
+
+    it("still answers 200 when the stamp is refused (migration not applied)", async () => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+      mockFetchWithTimeout.mockImplementation(async (url: string, init?: { body?: string }) =>
+        (init?.body ?? "").includes("state_of_desire_opt_in_at")
+          ? {
+              ok: false,
+              status: 400,
+              text: async () => '{"code":"PGRST204","message":"Could not find the column"}',
+            }
+          : { ok: true, json: async () => [], text: async () => "" }
+      );
+      const res = await POST(makeRequest({ ...validBody(), stateOfDesireTicked: true }));
+      expect(res.status).toBe(200);
+      expect(tickPatch()).toBeDefined();
+      expect(submissionPatches().find((b) => "terms_version" in b)).toBeDefined();
+    });
+  });
+
   /**
    * The client clamps `durationMs` to 86_400_000, and since main's "a finished survey is
    * never stranded" fix the server clamps to the same bound instead of refusing past it
@@ -827,11 +897,15 @@ describe("POST /api/survey", () => {
      * `assignQuestionOrderArm`, so this also fails if the hash or the salt ever changes.
      * That is the intent: an arm assignment that shifts mid-experiment resplits everyone
      * and invalidates the comparison, so it must not pass quietly.
+     *
+     * Their runs began while the test ran. One begun from its end (QUESTION_ORDER_TEST_END)
+     * was asked the new order whatever its session drew, and is stamped so (below).
      */
     const ARM_FIXTURES = [
       { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
       { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
     ] as const;
+    const DURING_TEST = "2026-11-10T10:00:00.000Z";
 
     // Located by URL, not by index. An earlier draft of this block sat outside the
     // parent describe, so it missed that describe's `vi.resetAllMocks()` and read
@@ -860,6 +934,7 @@ describe("POST /api/survey", () => {
           makeRequest({
             ...validBody(),
             sessionId,
+            startedAt: DURING_TEST,
             utmTracker: JSON.stringify({ utm_source: "google" }),
           })
         );
@@ -867,18 +942,31 @@ describe("POST /api/survey", () => {
       }
     );
 
-    it("agrees with the pure function the client bucketed with", async () => {
-      // Same check from the other side: whatever the route stamps must equal what
-      // SurveyEngine computed from the same session id. A change to either that does not
-      // move the other is a silent desync between what was shown and what was recorded.
-      await POST(
-        makeRequest({
-          ...validBody(),
-          sessionId: SESSION,
-          utmTracker: JSON.stringify({ utm_source: "google" }),
-        })
+    it.each(ARM_FIXTURES)(
+      "stamps the new order on a run begun from the test's end, whatever it drew ($arm)",
+      async ({ sessionId }) => {
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            startedAt: QUESTION_ORDER_TEST_END,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).question_order_arm).toBe("variant");
+      }
+    );
+
+    it("agrees with the pure function the readouts use", async () => {
+      // Whatever the route stamps must equal what the readouts recompute from the same session
+      // id and start. A change to either that does not move the other is a silent desync. That
+      // it is also the order the reader was asked is checked on the client's side, against the
+      // same function (useSurveyState.test.ts, "C13 arm").
+      const body = { ...validBody(), sessionId: SESSION };
+      await POST(makeRequest({ ...body, utmTracker: JSON.stringify({ utm_source: "google" }) }));
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(
+        questionOrderArmAt(SESSION, Date.parse(body.startedAt))
       );
-      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(assignQuestionOrderArm(SESSION));
     });
 
     it("adds the arm to a tracker that already exists", async () => {
@@ -1006,6 +1094,8 @@ describe("POST /api/survey", () => {
         makeRequest({
           ...validBody(),
           sessionId: "00000000-0000-4000-8000-000000000007",
+          // Begun while the opening order test ran, so the arm is the one this session drew.
+          startedAt: "2026-11-10T10:00:00.000Z",
           utmTracker: snug,
         })
       );
