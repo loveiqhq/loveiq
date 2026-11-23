@@ -26,7 +26,6 @@ import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { tryPostJourneyViaBot } from "@features/attribution/server/journey-message";
-import { noteReaderReturn } from "@features/attribution/server/return-ping";
 import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
@@ -433,20 +432,9 @@ const notifySlackSurvey = async ({
     });
   }
 
-  // A survey begun on an earlier day was a draft they came back to finish: the one return a
-  // thread can only hear of now, the moment it exists (return-ping.ts). Kept for AP-Analytics
-  // whichever way the message went; only the bot's has a thread to reply in.
-  await noteReaderReturn({
-    submissionId,
-    source: "draft",
-    at: new Date(journey.timings.completedAt ?? Date.now()),
-    reader: {
-      finishedAt: journey.timings.completedAt,
-      startedAt: journey.timings.startedAt,
-      internal: journey.internal,
-      emailMasked: journey.emailMasked,
-    },
-  });
+  // Main also hands a survey begun on an earlier day to the "Came back" reply
+  // (features/attribution/server/return-ping.ts, report reactivations). Staging has neither that
+  // code nor its reader_return table until main is merged into staging, so it stops here.
 };
 
 export async function POST(request: Request) {
