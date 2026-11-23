@@ -32,6 +32,9 @@ import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
+import { OPTION_GROUPS } from "@features/survey/optionGroups";
+import { SURVEY_2_COPY } from "@features/survey/survey2/copy";
+import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 
 import { stagingCookies } from "../probes/staging-cookie.mjs";
 import personasFile from "./personas.json";
@@ -178,6 +181,21 @@ const BY_TEXT = new Map(
       : [[norm(q.question), q] as const, [norm(anonymous.question), anonymous] as const];
   })
 );
+// Survey 2.0's screens (behind the `survey_2` switch) where their heading is new: Mark's simpler
+// wording, the 16016 areas screen and the details screen. A heading both versions share stays
+// the classic question: its options are matched under either version's words (shownLabels).
+for (const s of orderAskedQuestions(surveyQuestions, "survey2"))
+  if (!BY_TEXT.has(norm(s.question))) BY_TEXT.set(norm(s.question), s);
+
+/**
+ * The words an option can be on screen under: its stored value, and Survey 2.0's simpler label
+ * for it where Mark reworded it (SURVEY_2_COPY). The walker reads a heading both versions share
+ * as the classic question, so it looks for either.
+ */
+export function shownLabels(q: SurveyQuestion, stored: string): string[] {
+  const relabel = q.optionLabels?.[stored] ?? SURVEY_2_COPY[q.qId]?.optionLabels?.[stored];
+  return relabel && relabel !== stored ? [stored, relabel] : [stored];
+}
 
 /**
  * Staging, or this machine when asked for explicitly. Never loveiq.org: a walk submits a
@@ -231,6 +249,17 @@ export function answerFor(
   email: string,
   firstName: string
 ): unknown {
+  // Survey 2.0's details screen: the five answers it writes, filled one field at a time.
+  if (q.answerType === "details")
+    return { name: firstName, email, optIn: answers["16015"], country: "Germany", postal: "10967" };
+  // Survey 2.0's areas screen (16016a, never submitted): the areas the persona's topics are in.
+  if (q.qId === "16016a") {
+    const topics = Array.isArray(answers["16016"]) ? (answers["16016"] as string[]) : [];
+    return (OPTION_GROUPS.get("16016") ?? [])
+      .filter((g) => g.options.some((o) => topics.includes(o)))
+      .map((g) => g.label)
+      .slice(0, 2);
+  }
   if (q.answerType === "open") {
     if (q.inputType === "email") return email;
     // The ZIP / postal code question: a Berlin postal code, not a name.
@@ -764,12 +793,32 @@ async function main(argv: string[]): Promise<number> {
       await record("cookie-banner");
       await banner.click();
     }
-    await button(/continue/i).click();
-    await page
-      .getByRole("heading", { name: /quality in → magic out/i })
-      .waitFor({ timeout: 20_000 });
+    // Survey 2.0 (behind its switch) opens on its short guide, three cards, in the intro's place.
+    const guide = await page
+      .getByRole("heading", { name: /three rules to increase your report quality/i })
+      .waitFor({ state: "visible", timeout: 3_000 })
+      .then(
+        () => true,
+        () => false
+      );
+    if (guide) {
+      for (let i = 1; i <= 3 && (await page.getByRole("checkbox").count()) < 2; i++) {
+        await record(`guide-${i}`);
+        await page
+          .getByRole("button", { name: /^continue/i })
+          .filter({ visible: true })
+          .first()
+          .click();
+        await page.waitForTimeout(900);
+      }
+    } else {
+      await button(/continue/i).click();
+      await page
+        .getByRole("heading", { name: /quality in → magic out/i })
+        .waitFor({ timeout: 20_000 });
+    }
     // The introduction slides, read the way a careful first-timer reads them.
-    for (let i = 1; i <= 8 && (await page.getByRole("checkbox").count()) < 2; i++) {
+    for (let i = 1; !guide && i <= 8 && (await page.getByRole("checkbox").count()) < 2; i++) {
       await record(`intro-${i}`);
       const next = page.getByRole("button", { name: /^continue|^next/i }).last();
       if (!(await next.isVisible().catch(() => false))) break;
@@ -1839,12 +1888,42 @@ async function answerQuestion(
       );
       const missing: string[] = [];
       for (const label of wanted) {
-        const i = labels.indexOf(label.replace(/\s+/g, " ").trim());
-        if (i === -1) missing.push(label);
+        // Under its stored words, or Survey 2.0's simpler ones (shownLabels).
+        const i = shownLabels(q, label)
+          .map((l) => labels.indexOf(l.replace(/\s+/g, " ").trim()))
+          .find((at) => at !== -1);
+        if (i === undefined) missing.push(label);
         else await pressChoice(page, cards.nth(i));
       }
       if (missing.length === wanted.length) await pressChoice(page, cards.first());
       return missing.length ? `option not on screen: ${missing.join(" | ")}` : undefined;
+    }
+    case "details": {
+      // Survey 2.0's details screen: one field at a time, each opened by Next; the last Next,
+      // which submits, is the walk's own.
+      const a = answer as { name: string; email: string; optIn: unknown; postal: string };
+      const country = (answer as { country: string }).country;
+      const next = page.getByRole("button", { name: /^next$/i });
+      await page.getByLabel("Name or nickname").fill(a.name);
+      await next.click();
+      await page.getByLabel("Email", { exact: true }).fill(a.email);
+      await next.click();
+      // The newsletter question, once there is an email: the persona's Yes or No. A No opens
+      // the "Sure you want to miss out?" sheet, where the persona keeps its No.
+      const yes = typeof a.optIn === "string" && a.optIn.trim().toLowerCase().startsWith("yes");
+      await page.getByRole("radio", { name: yes ? "Yes, keep learning" : "No, thanks" }).click();
+      const notNow = page.getByRole("button", { name: "Not now" });
+      if (
+        await notNow.waitFor({ state: "visible", timeout: 2_000 }).then(
+          () => true,
+          () => false
+        )
+      )
+        await notNow.click();
+      await page.getByPlaceholder(/search for a country/i).fill(country);
+      await page.getByRole("option", { name: country }).first().click();
+      await page.getByLabel(/^Postal code in/).fill(a.postal);
+      return a.optIn == null ? "no persona answer for the newsletter; said No" : undefined;
     }
     case "country":
       await page.getByPlaceholder(/search for a country/i).fill(String(answer));
