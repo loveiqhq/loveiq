@@ -1,3 +1,5 @@
+import { SURVEY_2_MINUTES } from "@features/survey/survey2/order";
+
 /**
  * Survey 2.0's short guide, in place of today's intro and its four slides: Mark's Pre Survey
  * Wizard, the row "Suggestion · 3 cards excl. future/past me" (canvas LcXv9Kc2vTQR1jGhacobak,
@@ -40,7 +42,7 @@ export const GUIDE_CARDS: readonly GuideCard[] = [
       },
       {
         title: "Stay to the end",
-        text: "It takes about 9 minutes from start to finish, question by question.",
+        text: `It takes about ${SURVEY_2_MINUTES} minutes from start to finish, question by question.`,
       },
     ],
   },
