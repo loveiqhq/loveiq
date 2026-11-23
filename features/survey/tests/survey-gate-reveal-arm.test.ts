@@ -183,4 +183,20 @@ describe("POST /api/survey — Mark's 50/50 of the new EUR 1.99 page", () => {
     });
     expect(trackerOnPayload()).toMatchObject({ gate_reveal_arm: "control" });
   });
+
+  // 23 Nov: a reader who came straight to /survey carries no campaign and no landing cookie, so
+  // only the first page's stamp starts their tracker. It ran after the arms, which never start
+  // one, so 6 of the 7 such finishers since 17 Nov had no half on record (#2889, #2891, #2894).
+  it("stamps the half for a reader who started on /survey with no tracker", async () => {
+    await submit(sessionIn("reveal"), { utmTracker: undefined, landingPath: "/survey" });
+    expect(trackerOnPayload()).toMatchObject({
+      landing_path: "/survey",
+      gate_reveal_arm: "reveal",
+    });
+  });
+
+  it("still starts no tracker just to hold the half", async () => {
+    await submit(sessionIn("reveal"), { utmTracker: undefined });
+    expect(trackerOnPayload()).toBeNull();
+  });
 });
