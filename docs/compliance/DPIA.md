@@ -954,6 +954,8 @@ to 5 or skipped, and an optional one-line note (`mira_journal_entry`, one row pe
 day). Health and sex-life data (Art. 9). Purposes: showing it back to the person (patterns, day by
 day), and, only on their explicit choice, Mira's context in a chat; counting use without ratings or
 words (AP › Mira's "Journal" card reads only who checked in on which day and today's settings).
+A check-in that couldn't be saved because the sign-in was lost stays in the browser tab's session
+storage for up to a day, kept for that account only, until the person signs back in (round 4).
 
 **Basis**: the account's explicit consent (LAWFUL_BASIS A26). "Let Mira read my journal" is a
 separate opt-in, off by default (the last 7 days' ratings join the person's context sent to
