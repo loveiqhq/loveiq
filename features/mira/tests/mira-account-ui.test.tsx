@@ -401,6 +401,43 @@ describe("A sign-in Mira refuses as under 18", () => {
   });
 });
 
+// Round 4 (R4-CORE-1, lead decision): a browser stopped as under 18 was still asked to sign up,
+// with the 18+ tick, and sent a code before the refusal. The sign-in page now refuses at once.
+describe("The sign-in page in a browser Mira stopped as under 18", () => {
+  const adultsOnly = () => screen.findByRole("heading", { name: "Mira is only for adults." });
+
+  for (const [how, props] of [
+    ["the stop's cookie", { minor: true }],
+    ["back from Google refused", { minor: true, googleResult: "minor" }],
+  ] as const) {
+    it(`asks for nothing: no form, no tick, no code (${how})`, async () => {
+      render(<SignUpFlow {...props} />);
+      await adultsOnly();
+      expect(screen.queryByLabelText("Email")).toBeNull();
+      expect(screen.queryByRole("checkbox")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Send me a code" })).toBeNull();
+      expect(screen.queryByRole("link", { name: /Google/ })).toBeNull();
+      expect(document.body.textContent).not.toMatch(/try again|18 years/i);
+      // Nobody signed in: nothing to manage in Settings.
+      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+    });
+  }
+
+  it("refuses at once when the code request answers that the browser is stopped", async () => {
+    replies["POST /api/mira/auth"] = () => ({
+      status: 403,
+      body: { error: "Mira is only for adults.", minor: true },
+    });
+    render(<SignUpFlow />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.co" } });
+    tickAll();
+    fireEvent.click(screen.getByRole("button", { name: "Send me a code" }));
+    await adultsOnly();
+    expect(screen.queryByRole("heading", { name: "Check your inbox" })).toBeNull();
+    expect(sessionStorage.getItem("mira.signin.code.v1")).toBeNull();
+  });
+});
+
 describe("Back to a Settings section after sign-in", () => {
   // A session email's link, /mira/settings#weekly, signed out: the page's redirect can't see the
   // hash, so it sends next=/mira/settings, and the browser keeps #weekly on the sign-in page.

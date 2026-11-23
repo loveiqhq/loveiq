@@ -854,7 +854,7 @@ export default function MiraChat({
               >
                 Home
               </Link>
-            ) : (
+            ) : minor ? null : (
               <Link
                 href="/mira/start"
                 className="ml-1.5 inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white min-[360px]:px-[18px]"

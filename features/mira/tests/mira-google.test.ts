@@ -225,6 +225,21 @@ describe("where a sign-in returns to (next)", () => {
     expect((await startPage({ google: "done", about: "1" })).props.minor).toBe(false);
     vi.mocked(getMiraAccount).mockResolvedValue(null);
   });
+
+  // R4-CORE-1: signed out, a stopped browser got the sign-up form, the 18+ tick and a code.
+  it("signed out on a browser Mira stopped as under 18: the page refuses at once, too", async () => {
+    const startPage = async (q: Record<string, string>) =>
+      (await MiraStartPage({ searchParams: Promise.resolve(q) })) as { props: { minor: boolean } };
+    jar.get.mockImplementation((name: string) =>
+      name === "mira_minor" ? { name, value: "1" } : undefined
+    );
+    expect((await startPage({})).props.minor).toBe(true);
+    expect((await startPage({ next: "/mira/goals" })).props.minor).toBe(true);
+    jar.get.mockReset();
+    expect((await startPage({})).props.minor).toBe(false);
+    // Google's callback refused a stopped browser.
+    expect((await startPage({ google: "minor" })).props.minor).toBe(true);
+  });
 });
 
 describe("GET /api/mira/auth/google", () => {

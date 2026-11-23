@@ -121,7 +121,10 @@ export default function SignUpFlow({
   googleEnabled?: boolean;
   googleResult?: string | null;
   needsAbout?: boolean;
-  /** Back from Google into an account this browser may not use: stopped as under 18 (rail 15). */
+  /**
+   * This browser or account is stopped as under 18 (rail 15; the page reads the stop's cookie and
+   * the account, and Google's refused return): the one refusal, and nothing to sign in or up with.
+   */
   minor?: boolean;
   /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
   next?: string | null;
@@ -138,8 +141,8 @@ export default function SignUpFlow({
     minor ? "minor" : backFromGoogle && needsAbout ? "about" : "account"
   );
   // On the under-18 refusal: whether a sign-in happened (a code or Google), so Settings can sign
-  // out or delete; a refused passkey signed nobody in.
-  const [minorSignedIn, setMinorSignedIn] = useState(minor);
+  // out or delete; a refused passkey or code request, or a stopped browser's visit, signed nobody in.
+  const [minorSignedIn, setMinorSignedIn] = useState(minor && backFromGoogle);
   const [email, setEmail] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -154,7 +157,9 @@ export default function SignUpFlow({
   const [gender, setGender] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(
-    googleResult && !backFromGoogle ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!) : null
+    googleResult && !backFromGoogle && !minor
+      ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!)
+      : null
   );
   const [notice, setNotice] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -265,6 +270,11 @@ export default function SignUpFlow({
       body: { action: "start", email, adult, terms, consent, website },
     });
     setBusy(false);
+    // This browser is stopped as under 18: the server sends no code (R4-CORE-1), the refusal shows.
+    if (res.minor) {
+      refusedAsMinor(false);
+      return false;
+    }
     // One went out minutes ago (the inbox's 10-minute wait): it still works, so on to its field.
     const sentBefore = res.status === 429 && res.data.codeSent === true && step === "account";
     if (!res.ok && !sentBefore) {
@@ -821,7 +831,7 @@ export default function SignUpFlow({
               </label>
               <p className="text-[13px] leading-relaxed text-ap-muted">
                 Mira sends a short daily nudge by email at 8:00 your time, picking up on your last
-                chat. You can change the time, pause or stop it anytime in Settings or from any
+                chat. You can change the time or pause it anytime in Settings, and stop it from any
                 nudge.
               </p>
               <PrimaryButton type="submit" disabled={busy}>

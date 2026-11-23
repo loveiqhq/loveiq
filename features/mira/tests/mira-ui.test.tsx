@@ -460,6 +460,8 @@ describe("Chat", () => {
     });
     render(<MiraChat signedIn={false} initialChatId={null} stopped />);
     expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    // No way to sign up or in from a stopped browser (R4-CORE-1).
+    expect(screen.queryByRole("link", { name: /Sign in|free account/ })).toBeNull();
     expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
     typeAndSend("hello");
     await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
