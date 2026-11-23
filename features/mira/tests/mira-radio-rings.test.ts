@@ -27,7 +27,7 @@ const FOCUS_VISIBLE_ONLY = /peer-focus-visible:|has-\[:focus-visible\]/;
 
 describe("a radio's focus ring", () => {
   it("is drawn on :focus in every group, so WebKit's arrow keys keep it", () => {
-    // Each group's ring is in these places; the nudges page is a stop page, another area's.
+    // Each group's ring is in these places.
     const groups: Record<string, (src: string) => string> = {
       "journal/CheckIn.tsx": (s) => fn(s, "Scale"),
       "CoachingStylePanel.tsx": (s) => s,
@@ -36,11 +36,11 @@ describe("a radio's focus ring", () => {
       "checks/CheckRunner.tsx": (s) => s,
       "reviews/ReviewAsk.tsx": (s) => s,
       "MiraSettings.tsx": (s) => fn(s, "ThemePicker") + fn(s, "Segmented"),
+      "MiraNudges.tsx": (s) => s,
     };
     const withRadios = files(UI)
       .filter((f) => readFileSync(f, "utf8").includes('type="radio"'))
       .map((f) => path.relative(UI, f))
-      .filter((f) => f !== "MiraNudges.tsx")
       .sort();
     // A new radio group joins the list, and so this check.
     expect(withRadios).toEqual(Object.keys(groups).sort());
