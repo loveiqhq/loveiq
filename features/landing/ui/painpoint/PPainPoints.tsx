@@ -5,8 +5,7 @@ import { PP_ACCENT, PP_CARD, PP_H2, PP_INNER } from "./ppStyles";
 
 /**
  * Six patterns in people's own words, each with what the report gives them (board "Pain
- * points"), on the pale grey band. Three across at 1440, one column on a phone, where an
- * intro line sits under the heading.
+ * points"), on the pale grey band. Three across at 1440, one column on a phone.
  */
 const PPainPoints: FC = () => (
   <section
@@ -20,9 +19,6 @@ const PPainPoints: FC = () => (
           <span className={PP_ACCENT}>{PAIN_POINTS.titleAccent}</span>
           {PAIN_POINTS.titleTail}
         </h2>
-        <p className="m-0 text-[16px] leading-[26px] text-[#3f3a4d] lg:hidden">
-          {PAIN_POINTS.intro}
-        </p>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5 lg:grid-cols-[repeat(auto-fit,minmax(320px,1fr))]">
         {PAIN_POINTS.cards.map((card) => (
