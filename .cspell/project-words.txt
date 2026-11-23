@@ -47,6 +47,7 @@ Sexualist
 Stripe
 Subprocessors
 Subresource
+Substack
 Supabase
 Svix
 TDDDG

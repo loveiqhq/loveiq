@@ -96,6 +96,10 @@ export const AI_PHRASES: Array<[label: string, re: RegExp]> = [
   ["symphony / dance of", /\b(?:symphony|dance of)\b/i],
   ["it's important to note", /\bit(?:'|’)?s important to note\b/i],
   ["ultimately", /\bultimately\b/i],
+  // Named in the house voice (Notion "Editorial voice", the loveiq-voice skill), 2026-11-23.
+  ["robust", /\brobust(?:ly|ness)?\b/i],
+  ["crucial", /\bcrucial(?:ly)?\b/i],
+  ["game-changer", /\bgame[- ]?chang(?:er|ers|ing)\b/i],
 ];
 
 /** Absolute claims. Judged outside quotation marks: people quoted saying "never" is fine. */

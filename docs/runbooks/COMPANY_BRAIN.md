@@ -66,7 +66,8 @@ and a test fails if a prompt names a tool that does not exist.
 Skills teach Claude how LoveIQ does a job, step by step, with Jarvis's tools.
 
 - **In claude.ai** (for everyone): `loveiq-copy-gate`, `loveiq-chapter-writer`,
-  `loveiq-numbers` and `loveiq-research`, in `docs/claude-ai-skills/`. Build the zips with
+  `loveiq-numbers`, `loveiq-research` and `loveiq-voice` (the house voice for everything
+  written), in `docs/claude-ai-skills/`. Build the zips with
   `npm run skills:pack`, then upload each in claude.ai under Organization settings, Plugins &
   skills, Add, Upload a skill, which installs it for every member. `PROJECT_INSTRUCTIONS.md`
   beside them is the text of the claude.ai Project LoveIQ, shared with the organization.

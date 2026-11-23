@@ -46,6 +46,26 @@ describe("checkCopy — the rules asked for in words", () => {
     expect(f.evidence).toEqual(["They move fast — then stop.", "Another one – here."]);
   });
 
+  it("reads a whole page's copy, never its scripts, styles or comments", () => {
+    // An artifact is a whole HTML page. Its CSS and JS comments are code, not copy.
+    const page =
+      "<html><head><style>/* header — top */ @media (orientation: landscape) {}</style>" +
+      "<script>// navigate here — always first\nconst a = 1;</script></head>" +
+      "<body><!-- note — draft --><h1>Your report</h1><p>Your answers are ready to read.</p>" +
+      "</body></html>";
+    const r = checkCopy({ text: page });
+    expect(r.findings.map((f) => f.kind)).toEqual([]);
+    expect(r.words).toBe(8);
+  });
+
+  it("flags the three phrases the house voice names, robust, crucial and game-changer", () => {
+    const r = checkCopy({ text: "A robust plan is crucial. It is a game-changer for us." });
+    const msg = r.findings.find((f) => f.kind === "ai-phrase")?.message ?? "";
+    expect(msg).toContain('"robust" ×1');
+    expect(msg).toContain('"crucial" ×1');
+    expect(msg).toContain('"game-changer" ×1');
+  });
+
   it("reports machine-written phrases as one finding with a count for each", () => {
     const r = checkCopy(
       {

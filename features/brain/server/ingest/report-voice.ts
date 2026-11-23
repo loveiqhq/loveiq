@@ -29,9 +29,15 @@ import { syncSource, type BrainRow, type IngestResult } from "./upsert";
  */
 const SOURCE = "report";
 
-/** Readable text out of the stored HTML, with the heading structure kept as line breaks. */
+/**
+ * Readable text out of the stored HTML, with the heading structure kept as line breaks.
+ * Scripts, styles and comments are dropped whole: they are code, not copy, and check_copy
+ * reads whole pages too (an artifact's CSS comment is not a dash in its copy).
+ */
 export function htmlToText(html: string): string {
   return html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<\s*(h[1-6]|p|li|br|div|tr)\b[^>]*>/gi, "\n")
     .replace(/<\s*\/\s*(h[1-6]|p|li|div|tr|ul|ol|table)\s*>/gi, "\n")
     .replace(/<[^>]+>/g, "")

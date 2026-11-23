@@ -2680,15 +2680,17 @@ export const TOOLS = [
   },
   {
     name: "check_copy",
-    title: "Check report copy against the house rules",
+    title: "Check copy against the house rules",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "Checks report copy against the rules set for every chapter, in code, and prints the " +
-      "sentence behind each finding: no em dashes, no phrases that read as machine-written, no " +
-      "absolute claims, a plain reading level, length against the shipped chapter, no line that " +
-      "would fit every archetype, no line lifted from another chapter, and the chapter's own " +
-      "shipped voice (person, sentence length, headings). Pass `text` for a draft, with its " +
-      "`chapter` and `archetype` when known. Leave `text` out and pass both to audit the copy " +
+      "Checks copy against the house rules, in code, and prints the sentence behind each " +
+      "finding: no em dashes, no phrases that read as machine-written, no absolute claims, a " +
+      "plain reading level, no line lifted from a report chapter. Any text works: an artifact " +
+      "(its scripts and styles are skipped), an email, a page, a post, a Slack message. For a " +
+      "report chapter it also checks length against the shipped chapter, no line that would fit " +
+      "every archetype, and the chapter's own shipped voice (person, sentence length, " +
+      "headings). Pass `text` for a draft, with its `chapter` and `archetype` when it is report " +
+      "copy. Leave `text` out and pass both to audit the copy " +
       "that already shipped. It checks wording, not meaning: whether a claim is backed by " +
       "research still needs reading.",
     inputSchema: {
@@ -8208,6 +8210,10 @@ export const MCP_INSTRUCTIONS =
   "fields such as a Notion task's status or assignee. " +
   "Scores are not comparable between questions, so read the text rather than " +
   "thresholding on the number, and when two sources conflict prefer the later date.\n\n" +
+  "HOW WE WRITE: in LoveIQ's house voice, the loveiq-voice skill. For the team (an " +
+  "artifact, a Slack message, a doc), the result, decision or ask goes first, then only " +
+  "what's new. For users, the reader comes first, in plain words. Run check_copy on what " +
+  "you write before you call it ready.\n\n" +
   "EXACT TEXT: find_text lists every record holding an exact link or web address, email " +
   "address, phone, invoice or id number, or name, newest first with the line it is on and the " +
   "true total. Use it for anything exact: search ranks by meaning and never promises every " +
