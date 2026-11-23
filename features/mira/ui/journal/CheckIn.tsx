@@ -370,7 +370,7 @@ function Scale({
               onClick={() => value === i + 1 && onChange(null)}
               className="peer sr-only"
             />
-            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-field bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-ap-field bg-white text-[15px] font-semibold tabular-nums text-ap-ink transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-purple peer-checked:text-white peer-focus:outline peer-focus:outline-2 peer-focus:outline-offset-2 peer-focus:outline-ap-purple motion-safe:peer-checked:scale-[1.06] sm:h-12 sm:w-12">
               {i + 1}
             </span>
           </label>

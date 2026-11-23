@@ -1184,7 +1184,7 @@ function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: Theme) =
             onChange={() => onChange(theme)}
             className="peer sr-only"
           />
-          <span className="relative block overflow-hidden rounded-2xl ring-1 ring-ap-line transition-shadow duration-200 group-hover:ring-ap-quiet peer-checked:ring-2 peer-checked:ring-ap-purple peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple">
+          <span className="relative block overflow-hidden rounded-2xl ring-1 ring-ap-line transition-shadow duration-200 group-hover:ring-ap-quiet peer-checked:ring-2 peer-checked:ring-ap-purple peer-focus:outline peer-focus:outline-2 peer-focus:outline-offset-2 peer-focus:outline-ap-purple">
             <ThemePreview palette={theme === "dark" ? tokens.MIRA_DARK : tokens.AP_LIGHT} />
             {theme === "system" ? (
               <span className="absolute inset-0 [clip-path:polygon(58%_0,100%_0,100%_100%,42%_100%)]">
@@ -1243,7 +1243,7 @@ function Segmented<T extends string>({
             onChange={() => onChange(v)}
             className="peer sr-only"
           />
-          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ap-purple">
+          <span className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-full px-2 text-[14px] sm:px-4 text-ap-muted transition-[background-color,color] duration-200 hover:text-ap-ink peer-checked:bg-ap-ink peer-checked:font-semibold peer-checked:text-white peer-focus:outline peer-focus:outline-2 peer-focus:outline-ap-purple">
             <span
               aria-hidden="true"
               className="hidden font-serif sm:inline"
