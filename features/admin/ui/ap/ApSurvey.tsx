@@ -251,6 +251,37 @@ export default function ApSurvey() {
                       })),
                     },
                   },
+                  ...(data.guide
+                    ? [
+                        {
+                          name: "Short guide (Survey 2.0)",
+                          table: {
+                            columns: [
+                              { label: "Card", unit: "text" as const },
+                              { label: "Median time", unit: "mmss" as const },
+                              { label: "Reached", unit: "count" as const },
+                              { label: "Share of the first card", unit: "pct" as const },
+                              { label: "Continue", unit: "pct" as const },
+                              { label: "Skip intro", unit: "pct" as const },
+                              { label: "Back", unit: "pct" as const },
+                              { label: "Exit", unit: "pct" as const },
+                            ],
+                            rows: data.guide.cards.map((c, i) => ({
+                              label: `${i + 1} · ${c.name}`,
+                              values: [
+                                c.medianMs,
+                                c.reached,
+                                c.reachedShare,
+                                c.cont,
+                                c.skip,
+                                c.back,
+                                c.exit,
+                              ],
+                            })),
+                          },
+                        },
+                      ]
+                    : []),
                 ],
                 data.tiles
               )
@@ -379,6 +410,7 @@ export default function ApSurvey() {
           </Card>
 
           <IntroSection data={data} />
+          {data.guide && <GuideSection data={data} cards={data.guide.cards} />}
         </Busy>
       )}
     </>
@@ -608,6 +640,92 @@ function IntroSection({ data }: { data: SurveyPayload }) {
           </div>
           {sortRows(cards, sort).map((card) => (
             <IntroRow key={card.n} card={card} from={data.intro.recordedFrom} />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Survey 2.0's short guide (Mark's Pre Survey Wizard): its three cards and its consent, as the
+ * intro's table shows the intro's, for the runs that saw it. Recorded from its first day, so no
+ * PostHog fallback and no engagement column.
+ */
+function GuideSection({ data, cards }: { data: SurveyPayload; cards: IntroCard[] }) {
+  const [sort, setSort] =
+    useState<Sort<"time" | "reachedShare" | "cont" | "skip" | "back" | "exit">>(null);
+  const rows: IntroRowData[] = cards.map((card, i) => ({
+    ...card,
+    n: i + 1,
+    time: card.medianMs,
+    eng: "—",
+  }));
+  return (
+    <Card id="guide" labelledBy="h-guide">
+      <SectionHead
+        id="h-guide"
+        title="Short guide (Survey 2.0)"
+        info="survey.guide"
+        description="The cards Survey 2.0 shows in the intro's place, for the runs that saw them. Their consent row is theirs alone; the intro's leaves them out."
+      />
+      <AllTraffic note={data.narrowed} />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Short guide cards" style={{ minWidth: 1040 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: INTRO_GRID }}>
+            <Th label="#" />
+            <Th label="Card" />
+            <Th
+              label="Median time"
+              info="survey.wizTime"
+              sortKey="time"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Reached"
+              info="survey.wizReached"
+              sortKey="reachedShare"
+              sort={sort}
+              onSort={setSort}
+            />
+            <Th
+              label="Continue"
+              info="survey.wizContinue"
+              sortKey="cont"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Skip intro"
+              info="survey.wizSkip"
+              sortKey="skip"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Back"
+              info="survey.wizBack"
+              sortKey="back"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Exit"
+              info="survey.wizExit"
+              sortKey="exit"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th label="Engagement on card" />
+          </div>
+          {sortRows(rows, sort).map((card) => (
+            <IntroRow key={card.n} card={card} from={null} />
           ))}
         </div>
       </div>
