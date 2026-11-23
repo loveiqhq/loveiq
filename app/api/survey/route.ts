@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
 import {
+  isSurvey2Run,
   QUESTION_ORDER_ARM_KEY,
   questionOrderArmOfSubmission,
 } from "@shared/experiments/questionOrderArm";
@@ -710,6 +711,7 @@ export async function POST(request: Request) {
       optionOrder,
       marketingOptIn,
       marketingOptInVia,
+      survey2: isSurvey2Run(Object.keys(answers)),
       stateOfDesireTicked: stateOfDesireTicked === true,
     });
     const tSubmit = performance.now();
