@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
-import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyControls from "./SurveyControls";
 import SurveyJumpMenu from "./SurveyJumpMenu";
@@ -39,7 +38,7 @@ import {
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
-import { EMAIL_QID, OPT_IN_QID, orderAskedQuestions } from "./questionOrder";
+import { askedScreens, EMAIL_QID, OPT_IN_QID } from "./questionOrder";
 import {
   forgetOptInSheetShown,
   isOptInYes,
@@ -323,10 +322,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
     () =>
-      orderAskedQuestions(surveyQuestions, orderArm)
-        .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId))
-        .map((q) => applyEmailQuestionArm(q, emailArm)),
+      askedScreens(surveyQuestions, orderArm, prefilledKey.split(",")).map((q) =>
+        applyEmailQuestionArm(q, emailArm)
+      ),
     [prefilledKey, orderArm, emailArm]
   );
   const totalQuestions = orderedQuestions.length;

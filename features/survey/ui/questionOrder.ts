@@ -1,6 +1,7 @@
 import { optionGroupsFor, type OptionGroup } from "@features/survey/optionGroups";
-import { isRandomised } from "@features/survey/questionFlags";
+import { isHidden, isRandomised } from "@features/survey/questionFlags";
 import { SURVEY_2_ONLY_QIDS, type QuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import { survey2Screens } from "@features/survey/survey2/steps";
 
 import type { SurveyQuestion } from "@/data/survey-data";
 
@@ -220,6 +221,9 @@ export function orderAskedQuestions(
   questions: SurveyQuestion[],
   arm: QuestionOrderArm
 ): SurveyQuestion[] {
+  // Survey 2.0 is its own list of screens (features/survey/survey2), never derived from the
+  // classic pipeline below.
+  if (arm === "survey2") return survey2Screens(questions);
   // The questions only Survey 2.0 asks never reach a classic order: these lists are what a
   // classic draft resumes under, by saved position, so they must not grow.
   const classic = questions.filter((q) => !SURVEY_2_ONLY.has(q.qId));
@@ -230,6 +234,22 @@ export function orderAskedQuestions(
 }
 
 const SURVEY_2_ONLY: ReadonlySet<string> = new Set(SURVEY_2_ONLY_QIDS);
+
+/**
+ * The screens a run is actually shown, in order: the asked order for its arm, without hidden
+ * questions or the ones a landing card already answered (they are kept in the answers and scored
+ * like the rest; only where they are asked moves). The engine's list, so "Question X of N",
+ * the sheets and the saved position all count the same screens.
+ */
+export function askedScreens(
+  questions: SurveyQuestion[],
+  arm: QuestionOrderArm,
+  prefilled: readonly string[]
+): SurveyQuestion[] {
+  return orderAskedQuestions(questions, arm)
+    .filter((q) => !isHidden(q.qId))
+    .filter((q) => !prefilled.includes(q.qId));
+}
 
 /**
  * FNV-1a, 32-bit. Turns a seed string into an integer for `mulberry32`.
