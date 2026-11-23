@@ -255,6 +255,37 @@ describe("The roster (/mira/coaches)", () => {
     }
   });
 
+  // R4-HABITS-4: a Stop waiting for its slow Notify was lost when the page reloaded or closed
+  // first, and the request stayed stored.
+  it("sends a waiting Stop as the page goes, kept alive past it, and never twice", async () => {
+    let release = () => undefined as void;
+    const held = new Promise<void>((done) => (release = done));
+    const usual = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (url === "/api/mira/event" && String(init.body).includes('"notify"')) await held;
+      return usual(url, init);
+    });
+    const deletes = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    try {
+      render(<CoachRoster />);
+      fireEvent.click(await screen.findByRole("button", { name: "Notify me when Elif is ready" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop notifying me about Elif" }));
+      await act(() => new Promise((r) => setTimeout(r, 30)));
+      expect(deletes()).toEqual([]);
+      // A reload or a closed tab: the Stop goes now, as a request that outlives the page.
+      window.dispatchEvent(new Event("pagehide"));
+      expect(deletes().map(([url, init]) => [url, init?.keepalive])).toEqual([
+        ["/api/mira/coaches?notify=elif", true],
+      ]);
+      // Back from the back/forward cache: the Notify answers, and the Stop isn't sent again.
+      release();
+      expect(await screen.findByText("Stopped. We won’t contact you about Elif.")).toBeTruthy();
+      expect(deletes()).toHaveLength(1);
+    } finally {
+      fetchMock.mockImplementation(usual);
+    }
+  });
+
   it("finds a challenge in two taps and is honest that the coach isn't here yet", async () => {
     render(<CoachRoster />);
     fireEvent.click(screen.getByRole("button", { name: "Not sure? Find my challenge" }));
