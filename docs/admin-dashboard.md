@@ -16,8 +16,8 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 
 ## Access Model
 
-- Sign-in is by magic link. [`/admin/login`](../app/admin/login/page.tsx) renders [`AdminLoginForm`](../features/admin/ui/AdminLoginForm.tsx) in AP's light design and posts to [`POST /api/admin/login`](admin-api.md#sign-in-gdpr-submissions-and-kill-switch), which sends a link only to an address in `admin_users`.
-- The link opens [`/admin/auth/callback`](../app/admin/auth/callback/route.ts), which sets the session and lands on `/admin/ap`.
+- Sign-in is by one team password (since 22 Nov 2026), as on staging's `/login`. [`/admin/login`](../app/admin/login/page.tsx) renders [`AdminLoginForm`](../features/admin/ui/AdminLoginForm.tsx) in AP's light design and posts to [`POST /api/admin/login`](admin-api.md#sign-in-gdpr-submissions-and-kill-switch), where Supabase Auth checks it as the password of the team account (`ap-team@loveiq.org`, an admin in `admin_users`). Everyone signed in is that account: roles, the audit log and saved filters are its. A sign-in never ends the other sessions.
+- An operator's one-time link (minted with the service key, never emailed) opens [`/admin/auth/callback`](../app/admin/auth/callback/route.ts), which sets the session and lands on `/admin/ap`.
 - `proxy.ts` sends a signed-out visitor to `/admin/login`, and after 30 minutes without activity to `/admin/login?error=idle_timeout`, where the form says why.
 - API routes check the session again through [`verifyAdminSession()`](../features/admin/server/auth.ts) and map the email to its role in `admin_users`. The role hierarchy lives in [`features/admin/server/roles.ts`](../features/admin/server/roles.ts): `viewer`, `editor`, `admin`.
 - "Sign out" in AP's sidebar posts to [`/api/admin/logout`](../app/api/admin/logout/route.ts) with a CSRF token, then returns to `/admin/login`.
@@ -44,16 +44,27 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 | Survey                 | `/admin/ap/assessment-a/survey`          | [`ApSurvey.tsx`](../features/admin/ui/ap/ApSurvey.tsx)                 | `GET /api/admin/ap/survey`, `GET /api/admin/ap/survey/answers`                    |
 | Report                 | `/admin/ap/assessment-a/report`          | [`ApReport.tsx`](../features/admin/ui/ap/ApReport.tsx)                 | `GET /api/admin/ap/report`                                                        |
 | Payment                | `/admin/ap/assessment-a/payment`         | [`ApPayment.tsx`](../features/admin/ui/ap/ApPayment.tsx)               | `GET /api/admin/ap/payment`                                                       |
-| Pay to start           | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
+| Funnel and paywall     | `/admin/ap/assessment-a/pay-to-start`    | [`ApPayToStart.tsx`](../features/admin/ui/ap/ApPayToStart.tsx)         | `GET /api/admin/ap/pay-to-start`                                                  |
 | Unlock feedback        | `/admin/ap/assessment-a/unlock-feedback` | [`ApUnlockFeedback.tsx`](../features/admin/ui/ap/ApUnlockFeedback.tsx) | `GET /api/admin/ap/unlock-feedback`                                               |
 | Mira (beta)            | `/admin/ap/mira`                         | [`ApMira.tsx`](../features/admin/ui/ap/ApMira.tsx)                     | `GET /api/admin/ap/mira`                                                          |
 | Emails (Assessment A)  | `/admin/ap/assessment-a/emails`          | [`ApEmails.tsx`](../features/admin/ui/ap/ApEmails.tsx)                 | `GET /api/admin/ap/emails?scope=assessment`                                       |
 | Catalog (data sources) | `/admin/ap/sources`                      | [`ApSources.tsx`](../features/admin/ui/ap/ApSources.tsx)               | `GET`/`PUT /api/admin/ap/catalog`, `GET /api/admin/ap/catalog/rows`               |
 | Raw data explorer      | `/admin/ap/explorer`                     | [`ApExplorer.tsx`](../features/admin/ui/ap/ApExplorer.tsx)             | `GET /api/admin/ap/explorer`, `POST /api/admin/ap/explorer/unlock`, saved filters |
 
-Pay to start sets each funnel's steps out as funnel bands, with the market's reference rate
+Funnel and paywall is the Pay to start page, renamed by Marcus on 19 Nov 2026 when pay to start
+was paused. The running paywall test (#11) sits on top, with the same readout as Payment's. Under
+it, the free funnel before the paywall (1–22 Oct 2026, whatever the range) and the €1.99 page's
+funnel over the range: each funnel's steps as funnel bands, with the market's reference rate
 beside ours where a source exists (named under the cards), its money with profit per paying
-customer and per survey completion (Traffic's formula), and an info card on every figure.
+customer and per survey completion (Traffic's formula), and an info card on every figure. The
+pay-to-start funnels are still built (`payToStartFor`) for the Dashboard and Landing.
+
+Survey shows Mark's sheets between the questions (his Survey copy board, 17–18 Nov 2026): a
+Sheets section above the demographics, each sheet's row in the question funnel (in survey order),
+and numbered pins on the time and drop-out charts. Their figures come from the sheets' own PostHog
+events (`survey_sheet_shown`, `survey_sheet_closed`), sent by every browser that doesn't block
+PostHog. The
+question funnel sorts by two columns, and Question detail has a question dropdown.
 Landing's pay-to-start table counts "Started survey" from `prepaid_report_access.survey_started_at`,
 recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its
 keywords' spend, cost per survey, payment rate and revenue per survey.
@@ -115,7 +126,7 @@ charts, their axes and the info texts all go through `fmt("pct")` in
 - Admin auth utility: [`features/admin/tests/admin-auth-lib.test.ts`](../features/admin/tests/admin-auth-lib.test.ts)
 - Admin login route: [`features/admin/tests/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts)
 - Sign-in form: [`features/admin/tests/AdminLoginForm.test.tsx`](../features/admin/tests/AdminLoginForm.test.tsx)
-- Magic-link callback: [`features/admin/tests/admin-auth-callback.test.ts`](../features/admin/tests/admin-auth-callback.test.ts)
+- Password sign-in: [`features/admin/tests/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts); one-time link callback: [`features/admin/tests/admin-auth-callback.test.ts`](../features/admin/tests/admin-auth-callback.test.ts)
 - AP route guard and explorer routes: [`features/admin/tests/ap-routes.test.ts`](../features/admin/tests/ap-routes.test.ts)
 - Shared admin fetch hook: [`features/admin/tests/admin-hooks/useAdminFetch.test.ts`](../features/admin/tests/admin-hooks/useAdminFetch.test.ts)
 - End-to-end sign-in page and signed-out redirect: [`e2e/admin.spec.ts`](../e2e/admin.spec.ts)

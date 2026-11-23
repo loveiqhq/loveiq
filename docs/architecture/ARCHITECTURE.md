@@ -12,7 +12,7 @@
 - Server-side rendering for pages, client components for interactivity
 - Route handlers under `app/api/` for everything that writes. Public form routes check CSRF (double-submit cookie), rate limit and validate with Zod; webhooks check a signature; scheduled-job routes check a bearer secret
 - Rate limits live in Upstash Redis (Vercel KV), with an in-memory fallback when no store is configured (local development, and the staging project, which has none on purpose)
-- No end-user accounts: a report opens through its private link. Staff sign in to AP-Analytics with a Supabase Auth magic link, limited to the `admin_users` email allowlist
+- No end-user accounts: a report opens through its private link. Staff sign in to AP-Analytics with one team password (since 2026-11-22), checked by Supabase Auth as the password of the team account in the `admin_users` allowlist
 - Payments are settled by signed Stripe webhooks, never by the browser
 - Feature switches (the `system_flags` table) turn a feature on or off without a release
 - Scheduled jobs (Vercel Cron, see `vercel.json`) send reminders, import company data and post digests
@@ -302,7 +302,7 @@ Not exhaustive: every page is an `app/**/page.tsx`.
 - `/trust-zone` - `app/trust-zone/page.tsx`
 - `/login` - `app/login/page.tsx` → Staging login
 - `/admin/ap` - `app/admin/ap/page.tsx` → AP-Analytics Dashboard (Supabase Auth protected), with its other pages under `app/admin/ap/`; since 2026-10-16 the admin is AP-Analytics only, and `/admin` and the old admin pages redirect here
-- `/admin/login` - `app/admin/login/page.tsx` → Admin magic link login
+- `/admin/login` - `app/admin/login/page.tsx` → Admin sign-in with the team password
 - `/privacy-policy`, `/terms-of-use`, `/terms-and-conditions`, `/medical-disclaimer`, `/digital-content-terms`, `/cookies`, `/imprint` - Legal pages
 
 **API Routes:**
@@ -315,7 +315,7 @@ Not exhaustive. Every public route is listed in [`docs/api.md`](../api.md) and e
 - `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
 - `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)
 - `/api/admin/*` - Admin API routes (login, logout, the AP-Analytics feeds under `ap/`, and the API-only data-subject, submissions/[id], system-flags and digest-image)
-- `/admin/auth/callback` - `app/admin/auth/callback/route.ts` (Supabase Auth magic link callback)
+- `/admin/auth/callback` - `app/admin/auth/callback/route.ts` (an operator's one-time link)
 
 **SEO Routes:**
 

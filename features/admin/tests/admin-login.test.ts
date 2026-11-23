@@ -1,271 +1,207 @@
+import { createHmac } from "node:crypto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
-
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 4, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
-
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-
 const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
+const mockAudit = vi.fn();
+vi.mock("@features/admin/server/audit", () => ({
+  logAdminAction: (...args: unknown[]) => mockAudit(...args),
+}));
+const mockSlack = vi.fn();
+vi.mock("@shared/observability/slack", () => ({
+  notifySlack: (...args: unknown[]) => mockSlack(...args),
+  escapeSlack: (s: string) => s,
+  maskEmail: (s: string) => s,
+}));
 
-const mockResendSend = vi.fn().mockResolvedValue({ id: "msg_123" });
-vi.mock("resend", () => {
-  return {
-    Resend: class MockResend {
-      emails = { send: (...args: unknown[]) => mockResendSend(...args) };
+/** Supabase Auth as the route meets it: the password check, and the session cookie it writes. */
+const auth = vi.hoisted(() => ({
+  signInWithPassword: vi.fn(),
+  signOut: vi.fn(),
+}));
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: (
+    _url: string,
+    _key: string,
+    opts: {
+      cookies: { setAll: (c: Array<{ name: string; value: string; options: object }>) => void };
+    }
+  ) => ({
+    auth: {
+      signInWithPassword: async (creds: { email: string; password: string }) => {
+        const result = await auth.signInWithPassword(creds);
+        if (!result.error)
+          opts.cookies.setAll([
+            {
+              name: "sb-test-auth-token",
+              value: "session",
+              options: { path: "/", httpOnly: true },
+            },
+          ]);
+        return result;
+      },
+      signOut: (...args: unknown[]) => auth.signOut(...args),
     },
-  };
-});
-
-vi.mock("@features/admin/server/emails/admin-magic-link", () => ({
-  adminMagicLinkEmail: vi.fn().mockReturnValue({
-    subject: "Your LoveIQ admin login link",
-    html: "<p>Sign in</p>",
   }),
 }));
 
 import { POST } from "@/app/api/admin/login/route";
-import { adminMagicLinkEmail } from "@features/admin/server/emails/admin-magic-link";
+import { ADMIN_TEAM_EMAIL } from "@features/admin/server/sign-in";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
+import { ADMIN_HOME } from "@shared/url/admin-next";
 
-function makeRequest(body: unknown) {
-  return new Request("http://localhost/api/admin/login", {
+const request = (body: unknown) =>
+  new NextRequest("http://localhost/api/admin/login", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-csrf-token": "valid",
-    },
+    headers: { "Content-Type": "application/json", "x-csrf-token": "valid" },
     body: JSON.stringify(body),
   });
-}
 
-describe("POST /api/admin/login (magic link)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.stubEnv("RESEND_API_KEY", "re_test_fake_key");
-    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
-    vi.mocked(checkRateLimit).mockResolvedValue({
-      allowed: true,
-      remaining: 4,
-      resetAt: new Date(),
-    });
-    // Default: email is in allowlist
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("/admin_users")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [{ email: "admin@test.com" }],
-        });
-      }
-      if (path === "/auth/v1/admin/users") {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ id: "auth-user-uuid" }),
-        });
-      }
-      if (path.includes("/admin/generate_link")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ hashed_token: "test-hashed-token" }),
-        });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-    mockResendSend.mockResolvedValue({ id: "msg_123" });
+const RIGHT = "the-team-password";
+const SECRET = "s".repeat(40);
+/** What Supabase holds: the team password mixed with the server's secret, never the password itself. */
+const HELD = createHmac("sha256", SECRET).update(RIGHT).digest("base64url");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
+  vi.stubEnv("ADMIN_TEAM_PASSWORD_SECRET", SECRET);
+  vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+  vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, remaining: 4, resetAt: new Date() });
+  auth.signInWithPassword.mockImplementation(async ({ password }: { password: string }) =>
+    password === HELD
+      ? { data: { user: { id: "user-team", email: ADMIN_TEAM_EMAIL } }, error: null }
+      : { data: { user: null }, error: { status: 400, message: "Invalid login credentials" } }
+  );
+  auth.signOut.mockResolvedValue({ error: null });
+  mockSupabaseFetch.mockResolvedValue({
+    ok: true,
+    json: async () => [{ email: ADMIN_TEAM_EMAIL }],
   });
+});
 
-  it("returns success and sends magic link for allowed email", async () => {
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
+describe("POST /api/admin/login (the team password, 22 Nov 2026)", () => {
+  it("signs in the team account with the right password, as an ordinary admin session", async () => {
+    const res = await POST(request({ password: RIGHT }));
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.message).toContain("check your inbox");
-    // Should have called generate_link
-    expect(mockSupabaseFetch).toHaveBeenCalledWith(
-      "/auth/v1/admin/generate_link",
-      expect.objectContaining({ method: "POST" })
+    expect(await res.json()).toEqual({ success: true, next: ADMIN_HOME });
+    // Supabase gets the password mixed with the server's secret, so the team password alone
+    // opens nothing at Supabase's own (public) sign-in.
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({
+      email: ADMIN_TEAM_EMAIL,
+      password: HELD,
+    });
+    expect(JSON.stringify(auth.signInWithPassword.mock.calls)).not.toContain(RIGHT);
+    const set = (name: string) => res.cookies.get(name);
+    expect(set("sb-test-auth-token")?.value).toBe("session");
+    expect(set("sb-test-auth-token")).toMatchObject({ sameSite: "lax", httpOnly: true });
+    // R-03: the CSRF token is really replaced: a __Host- cookie only goes with Secure, Path=/.
+    expect(res.headers.getSetCookie().find((c) => c.startsWith("__Host-csrf="))).toMatch(
+      /^__Host-csrf=;.*Path=\/;.*Max-Age=0;.*Secure/
     );
-    // Should have sent email via Resend
-    expect(mockResendSend).toHaveBeenCalledOnce();
-  });
-
-  it("pre-creates and confirms the auth user before generating the link", async () => {
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(200);
-    // Root-cause fix: a brand-new admin's auth user must be created + email-confirmed,
-    // otherwise generate_link(magiclink) issues a confirmation_token the callback can't verify.
-    expect(mockSupabaseFetch).toHaveBeenCalledWith(
-      "/auth/v1/admin/users",
+    expect(set("admin_posthog_distinct_id")?.value).toBe("user-team");
+    expect(set("__admin_activity")?.value).toMatch(/^\d+$/);
+    expect(mockAudit).toHaveBeenCalledWith({
+      admin_email: ADMIN_TEAM_EMAIL,
+      action: "login",
+      ip: "127.0.0.1",
+    });
+    expect(mockSlack).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining('"email_confirm":true'),
+        kind: "admin_login",
+        text: ":lock: Admin login with the team password",
       })
     );
+    // One shared account: a sign-in never ends the teammates' sessions.
+    expect(auth.signOut).not.toHaveBeenCalled();
   });
 
-  it("still sends the link when the auth user already exists (422)", async () => {
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("/admin_users")) {
-        return Promise.resolve({ ok: true, json: async () => [{ email: "admin@test.com" }] });
-      }
-      if (path === "/auth/v1/admin/users") {
-        return Promise.resolve({
-          ok: false,
-          status: 422,
-          json: async () => ({ msg: "email address already registered" }),
-        });
-      }
-      if (path.includes("/admin/generate_link")) {
-        return Promise.resolve({ ok: true, json: async () => ({ hashed_token: "t" }) });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(200);
-    expect(mockResendSend).toHaveBeenCalledOnce();
+  it("opens the admin page the sign-in was for, and nothing outside the admin", async () => {
+    const ok = await POST(
+      request({ password: RIGHT, next: "/admin/ap/assessment-a/survey?period=7d" })
+    );
+    expect((await ok.json()).next).toBe("/admin/ap/assessment-a/survey?period=7d");
+    for (const next of ["https://evil.example/admin", "//evil.example", "/survey"]) {
+      const res = await POST(request({ password: RIGHT, next }));
+      expect((await res.json()).next, next).toBe(ADMIN_HOME);
+    }
   });
 
-  it("does NOT create an auth user for a non-allowlisted email", async () => {
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("/admin_users")) {
-        return Promise.resolve({ ok: true, json: async () => [] });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-
-    await POST(makeRequest({ email: "nobody@test.com" }));
-    expect(mockSupabaseFetch).not.toHaveBeenCalledWith("/auth/v1/admin/users", expect.anything());
+  it("refuses a wrong password with one plain answer, and records nothing", async () => {
+    const res = await POST(request({ password: "wrong" }));
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Incorrect password." });
+    expect(res.cookies.get("sb-test-auth-token")).toBeUndefined();
+    expect(mockAudit).not.toHaveBeenCalled();
+    expect(mockSlack).not.toHaveBeenCalled();
   });
 
-  it("returns same generic response for non-allowed email (no enumeration)", async () => {
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("/admin_users")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [],
-        });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-
-    const res = await POST(makeRequest({ email: "nobody@test.com" }));
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.message).toContain("check your inbox");
-    // Should NOT have called generate_link or Resend
-    expect(mockResendSend).not.toHaveBeenCalled();
+  it("refuses an empty or missing password before asking Supabase", async () => {
+    for (const body of [{}, { password: "" }, { password: 7 }]) {
+      const res = await POST(request(body));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("returns 400 for invalid email", async () => {
-    const res = await POST(makeRequest({ email: "not-an-email" }));
-    expect(res.status).toBe(400);
+  it("ends the new session when the team account is no longer an admin, answering as for a wrong password", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    const res = await POST(request({ password: RIGHT }));
+    // The same answer as a wrong guess, headers included: it never tells a guesser they were right.
+    const guess = await POST(request({ password: "wrong" }));
+    expect(res.status).toBe(guess.status);
+    expect(await res.json()).toEqual(await guess.json());
+    expect(res.headers.getSetCookie()).toEqual(guess.headers.getSetCookie());
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mockAudit).not.toHaveBeenCalled();
+    expect(mockSlack).toHaveBeenCalledWith(expect.objectContaining({ kind: "admin_login_denied" }));
   });
 
-  it("returns 400 when email is missing", async () => {
-    const res = await POST(makeRequest({}));
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 403 when CSRF fails", async () => {
-    vi.mocked(verifyCsrfToken).mockResolvedValue(false);
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(403);
-  });
-
-  it("returns 429 when rate limited", async () => {
-    vi.mocked(checkRateLimit).mockResolvedValue({
+  it("checks CSRF first, then the rate limit, before any password check", async () => {
+    vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
+    expect((await POST(request({ password: RIGHT }))).status).toBe(403);
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
       allowed: false,
       remaining: 0,
-      resetAt: new Date(Date.now() + 60_000),
+      resetAt: new Date(Date.now() + 30_000),
     });
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(429);
+    const limited = await POST(request({ password: RIGHT }));
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "127.0.0.1",
+      expect.objectContaining({ bucket: "admin-login", limit: 5 })
+    );
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("returns 500 when admin_users check fails", async () => {
-    mockSupabaseFetch.mockRejectedValue(new Error("DB error"));
-
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(500);
+  it("says it can't when Supabase Auth isn't configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    expect((await POST(request({ password: RIGHT }))).status).toBe(500);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("returns 500 when Resend rejects the email", async () => {
-    mockResendSend.mockResolvedValue({
-      error: { statusCode: 403, message: "The from address is not verified" },
-    });
-
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(500);
-    // Should NOT have returned success
-    const json = await res.json();
-    expect(typeof json.error).toBe("string");
-    expect(json.error.length).toBeGreaterThan(0);
-    // Generic message — must NOT leak the upstream "from address not verified" detail.
-    expect(json.error.toLowerCase()).not.toContain("from address");
-    expect(json.error.toLowerCase()).not.toContain("resend");
-    expect(json.success).toBeUndefined();
-  });
-
-  it("returns 500 when generate_link fails", async () => {
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("/admin_users")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [{ email: "admin@test.com" }],
-        });
-      }
-      if (path.includes("/admin/generate_link")) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({ error: "Internal server error" }),
-        });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-
-    const res = await POST(makeRequest({ email: "admin@test.com" }));
-    expect(res.status).toBe(500);
-  });
-
-  /** The magic link the email was given. */
-  const sentLink = () => vi.mocked(adminMagicLinkEmail).mock.calls.at(-1)![0].magicLink;
-
-  it("puts the page the sign-in was for on the magic link, so the link opens it", async () => {
-    const next = "/admin/ap/assessment-a?period=custom&from=2026-10-01&to=2026-10-07";
-    const res = await POST(makeRequest({ email: "admin@test.com", next }));
-    expect(res.status).toBe(200);
-    const link = new URL(sentLink());
-    expect(link.pathname).toBe("/admin/auth/callback");
-    expect(link.searchParams.get("next")).toBe(next);
-    expect(link.searchParams.get("token_hash")).toBe("test-hashed-token");
-  });
-
-  it.each([
-    "//evil.com",
-    "/\\evil.com",
-    "/admin/..//evil",
-    "%2F%2Fevil.com",
-    "/admin/%2F%2Fevil.com",
-    "https://evil.com/admin/ap",
-    "/admin@evil.com",
-    42,
-  ])("leaves a next that is not an admin page off the link: %j", async (next) => {
-    const res = await POST(makeRequest({ email: "admin@test.com", next }));
-    // The sign-in itself still works: a bad next is dropped, never an error.
-    expect(res.status).toBe(200);
-    expect(new URL(sentLink()).searchParams.has("next")).toBe(false);
+  it("says it can't, and never sends the bare password, when the server's secret is missing or short", async () => {
+    for (const secret of ["", "too-short-a-secret"]) {
+      vi.stubEnv("ADMIN_TEAM_PASSWORD_SECRET", secret);
+      expect((await POST(request({ password: RIGHT }))).status, secret).toBe(500);
+    }
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { fillRange } from "@features/admin/ui/ap/field-info";
 import { FIELDS } from "@features/admin/ui/ap/fields";
+import { fields as PTS_FIELDS } from "@features/admin/ui/ap/fields/pay-to-start";
 
 const ROOT = join(__dirname, "..");
 const files = (dir: string): string[] =>
@@ -109,6 +110,21 @@ describe("the field info cards", () => {
     for (const [k, d] of Object.entries(FIELDS)) {
       expect(d.query.text, k).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/);
       expect(d.query.text, k).not.toMatch(/sk_live|sk_test|whsec_|eyJhbGci/);
+    }
+  });
+});
+
+describe("Funnel and paywall's cards (review, 23 Nov 2026)", () => {
+  it("map the queries' four funnels to the two the page shows, on every card", () => {
+    const cards = Object.entries(PTS_FIELDS);
+    expect(cards.length).toBeGreaterThan(20);
+    for (const [key, card] of cards) {
+      expect(card.caveat, key).toContain(
+        "Where the query names Pay after the report, that is Before the paywall here"
+      );
+      // The week chart draws the range's own weeks: its card never claims 1–22 Oct.
+      if (key === "pts.weeks") expect(card.caveat).not.toContain("1–22 Oct");
+      else expect(card.caveat, key).toContain("read over 1–22 Oct 2026 whatever the range");
     }
   });
 });

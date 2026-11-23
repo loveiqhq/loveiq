@@ -41,7 +41,7 @@ The admin is AP-Analytics only since 16 Oct 2026: `/admin` and the old admin pag
 | `/api/health`                 | GET              | `api/health/route.ts`                 | Health check                |
 | `/api/staging-login`          | POST             | `api/staging-login/route.ts`          | Staging environment auth    |
 | `/api/staging-logout`         | POST             | `api/staging-logout/route.ts`         | Staging environment auth    |
-| `/api/admin/login`            | POST             | `api/admin/login/route.ts`            | Admin magic link login      |
+| `/api/admin/login`            | POST             | `api/admin/login/route.ts`            | Admin sign-in (password)    |
 | `/api/admin/logout`           | POST             | `api/admin/logout/route.ts`           | Admin logout                |
 | `/api/admin/submissions/[id]` | GET/PATCH/DELETE | `api/admin/submissions/[id]/route.ts` | One submission (API only)   |
 
@@ -56,4 +56,4 @@ The admin is AP-Analytics only since 16 Oct 2026: `/admin` and the old admin pag
 | `error.tsx`                    | Error boundary page                                        |
 | `global-error.tsx`             | Root error boundary                                        |
 | `admin/layout.tsx`             | Sets the signed-in admin's PostHog identity (no chrome)    |
-| `admin/auth/callback/route.ts` | Magic link callback handler                                |
+| `admin/auth/callback/route.ts` | An operator's one-time sign-in link                        |

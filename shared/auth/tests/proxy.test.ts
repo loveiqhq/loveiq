@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 // Mock crypto for deterministic nonce generation
 vi.stubGlobal("crypto", {
@@ -257,7 +257,7 @@ describe("proxy middleware", () => {
 
   it("keeps pages and API responses Cross-Origin-Resource-Policy: same-origin", async () => {
     // Signed in, so the admin paths reach the header instead of returning a 401 first.
-    mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+    mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
     // The last two end in .png but sit under /api and /admin: the submission API
     // parseInt()s `2373.png` to 2373 and answers with that submission.
     for (const path of [
@@ -269,7 +269,15 @@ describe("proxy middleware", () => {
     ]) {
       // Cleared per path: a path that never sets the header must not pass on the last one's.
       mockResponseHeaders.clear();
-      await proxy(makeNextRequest(`http://localhost:3000${path}`));
+      await proxy(
+        makeNextRequest(
+          `http://localhost:3000${path}`,
+          undefined,
+          undefined,
+          undefined,
+          String(Date.now())
+        )
+      );
       expect(mockResponseHeaders.get("Cross-Origin-Resource-Policy"), path).toBe("same-origin");
     }
   });
@@ -598,7 +606,7 @@ describe("proxy middleware", () => {
     const adminUrl = "http://localhost:3000/admin/dashboard";
 
     it("re-stamps __admin_activity with a 7-day maxAge on active admin requests", async () => {
-      mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+      mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
       const fiveMinAgo = String(Date.now() - 5 * 60 * 1000);
 
       await proxy(makeNextRequest(adminUrl, undefined, undefined, undefined, fiveMinAgo));
@@ -614,18 +622,56 @@ describe("proxy middleware", () => {
     });
 
     it("forces re-auth (redirect) when the last activity is older than 30 minutes", async () => {
-      mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+      mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
       const fortyMinAgo = String(Date.now() - 40 * 60 * 1000);
 
-      await proxy(makeNextRequest(adminUrl, undefined, undefined, undefined, fortyMinAgo));
+      const res = await proxy(
+        makeNextRequest(adminUrl, undefined, undefined, undefined, fortyMinAgo)
+      );
 
       expect(mockRedirect).toHaveBeenCalledWith(
         expect.objectContaining({ href: expect.stringContaining("error=idle_timeout") })
       );
+      // The stale stamp stays, so a reload is idle again rather than stampless and let in.
+      expect(
+        (res as unknown as { cookies: { delete: Mock } }).cookies.delete
+      ).not.toHaveBeenCalled();
+      expect(mockCookiesSet.mock.calls.some((call) => call[0] === "__admin_activity")).toBe(false);
+    });
+
+    it("treats a session with no activity stamp as idle (a sign-in always writes one)", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
+      await proxy(makeNextRequest(adminUrl));
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({ href: expect.stringContaining("error=idle_timeout") })
+      );
+      expect(mockCookiesSet.mock.calls.some((call) => call[0] === "__admin_activity")).toBe(false);
+    });
+
+    it("opens the admin only for the team account: another session on the site is not a sign-in", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { email: "mb@loveiq.org" } } });
+      const fresh = String(Date.now());
+      await proxy(makeNextRequest(adminUrl, undefined, undefined, undefined, fresh));
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          href: "http://localhost:3000/admin/login?next=%2Fadmin%2Fdashboard",
+        })
+      );
+      const res = await proxy(
+        makeNextRequest(
+          "http://localhost:3000/api/admin/stats",
+          undefined,
+          undefined,
+          undefined,
+          fresh
+        )
+      );
+      expect((res as unknown as { status: number }).status).toBe(401);
+      expect(mockCookiesSet.mock.calls.some((call) => call[0] === "__admin_activity")).toBe(false);
     });
 
     it("returns 401 JSON (not a redirect) for idle /api/admin/* callers", async () => {
-      mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+      mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
       const fortyMinAgo = String(Date.now() - 40 * 60 * 1000);
 
       const res = await proxy(
@@ -640,6 +686,9 @@ describe("proxy middleware", () => {
 
       expect((res as unknown as { status: number }).status).toBe(401);
       expect(mockRedirect).not.toHaveBeenCalled();
+      expect(
+        (res as unknown as { cookies: { delete: Mock } }).cookies.delete
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -667,7 +716,7 @@ describe("proxy middleware", () => {
     });
 
     it("keeps it when the idle timeout signs the admin out", async () => {
-      mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+      mockGetUser.mockResolvedValue({ data: { user: { email: "ap-team@loveiq.org" } } });
       await proxy(
         makeNextRequest(
           "http://localhost:3000/admin/ap?period=7d",

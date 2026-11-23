@@ -15,10 +15,16 @@ vi.mock("@shared/http/csrf-client", () => ({
 import AdminLoginForm from "@features/admin/ui/AdminLoginForm";
 
 let mockFetch: ReturnType<typeof vi.fn>;
+const assign = vi.fn();
 
 beforeEach(() => {
   mockFetch = vi.fn();
   globalThis.fetch = mockFetch;
+  assign.mockReset();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, assign },
+  });
 });
 
 afterEach(() => {
@@ -26,7 +32,71 @@ afterEach(() => {
   search = "";
 });
 
-describe("AdminLoginForm", () => {
+const answer = (status: number, body: unknown) =>
+  ({ ok: status < 400, status, json: async () => body }) as Response;
+
+describe("AdminLoginForm: the team password (22 Nov 2026)", () => {
+  it("asks for the password only, as staging's /login does", () => {
+    render(<AdminLoginForm />);
+    const input = screen.getByLabelText("Password");
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveAttribute("required");
+    expect(input).toHaveAttribute("autocomplete", "current-password");
+    expect(screen.queryByLabelText(/email/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByText(/magic link/i)).toBeNull();
+  });
+
+  it("signs in and opens the page the server named, with the page it was for", async () => {
+    search = "next=%2Fadmin%2Fap%2Fassessment-a%3Fperiod%3D7d";
+    mockFetch.mockResolvedValue(
+      answer(200, { success: true, next: "/admin/ap/assessment-a?period=7d" })
+    );
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+    await user.type(screen.getByLabelText("Password"), "the-team-password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/admin/ap/assessment-a?period=7d"));
+    const [url, init] = mockFetch.mock.calls[0]!;
+    expect(url).toBe("/api/admin/login");
+    expect(init.headers["x-csrf-token"]).toBe("test-csrf-token");
+    expect(JSON.parse(String(init.body))).toEqual({
+      password: "the-team-password",
+      next: "/admin/ap/assessment-a?period=7d",
+    });
+  });
+
+  it("says so when the password is wrong, and stays on the form", async () => {
+    mockFetch.mockResolvedValue(answer(401, { error: "Incorrect password." }));
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+    await user.type(screen.getByLabelText("Password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect password.");
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  });
+
+  it("passes the rate limit's words on", async () => {
+    mockFetch.mockResolvedValue(answer(429, { error: "Please try again later." }));
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+    await user.type(screen.getByLabelText("Password"), "x");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Please try again later.");
+  });
+
+  it("shows a plain error when the request fails", async () => {
+    mockFetch.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+    await user.type(screen.getByLabelText("Password"), "x");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Please try again."
+    );
+  });
+
   it("says why when the idle timeout signed the admin out", () => {
     search = "error=idle_timeout";
     render(<AdminLoginForm />);
@@ -35,118 +105,9 @@ describe("AdminLoginForm", () => {
     );
   });
 
-  it("sends the page the sign-in is for with the email", async () => {
-    search = "next=%2Fadmin%2Fap%2Fassessment-a%3Fperiod%3D7d";
-    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) } as Response);
-    const user = userEvent.setup();
+  it("points a spent operator link back to the password", () => {
+    search = "error=auth_failed";
     render(<AdminLoginForm />);
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-    await screen.findByText(/check your email/i);
-    expect(JSON.parse(String(mockFetch.mock.calls[0]![1].body))).toEqual({
-      email: "admin@test.com",
-      next: "/admin/ap/assessment-a?period=7d",
-    });
-  });
-
-  it("renders email input and submit button", () => {
-    render(<AdminLoginForm />);
-    expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /send magic link/i })).toBeInTheDocument();
-  });
-
-  it("shows success state after sending magic link", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        message: "If your email is registered, check your inbox.",
-      }),
-    } as unknown as Response);
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    expect(await screen.findByText(/check your email/i)).toBeInTheDocument();
-    expect(screen.getByText("admin@test.com")).toBeInTheDocument();
-  });
-
-  it("shows error on failed request", async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Unable to process request." }),
-    } as unknown as Response);
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    expect(await screen.findByText("Unable to process request.")).toBeInTheDocument();
-  });
-
-  it("shows generic error on network failure", async () => {
-    mockFetch.mockRejectedValue(new Error("Network failure"));
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
-  });
-
-  it("button shows Sending... during submission", async () => {
-    mockFetch.mockReturnValue(new Promise(() => {}));
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    const btn = await screen.findByRole("button", { name: /sending/i });
-    expect(btn).toBeDisabled();
-  });
-
-  it("sends CSRF token in request headers", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    } as unknown as Response);
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    await screen.findByText(/check your email/i);
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      "/api/admin/login",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          "x-csrf-token": "test-csrf-token",
-        }),
-      })
-    );
-  });
-
-  it("allows trying a different email after success", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    } as unknown as Response);
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
-    await user.click(screen.getByRole("button", { name: /send magic link/i }));
-
-    await screen.findByText(/check your email/i);
-    await user.click(screen.getByText(/try a different email/i));
-
-    expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/Sign in with the password below/);
   });
 });

@@ -7,7 +7,7 @@ Authenticated admin page routes. Since 16 Oct 2026 the admin is AP-Analytics onl
 - Thin `page.tsx` wrappers for the AP-Analytics pages under `ap/`, each inside `DashboardErrorBoundary`
 - `ap/layout.tsx` for AP's light shell
 - `layout.tsx`, which only sets the signed-in admin's PostHog identity
-- The sign-in page under `login/` and the magic-link callback under `auth/`
+- The sign-in page under `login/` (the team password) and an operator's one-time link under `auth/`
 
 ## What does not belong here
 
@@ -28,4 +28,4 @@ Start with the domain doc in [`docs/admin/domains/AGENT_README.md`](../../docs/a
 - `layout.tsx`: the signed-in admin's PostHog identity; draws nothing
 - `ap/layout.tsx`: AP's light shell (`features/admin/ui/ap/ApShell.tsx`)
 - `login/page.tsx`: public admin sign-in page
-- `auth/callback/route.ts`: magic-link callback; a sign-in lands on `/admin/ap`
+- `auth/callback/route.ts`: an operator's one-time link (minted with the service key, never emailed); a sign-in lands on `/admin/ap`

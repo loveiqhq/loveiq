@@ -35,11 +35,11 @@ const callback = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   auth.verifyOtp.mockResolvedValue({ error: null });
-  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", email: "mb@loveiq.org" } } });
+  auth.getUser.mockResolvedValue({ data: { user: { id: "u1", email: "ap-team@loveiq.org" } } });
   auth.signOut.mockResolvedValue({ error: null });
   mockSupabaseFetch.mockResolvedValue({
     ok: true,
-    json: async () => [{ email: "mb@loveiq.org", role: "admin" }],
+    json: async () => [{ email: "ap-team@loveiq.org", role: "admin" }],
   });
 });
 
@@ -93,11 +93,30 @@ describe("GET /admin/auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
   });
 
-  it("stamps nothing for someone not on the admin list", async () => {
+  it("never signs the teammates out: a sign-in ends no other session", async () => {
+    expect((await callback()).headers.get("location")).toBe("http://localhost/admin/ap");
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("refuses a link for anyone but the team account, ending this browser's session only", async () => {
+    auth.getUser.mockResolvedValue({ data: { user: { id: "u2", email: "mb@loveiq.org" } } });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: "mb@loveiq.org", role: "admin" }],
+    });
+    const res = await callback();
+    expect(res.headers.get("location")).toContain("error=not_authorized");
+    expect(res.cookies.get("__admin_activity")).toBeUndefined();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("stamps nothing when the team account is off the admin list, ending this browser's session only", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
     const res = await callback();
     expect(res.headers.get("location")).toContain("error=not_authorized");
     expect(res.cookies.get("__admin_activity")).toBeUndefined();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("marks a teammate's browser as team for two years, so Mira's numbers leave it out", async () => {

@@ -362,7 +362,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 - CSP with `report-uri` (R-11); HSTS preload (R-12); CORP (T-16)
 - CSRF double-submit cookie; rotation on admin login (R-03)
 - Rate-limiting per IP + per (IP, submission) — IPv6 /64 collapse (R-08, R-18)
-- Admin session: 30-min idle timeout (R-13) + concurrent session cap (T-15)
+- Admin session: one team password for a single admin account (since 22 Nov 2026, replacing personal emailed links and their concurrent session cap, T-15); 30-min idle timeout (R-13)
 - Webhook signature verification + livemode guard (T-01) + idempotency
 - Optimistic locking on admin mutations (F-05)
 - Kill switches (F-12), mid-loop re-check (T-20)
