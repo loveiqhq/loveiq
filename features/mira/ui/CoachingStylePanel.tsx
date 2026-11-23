@@ -45,7 +45,7 @@ export function StyleScales({ value, onChange }: { value: Style; onChange: (v: S
                   />
                   <span
                     aria-hidden="true"
-                    className={`rounded-full border-2 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ap-purple ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-ap-muted bg-white"}`}
+                    className={`rounded-full border-2 peer-focus:outline peer-focus:outline-2 peer-focus:outline-offset-2 peer-focus:outline-ap-purple ${n === v ? "h-5 w-5 border-ap-purple bg-ap-purple" : "h-3.5 w-3.5 border-ap-muted bg-white"}`}
                   />
                 </label>
               ))}

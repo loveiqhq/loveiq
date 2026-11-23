@@ -20,7 +20,6 @@ const getGoals = () => miraApi<{ goals: Goal[] }>("/api/mira/goals");
 export function useGoals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [load, setLoad] = useState<Load>("loading");
-  const [loadError, setLoadError] = useState<string | null>(null);
   // In the browser: the server's clock is not the person's, and a tab may stay open overnight.
   const { today, fresh } = useToday();
   // The goals whose tick is saving: each one's own, so ticks of two goals never wait or cross.
@@ -30,10 +29,8 @@ export function useGoals() {
   const show = useCallback((r: ApiResult<{ goals: Goal[] }>) => {
     if (r.signedOut) return setLoad("signed-out");
     if (r.minor) return setLoad("minor");
-    if (!r.ok || !Array.isArray(r.data.goals)) {
-      setLoadError(r.data.error ?? "Your goals didn't load.");
-      return setLoad("error");
-    }
+    // Said one way, the kit's LoadFailed, never with the route's words (round 4).
+    if (!r.ok || !Array.isArray(r.data.goals)) return setLoad("error");
     setGoals(r.data.goals);
     setLoad("ready");
   }, []);
@@ -123,7 +120,6 @@ export function useGoals() {
   return {
     goals,
     load,
-    loadError,
     today,
     ticking,
     reload,

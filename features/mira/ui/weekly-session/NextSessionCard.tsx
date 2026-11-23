@@ -133,7 +133,12 @@ export function NextSessionCard() {
 
   return withSheet(
     <section aria-labelledby="weekly-h" className={SECTION}>
-      <div className="flex items-start gap-4">
+      {/* Named as every Home section is, the time under it (round-4 R4-UXA-6: the heading was
+          the time alone). */}
+      <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
+        Your weekly session
+      </h2>
+      <div className="mt-3 flex items-start gap-4">
         {/* The day at a glance, as a calendar shows it. */}
         <div
           aria-hidden="true"
@@ -150,16 +155,9 @@ export function NextSessionCard() {
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="weekly-h" tabIndex={-1} className={HEADING}>
-            {next.now ? (
-              "Your session is open now"
-            ) : (
-              <>
-                <span className="sr-only">Your next weekly session: </span>
-                {next.weekday}, {slot.time}
-              </>
-            )}
-          </h2>
+          <p className="font-serif text-[20px] font-semibold">
+            {next.now ? "Open now" : `${next.weekday}, ${slot.time}`}
+          </p>
           <p className="mt-0.5 text-[14px] text-ap-body">
             {next.now
               ? `${slotLabel(slot)}, ${zoneLabel(slot.timeZone)}. Fifteen minutes, whenever you’re ready.`

@@ -5,6 +5,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import type { JournalShare } from "@features/mira/journal";
 import { zoneLabel } from "@features/mira/server/calendar";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { AskFirst, DEFAULT_REMINDER, Skeleton, Switch, refocus } from "./parts";
 import { useJournal, type Journal } from "./useJournal";
 
@@ -30,6 +31,7 @@ export function JournalSettings({
 }) {
   const own = useJournal(!journal);
   const j = journal ?? own;
+  const again = useRetry(j.status === "loading", j.reload);
   const id = useId();
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,24 +73,17 @@ export function JournalSettings({
       >
         {title}
       </h2>
-      {j.status === "loading" ? (
+      {j.status === "loading" && !again.busy ? (
         <div aria-hidden="true" className="flex flex-col gap-3">
           <Skeleton className="h-[88px] w-full rounded-2xl" />
           <Skeleton className="h-[88px] w-full rounded-2xl" />
         </div>
       ) : !s ? (
-        <div className="text-[14px] text-ap-body">
-          {j.status === "minor" ? (
-            <AdultsOnly />
-          ) : j.status === "signed-out" ? null : (
-            <>
-              Your journal settings didn’t load.{" "}
-              <button type="button" onClick={j.reload} className="font-semibold underline">
-                Try again
-              </button>
-            </>
-          )}
-        </div>
+        j.status === "minor" ? (
+          <AdultsOnly />
+        ) : j.status === "signed-out" ? null : (
+          <LoadFailed what="Your journal settings" {...again} />
+        )
       ) : (
         <>
           <Row

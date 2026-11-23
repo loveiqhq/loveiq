@@ -45,7 +45,7 @@ function clocksDiffer(a: string, b: string): boolean {
 
 /** A radio styled as the chat's answer chip; selected in the multi-select's lilac. */
 const RADIO_CHIP =
-  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-field bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus-visible:ring-2 peer-focus-visible:ring-ap-purple peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white";
+  "inline-flex min-h-[44px] min-w-[52px] cursor-pointer select-none items-center justify-center rounded-full border border-ap-field bg-white px-3.5 text-[14px] tabular-nums text-ap-body transition-colors duration-150 hover:border-ap-mist hover:bg-ap-ground peer-checked:border-ap-purple peer-checked:bg-ap-lilac peer-checked:font-semibold peer-checked:text-ap-ink peer-focus:ring-2 peer-focus:ring-ap-purple peer-focus:ring-offset-2 peer-focus:ring-offset-white";
 const LEGEND = "text-[13px] font-semibold text-ap-ink";
 export const CARD = "rounded-[20px] border border-ap-line bg-white/90 p-4";
 const LINK_PILL =

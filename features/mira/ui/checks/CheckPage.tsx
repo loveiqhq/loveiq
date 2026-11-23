@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   SUPPORT_HEADLINE,
   bandOf,
@@ -15,6 +22,7 @@ import { MiraAppFrame } from "../MiraAppFrame";
 import { SignedOutNotice } from "../account/SignedOut";
 import { refocus } from "../journal/parts";
 import { AdultsOnly } from "../kit";
+import { LoadFailed, useRetry } from "../kit/load-failed";
 import { MiraCloud, PrimaryButton } from "../MiraShell";
 import { SupportPanel } from "../SupportPanel";
 import { miraApi, signInHref } from "../api";
@@ -61,6 +69,7 @@ export default function CheckPage({
 }) {
   const check = checkById(checkId)!;
   const { data, error, minor, signedOut, setData, retry } = useChecks();
+  const again = useRetry(!data && !error, retry);
   const [mode, setMode] = useState<"intro" | "run" | "result" | null>(null);
   const [draft, setDraft] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -77,8 +86,9 @@ export default function CheckPage({
   const runRef = useRef<HTMLDivElement | null>(null);
   const summary = data?.checks.find((c) => c.id === checkId);
 
-  // Once the account is loaded: its draft in this tab, then the result or the introduction.
-  useEffect(() => {
+  // Once the account is loaded: its draft in this tab, then the result or the introduction,
+  // before the page is painted, so a Try again that loaded hands the focus to its h1 (round 4).
+  useLayoutEffect(() => {
     if (!data || mode !== null) return;
     /* eslint-disable react-hooks/set-state-in-effect -- sessionStorage is read after mount */
     setDraft(drafts.read(data.account, checkId));
@@ -210,15 +220,15 @@ export default function CheckPage({
           </h1>
           <AdultsOnly className="mt-4" />
         </>
-      ) : error ? (
-        <p role="alert" className="mt-6 text-[15px] text-ap-bad-ink">
-          {error}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+      ) : error || again.busy ? (
+        <>
+          <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+            {check.title}
+          </h1>
+          <LoadFailed what={`Your ${check.title.toLowerCase()}`} {...again} className="mt-4" />
+        </>
       ) : null}
-      {!data && !error && !signedOut ? <Skeleton /> : null}
+      {!data && !error && !signedOut && !again.busy ? <Skeleton /> : null}
 
       {data && mode === "intro" ? (
         <Intro
@@ -331,7 +341,10 @@ function Intro({
       <p className={EYEBROW}>
         Self-check · {n} questions · about {check.minutes} min
       </p>
-      <h1 className="mt-2 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+      <h1
+        tabIndex={-1}
+        className="mt-2 font-serif text-[34px] font-medium leading-tight outline-none sm:text-[40px]"
+      >
         {check.title}
       </h1>
       <p className="mt-3 text-[16px] leading-relaxed text-ap-body">
@@ -656,6 +669,7 @@ function History({ check, results }: { check: Check; results: CheckResult[] }) {
  */
 export function BodyCheckPage() {
   const { data, error, minor, signedOut, retry } = useChecks();
+  const again = useRetry(!data && !error, retry);
   const body = data?.bodyCheck;
   const [mode, setMode] = useState<"intro" | "run" | "done">("intro");
   const [answers, setAnswers] = useState<number[]>([]);
@@ -698,20 +712,19 @@ export function BodyCheckPage() {
         </Link>{" "}
         <span aria-hidden="true">/</span> Body check
       </nav>
-      <h1 className="mt-6 font-serif text-[34px] font-medium leading-tight sm:text-[40px]">
+      <h1
+        tabIndex={-1}
+        className="mt-6 font-serif text-[34px] font-medium leading-tight outline-none sm:text-[40px]"
+      >
         Body check
       </h1>
       {signedOut ? (
         <SignedOutNotice />
       ) : minor ? (
         <AdultsOnly className="mt-4" />
-      ) : error || (data && !body) ? (
-        <p role="alert" className="mt-4 text-ap-bad-ink">
-          {error ?? "Your body checks couldn’t be loaded."}{" "}
-          <button type="button" onClick={retry} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
+      ) : error || again.busy || (data && !body) ? (
+        // The account loaded without its body checks (their own read failed): a failed read too.
+        <LoadFailed what="Your body check" {...again} className="mt-4" />
       ) : null}
       <div className="mt-6 max-w-[600px]">
         {mode === "done" ? (

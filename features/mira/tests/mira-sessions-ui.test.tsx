@@ -204,9 +204,11 @@ describe("Home's weekly session card", () => {
     vi.useFakeTimers({ now: new Date("2026-11-21T12:00:00Z"), toFake: ["Date"] });
     replies["GET /api/mira/weekly-session"] = has(SLOT);
     render(<NextSessionCard />);
-    expect(
-      await screen.findByRole("heading", { name: /^Your next weekly session:\s*Tuesday, 19:00$/ })
-    ).toBeInTheDocument();
+    // Named as every Home section is, with the time under it (round-4 R4-UXA-6: the heading was
+    // the time alone, "Tuesday, 19:00").
+    const card = within(await screen.findByRole("region", { name: "Your weekly session" }));
+    expect(card.getAllByRole("heading").map((h) => h.textContent)).toEqual(["Your weekly session"]);
+    expect(card.getByText("Tuesday, 19:00")).toBeInTheDocument();
     expect(screen.getByText("In 3 days · 15 minutes with Mira · Berlin time")).toBeInTheDocument();
     const add = screen.getByRole("button", { name: "Add to calendar" });
     expect(add).toHaveAttribute("aria-expanded", "false");
@@ -226,9 +228,8 @@ describe("Home's weekly session card", () => {
     vi.useFakeTimers({ now: new Date("2026-11-24T18:10:00Z"), toFake: ["Date"] });
     replies["GET /api/mira/weekly-session"] = has(SLOT);
     render(<NextSessionCard />);
-    expect(
-      await screen.findByRole("heading", { name: "Your session is open now" })
-    ).toBeInTheDocument();
+    const card = within(await screen.findByRole("region", { name: "Your weekly session" }));
+    expect(card.getByText("Open now")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Join now" })).toHaveAttribute("href", "/mira/session");
   });
 

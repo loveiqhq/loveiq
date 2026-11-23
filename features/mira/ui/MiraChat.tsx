@@ -15,6 +15,7 @@ import { ADULTS_ONLY, ConfirmDelete } from "./kit";
 import { Modal, SupportPanel, type SupportCountry } from "./SupportPanel";
 import { DISCLAIMER, LegalLinks, MiraCloud, Wordmark } from "./MiraShell";
 import { ReviewsWelcome } from "./reviews/PublicReviews";
+import { SignedOutNotice } from "./account/SignedOut";
 import { ReviewAsk, THUMBS_FOR_ASK, reviewAskDue } from "./reviews/ReviewAsk";
 import { TalkButton, VoiceEnded, VoicePanel } from "./voice/VoicePanel";
 import { useVoice } from "./voice/useVoice";
@@ -133,6 +134,9 @@ export default function MiraChat({
   // The saved chat didn't load: said with Try again, whatever else fails meanwhile (a send's
   // error doesn't replace it), and it stays the chat being continued (CHAT-16, R3-CHAT-10).
   const [unloaded, setUnloaded] = useState(false);
+  // The saved chat's own read found the sign-in gone: the one notice in its place, never the
+  // welcome and its prompts, which read as a new chat (round-4 R4-CORE-5).
+  const [lost, setLost] = useState(false);
   // A calm line about the chat itself (it isn't here any more), read out as a status.
   const [notice, setNotice] = useState<string | null>(stopped ? ADULTS_ONLY : null);
   // What a screen reader hears from the hidden live line: that Mira is writing, then her new reply
@@ -244,7 +248,7 @@ export default function MiraChat({
       window.history.replaceState(null, "", "/mira");
       setNotice("That chat isn't here any more. It may have been deleted.");
     } else if (chat.status === 401) {
-      setError({ text: "Please sign in again.", signIn: true });
+      setLost(true);
     } else {
       setUnloaded(true);
     }
@@ -725,7 +729,8 @@ export default function MiraChat({
   }, [started]);
 
   // "Make Mira yours": once per browser, after a reply of Mira's when nothing else asks for the
-  // person's attention (no question with answer buttons, card, check, panel or crisis).
+  // person's attention (no question with answer buttons, card, check, panel or crisis), nor her own
+  // question (round-4 R4-CORE-2: two asks at once).
   const showTip =
     tipSeen === false &&
     !sending &&
@@ -741,6 +746,7 @@ export default function MiraChat({
     !isInvitation(last) &&
     !last.ask &&
     !last.goal &&
+    !endsAsking(last.content) &&
     !crisisIn(messages);
 
   useEffect(() => {
@@ -767,8 +773,8 @@ export default function MiraChat({
   const empty = !started || atStart;
   // A saved chat that didn't load is no new chat: no welcome or prompts in its place.
   // A chat opened by its link loads first: the welcome would only flash before it.
-  const showWelcome = empty && (ready || !initialChatId) && !unloaded;
-  const showChips = ready && empty && !gate && !unloaded && !minor;
+  const showWelcome = empty && (ready || !initialChatId) && !unloaded && !lost;
+  const showChips = ready && empty && !gate && !unloaded && !minor && !lost;
 
   return (
     <div className="bg-white font-sans text-ap-ink selection:bg-ap-lilac">
@@ -801,38 +807,6 @@ export default function MiraChat({
                       />
                     ) : null}
                   </button>
-                  {showTip ? (
-                    <div
-                      role="note"
-                      aria-label="Tip"
-                      className="fixed inset-x-3 top-[64px] z-20 rounded-[18px] border border-ap-line bg-white p-4 text-left shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-in sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2.5 sm:w-[300px]"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="absolute -top-[6px] right-[60px] hidden h-3 w-3 rotate-45 border-l border-t border-ap-line bg-white sm:block"
-                      />
-                      <p className="font-serif text-[17px] font-semibold">Make Mira yours</p>
-                      <p className="mt-1 text-[14px] leading-snug text-ap-body">
-                        Choose how she coaches you: softer or more direct, solutions or root causes.
-                      </p>
-                      <div className="mt-3 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={closeTip}
-                          className="min-h-[40px] px-3 text-[14px] font-semibold text-ap-muted"
-                        >
-                          Not now
-                        </button>
-                        <button
-                          type="button"
-                          onClick={openStyle}
-                          className="inline-flex min-h-[40px] items-center rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
-                        >
-                          Set it up
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                 </span>
                 <button
                   type="button"
@@ -854,7 +828,7 @@ export default function MiraChat({
               >
                 Home
               </Link>
-            ) : (
+            ) : minor ? null : (
               <Link
                 href="/mira/start"
                 className="ml-1.5 inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white min-[360px]:px-[18px]"
@@ -864,6 +838,40 @@ export default function MiraChat({
             )}
           </div>
         </header>
+
+        {/* "Make Mira yours", in its own room under the header, beside the highlighted button:
+            drawn over the conversation it hid the start of the reply it came with (round-4
+            R4-CORE-2), as the chat shows a new reply from its first line. */}
+        {showTip ? (
+          <div className="relative z-[2] shrink-0 px-3 pb-2 min-[360px]:px-4 sm:flex sm:justify-end sm:px-8">
+            <div
+              role="note"
+              aria-label="Tip"
+              className="rounded-[18px] border border-ap-line bg-white p-4 text-left shadow-[0_18px_40px_-18px_rgba(22,16,33,0.35)] motion-safe:animate-mira-in sm:w-[300px]"
+            >
+              <p className="font-serif text-[17px] font-semibold">Make Mira yours</p>
+              <p className="mt-1 text-[14px] leading-snug text-ap-body">
+                Choose how she coaches you: softer or more direct, solutions or root causes.
+              </p>
+              <div className="mt-3 flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={closeTip}
+                  className="min-h-[40px] px-3 text-[14px] font-semibold text-ap-muted"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={openStyle}
+                  className="inline-flex min-h-[40px] items-center rounded-full bg-ap-ink px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                >
+                  Set it up
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="relative z-[1] flex min-h-0 flex-1">
           {/* Wide screens, signed in: the chat list, once there is more than one chat to go back
@@ -905,6 +913,11 @@ export default function MiraChat({
                   : "min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none [mask-image:linear-gradient(to_bottom,transparent,#000_20px)] [scrollbar-color:rgb(var(--ap-mist))_transparent] [scrollbar-width:thin]"
               }
             >
+              {lost ? (
+                <div className="mx-auto w-full max-w-[760px]">
+                  <SignedOutNotice />
+                </div>
+              ) : null}
               {showWelcome ? (
                 <div className="mx-auto flex max-w-[760px] flex-col items-center gap-3 py-6 text-center sm:gap-3.5 sm:pb-7 sm:pt-0">
                   <h1 className="text-balance font-serif text-[30px] font-medium leading-[1.2] tracking-[-0.01em] motion-safe:animate-mira-in sm:text-[40px] [@media(max-height:480px)]:text-[24px]">

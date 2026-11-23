@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   FINDER,
   coachById,
+  type Coach,
   type CoachId,
   type FinderOutcome,
 } from "@features/mira/content/coaches";
 import { track } from "./data";
-import { ChevronIcon, CloseIcon, CoachPortrait, NotifyButton } from "./parts";
+import { ChevronIcon, CloseIcon, CoachPortrait } from "./parts";
 import { FOCUS, INK_PILL, QUIET_PILL } from "./styles";
 
 const TEXT_BUTTON = `min-h-[44px] px-2 text-[14px] font-semibold text-ap-muted underline underline-offset-4 hover:text-ap-ink ${FOCUS}`;
@@ -20,12 +21,11 @@ const TEXT_BUTTON = `min-h-[44px] px-2 text-[14px] font-semibold text-ap-muted u
  * asks what would help (board 10's feedback). Only the outcome is counted, never the answers.
  */
 export function CoachFinder({
-  known,
-  onNotify,
+  notify,
   onClose,
 }: {
-  known: CoachId[];
-  onNotify: (id: CoachId, on: boolean) => void;
+  /** A coming-soon coach's Notify me, as the roster shows it (nothing while unknown). */
+  notify: (coach: Coach) => ReactNode;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<"start" | "desire">("start");
@@ -128,7 +128,7 @@ export function CoachFinder({
           </div>
         </div>
       ) : (
-        <Result id={outcome} known={known} onNotify={onNotify} again={again} focus={focusOnMount} />
+        <Result id={outcome} notify={notify} again={again} focus={focusOnMount} />
       )}
     </section>
   );
@@ -136,14 +136,12 @@ export function CoachFinder({
 
 function Result({
   id,
-  known,
-  onNotify,
+  notify,
   again,
   focus,
 }: {
   id: CoachId;
-  known: CoachId[];
-  onNotify: (id: CoachId, on: boolean) => void;
+  notify: (coach: Coach) => ReactNode;
   again: () => void;
   focus: (el: HTMLElement | null) => void;
 }) {
@@ -175,7 +173,7 @@ function Result({
             </Link>
           ) : (
             <>
-              <NotifyButton coach={coach} done={known.includes(coach.id)} onChange={onNotify} />
+              {notify(coach)}
               <Link href="/mira" className={QUIET_PILL}>
                 Talk to Mira meanwhile
               </Link>

@@ -65,15 +65,18 @@ export function track(name: CoachEvent, detail?: string): void {
   });
 }
 
-/** "Notify me" on a coming-soon coach: null when it went through, else what to tell the person. */
-export async function notify(coach: CoachId): Promise<string | null> {
-  const r = await miraApi("/api/mira/event", { body: { type: "notify", coach } });
+/**
+ * "Notify me" on a coming-soon coach: null when it went through, else what to tell the person.
+ * `keepalive`: sent as the page goes, outliving it (parts.tsx).
+ */
+export async function notify(coach: CoachId, keepalive = false): Promise<string | null> {
+  const r = await miraApi("/api/mira/event", { body: { type: "notify", coach }, keepalive });
   return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
 }
 
 /** "Notify me" taken back: null when it went through, else what to tell the person. */
-export async function stopNotifying(coach: CoachId): Promise<string | null> {
-  const r = await miraApi(`/api/mira/coaches?notify=${coach}`, { method: "DELETE" });
+export async function stopNotifying(coach: CoachId, keepalive = false): Promise<string | null> {
+  const r = await miraApi(`/api/mira/coaches?notify=${coach}`, { method: "DELETE", keepalive });
   return r.ok ? null : (r.data.error ?? "That didn't go through. Please try again.");
 }
 

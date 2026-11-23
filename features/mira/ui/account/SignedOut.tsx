@@ -1,15 +1,48 @@
 "use client";
 
-import { SIGNED_OUT, signInHref } from "../api";
+import { useEffect, useRef } from "react";
+import { SIGNED_OUT, SIGNED_OUT_EVENT, signInHref } from "../api";
+
+/** The notice's id: what a page focuses when a sheet over it closes after the sign-in went. */
+export const SIGNED_OUT_ID = "mira-signed-out";
+
+/**
+ * What had the focus when a Mira route last answered 401: heard as it is told, before the page
+ * swaps its content for the notice.
+ */
+let focusedAtSignOut: Element | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener(SIGNED_OUT_EVENT, () => {
+    focusedAtSignOut = document.activeElement;
+  });
+}
 
 /**
  * The one answer to a lost sign-in on a signed-in page (round-2 HAB-16): what happened and a way
  * back in that returns to this page, shown in place of what can no longer be read or saved. A page
  * shows it once `useSignedOut()` (ui/api.ts) hears a 401 from any Mira route.
+ *
+ * When it replaced the control that had the focus (a switch, Add goal, Notify me, Book, "Show
+ * older sessions"), the focus comes here rather than falling to the page, so the next Tab is
+ * "Sign in again" (round 4: R4-CORE-7, R4-UXA-1, R4-HABITS-3). A 401 as the page loads has no
+ * focus to lose (the page had it), and a focus that is still somewhere stays there.
  */
 export function SignedOutNotice() {
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const now = document.activeElement;
+    if (now && now !== document.body) return;
+    const had = focusedAtSignOut;
+    if (had && had !== document.body && !had.isConnected) box.current?.focus();
+  }, []);
   return (
-    <div role="alert" className="mt-8 rounded-3xl border border-ap-line p-5">
+    <div
+      ref={box}
+      id={SIGNED_OUT_ID}
+      role="alert"
+      tabIndex={-1}
+      className="mt-8 rounded-3xl border border-ap-line p-5 outline-none"
+    >
       <p className="text-[15px] font-semibold">You were signed out.</p>
       <p className="mt-1 text-[14px] text-ap-body">
         Sign in again to go on. You&apos;ll come straight back here.

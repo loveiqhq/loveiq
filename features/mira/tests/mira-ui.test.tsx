@@ -460,6 +460,8 @@ describe("Chat", () => {
     });
     render(<MiraChat signedIn={false} initialChatId={null} stopped />);
     expect(await screen.findByText("Mira is only for adults.")).toBeInTheDocument();
+    // No way to sign up or in from a stopped browser (R4-CORE-1).
+    expect(screen.queryByRole("link", { name: /Sign in|free account/ })).toBeNull();
     expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
     typeAndSend("hello");
     await waitFor(() => expect(calls("POST /api/mira/chat")).toHaveLength(1));
@@ -519,6 +521,24 @@ describe("Chat", () => {
     expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
     expect(screen.getByLabelText("Message Mira")).toHaveValue("hello");
     expect(calls("POST /api/mira/chat")[0]!.chatId).toBe(SAVED); // still this chat
+  });
+
+  // R4-CORE-5: the chat's own read answering 401 turned the page into the welcome with its
+  // eight prompts and "Please sign in again.", as if it were a new chat.
+  it("says a lost sign-in on a saved chat's read with the one notice, not the welcome", async () => {
+    window.history.replaceState(null, "", `/mira?chat=${SAVED}`);
+    onTestFinished(() => window.history.replaceState(null, "", "/"));
+    replies[`GET /api/mira/chats/${SAVED}`] = () => ({ status: 401, body: { error: "x" } });
+    render(<MiraChat signedIn initialChatId={SAVED} />);
+    expect(await screen.findByText("You were signed out.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+      "href",
+      `/mira/start?next=${encodeURIComponent(`/mira?chat=${SAVED}`)}`
+    );
+    expect(screen.queryByRole("heading", { level: 1, name: /Talk to/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: miraConfig.starterChips[0] })).toBeNull();
+    expect(screen.queryByText("Please sign in again.")).toBeNull();
+    expect(screen.getAllByText("You were signed out.")).toHaveLength(1);
   });
 
   it("lists a new chat under the title the server gave it, never words it held back", async () => {
@@ -1186,6 +1206,33 @@ describe("“Make Mira yours” tip (coaching style)", () => {
     expect(tip()).toBeNull();
   });
 
+  // R4-CORE-2: the tip was drawn over the conversation (fixed on phones, absolute from sm), right
+  // where the chat scrolls a new reply's first line, hiding it; and it came under Mira's own
+  // question, two asks at once.
+  it("takes its own room above the conversation, never over the reply, and waits out her question", async () => {
+    const answers = ["Which of the two feels more doable for you?", "Try this."];
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: answers.shift()!, chatId: null } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Which of the two feels more doable for you?");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(tip()).toBeNull();
+    typeAndSend("the first");
+    await screen.findByText("Try this.");
+    const note = await screen.findByRole("note", { name: "Tip" });
+    // In the page's flow: nothing on its way up is laid over the conversation.
+    for (let el: HTMLElement | null = note; el; el = el.parentElement) {
+      expect(el.className).not.toMatch(/(^|\s)(sm:)?(fixed|absolute)(\s|$)/);
+    }
+    // Between the header and the conversation, so the conversation starts below it.
+    const conversation = screen.getByRole("region", { name: "Conversation" });
+    expect(note.closest("header")).toBeNull();
+    expect(
+      note.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(conversation.contains(note)).toBe(false);
+  });
+
   it("Not now puts it away for good in that browser", async () => {
     replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
     render(<MiraChat signedIn initialChatId={null} />);
@@ -1543,7 +1590,9 @@ describe("Sign-up ticks, honeypot and where it ends", () => {
 });
 
 // Round-3 SET-11 residual: a read that failed was said two ways, "…didn't load" and "We couldn't
-// load your…". One way on every screen: "<what> didn't load."
+// load your…". One way on every screen: "<what> didn't load." Round 4 (R4-CORE-4): the pages
+// also said "Unable to load your…" (the route's words), "…couldn’t be loaded" and "…didn’t load
+// just now"; mira-pages-failed.test.tsx checks the screens themselves.
 describe("Mira's wording", () => {
   const files = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
@@ -1556,7 +1605,7 @@ describe("Mira's wording", () => {
     const found = [...files("features/mira/ui"), ...files("app/mira")].flatMap((f) =>
       readFileSync(f, "utf8")
         .split("\n")
-        .filter((line) => /couldn(’|'|&apos;)t load/.test(line))
+        .filter((line) => /couldn(’|'|&apos;)t (be )?load|Unable to load|load just now/.test(line))
         .map((line) => `${f}: ${line.trim()}`)
     );
     expect(found).toEqual([]);

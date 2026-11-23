@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { NEW_CODE, miraApi } from "../api";
+import { NEW_CODE, forgetPendingSteps, miraApi } from "../api";
 import { shortDate } from "../kit/dates";
 import { EmailChanged } from "../MiraSettings";
 import { addPasskey, syncPasskeyList, syncPasskeyName, usePasskeysWork } from "./passkeys";
@@ -201,6 +201,8 @@ export default function SecuritySettings() {
             onGone={(id) => setData({ ...data, devices: data.devices.filter((d) => d.id !== id) })}
             onNotice={setNotice}
             onSignedOut={() => {
+              // As Settings' own Sign out: nothing pending stays in this tab (R4-CORE-3).
+              forgetPendingSteps();
               router.replace("/mira/start");
               router.refresh();
             }}
@@ -340,8 +342,9 @@ function EmailRow({
     >
       {!data.emailChange.allowed ? (
         <p className="text-[13px] text-ap-muted">
+          {/* Settings says why once, at its top (round-4 R4-UXA-5): here, what it means. */}
           {data.minor
-            ? "Mira is only for adults."
+            ? "Can’t be changed."
             : "This address is also a LoveIQ team login, so it can't be changed here."}
         </p>
       ) : null}

@@ -121,7 +121,10 @@ export default function SignUpFlow({
   googleEnabled?: boolean;
   googleResult?: string | null;
   needsAbout?: boolean;
-  /** Back from Google into an account this browser may not use: stopped as under 18 (rail 15). */
+  /**
+   * This browser or account is stopped as under 18 (rail 15; the page reads the stop's cookie and
+   * the account, and Google's refused return): the one refusal, and nothing to sign in or up with.
+   */
   minor?: boolean;
   /** Where to go once signed in (the page checked it: a Mira page only); else Home. */
   next?: string | null;
@@ -138,8 +141,8 @@ export default function SignUpFlow({
     minor ? "minor" : backFromGoogle && needsAbout ? "about" : "account"
   );
   // On the under-18 refusal: whether a sign-in happened (a code or Google), so Settings can sign
-  // out or delete; a refused passkey signed nobody in.
-  const [minorSignedIn, setMinorSignedIn] = useState(minor);
+  // out or delete; a refused passkey or code request, or a stopped browser's visit, signed nobody in.
+  const [minorSignedIn, setMinorSignedIn] = useState(minor && backFromGoogle);
   const [email, setEmail] = useState("");
   const [adult, setAdult] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -154,7 +157,9 @@ export default function SignUpFlow({
   const [gender, setGender] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(
-    googleResult && !backFromGoogle ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!) : null
+    googleResult && !backFromGoogle && !minor
+      ? (GOOGLE_ERRORS[googleResult] ?? GOOGLE_ERRORS.failed!)
+      : null
   );
   const [notice, setNotice] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -265,6 +270,11 @@ export default function SignUpFlow({
       body: { action: "start", email, adult, terms, consent, website },
     });
     setBusy(false);
+    // This browser is stopped as under 18: the server sends no code (R4-CORE-1), the refusal shows.
+    if (res.minor) {
+      refusedAsMinor(false);
+      return false;
+    }
     // One went out minutes ago (the inbox's 10-minute wait): it still works, so on to its field.
     const sentBefore = res.status === 429 && res.data.codeSent === true && step === "account";
     if (!res.ok && !sentBefore) {
@@ -443,13 +453,17 @@ export default function SignUpFlow({
     (next ? `&next=${encodeURIComponent(next)}` : "");
 
   return (
-    <div className="flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
+    <div className="relative flex min-h-screen flex-col bg-white font-sans text-ap-ink lg:flex-row">
+      {/* The page's banner, as on every Mira page (round-3 R3-UXA-12): the logo, at the top on
+          phones, and from md over the lilac panel's corner, where the panel keeps it room. */}
+      <header className="px-4 pt-8 sm:px-12 md:absolute md:left-10 md:top-10 md:z-[1] md:p-0">
+        <Wordmark />
+      </header>
       {/* On phones the form comes first and this lilac panel follows it. */}
       <aside className="relative order-last flex flex-col gap-8 overflow-hidden border-t border-ap-line p-6 sm:p-10 md:order-none lg:w-[460px] lg:shrink-0 lg:border-r lg:border-t-0">
         <MiraCloud className="opacity-90" />
-        <div className="relative hidden md:block">
-          <Wordmark />
-        </div>
+        {/* The logo's room: the banner draws it here (its size never follows the text size). */}
+        <div aria-hidden="true" className="relative hidden h-[46px] md:block" />
         <div className={`relative mt-auto flex-col gap-4 ${step === "minor" ? "hidden" : "flex"}`}>
           <p className="flex items-center gap-2.5 text-[14px] text-ap-body">
             <Image
@@ -481,376 +495,379 @@ export default function SignUpFlow({
         </div>
       </aside>
 
-      <main id="main-content" className="flex flex-1 flex-col px-4 py-8 sm:px-12 lg:px-20">
-        <div className="mb-8 md:hidden">
-          <Wordmark />
-        </div>
-        <ol
-          aria-label="Sign-up progress"
-          className={`grid-cols-3 gap-2 ${step === "minor" ? "hidden" : "grid"}`}
-        >
-          {STEPS.map((s, i) => (
-            <li
-              key={s.key}
-              aria-current={i === current ? "step" : undefined}
-              className="flex flex-col gap-2"
-            >
-              <span
-                aria-hidden="true"
-                className={`h-1 rounded-full ${i <= current ? "bg-ap-purple" : "bg-ap-track"}`}
-              />
-              <span
-                className={`text-[12px] ${i === current ? "font-bold text-ap-ink" : "text-ap-muted"}`}
+      {/* The form's column: the main part, then the page's contentinfo with the legal links. */}
+      <div className="flex flex-1 flex-col px-4 pb-8 sm:px-12 lg:px-20">
+        <main id="main-content" className="flex flex-1 flex-col pt-8">
+          <ol
+            aria-label="Sign-up progress"
+            className={`grid-cols-3 gap-2 ${step === "minor" ? "hidden" : "grid"}`}
+          >
+            {STEPS.map((s, i) => (
+              <li
+                key={s.key}
+                aria-current={i === current ? "step" : undefined}
+                className="flex flex-col gap-2"
               >
-                {s.label}
-              </span>
-            </li>
-          ))}
-        </ol>
-
-        <div className="my-auto flex w-full max-w-[460px] flex-col gap-5 py-10">
-          {backFromGoogle && step === "account" ? (
-            <p className="text-[15px] text-ap-body">Signing you in…</p>
-          ) : null}
-
-          {step === "account" && !backFromGoogle ? (
-            <form
-              className="flex flex-col gap-5"
-              noValidate
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (busy) return;
-                // Said, not a silently dead button: what is missing, and the focus on it.
-                if (!emailOk) {
-                  setError(ENTER_EMAIL);
-                  return emailField.current?.focus();
-                }
-                if (!adult || !terms || !consent) {
-                  setError(TICK_THREE);
-                  return e.currentTarget
-                    .querySelector<HTMLInputElement>('input[aria-required="true"]:not(:checked)')
-                    ?.focus();
-                }
-                void sendCode();
-              }}
-            >
-              <div>
-                <h1
-                  ref={heading}
-                  tabIndex={-1}
-                  className="font-serif text-[34px] font-medium leading-tight outline-none"
-                >
-                  Create your free account{" "}
-                  <span className="inline-block whitespace-nowrap align-middle rounded-full border border-ap-line px-2.5 py-0.5 font-sans text-[12px] font-semibold tracking-[0.04em] text-ap-muted">
-                    Beta version
-                  </span>
-                </h1>
-                <p className="mt-2 text-[15px] text-ap-body">
-                  It takes a minute. Your current chat comes with you.
-                </p>
-              </div>
-              <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                Email
-                <input
-                  ref={emailField}
-                  type="email"
-                  // "webauthn": where the browser has them, this field also suggests passkeys.
-                  autoComplete="email webauthn"
-                  required
-                  aria-invalid={error === ENTER_EMAIL || undefined}
-                  aria-describedby={error === ENTER_EMAIL ? "signup-error" : undefined}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                <span
+                  aria-hidden="true"
+                  className={`h-1 rounded-full ${i <= current ? "bg-ap-purple" : "bg-ap-track"}`}
                 />
-              </label>
-              {/* A honeypot: hidden from people and screen readers and out of the tab order, so
+                <span
+                  className={`text-[12px] ${i === current ? "font-bold text-ap-ink" : "text-ap-muted"}`}
+                >
+                  {s.label}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="my-auto flex w-full max-w-[460px] flex-col gap-5 py-10">
+            {backFromGoogle && step === "account" ? (
+              <p className="text-[15px] text-ap-body">Signing you in…</p>
+            ) : null}
+
+            {step === "account" && !backFromGoogle ? (
+              <form
+                className="flex flex-col gap-5"
+                noValidate
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (busy) return;
+                  // Said, not a silently dead button: what is missing, and the focus on it.
+                  if (!emailOk) {
+                    setError(ENTER_EMAIL);
+                    return emailField.current?.focus();
+                  }
+                  if (!adult || !terms || !consent) {
+                    setError(TICK_THREE);
+                    return e.currentTarget
+                      .querySelector<HTMLInputElement>('input[aria-required="true"]:not(:checked)')
+                      ?.focus();
+                  }
+                  void sendCode();
+                }}
+              >
+                <div>
+                  <h1
+                    ref={heading}
+                    tabIndex={-1}
+                    className="font-serif text-[34px] font-medium leading-tight outline-none"
+                  >
+                    Create your free account{" "}
+                    <span className="inline-block whitespace-nowrap align-middle rounded-full border border-ap-line px-2.5 py-0.5 font-sans text-[12px] font-semibold tracking-[0.04em] text-ap-muted">
+                      Beta version
+                    </span>
+                  </h1>
+                  <p className="mt-2 text-[15px] text-ap-body">
+                    It takes a minute. Your current chat comes with you.
+                  </p>
+                </div>
+                <label className="flex flex-col gap-2 text-[14px] font-semibold">
+                  Email
+                  <input
+                    ref={emailField}
+                    type="email"
+                    // "webauthn": where the browser has them, this field also suggests passkeys.
+                    autoComplete="email webauthn"
+                    required
+                    aria-invalid={error === ENTER_EMAIL || undefined}
+                    aria-describedby={error === ENTER_EMAIL ? "signup-error" : undefined}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  />
+                </label>
+                {/* A honeypot: hidden from people and screen readers and out of the tab order, so
                   only a bot fills it; the code request carries it and the server drops those. */}
-              <input
-                type="text"
-                name="website"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                tabIndex={-1}
-                autoComplete="off"
-                aria-hidden="true"
-                className="sr-only"
-              />
-              <p className="-mt-2 text-[13px] text-ap-muted">
-                Took the LoveIQ test already? Use the same email and we&apos;ll connect your result.
-              </p>
-              <Tick checked={adult} onChange={setAdult} required>
-                I confirm that I am 18 years of age or older.
-              </Tick>
-              <Tick checked={terms} onChange={setTerms} required>
-                I accept the{" "}
-                <a href="/terms-of-use" target="_blank" className="underline">
-                  terms of use
-                </a>{" "}
-                and I have read the{" "}
-                <a href="/privacy-policy" target="_blank" className="underline">
-                  privacy notice
-                </a>
-                .
-              </Tick>
-              <Tick checked={consent} onChange={setConsent} required>
-                Mira may process what I share about my sex life and health to coach me, and to
-                count, without my words, how Mira is used and whether she helps.{" "}
-                <Link href="/mira/privacy" target="_blank" className="underline">
-                  How Mira handles your data
-                </Link>
-              </Tick>
-              <p className="-mb-2 text-[13px] text-ap-muted">Optional, for a new account</p>
-              <Tick checked={useAssessment} onChange={setUseAssessment}>
-                Use my LoveIQ test result to tailor my coaching.
-              </Tick>
-              <PrimaryButton type="submit" disabled={busy}>
-                {busy ? "Sending…" : "Send me a code"}
-              </PrimaryButton>
-              {googleEnabled ? (
-                <>
-                  <div className="flex items-center gap-3 text-[13px] text-ap-muted">
-                    <span className="h-px flex-1 bg-ap-line" />
-                    or
-                    <span className="h-px flex-1 bg-ap-line" />
-                  </div>
-                  {/* A plain link: Google sign-in is a full-page hand-over, not an app route. Its href
+                <input
+                  type="text"
+                  name="website"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  className="sr-only"
+                />
+                <p className="-mt-2 text-[13px] text-ap-muted">
+                  Took the LoveIQ test already? Use the same email and we&apos;ll connect your
+                  result.
+                </p>
+                <Tick checked={adult} onChange={setAdult} required>
+                  I confirm that I am 18 years of age or older.
+                </Tick>
+                <Tick checked={terms} onChange={setTerms} required>
+                  I accept the{" "}
+                  <a href="/terms-of-use" target="_blank" className="underline">
+                    terms of use
+                  </a>{" "}
+                  and I have read the{" "}
+                  <a href="/privacy-policy" target="_blank" className="underline">
+                    privacy notice
+                  </a>
+                  .
+                </Tick>
+                <Tick checked={consent} onChange={setConsent} required>
+                  Mira may process what I share about my sex life and health to coach me, and to
+                  count, without my words, how Mira is used and whether she helps.{" "}
+                  <Link href="/mira/privacy" target="_blank" className="underline">
+                    How Mira handles your data
+                  </Link>
+                </Tick>
+                <p className="-mb-2 text-[13px] text-ap-muted">Optional, for a new account</p>
+                <Tick checked={useAssessment} onChange={setUseAssessment}>
+                  Use my LoveIQ test result to tailor my coaching.
+                </Tick>
+                <PrimaryButton type="submit" disabled={busy}>
+                  {busy ? "Sending…" : "Send me a code"}
+                </PrimaryButton>
+                {googleEnabled ? (
+                  <>
+                    <div className="flex items-center gap-3 text-[13px] text-ap-muted">
+                      <span className="h-px flex-1 bg-ap-line" />
+                      or
+                      <span className="h-px flex-1 bg-ap-line" />
+                    </div>
+                    {/* A plain link: Google sign-in is a full-page hand-over, not an app route. Its href
                       must not depend on state the click changes: React re-renders before the browser
                       follows the link, so a click that cleared the href went nowhere. */}
-                  <a
-                    href={adult && terms && consent ? googleHref : undefined}
-                    aria-disabled={busy || !adult || !terms || !consent}
-                    onClick={rememberSourceForGoogle}
-                    className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                    <a
+                      href={adult && terms && consent ? googleHref : undefined}
+                      aria-disabled={busy || !adult || !terms || !consent}
+                      onClick={rememberSourceForGoogle}
+                      className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                    >
+                      <GoogleG />
+                      Continue with Google
+                    </a>
+                  </>
+                ) : null}
+                {passkeys ? (
+                  <button
+                    type="button"
+                    aria-disabled={busy || undefined}
+                    onClick={() => (busy ? undefined : void passkeyButton())}
+                    className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-50"
                   >
-                    <GoogleG />
-                    Continue with Google
-                  </a>
-                </>
-              ) : null}
-              {passkeys ? (
-                <button
-                  type="button"
-                  aria-disabled={busy || undefined}
-                  onClick={() => (busy ? undefined : void passkeyButton())}
-                  className="flex min-h-[48px] items-center justify-center gap-3 rounded-full border border-ap-line bg-white px-5 text-[15px] font-semibold text-ap-ink transition hover:border-ap-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ap-purple aria-disabled:cursor-wait aria-disabled:opacity-50"
-                >
-                  <PasskeyIcon />
-                  Sign in with a passkey
-                </button>
-              ) : null}
-              <p className="text-[13px] text-ap-muted">
-                No password needed. Already have an account? Use the same form
-                {passkeys ? ", or your passkey" : ""}.
-              </p>
-            </form>
-          ) : null}
+                    <PasskeyIcon />
+                    Sign in with a passkey
+                  </button>
+                ) : null}
+                <p className="text-[13px] text-ap-muted">
+                  No password needed. Already have an account? Use the same form
+                  {passkeys ? ", or your passkey" : ""}.
+                </p>
+              </form>
+            ) : null}
 
-          {step === "verify" ? (
-            <form
-              className="flex flex-col gap-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void verify();
-              }}
-            >
-              <div>
+            {step === "verify" ? (
+              <form
+                className="flex flex-col gap-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void verify();
+                }}
+              >
+                <div>
+                  <h1
+                    ref={heading}
+                    tabIndex={-1}
+                    className="font-serif text-[34px] font-medium leading-tight outline-none"
+                  >
+                    Check your inbox
+                  </h1>
+                  <p className="mt-2 text-[15px] text-ap-body">
+                    We sent a sign-in code to{" "}
+                    <strong className="[overflow-wrap:anywhere]">{email}</strong>. It works for an
+                    hour.
+                  </p>
+                </div>
+                <label className="flex flex-col gap-2 text-[14px] font-semibold">
+                  Code from the email
+                  <input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={10}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    className="min-h-[56px] rounded-2xl border border-ap-field bg-white px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
+                  />
+                </label>
+                <PrimaryButton type="submit" disabled={busy || code.length < 6}>
+                  {busy ? "Checking…" : "Verify and continue"}
+                </PrimaryButton>
+                <div className="flex justify-between gap-3 text-[14px] text-ap-muted">
+                  <button
+                    type="button"
+                    className="underline aria-disabled:cursor-wait aria-disabled:opacity-50"
+                    aria-disabled={busy || undefined}
+                    onClick={async () => {
+                      if (busy) return;
+                      if (await sendCode()) setNotice(NEW_CODE);
+                    }}
+                  >
+                    Send a new code
+                  </button>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      keepWaiting(null);
+                      setStep("account");
+                      setCode("");
+                      // A restored step brought the ticks back for its resend; whoever types an
+                      // address next must tick them themselves (consent is never pre-ticked).
+                      setAdult(false);
+                      setTerms(false);
+                      setConsent(false);
+                      setUseAssessment(false);
+                    }}
+                  >
+                    Change email
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {step === "passkey" ? (
+              <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
+            ) : null}
+
+            {step === "kept" ? (
+              <div className="flex flex-col gap-5">
+                <div>
+                  <h1
+                    ref={heading}
+                    tabIndex={-1}
+                    className="font-serif text-[34px] font-medium leading-tight outline-none"
+                  >
+                    Your earlier chat wasn&apos;t kept
+                  </h1>
+                  <p className="mt-2 text-[15px] text-ap-body">
+                    “Remember our conversations” is off for this account, so Mira keeps no chats.
+                    You can turn it on in Settings.
+                  </p>
+                </div>
+                <PrimaryButton onClick={() => void afterKept.current()}>Continue</PrimaryButton>
+              </div>
+            ) : null}
+
+            {step === "minor" ? (
+              <div className="flex flex-col gap-3">
                 <h1
                   ref={heading}
                   tabIndex={-1}
                   className="font-serif text-[34px] font-medium leading-tight outline-none"
                 >
-                  Check your inbox
+                  {ADULTS_ONLY}
                 </h1>
-                <p className="mt-2 text-[15px] text-ap-body">
-                  We sent a sign-in code to{" "}
-                  <strong className="[overflow-wrap:anywhere]">{email}</strong>. It works for an
-                  hour.
-                </p>
+                {minorSignedIn ? (
+                  <p className="text-[15px] text-ap-body">
+                    You can sign out or delete the account in{" "}
+                    <Link
+                      href="/mira/settings"
+                      className="font-semibold text-ap-ink underline underline-offset-2"
+                    >
+                      Settings
+                    </Link>
+                    .
+                  </p>
+                ) : null}
               </div>
-              <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                Code from the email
-                <input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={10}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  className="min-h-[56px] rounded-2xl border border-ap-field bg-white px-4 text-center font-serif text-[28px] tracking-[0.5em] outline-none focus:border-ap-purple"
-                />
-              </label>
-              <PrimaryButton type="submit" disabled={busy || code.length < 6}>
-                {busy ? "Checking…" : "Verify and continue"}
-              </PrimaryButton>
-              <div className="flex justify-between gap-3 text-[14px] text-ap-muted">
-                <button
-                  type="button"
-                  className="underline aria-disabled:cursor-wait aria-disabled:opacity-50"
-                  aria-disabled={busy || undefined}
-                  onClick={async () => {
-                    if (busy) return;
-                    if (await sendCode()) setNotice(NEW_CODE);
-                  }}
-                >
-                  Send a new code
-                </button>
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => {
-                    keepWaiting(null);
-                    setStep("account");
-                    setCode("");
-                    // A restored step brought the ticks back for its resend; whoever types an
-                    // address next must tick them themselves (consent is never pre-ticked).
-                    setAdult(false);
-                    setTerms(false);
-                    setConsent(false);
-                    setUseAssessment(false);
-                  }}
-                >
-                  Change email
-                </button>
-              </div>
-            </form>
-          ) : null}
+            ) : null}
 
-          {step === "passkey" ? (
-            <PasskeyOffer headingRef={heading} onDone={() => void afterPasskeyOffer()} />
-          ) : null}
-
-          {step === "kept" ? (
-            <div className="flex flex-col gap-5">
-              <div>
+            {step === "about" ? (
+              <form
+                className="flex flex-col gap-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void saveAbout();
+                }}
+              >
                 <h1
                   ref={heading}
                   tabIndex={-1}
                   className="font-serif text-[34px] font-medium leading-tight outline-none"
                 >
-                  Your earlier chat wasn&apos;t kept
+                  About you
                 </h1>
-                <p className="mt-2 text-[15px] text-ap-body">
-                  “Remember our conversations” is off for this account, so Mira keeps no chats. You
-                  can turn it on in Settings.
-                </p>
-              </div>
-              <PrimaryButton onClick={() => void afterKept.current()}>Continue</PrimaryButton>
-            </div>
-          ) : null}
-
-          {step === "minor" ? (
-            <div className="flex flex-col gap-3">
-              <h1
-                ref={heading}
-                tabIndex={-1}
-                className="font-serif text-[34px] font-medium leading-tight outline-none"
-              >
-                {ADULTS_ONLY}
-              </h1>
-              {minorSignedIn ? (
-                <p className="text-[15px] text-ap-body">
-                  You can sign out or delete the account in{" "}
-                  <Link
-                    href="/mira/settings"
-                    className="font-semibold text-ap-ink underline underline-offset-2"
+                <label className="flex flex-col gap-2 text-[14px] font-semibold">
+                  What should Mira call you?
+                  <input
+                    value={name}
+                    maxLength={60}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Name or nickname"
+                    className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-[14px] font-semibold">
+                  How do you describe your gender?{" "}
+                  <span className="font-normal text-ap-muted">
+                    Optional. Mira won&apos;t need to ask again.
+                  </span>
+                  <input
+                    value={gender}
+                    maxLength={40}
+                    onChange={(e) => setGender(e.target.value)}
+                    placeholder="Woman, man, non-binary, or your own words"
+                    className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-[14px] font-semibold">
+                  Where are you based?{" "}
+                  <span className="font-normal text-ap-muted">
+                    So Mira can show the right support lines if you ever need them.
+                  </span>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal"
                   >
-                    Settings
-                  </Link>
-                  .
+                    <option value="">Choose…</option>
+                    {CRISIS_COUNTRY_OPTIONS.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                    <option value="OTHER">Somewhere else</option>
+                  </select>
+                </label>
+                <p className="text-[13px] leading-relaxed text-ap-muted">
+                  Mira sends a short daily nudge by email at 8:00 your time, picking up on your last
+                  chat. You can change the time or pause it anytime in Settings, and stop it from
+                  any nudge.
                 </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {step === "about" ? (
-            <form
-              className="flex flex-col gap-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void saveAbout();
-              }}
-            >
-              <h1
-                ref={heading}
-                tabIndex={-1}
-                className="font-serif text-[34px] font-medium leading-tight outline-none"
-              >
-                About you
-              </h1>
-              <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                What should Mira call you?
-                <input
-                  value={name}
-                  maxLength={60}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Name or nickname"
-                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                How do you describe your gender?{" "}
-                <span className="font-normal text-ap-muted">
-                  Optional. Mira won&apos;t need to ask again.
-                </span>
-                <input
-                  value={gender}
-                  maxLength={40}
-                  onChange={(e) => setGender(e.target.value)}
-                  placeholder="Woman, man, non-binary, or your own words"
-                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal outline-none focus:border-ap-purple"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-[14px] font-semibold">
-                Where are you based?{" "}
-                <span className="font-normal text-ap-muted">
-                  So Mira can show the right support lines if you ever need them.
-                </span>
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="min-h-[48px] rounded-2xl border border-ap-field bg-white px-4 text-[16px] font-normal"
+                <PrimaryButton type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Continue"}
+                </PrimaryButton>
+                <button
+                  type="button"
+                  aria-disabled={busy || undefined}
+                  onClick={() => (busy ? undefined : void skipAbout())}
+                  className="text-[14px] text-ap-muted underline aria-disabled:cursor-wait aria-disabled:opacity-50"
                 >
-                  <option value="">Choose…</option>
-                  {CRISIS_COUNTRY_OPTIONS.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
-                  <option value="OTHER">Somewhere else</option>
-                </select>
-              </label>
-              <p className="text-[13px] leading-relaxed text-ap-muted">
-                Mira sends a short daily nudge by email at 8:00 your time, picking up on your last
-                chat. You can change the time, pause or stop it anytime in Settings or from any
-                nudge.
-              </p>
-              <PrimaryButton type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Continue"}
-              </PrimaryButton>
-              <button
-                type="button"
-                aria-disabled={busy || undefined}
-                onClick={() => (busy ? undefined : void skipAbout())}
-                className="text-[14px] text-ap-muted underline aria-disabled:cursor-wait aria-disabled:opacity-50"
-              >
-                Skip for now
-              </button>
-            </form>
-          ) : null}
+                  Skip for now
+                </button>
+              </form>
+            ) : null}
 
-          {notice ? (
-            <p role="status" className="text-[14px] text-ap-good-ink">
-              {notice}
-            </p>
-          ) : null}
-          {error ? (
-            <p id="signup-error" role="alert" className="text-[14px] text-ap-bad-ink">
-              {error}
-            </p>
-          ) : null}
-        </div>
-        <LegalLinks className="mt-auto max-w-[520px] pt-3" />
-      </main>
+            {notice ? (
+              <p role="status" className="text-[14px] text-ap-good-ink">
+                {notice}
+              </p>
+            ) : null}
+            {error ? (
+              <p id="signup-error" role="alert" className="text-[14px] text-ap-bad-ink">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        </main>
+        <footer>
+          <LegalLinks className="max-w-[520px]" />
+        </footer>
+      </div>
     </div>
   );
 }

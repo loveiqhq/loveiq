@@ -349,6 +349,43 @@ describe("the goals page", () => {
     expect((input as HTMLInputElement).value).toBe("");
   });
 
+  // R4-HABITS-2: one status line, and the same words set again changed nothing in it, so a
+  // second "Goal added." or "Goal deleted." in a row was never read out.
+  it("says every add and every delete, the same words twice in a row too", async () => {
+    let n = 0;
+    replies["POST /api/mira/goals"] = (b) => ({
+      body: { goal: goal(`new${++n}`, { text: b.text }) },
+    });
+    render(<GoalsPage />);
+    const input = await screen.findByLabelText("Your goal, in your own words");
+    const status = screen.getAllByRole("status").find((el) => el.classList.contains("sr-only"))!;
+    const heard: string[] = [];
+    const watch = new MutationObserver(() => heard.push(status.textContent ?? ""));
+    watch.observe(status, { childList: true, characterData: true, subtree: true });
+    for (const words of ["Stretch before bed", "Walk ten minutes"]) {
+      fireEvent.change(input, { target: { value: words } });
+      fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
+      await screen.findByText(words);
+    }
+    await waitFor(() => expect(heard.length).toBeGreaterThanOrEqual(2));
+    expect(heard.map((t) => t.trim())).toEqual(["Goal added.", "Goal added."]);
+
+    for (const words of ["Stretch before bed", "Walk ten minutes"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Edit: ${words}` }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete goal" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() => expect(screen.queryByText(words)).toBeNull());
+    }
+    await waitFor(() => expect(heard.length).toBeGreaterThanOrEqual(4));
+    expect(heard.map((t) => t.trim())).toEqual([
+      "Goal added.",
+      "Goal added.",
+      "Goal deleted.",
+      "Goal deleted.",
+    ]);
+    watch.disconnect();
+  });
+
   it("says so when a stale tab ticks a goal put away elsewhere, and keeps no tick", async () => {
     replies["GET /api/mira/goals"] = () => ({ body: { goals: [LIGHT] } });
     replies["POST /api/mira/goals/g1/log"] = () => ({
