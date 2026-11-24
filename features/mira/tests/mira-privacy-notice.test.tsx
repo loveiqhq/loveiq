@@ -71,12 +71,32 @@ describe("Mira's privacy notice, made true", () => {
 
   it("keeps the promises the code now keeps: a request covers everything, deletion unlinks", () => {
     expect(text).toContain("A request covers all your Mira data.");
-    // Round 4: a copy keeps to rows tied to the person (GDPR Art. 15(4)), and says so.
+    // Round 4: a copy keeps to rows tied to the person (GDPR Art. 15(4)), and says so; chats kept
+    // without an account (24 Nov 2026) stay out too, unless one came into the account.
     expect(text).toContain(
-      "A copy leaves out what was done in a browser before you signed in, as on a shared browser that can be someone else's."
+      "A copy leaves out what was done in a browser before you signed in, chats we kept without an account included, as on a shared browser that can be someone else's. A chat that came into your account when you signed up is in it."
     );
     expect(text).toContain(
       "Deleting your account deletes any words in the log, and the rest is no longer linked to you."
     );
+  });
+
+  // Eman, 24 Nov 2026: chats without an account are kept too (store.ts keepAnonExchange, the
+  // chat route), only under the tick that says so; deleted by "Delete this chat", at sign-up
+  // when the account keeps no chats, by the under-18 stop, or 12 months after the last message.
+  it("says a chat without an account is kept, why, how to delete it and for how long", () => {
+    expect(text).not.toContain("not by us");
+    expect(text).not.toContain("Without an account, that count is all we keep of a voice session.");
+    for (const line of [
+      "Without an account, your chat too: what you write and what Mira writes back, with this browser's random id and which wording of the tick you agreed to. The tick before your first message says so.",
+      "Without an account it counts your free message, links your steps and keeps your chat with this browser.",
+      "Without an account, to keep your chat: to coach you, as it comes into an account if you make one, and so our team can read chats to improve Mira. Legal basis: your explicit consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR), which you give with the tick before your first message.",
+      "Without an account, your chat is kept in this browser, and starting a new chat or clearing your browser data removes it there. From the first message you send after the tick that says so, we keep a copy too, with this browser's random id. “Delete this chat” on the chat page deletes it, here and on our servers, with any other chat we kept from this browser; otherwise we delete it 12 months after its last message. If you make an account, it moves into the account and is kept like your other chats, or, with “Remember our conversations” off, is deleted.",
+      "Without an account, use “Delete this chat” on the chat page. We can't tell from an email which chat kept without an account is yours, so that button, in the browser you used, is the way to delete it.",
+      "In a browser without an account, the chat there is cleared, every chat we kept from that browser is deleted, and a cookie marks that browser for a year.",
+      "Without an account, we keep a session's words in your chat like typed ones, and of the session itself only that count.",
+    ]) {
+      expect(text, line).toContain(line);
+    }
   });
 });

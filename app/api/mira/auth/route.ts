@@ -4,15 +4,18 @@
  *   { action: "start", email, adult: true, terms: true, consent: true, website? } → emails a
  *       sign-in code (`website` is a hidden field only a bot fills); never from a browser Mira
  *       stopped as under 18 (403 `minor: true`, whatever the address)
- *   { action: "verify", email, code, carry?, useAssessment? }  → signs in (Mira's
+ *   { action: "verify", email, code, carry?, anonChat?, useAssessment? }  → signs in (Mira's
  *       own cookie), records the consent with the form's two optional ticks (off unless sent
  *       true), records the device (devices.ts; Mira honours only recorded sessions), moves the
  *       anonymous chat into the account ("your current chat comes with you"), and says whether to
  *       offer "Use Face ID next time?" (`offerPasskey`: never to staff, under-18s or at 10 passkeys);
  *       `minor: true` when this browser or the account was stopped as under 18 (nothing carried)
- *   { action: "carry", carry } → after a Google or passkey sign-in, moves the anonymous chat into
- *       the account (never from a browser or for an account Mira stopped as under 18: 403
+ *   { action: "carry", carry, anonChat? } → after a Google or passkey sign-in, moves the anonymous
+ *       chat into the account (never from a browser or for an account Mira stopped as under 18: 403
  *       `minor: true`)
+ *   `anonChat` (24 Nov 2026): the chat Mira kept from this browser signed out (the chat route's
+ *   `anonChat`). It becomes the account's own chat (store.ts adoptAnonChat), so it is never kept
+ *   twice; when the account keeps no chats, or the sign-in is refused as under 18, it is deleted.
  *   { action: "logout" }  → also forgets this device (its row in Settings › Devices)
  *
  * "start" answers the same whether or not the address is new, so it can't be used to learn who
@@ -38,9 +41,11 @@ import {
 } from "@features/mira/server/sign-in";
 import {
   addMessages,
+  adoptAnonChat,
   claimCodeAttempt,
   consumeCode,
   createChat,
+  deleteAnonChats,
   getProfile,
   logMiraEvent,
   recordCodeIssued,
@@ -106,9 +111,14 @@ const schema = z.discriminatedUnion("action", [
     email,
     code: z.string().trim().regex(SIGN_IN_CODE),
     carry: carrySchema.optional(),
+    anonChat: z.string().uuid().optional(),
     useAssessment: z.boolean().default(false),
   }),
-  z.object({ action: z.literal("carry"), carry: carrySchema.min(1) }),
+  z.object({
+    action: z.literal("carry"),
+    carry: carrySchema.min(1),
+    anonChat: z.string().uuid().optional(),
+  }),
   z.object({ action: z.literal("logout") }),
 ]);
 
@@ -136,13 +146,22 @@ async function sentNothing(): Promise<NextResponse> {
  * crisis words or the first reply opened the support lines: then by its date in the person's
  * zone, "Chat on 22 Nov", never those words (round-2 CHAT-17, lead decision 5, as the chat
  * route names its chats).
+ * The copy Mira kept of this browser's chat (`anonChat`, 24 Nov 2026) becomes the account's own
+ * instead, and needs no allowance; when the account keeps no chats it is deleted. A copy missing
+ * turns the browser shows goes, and the turns are carried as above: never both.
  */
 async function carryChat(
   accountId: string,
   remember: boolean,
   turns: Turn[],
-  timeZone?: string | null
+  timeZone?: string | null,
+  anonChat?: string
 ): Promise<string | null | "limited"> {
+  if (anonChat) {
+    const browser = await anonId();
+    if (!remember) await deleteAnonChats(browser, anonChat);
+    else if (await adoptAnonChat(browser, anonChat, accountId, turns.length)) return anonChat;
+  }
   const kept = turns.slice(-HISTORY_TURNS).map((t) => ({
     role: t.role,
     content: t.content.slice(0, t.role === "user" ? MAX_MESSAGE_CHARS : MAX_REPLY_CHARS),
@@ -205,7 +224,13 @@ export async function POST(request: Request) {
       const profile = await getProfile(account.id);
       const turns = body.carry.filter((t) => t.content.trim());
       const remember = profile?.remember_chats !== false;
-      const chatId = await carryChat(account.id, remember, turns, profile?.time_zone);
+      const chatId = await carryChat(
+        account.id,
+        remember,
+        turns,
+        profile?.time_zone,
+        body.anonChat
+      );
       if (chatId === "limited") return tryLater();
       // Not kept as "Remember our conversations" is off: the page says so (round-2 ID-20).
       return NextResponse.json({ success: true, chatId, ...(remember ? {} : { memoryOff: true }) });
@@ -370,7 +395,7 @@ export async function POST(request: Request) {
     const remember = !minor && profile?.remember_chats !== false;
     // A chat came along but the account keeps none: the page says so (round-2 ID-20).
     const memoryOff = carry.length > 0 && !minor && profile?.remember_chats === false;
-    const chatId = await carryChat(account.id, remember, carry, profile?.time_zone);
+    const chatId = await carryChat(account.id, remember, carry, profile?.time_zone, body.anonChat);
     logMiraEvent(
       "signup_completed",
       { anonId: await anonId(), userId: account.id },

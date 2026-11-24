@@ -46,8 +46,9 @@ export const SKIP_ANSWER = "I’d rather skip this one.";
 /**
  * Bumped whenever the consent wording on the chat or the sign-up changes: a browser that ticked
  * an older version is asked again. Pure constants, so the chat page imports this file too.
+ * Signed out, a chat is kept only under this version (the chat route), and with it.
  */
-export const CONSENT_VERSION = "mira-2026-11-21-2"; // the optional rating box went (21 Nov)
+export const CONSENT_VERSION = "mira-2026-11-24"; // the chat's tick names keeping it (24 Nov)
 
 /**
  * The wording of "Mira may use my check results" (ui/checks/ChecksSettings.tsx), recorded with

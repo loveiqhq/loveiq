@@ -1,9 +1,13 @@
 /**
  * POST /api/mira/chat — one message to Mira, one reply back.
  *
- * Anonymous: the browser keeps the chat and sends the recent turns; nothing is stored here, and
- * every message is counted per browser id (ANON_FREE_MESSAGES, then the sign-up card), with a
- * daily message cap per browser and per network against cost and abuse.
+ * Anonymous: the browser keeps the chat and sends the recent turns, and every message is counted
+ * per browser id (ANON_FREE_MESSAGES, then the sign-up card), with a daily message cap per browser
+ * and per network against cost and abuse. From 24 Nov 2026 (Eman) each answered exchange is also
+ * kept under the browser id (store.ts keepAnonExchange; a crisis one too), but only when the
+ * browser agreed to the consent that names keeping it (`consentVersion` is CONSENT_VERSION) and
+ * never for a browser stopped as under 18; the kept chat's id comes back as `anonChat`, for the
+ * browser to send with its next message. A message the sign-up card holds back is not kept.
  * Signed in: turns come from the account's stored chat, and the exchange is stored when
  * "Remember our conversations" is on. Both need the first-message consent (18+ and the
  * sensitive-data yes), sent with every message. Over everyone together, GLOBAL_DAILY_MESSAGES
@@ -28,10 +32,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import miraConfig from "@features/mira/content/mira-config.json";
 import { alertAnonShare, alertDailyCeiling } from "@features/mira/server/alerts";
-import { anonId } from "@features/mira/server/anon";
+import { anonId, knownAnonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
   ANON_GLOBAL_DAILY_MESSAGES,
+  CONSENT_VERSION,
   DAILY_MESSAGES,
   GLOBAL_DAILY_MESSAGES,
   HISTORY_TURNS,
@@ -58,9 +63,11 @@ import { getMiraAccount } from "@features/mira/server/session";
 import {
   addMessages,
   createChat,
+  deleteAnonChats,
   findAssessment,
   getMessages,
   getProfile,
+  keepAnonExchange,
   logMiraEvent,
   ownsChat,
 } from "@features/mira/server/store";
@@ -112,7 +119,14 @@ const schema = z.object({
   session: z.literal(true).optional(),
   /** Sent from a page rendered signed in: without the sign-in now, ask for it again. */
   signedIn: z.literal(true).optional(),
+  /** Signed out: the consent wording this browser agreed to; only CONSENT_VERSION's is kept. */
+  consentVersion: z.string().max(40).optional(),
+  /** Signed out: the chat Mira kept from this browser (her last answer's `anonChat`). */
+  anonChat: z.string().uuid().optional(),
 });
+
+/** Signed out, a chat is kept only under the consent that names keeping it (24 Nov 2026). */
+const keepsSignedOut = (raw: Record<string, unknown>) => raw.consentVersion === CONSENT_VERSION;
 
 /** A spoken crisis message's session, read leniently: the crisis reply never waits for the body. */
 function spokenSession(raw: Record<string, unknown>): string | undefined {
@@ -214,6 +228,7 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
   let chatId: string | null = null;
   let messageId: number | null = null;
   let title: string | undefined;
+  let anonChat: string | null = null;
   try {
     const ip = getClientIp(request);
     const logged =
@@ -227,7 +242,8 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
       ).allowed;
     if (logged) {
       const account = await getMiraAccount();
-      who = { anonId: account ? null : await anonId(), userId: account?.id ?? null };
+      const browser = account ? null : await anonId();
+      who = { anonId: browser, userId: account?.id ?? null };
       const profile = account ? await getProfile(account.id) : null;
       if (profile?.country && profile.country !== "OTHER") country = profile.country;
       // Stored like any exchange while remembering is on, but not past the daily cap.
@@ -247,6 +263,17 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
         ]);
         chatId = id;
         messageId = ids[1] ?? null;
+      } else if (browser && keepsSignedOut(raw) && !(await isMinor(null))) {
+        // Signed out, kept under the browser's id like any exchange, and named by its date.
+        anonChat = await keepAnonExchange(
+          { anonId: browser, consentVersion: CONSENT_VERSION },
+          typeof raw.anonChat === "string" ? raw.anonChat : null,
+          neutralTitle(new Date()),
+          [
+            { role: "user", content: message.trim().slice(0, MAX_MESSAGE_CHARS) },
+            { role: "assistant", content: miraConfig.crisisMessage },
+          ]
+        );
       }
     }
   } catch (err) {
@@ -268,6 +295,7 @@ async function crisisReply(request: Request, raw: Record<string, unknown>, messa
     chatId,
     messageId,
     ...(title ? { title } : {}),
+    ...(anonChat ? { anonChat } : {}),
   });
 }
 
@@ -522,34 +550,48 @@ export async function POST(request: Request) {
   const lines = crisis || refused || support;
   let messageId: number | null = null;
   let title: string | undefined; // a new chat's, as it is shown (Home, the chat list)
+  let anonChat: string | null = null; // the chat kept from this browser, signed out
+  // A new chat is named after its first message, unless the reply to it was a crisis or a
+  // declined one: then by its date, never those words (round-2 audit CHAT-17, lead decision 5).
+  // The question-9 check-in's lines come from a check, not the message, which names it.
+  const now = new Date();
+  const named =
+    crisis || refused ? neutralTitle(now, timeZone) : message.replace(/\s+/g, " ").slice(0, 80);
+  // A spoken turn is tagged with its voice session in an account only (server/voice.ts).
+  const voiceSession = account ? voice?.session : undefined;
+  const exchange = [
+    { role: "user" as const, content: message, voiceSession },
+    { role: "assistant" as const, content: reply, sources, ask, goal, voiceSession },
+    ...(invitation ? [{ role: "assistant" as const, content: invitation, voiceSession }] : []),
+  ];
   if (minor) {
-    // An under-18 stop keeps nothing: stopForMinor deletes the account's chats, this one too.
+    // An under-18 stop keeps nothing: stopForMinor deletes the account's chats, this one too,
+    // and what this browser had kept signed out.
     chatId = null;
     await stopForMinor(account?.id ?? null);
   } else if (account && remember) {
     try {
       if (!chatId) {
-        // Named after its first message, unless the reply to it was a crisis or a declined one:
-        // then by its date, never those words (round-2 audit CHAT-17, lead decision 5). The
-        // question-9 check-in's lines come from a check, not the message, which names it.
-        const now = new Date();
-        const stored =
-          crisis || refused
-            ? neutralTitle(now, timeZone)
-            : message.replace(/\s+/g, " ").slice(0, 80);
-        chatId = await createChat(account.id, stored);
-        title = shownTitle(stored, now, timeZone);
+        chatId = await createChat(account.id, named);
+        title = shownTitle(named, now, timeZone);
       }
-      const voiceSession = voice?.session;
-      const ids = await addMessages(chatId, [
-        { role: "user", content: message, voiceSession },
-        { role: "assistant", content: reply, sources, ask, goal, voiceSession },
-        ...(invitation ? [{ role: "assistant" as const, content: invitation, voiceSession }] : []),
-      ]);
+      const ids = await addMessages(chatId, exchange);
       messageId = ids[1] ?? null;
     } catch (err) {
       // The person still gets the reply; only the saved copy is missing.
       logger.error({ err }, "mira: the exchange was not stored");
+    }
+  } else if (anon && keepsSignedOut(parsed.data)) {
+    try {
+      anonChat = await keepAnonExchange(
+        { anonId: anon, consentVersion: CONSENT_VERSION },
+        parsed.data.anonChat,
+        named,
+        exchange
+      );
+    } catch (err) {
+      // As above: the reply still goes out.
+      logger.error({ err }, "mira: a signed-out exchange was not kept");
     }
   }
 
@@ -592,5 +634,36 @@ export async function POST(request: Request) {
     ...(goal ? { goal } : {}),
     ...(invitation ? { invitation } : {}),
     ...(freeLeft === null ? {} : { freeLeft }),
+    ...(anonChat ? { anonChat } : {}),
   });
+}
+
+/**
+ * DELETE /api/mira/chat — "Delete this chat" without an account (24 Nov 2026): every chat Mira
+ * kept from this browser goes, with its messages, as the confirm step says. Never makes a browser
+ * id; 404 when this browser kept none. Logged as `chat_deleted`, with no id or words.
+ */
+export async function DELETE(request: Request) {
+  if (!(await verifyCsrfToken(request))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+  }
+  const rate = await checkRateLimit(getClientIp(request), {
+    bucket: "mira-chat-delete",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!rate.allowed) {
+    return NextResponse.json({ error: "Please try again in a minute." }, { status: 429 });
+  }
+  const browser = await knownAnonId();
+  try {
+    if (!browser || (await deleteAnonChats(browser)) === 0) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+    logMiraEvent("chat_deleted", { anonId: browser });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "mira: could not delete a signed-out chat");
+    return NextResponse.json({ error: "Unable to delete this chat." }, { status: 500 });
+  }
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
+import { CONSENT_VERSION } from "@features/mira/server/config";
 import MiraChat from "@features/mira/ui/MiraChat";
 import { GOAL_STARTER, GoalSuggestion } from "@features/mira/ui/goals/GoalSuggestion";
 import GoalsCard from "@features/mira/ui/goals/GoalsCard";
@@ -291,7 +292,7 @@ describe("Add as a goal, under a reply of Mira's", () => {
 
 describe("the chat and goals", () => {
   const consent = () =>
-    localStorage.setItem("mira.consent.v1", JSON.stringify({ version: "mira-2026-11-21-2" }));
+    localStorage.setItem("mira.consent.v1", JSON.stringify({ version: CONSENT_VERSION }));
 
   it("shows Mira's goal offer under her reply, with no sign-up card beside it", async () => {
     consent();

@@ -132,6 +132,9 @@ const COLUMNS = [
  * masked, DPIA M5), the team's data tool, every email Resend sends, the voice tick, the
  * self-checks' counts and the under-18 stop in full.
  * Round 3 (R3-DATA-4): the email links' cookie (mira_link) and the under-18 browser mark.
+ * 24 Nov 2026 (Eman): a chat without an account is kept too, under the tick that says so, until
+ * "Delete this chat", a sign-up or 12 months after its last message (wording for Sanjin and the
+ * DPO to check).
  */
 export default function MiraPrivacyPage() {
   return (
@@ -192,6 +195,11 @@ export default function MiraPrivacyPage() {
             for a year, so Mira&apos;s pages open the way you set them, with or without an account.
           </li>
           <li>Your saved chats, if &ldquo;Remember our conversations&rdquo; is on.</li>
+          <li>
+            Without an account, your chat too: what you write and what Mira writes back, with this
+            browser&apos;s random id and which wording of the tick you agreed to. The tick before
+            your first message says so.
+          </li>
           <li>
             Your LoveIQ Sexual Personality result, only if you tick &ldquo;Use my LoveIQ test result
             to tailor my coaching&rdquo;. It stays off unless you turn it on. We find your result by
@@ -261,10 +269,10 @@ export default function MiraPrivacyPage() {
           </li>
           <li>
             A random id in a cookie on this browser, kept for a year. Without an account it counts
-            your free message and links your steps. When you sign in, a cookie keeps you signed in.
-            When you open a link from one of Mira&apos;s emails to stop reminders or change your
-            nudges, a cookie keeps the link&apos;s key for an hour, sent only to that page, so the
-            key stays out of the page&apos;s address.
+            your free message, links your steps and keeps your chat with this browser. When you sign
+            in, a cookie keeps you signed in. When you open a link from one of Mira&apos;s emails to
+            stop reminders or change your nudges, a cookie keeps the link&apos;s key for an hour,
+            sent only to that page, so the key stays out of the page&apos;s address.
           </li>
           <li>
             Short-lived counters with your IP address, email address or browser id, to stop abuse.
@@ -330,6 +338,12 @@ export default function MiraPrivacyPage() {
           <li>
             To coach you. Mira needs your messages to answer them. Legal basis: your explicit
             consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR).
+          </li>
+          <li>
+            Without an account, to keep your chat: to coach you, as it comes into an account if you
+            make one, and so our team can read chats to improve Mira. Legal basis: your explicit
+            consent (Art. 6(1)(a) and Art. 9(2)(a) GDPR), which you give with the tick before your
+            first message.
           </li>
           <li>
             To see whether Mira helps. We count the labels and compare body check scores across
@@ -438,10 +452,10 @@ export default function MiraPrivacyPage() {
           under its own privacy policy.
         </p>
         <p className="mt-3">
-          Our team can currently also read much of what Mira stores, including your chats, goals,
-          journal, the key points of your voice sessions and your name, with an internal data tool
-          that only team members can use. Its answers reach them through Claude, Anthropic&apos;s AI
-          assistant.
+          Our team can currently also read much of what Mira stores, including your chats (with or
+          without an account), goals, journal, the key points of your voice sessions and your name,
+          with an internal data tool that only team members can use. Its answers reach them through
+          Claude, Anthropic&apos;s AI assistant.
         </p>
 
         {/* Talking to Mira by voice (22 Nov 2026, features/mira/ui/voice). */}
@@ -486,16 +500,21 @@ export default function MiraPrivacyPage() {
           <li>
             For Mira&apos;s statistics we count each session&apos;s length, how speech became text,
             its number of turns and whether its key points were opened later: numbers, never words.
-            Without an account, that count is all we keep of a voice session.
+            Without an account, we keep a session&apos;s words in your chat like typed ones, and of
+            the session itself only that count.
           </li>
         </ul>
 
         <h2>How long we keep it</h2>
         <ul>
           <li>
-            Without an account, your chat is saved only in this browser, not by us. Starting a new
-            chat or clearing your browser data removes it. If you make an account, Mira can carry
-            the chat into it.
+            Without an account, your chat is kept in this browser, and starting a new chat or
+            clearing your browser data removes it there. From the first message you send after the
+            tick that says so, we keep a copy too, with this browser&apos;s random id. &ldquo;Delete
+            this chat&rdquo; on the chat page deletes it, here and on our servers, with any other
+            chat we kept from this browser; otherwise we delete it 12 months after its last message.
+            If you make an account, it moves into the account and is kept like your other chats, or,
+            with &ldquo;Remember our conversations&rdquo; off, is deleted.
           </li>
           <li>
             With an account, Mira saves your chats while &ldquo;Remember our conversations&rdquo; is
@@ -595,8 +614,10 @@ export default function MiraPrivacyPage() {
         <ul>
           <li>
             You can take back your consent at any time. Stop chatting, or delete your chats, your
-            self-check results or your account in Settings. Without an account, start a new chat or
-            clear your browser data. This does not make what we did before unlawful.
+            self-check results or your account in Settings. Without an account, use &ldquo;Delete
+            this chat&rdquo; on the chat page. We can&apos;t tell from an email which chat kept
+            without an account is yours, so that button, in the browser you used, is the way to
+            delete it. This does not make what we did before unlawful.
           </li>
           <li>
             Daily nudges come with your free account. You can stop them with the link in any nudge,
@@ -627,7 +648,9 @@ export default function MiraPrivacyPage() {
               ec@loveiq.org
             </a>
             . A request covers all your Mira data. A copy leaves out what was done in a browser
-            before you signed in, as on a shared browser that can be someone else&apos;s.
+            before you signed in, chats we kept without an account included, as on a shared browser
+            that can be someone else&apos;s. A chat that came into your account when you signed up
+            is in it.
           </li>
           <li>
             You can complain to a data protection authority, for example the Berlin Commissioner for
@@ -675,11 +698,12 @@ export default function MiraPrivacyPage() {
         <p className="mt-3">
           Mira is only for people aged 18 or older. If you tell Mira you are under 18, she stops
           coaching for good on that account or in that browser. In a browser without an account, the
-          chat there is cleared, and a cookie marks that browser for a year. In an account, she
-          turns her emails off, forgets its reply language and look, and deletes what it keeps: its
-          chats, goals, journal, self-check and body check results, voice sessions, rating and
-          words, passkeys, weekly session, requests to hear about coaches and the coach the finder
-          suggested, and a change of email waiting for its code.
+          chat there is cleared, every chat we kept from that browser is deleted, and a cookie marks
+          that browser for a year. In an account, she turns her emails off, forgets its reply
+          language and look, and deletes what it keeps: its chats, goals, journal, self-check and
+          body check results, voice sessions, rating and words, passkeys, weekly session, requests
+          to hear about coaches and the coach the finder suggested, and a change of email waiting
+          for its code.
         </p>
 
         <h2>Mira is not a therapist</h2>

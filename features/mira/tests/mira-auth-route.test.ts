@@ -49,6 +49,9 @@ vi.mock("@features/mira/server/sign-in", async (importOriginal) => ({
 }));
 vi.mock("@features/mira/server/store", () => ({
   addMessages: vi.fn().mockResolvedValue([1, 2]),
+  // The chat Mira kept from this browser signed out (24 Nov 2026).
+  adoptAnonChat: vi.fn().mockResolvedValue(true),
+  deleteAnonChats: vi.fn().mockResolvedValue(undefined),
   createChat: vi.fn().mockResolvedValue("6f2c4a1e-1111-4222-8333-944455556666"),
   getProfile: vi.fn().mockResolvedValue({ name: "Lea", remember_chats: true }),
   logMiraEvent: vi.fn(),
@@ -64,9 +67,12 @@ import { CONSENT_VERSION } from "@features/mira/server/config";
 import { alertCodeCap } from "@features/mira/server/alerts";
 import { addressKey, sendSignInCode } from "@features/mira/server/sign-in";
 import { isUndeliverable } from "@shared/emails/suppression";
+import { isMinor } from "@features/mira/server/minor";
 import {
   addMessages,
+  adoptAnonChat,
   createChat,
+  deleteAnonChats,
   getProfile,
   claimCodeAttempt,
   consumeCode,
@@ -474,6 +480,72 @@ describe("POST /api/mira/auth", () => {
         .mocked(checkRateLimit)
         .mock.calls.find(([, c]) => c.bucket === "mira-carry")!;
       expect([key, cfg.limit, cfg.windowMs]).toEqual(["u1", 5, 86_400_000]);
+    });
+  });
+
+  // Eman, 24 Nov 2026: a signed-out chat is kept under the browser's id. "Your current chat comes
+  // with you": at sign-up that kept chat becomes the account's own, and is never kept twice.
+  describe("the chat Mira kept from this browser", () => {
+    const KEPT = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+    const turns = [
+      { role: "user", content: "I avoid mirrors" },
+      { role: "assistant", content: "Since when?" },
+    ];
+    const verify = (extra: Record<string, unknown>) =>
+      post({ action: "verify", email: "lea@example.com", code: "12345678", ...extra });
+
+    it("moves into the new account at a code sign-in, instead of a copy of the browser's turns", async () => {
+      const body = await (await verify({ carry: turns, anonChat: KEPT })).json();
+      expect(adoptAnonChat).toHaveBeenCalledWith("anon_test_123456789", KEPT, "u1", 2);
+      expect(createChat).not.toHaveBeenCalled();
+      expect(addMessages).not.toHaveBeenCalled();
+      expect(body).toMatchObject({ success: true, chatId: KEPT });
+    });
+
+    it("moves after a Google or passkey sign-in too", async () => {
+      getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      const body = await (await post({ action: "carry", carry: turns, anonChat: KEPT })).json();
+      expect(adoptAnonChat).toHaveBeenCalledWith("anon_test_123456789", KEPT, "u1", 2);
+      expect(createChat).not.toHaveBeenCalled();
+      expect(body).toMatchObject({ success: true, chatId: KEPT });
+    });
+
+    it("gives way to the browser's turns when the kept copy can't move", async () => {
+      vi.mocked(adoptAnonChat).mockResolvedValueOnce(false);
+      await verify({ carry: turns, anonChat: KEPT });
+      expect(createChat).toHaveBeenCalledWith("u1", "I avoid mirrors");
+      expect(vi.mocked(addMessages).mock.calls[0]![1]).toHaveLength(2);
+    });
+
+    it("is deleted when the account keeps no chats, as the page then says it wasn't kept", async () => {
+      vi.mocked(upsertProfileAtSignIn).mockResolvedValueOnce({
+        name: "Lea",
+        remember_chats: false,
+      } as never);
+      const body = await (await verify({ carry: turns, anonChat: KEPT })).json();
+      expect(body).toMatchObject({ chatId: null, memoryOff: true });
+      expect(deleteAnonChats).toHaveBeenCalledWith("anon_test_123456789", KEPT);
+      expect(adoptAnonChat).not.toHaveBeenCalled();
+
+      getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValueOnce({ name: "Lea", remember_chats: false } as never);
+      vi.mocked(deleteAnonChats).mockClear();
+      await post({ action: "carry", carry: turns, anonChat: KEPT });
+      expect(deleteAnonChats).toHaveBeenCalledWith("anon_test_123456789", KEPT);
+      expect(adoptAnonChat).not.toHaveBeenCalled();
+    });
+
+    it("is deleted, never carried, when the sign-in is refused as under 18", async () => {
+      vi.mocked(isMinor).mockResolvedValueOnce(true);
+      const body = await (await verify({ carry: turns, anonChat: KEPT })).json();
+      expect(body).toMatchObject({ minor: true, chatId: null });
+      expect(deleteAnonChats).toHaveBeenCalledWith("anon_test_123456789", KEPT);
+      expect(adoptAnonChat).not.toHaveBeenCalled();
+    });
+
+    it("refuses a kept chat that isn't a chat id", async () => {
+      expect((await verify({ carry: turns, anonChat: "not-a-chat" })).status).toBe(400);
+      expect(adoptAnonChat).not.toHaveBeenCalled();
     });
   });
 });
