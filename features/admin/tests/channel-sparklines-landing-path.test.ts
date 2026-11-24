@@ -2,6 +2,25 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { LANDING_PATH_TRACKER_KEY } from "@features/attribution/server/traffic";
+import { JOURNEY_TRACKER_KEY } from "@features/pay-to-start/logic/journey";
+import { EMAIL_QUESTION_ARM_KEY } from "@shared/experiments/emailQuestionArm";
+import { GATE_REVEAL_ARM_KEY } from "@shared/experiments/gateRevealArm";
+import { QUESTION_ORDER_ARM_KEY } from "@shared/experiments/questionOrderArm";
+
+/**
+ * Every key /api/survey stamps on its own (app/api/survey/route.ts): the first page, the
+ * journey label and the experiment arms. Since #772 the first page starts the tracker before the
+ * arms join it, so a tracker holding only these is still no attribution.
+ */
+const SERVER_STAMPS = [
+  LANDING_PATH_TRACKER_KEY,
+  JOURNEY_TRACKER_KEY,
+  QUESTION_ORDER_ARM_KEY,
+  EMAIL_QUESTION_ARM_KEY,
+  GATE_REVEAL_ARM_KEY,
+];
+
 /**
  * /api/survey may start a utm_tracker holding only the first page (landing_path) for a visitor
  * with no campaign tags (#704). The funnel digest's per-channel sparklines count a finish and a
@@ -39,7 +58,7 @@ describe("get_channel_sparklines and a tracker holding only the first page", () 
   ])("reads it as no tracker in %s", (name, next, alias) => {
     const { sql } = latestDefinition();
     expect(cte(sql, name, next)).toContain(
-      `AND (${alias}.utm_tracker::jsonb - 'landing_path') <> '{}'::jsonb`
+      `AND (${alias}.utm_tracker::jsonb - ARRAY[${SERVER_STAMPS.map((k) => `'${k}'`).join(", ")}]) <> '{}'::jsonb`
     );
   });
 
