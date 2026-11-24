@@ -7,7 +7,7 @@ import { PP_FOCUS } from "./ppStyles";
 import { HERO, QUESTION_1, QUESTION_C } from "./painPointContent";
 
 /**
- * Which hero: `b`, the page as released (round 4's B, `pain_point`, paused on 24 Nov 2026),
+ * Which hero: `b`, the page as released (round 4's B, `pain_point`, paused on 25 Nov 2026),
  * or `c`, version C (`pain_point_c`), asking Q10003, with the privacy line under the film.
  */
 export type PHeroVersion = "b" | "c";

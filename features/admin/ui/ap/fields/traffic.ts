@@ -355,7 +355,7 @@ const WEEK = "date_trunc(:grain, DAY)::date";
  * range's), to the range's end or yesterday, or the test's last whole day once it ended (the
  * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous; the
  * video page vs. question card test, #6, on 11 Nov 2026, the registry's last day; the
- * pain-point page's B on 24 Nov 2026, when its version C took its half). The landing tests
+ * pain-point page's B on 25 Nov 2026, when its version C took its half). The landing tests
  * carry the Landing page's names (server/ap/landing.ts, LANDING_TESTS) and are read by their
  * visits and starts.
  */

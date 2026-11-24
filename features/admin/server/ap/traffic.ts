@@ -1924,7 +1924,7 @@ function buildExperiments(
     LANDING_PAIN_POINT_START_DAY,
     {
       lastDay: LANDING_PAIN_POINT_LAST_DAY,
-      why: "Paused on 24 Nov 2026: version C of the pain-point page took its half",
+      why: "Paused on 25 Nov 2026: version C of the pain-point page took its half",
     }
   );
   // #6 · round 3, the landing hero: ended at the 10 Nov 2026 sync, which kept the video.

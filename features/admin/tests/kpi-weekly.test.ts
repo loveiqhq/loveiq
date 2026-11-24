@@ -399,7 +399,7 @@ describe("rows and summaries", () => {
 
   it("names every landing page on the landing line, the pain-point page's B and C apart", () => {
     // The line used to name only the question card and the video page, so round 4's
-    // pain-point page never showed on the page; version C (24 Nov 2026) is its own entry.
+    // pain-point page never showed on the page; version C (25 Nov 2026) is its own entry.
     const landing = weeks.map(() =>
       parseKpiWeek(
         raw({

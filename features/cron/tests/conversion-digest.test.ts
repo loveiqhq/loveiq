@@ -2153,8 +2153,8 @@ describe("conversion-digest handler", () => {
         ).blocks
       );
       // Version C's first whole day (sync 24 Nov 2026), LANDING_TEST_START_DAY.
-      expect(text).toContain(`the landing test starts on 25 Nov, ${card} against ${video}`);
-      expect(text).toContain("its first numbers arrive in the 26 Nov digest");
+      expect(text).toContain(`the landing test starts on 26 Nov, ${card} against ${video}`);
+      expect(text).toContain("its first numbers arrive in the 27 Nov digest");
       expect(text).not.toContain("no visits recorded");
     });
 

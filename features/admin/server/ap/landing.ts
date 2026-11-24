@@ -95,7 +95,7 @@ export const LANDING_TESTS: LandingTest[] = [
     from: LANDING_PAIN_POINT_START_DAY,
     to: LANDING_PAIN_POINT_LAST_DAY,
     outcome:
-      "Paused at the 24 Nov 2026 sync: version C of the pain-point page took B's half, with an easier question and the privacy line under the film.",
+      "Paused on 25 Nov 2026, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question and the privacy line under the film.",
     arms: ["video", "pain_point"],
   },
   {

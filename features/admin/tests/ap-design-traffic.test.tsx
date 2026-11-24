@@ -360,9 +360,9 @@ describe("the Traffic builder, as the design reads", () => {
       "Direct / unattributed",
     ]);
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
-      "Pain-point page C vs. video page: Since 25 Nov 2026 · live",
-      // B's days, paused on 24 Nov 2026 for version C.
-      "Pain-point page vs. video page: 18 Nov – 24 Nov 2026 · ended",
+      "Pain-point page C vs. video page: Since 26 Nov 2026 · live",
+      // B's days, paused on 25 Nov 2026 for version C.
+      "Pain-point page vs. video page: 18 Nov – 25 Nov 2026 · ended",
       // Registry #6's days, written as an ended test is.
       "Video page vs. question card: 14 Oct – 11 Nov 2026 · ended",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",
