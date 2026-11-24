@@ -17,13 +17,8 @@ const rimFor = (i: number) => (i < 3 ? "#e6b5a6" : i > 3 ? "#c9bff0" : "#e0dce6"
  * is saved into the survey draft as you tap (useLandingPick), so /survey skips the question;
  * the button then reads "Continue free test" and counts as the card's continue. A radio
  * group: one dot is in the tab order, and the arrow keys move between them.
- * `divided`: B's hairline over the question, which parts it from the intro above it. Version
- * C sets it off: there the film is above it.
  */
-const PHeroQuestion: FC<{ question: HeroQuestion; divided?: boolean }> = ({
-  question,
-  divided = true,
-}) => {
+const PHeroQuestion: FC<{ question: HeroQuestion }> = ({ question }) => {
   const { selected, pick } = useLandingPick(question.qId);
   const questionId = useId();
   const dotsRef = useRef<Array<HTMLButtonElement | null>>([]);
@@ -46,10 +41,7 @@ const PHeroQuestion: FC<{ question: HeroQuestion; divided?: boolean }> = ({
   };
 
   return (
-    <div
-      id="start"
-      className={`flex max-w-[520px] flex-col gap-4${divided ? " border-t border-[#e9e6ee] pt-6" : ""}`}
-    >
+    <div id="start" className="flex max-w-[520px] flex-col gap-4 border-t border-[#e9e6ee] pt-6">
       <p
         id={questionId}
         className="m-0 font-serif text-[22px] font-medium leading-[30px] text-[#161021]"

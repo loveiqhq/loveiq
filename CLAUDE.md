@@ -604,8 +604,8 @@ The landing page is a 50/50 A/B (round 4, from the 2026-11-16 release): arm A
 video in the hero (`white/WHeroVideo.tsx`); the other arm is Marcus's pain-point page
 under `features/landing/ui/painpoint/`, which reuses three live sections (archetypes,
 reviews, research) at its own scale through opt-in props. Since the 2026-11-24 sync that
-arm is its version C (`pain_point_c`), whose hero asks Q10003 under the film; B
-(`pain_point`, Q01002 beside the film) is paused. `proxy.ts` assigns the arm and
+arm is its version C (`pain_point_c`): its hero asks Q10003 where B asks Q01002, and its
+privacy line sits under the film. B (`pain_point`) is paused. `proxy.ts` assigns the arm and
 `app/page.tsx` renders it; see `shared/experiments/landingVariant.ts`. Force an arm with
 `/?variant=video` or `/?variant=pain_point_c`; `/?variant=pain_point` still renders B and
 `/?variant=white_card` round 3's question-card page, kept for a rollback.

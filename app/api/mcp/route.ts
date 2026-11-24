@@ -2059,7 +2059,7 @@ export const TOOLS = [
       "THE LANDING TEST, round 4: experiment_exposure with properties.experiment = " +
       `'${LANDING_VARIANT_EXPERIMENT}' is a visitor shown an arm (properties.variant 'video' is ` +
       "the video page, 'pain_point_c' version C of Marcus's pain-point page, which asks " +
-      "question 10003 under its film); events after it carry the " +
+      "question 10003 where B asks 01002); events after it carry the " +
       `arm as properties.landing_variant. Its readouts start on ${LANDING_TEST_START_DAY} (from ` +
       `toDateTime('${LANDING_TEST_START_DAY} 00:00:00'), read in the project's Berlin time): ` +
       "compare the arms from then. Before it, 'pain_point' (the pain-point page as released, " +

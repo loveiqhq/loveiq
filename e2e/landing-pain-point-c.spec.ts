@@ -2,11 +2,11 @@ import { test, expect, type Page } from "@playwright/test";
 import { instantScroll } from "./fixtures/instant-scroll";
 
 /**
- * Round 4's version C (`pain_point_c`, LoveIQ Sync 24 Nov 2026): the pain-point page with
- * Q10003, "I'm comfortable expressing what turns me on.", under the film, where B
- * (`pain_point`, landing-pain-point.spec.ts) asks Q01002 beside it. Opened with `?variant=`:
- * in a production build a bare "/" is a coin flip between the two live arms
- * (playwright.config.ts).
+ * Round 4's version C (`pain_point_c`, LoveIQ Sync 24 Nov 2026): the pain-point page asking
+ * Q10003, "I'm comfortable expressing what turns me on.", where B (`pain_point`,
+ * landing-pain-point.spec.ts) asks Q01002, with the privacy line moved under the film.
+ * Opened with `?variant=`: in a production build a bare "/" is a coin flip between the two
+ * live arms (playwright.config.ts).
  */
 const C_QUESTION = "I'm comfortable expressing what turns me on.";
 
@@ -22,7 +22,7 @@ async function box(page: Page, selector: string) {
   return b;
 }
 
-test.describe("Landing version C (round 4) — the question under the film", () => {
+test.describe("Landing version C (round 4) — Q10003, the privacy line under the film", () => {
   test.beforeEach(async ({ page }) => {
     for (const p of [
       "**/api/survey",
@@ -50,24 +50,30 @@ test.describe("Landing version C (round 4) — the question under the film", () 
     ["a phone", 390],
     ["a desktop", 1440],
   ] as const) {
-    test(`puts the question under the film on ${name}`, async ({ page }) => {
+    test(`asks the question where B does, the privacy line under the film, on ${name}`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       await openPage(page);
-      const film = await box(page, '[data-testid="pp-hero"] [data-testid="hero-video"]');
-      const question = await box(page, '[data-testid="pp-hero"] [role="radiogroup"]');
-      // Below the film's foot, inside its column.
-      expect(question.y).toBeGreaterThanOrEqual(film.y + film.height);
-      expect(question.x).toBeGreaterThanOrEqual(film.x - 1);
-      expect(question.x + question.width).toBeLessThanOrEqual(film.x + film.width + 1);
       const headline = await box(page, '[data-testid="pp-hero"] h1');
+      const question = await box(page, '[data-testid="pp-hero"] [role="radiogroup"]');
+      const live = await box(page, '[data-testid="pp-hero"] .pp-live');
+      const film = await box(page, '[data-testid="pp-hero"] [data-testid="hero-video"]');
+      const privacy = await box(page, '[data-testid="pp-hero"] p:has(a[href="/trust-zone"])');
+      // As on B: the question under the headline, the live line under the question.
+      expect(question.y).toBeGreaterThanOrEqual(headline.y + headline.height);
+      expect(live.y).toBeGreaterThanOrEqual(question.y + question.height);
+      // The privacy line below the film's foot, inside its column.
+      expect(privacy.y).toBeGreaterThanOrEqual(film.y + film.height);
+      expect(privacy.x).toBeGreaterThanOrEqual(film.x - 1);
+      expect(privacy.x + privacy.width).toBeLessThanOrEqual(film.x + film.width + 1);
       if (width >= 1024) {
-        // Desktop: the film and its question are the right column, the headline the left.
+        // Desktop: the headline and the question are the left column, the film the right.
         expect(headline.x + headline.width).toBeLessThanOrEqual(film.x);
+        expect(question.x + question.width).toBeLessThanOrEqual(film.x);
       } else {
-        // Phone: the headline, then the film, then the question, then the live line.
-        expect(film.y).toBeGreaterThanOrEqual(headline.y + headline.height);
-        const live = await box(page, '[data-testid="pp-hero"] .pp-live');
-        expect(live.y).toBeGreaterThanOrEqual(question.y + question.height);
+        // Phone: the film after the live line, then the privacy line.
+        expect(film.y).toBeGreaterThanOrEqual(live.y + live.height);
       }
     });
   }
