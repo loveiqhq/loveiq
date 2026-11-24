@@ -145,6 +145,8 @@ const heroWeek = () => buildLanding(heroInput());
 describe("the landing tests, as the design names them", () => {
   it("names each test by the pages it compares, not by its number, and shows no rebuild test", () => {
     expect(LANDING_TESTS.map((t) => t.name)).toEqual([
+      // Version C took B's half at the 24 Nov 2026 sync: its test comes first, B's after.
+      "Pain-point page C vs. video page",
       "Pain-point page vs. video page",
       "Video page vs. question card",
       "Video page vs. question card · first run (7–13 Oct)",
