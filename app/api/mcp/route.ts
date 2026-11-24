@@ -166,6 +166,8 @@ import { reportingDateTime, reportingDay, reportingDayStart } from "@shared/time
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
   LANDING_VARIANT_EXPERIMENT,
 } from "@shared/experiments/landingVariant";
@@ -2056,10 +2058,14 @@ export const TOOLS = [
       "opened a page with 'variant=' in properties.$current_url (the team's arm override). " +
       "THE LANDING TEST, round 4: experiment_exposure with properties.experiment = " +
       `'${LANDING_VARIANT_EXPERIMENT}' is a visitor shown an arm (properties.variant 'video' is ` +
-      "the video page, 'pain_point' Marcus's new pain-point page); events after it carry the " +
+      "the video page, 'pain_point_c' version C of Marcus's pain-point page, which asks " +
+      "question 10003 under its film); events after it carry the " +
       `arm as properties.landing_variant. Its readouts start on ${LANDING_TEST_START_DAY} (from ` +
       `toDateTime('${LANDING_TEST_START_DAY} 00:00:00'), read in the project's Berlin time): ` +
-      "compare the arms from then. Round 3 ('landing-hero-video-ab': 'white_card' question 1 " +
+      "compare the arms from then. Before it, 'pain_point' (the pain-point page as released, " +
+      `asking question 01002 beside its film) ran against 'video' from ${LANDING_PAIN_POINT_START_DAY} ` +
+      `to ${LANDING_PAIN_POINT_LAST_DAY}, when it was paused for version C. ` +
+      "Round 3 ('landing-hero-video-ab': 'white_card' question 1 " +
       `against 'white_video' the presenter video, read from ${LANDING_HERO_RESTART_DAY} to ` +
       `${LANDING_HERO_LAST_DAY}) ended with the video kept, and 'video' is that same page. ` +
       "A page view still does not mean it was seen: cta_seen with " +
@@ -2075,7 +2081,9 @@ export const TOOLS = [
       "complete carry it from that release), and hero_video_error with properties.reason for " +
       "a start that failed ('abandoned': the visitor left while it was starting). " +
       "Added 2026-10-13: landing_card_answer (a tap on question 1's card, properties.location " +
-      "'hero' or 'footer', properties.value the point picked, 1 to 7), cta_click with properties.element " +
+      "'hero' or 'footer', properties.value the point picked, 1 to 7, and from 2026-11-24 " +
+      "properties.question the survey question it answers: '10003' on 'pain_point_c', '01002' " +
+      "everywhere else and on every earlier event), cta_click with properties.element " +
       "'question_card' (that card's Continue; without it, the button beside it), " +
       "section_seen (properties.section, once per section per page: how far down a visitor " +
       "got) and cta_seen 'sticky_bar'. Round 4's new page adds cta_click locations " +
@@ -2106,7 +2114,7 @@ export const TOOLS = [
             `'www.loveiq.org' AND timestamp >= toDateTime('${LANDING_TEST_START_DAY} 00:00:00')), ` +
             "person_id, NULL)) AS played FROM events WHERE event = " +
             `'experiment_exposure' AND properties.experiment = '${LANDING_VARIANT_EXPERIMENT}' AND ` +
-            "properties.variant IN ('video', 'pain_point') AND " +
+            "properties.variant IN ('video', 'pain_point_c') AND " +
             `properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('${LANDING_TEST_START_DAY} ` +
             "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
             `toDateTime('${LANDING_TEST_START_DAY} 00:00:00') AND (match(toString(properties.$current_url), ` +

@@ -67,9 +67,9 @@ const SHOTS = [
   },
   {
     name: "landing-pain-point",
-    path: "/?variant=pain_point",
+    path: "/?variant=pain_point_c",
     viewport: VIEWPORT,
-    what: "the landing page, arm `pain_point` (Marcus's new pain-point page), above the fold",
+    what: "the landing page, arm `pain_point_c` (version C of Marcus's pain-point page: Q10003 under the film), above the fold",
   },
   {
     name: "landing-white-prev",
@@ -91,9 +91,9 @@ const SHOTS = [
   },
   {
     name: "landing-pain-point-mobile",
-    path: "/?variant=pain_point",
+    path: "/?variant=pain_point_c",
     viewport: MOBILE,
-    what: "the landing page, arm `pain_point` (Marcus's new pain-point page), on a phone",
+    what: "the landing page, arm `pain_point_c` (version C of Marcus's pain-point page: Q10003 under the film), on a phone",
   },
   {
     name: "landing-white-prev-mobile",

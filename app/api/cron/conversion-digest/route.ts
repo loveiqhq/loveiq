@@ -536,8 +536,8 @@ interface DigestInput {
   /**
    * The landing pair the per-arm blocks compare, in reading order, and the day that
    * comparison starts. Production omits both and gets round 4's live arms (V3's
-   * video page, then V4's pain-point page) from LANDING_TEST_START_DAY. A read of
-   * round 2 passes ["white_prev", "white"] and 2026-08-21.
+   * video page, then V4 C, the pain-point page's version C) from LANDING_TEST_START_DAY.
+   * A read of round 2 passes ["white_prev", "white"] and 2026-08-21.
    *
    * The day matters even with new arm values: the per-arm series take their x-axis
    * from every day the RPC returns, so without the cut the first week after launch

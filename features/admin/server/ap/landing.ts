@@ -10,6 +10,8 @@ import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
@@ -62,22 +64,38 @@ export interface LandingTest {
   note?: string;
   /** A, then B. */
   arms: [string, string];
+  /** The two versions' letters, when not A and B: version C's test reads A and C. */
+  letters?: [string, string];
 }
 
 /**
  * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), each
  * named by the pages it compares, new page first. The rebuild test (V1 vs V2, Aug–Sep 2026) was
  * taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new page against the
- * video page, under the number the registry gives it at its release.
+ * video page, under the number the registry gives it at its release. "#10 · C" is its version
+ * C (sync 24 Nov 2026: Q10003 under the film) against the same video page, in B's place, so
+ * B's days stay #10's and C is read from its own first day.
  */
 export const LANDING_TESTS: LandingTest[] = [
+  {
+    key: "pain-point-c",
+    name: "Pain-point page C vs. video page",
+    code: "#10 · C",
+    from: LANDING_TEST_START_DAY,
+    to: null,
+    outcome: "Running, read over up to 28 days.",
+    note: "Version C asks “I'm comfortable expressing what turns me on.” under the film, where B asked about satisfaction beside it.",
+    arms: ["video", "pain_point_c"],
+    letters: ["A", "C"],
+  },
   {
     key: "pain-point",
     name: "Pain-point page vs. video page",
     code: "#10",
-    from: LANDING_TEST_START_DAY,
-    to: null,
-    outcome: "Running, read over up to 28 days.",
+    from: LANDING_PAIN_POINT_START_DAY,
+    to: LANDING_PAIN_POINT_LAST_DAY,
+    outcome:
+      "Paused at the 24 Nov 2026 sync: version C of the pain-point page took B's half, with an easier question under the film.",
     arms: ["video", "pain_point"],
   },
   {
@@ -114,6 +132,7 @@ export const LANDING_TESTS: LandingTest[] = [
 export const LANDING_ARM_NAMES: ReadonlyMap<string, string> = new Map([
   ["video", "Video page (V3)"],
   ["pain_point", "Pain-point page (V4)"],
+  ["pain_point_c", "Pain-point page C (V4 C)"],
   ["white_card", "Question card (V2)"],
   ["white_video", "Video page (V3)"],
 ]);
@@ -325,7 +344,7 @@ function armRow(
   test: LandingTest,
   w: { from: string; to: string },
   arm: string,
-  letter: "A" | "B",
+  letter: string,
   today: string,
   ph: LandingArmEngagement | undefined,
   /** "Free survey": pay to start's finishers and their starts are out, as on every page. */
@@ -524,13 +543,14 @@ export function buildLanding(input: {
     if (!w) continue;
     const ph = input.armEngagement[test.key];
     const byArm = new Map(ph && ph.ok ? ph.value.map((e) => [e.arm, e]) : []);
+    const [first, second] = test.letters ?? ["A", "B"];
     const [a, b] = test.arms.map((arm, i) =>
       armRow(
         facts,
         test,
         w,
         arm,
-        i === 0 ? "A" : "B",
+        i === 0 ? first : second,
         today,
         byArm.get(arm),
         f.funnel === "free",

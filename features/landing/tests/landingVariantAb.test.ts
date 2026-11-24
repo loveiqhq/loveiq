@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { reportingDay } from "@shared/time/reporting-day";
 import {
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_AT,
   LANDING_TEST_START_DAY,
   LANDING_VARIANT_ARMS,
@@ -14,17 +17,27 @@ import {
 
 /**
  * Round 4 of the landing A/B: today's video page (`video`, the control kept at the
- * 10.11 sync) against Marcus's new pain-point page (`pain_point`). The pieces live in
+ * 10.11 sync) against Marcus's new pain-point page, since the 24.11 sync its version C
+ * (`pain_point_c`) in place of B (`pain_point`). The pieces live in
  * several files and a broken link in any one of them loses the test's data without
  * breaking the page — so they are pinned here rather than left to a read-through.
  */
 describe("landing A/B — the two arms", () => {
   it("serves exactly round 4's two arms; earlier rounds' values stay valid but unassigned", () => {
-    expect([...LANDING_VARIANT_ARMS]).toEqual(["video", "pain_point"]);
+    // Since the 24 Nov 2026 sync: the video page against the pain-point page's version C.
+    expect([...LANDING_VARIANT_ARMS]).toEqual(["video", "pain_point_c"]);
     for (const arm of LANDING_VARIANT_ARMS) expect(isLiveLandingArm(arm)).toBe(true);
     // Stored rows carry these, so they must still parse; none is assigned any more.
-    // Round 3's two arms are here too: a returning visitor holding one is re-rolled.
-    for (const old of ["control", "white", "white_prev", "white_card", "white_video"]) {
+    // Round 3's two arms are here too, and B, paused for C: a returning visitor holding one
+    // is re-rolled.
+    for (const old of [
+      "control",
+      "white",
+      "white_prev",
+      "white_card",
+      "white_video",
+      "pain_point",
+    ]) {
       expect(isLandingVariant(old)).toBe(true);
       expect(isLiveLandingArm(old)).toBe(false);
       expect(LANDING_VARIANT_ARMS).not.toContain(old);
@@ -40,6 +53,7 @@ describe("landing A/B — the two arms", () => {
     expect(normalizeLandingVariant("nonsense")).toBe("white");
     expect(isLiveLandingArm(normalizeLandingVariant(null))).toBe(false);
     expect(normalizeLandingVariant("pain_point")).toBe("pain_point");
+    expect(normalizeLandingVariant("pain_point_c")).toBe("pain_point_c");
     expect(normalizeLandingVariant("video")).toBe("video");
     expect(normalizeLandingVariant("white_video")).toBe("white_video");
     expect(normalizeLandingVariant("white_prev")).toBe("white_prev");
@@ -49,11 +63,19 @@ describe("landing A/B — the two arms", () => {
     expect(LANDING_VARIANT_EXPERIMENT).toBe("landing-pain-point-ab");
   });
 
-  it("starts round 4's readouts on the first whole Berlin day after the release", () => {
-    // Release planned for Mon 16 Nov 2026: the first whole day is Tue 17 Nov, whose
-    // Berlin midnight (CET, UTC+1) is 23:00 UTC the evening before.
-    expect(LANDING_TEST_START_DAY).toBe("2026-11-17");
-    expect(LANDING_TEST_START_AT).toBe("2026-11-16T23:00:00Z");
+  it("reads A against B over B's own days, and A against C from C's first whole day", () => {
+    // B was released Tue 17 Nov 2026, so its first whole day is Wed 18 Nov. C is set for a
+    // release on Tue 24 Nov: its first whole day is Wed 25 Nov, whose Berlin midnight (CET,
+    // UTC+1) is 23:00 UTC the evening before, and B's last day is the day before it.
+    expect(LANDING_PAIN_POINT_START_DAY).toBe("2026-11-18");
+    expect(LANDING_PAIN_POINT_LAST_DAY).toBe("2026-11-24");
+    expect(LANDING_TEST_START_DAY).toBe("2026-11-25");
+    expect(LANDING_TEST_START_AT).toBe("2026-11-24T23:00:00Z");
+    expect(reportingDay(new Date(LANDING_TEST_START_AT))).toBe(LANDING_TEST_START_DAY);
+    // No gap and no overlap: C starts the day after B's last.
+    const dayAfterB = new Date(`${LANDING_PAIN_POINT_LAST_DAY}T12:00:00Z`);
+    dayAfterB.setUTCDate(dayAfterB.getUTCDate() + 1);
+    expect(dayAfterB.toISOString().slice(0, 10)).toBe(LANDING_TEST_START_DAY);
   });
 
   it("renders one arm per variant, chosen from the proxy's header", () => {
@@ -63,9 +85,9 @@ describe("landing A/B — the two arms", () => {
     expect(page).toContain("LANDING_VARIANT_HEADER");
     // ...and not by importing next/headers' cookies (the comment explains why).
     expect(page).not.toMatch(/^import \{[^}]*\bcookies\b/m);
-    // The new page for its arm, round 2's V1 for QA, and the white page for the rest.
+    // The new page for B and C, round 2's V1 for QA, and the white page for the rest.
     expect(page).toMatch(
-      /variant === "pain_point" \? \(\s*<LandingPagePainPoint variant=\{variant\} \/>\s*\) : variant === "white_prev" \? \(\s*<LandingPageWhiteV1 \/>\s*\) : \(\s*<LandingPageWhite variant=\{variant\} \/>\s*\)/
+      /variant === "pain_point" \|\| variant === "pain_point_c" \? \(\s*<LandingPagePainPoint variant=\{variant\} \/>\s*\) : variant === "white_prev" \? \(\s*<LandingPageWhiteV1 \/>\s*\) : \(\s*<LandingPageWhite variant=\{variant\} \/>\s*\)/
     );
     // ...and the white page shows the video for the control and round 3's video arm.
     const current = readFileSync(

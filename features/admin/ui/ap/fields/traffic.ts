@@ -11,6 +11,8 @@ import { EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
@@ -352,13 +354,16 @@ const WEEK = "date_trunc(:grain, DAY)::date";
  * The tests the page reads, each arm in its window: from the test's first whole day (or the
  * range's), to the range's end or yesterday, or the test's last whole day once it ended (the
  * email question on 4 Nov 2026: from then every free run is asked, and stamped, anonymous; the
- * video page vs. question card test, #6, on 11 Nov 2026, the registry's last day). The landing
- * tests carry the Landing page's names (server/ap/landing.ts, LANDING_TESTS) and are read by
- * their visits and starts.
+ * video page vs. question card test, #6, on 11 Nov 2026, the registry's last day; the
+ * pain-point page's B on 24 Nov 2026, when its version C took its half). The landing tests
+ * carry the Landing page's names (server/ap/landing.ts, LANDING_TESTS) and are read by their
+ * visits and starts.
  */
 const EXP = `tests (test, arm, control, first_day, last_day) AS (VALUES
-  ('Pain-point page vs. video page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
-  ('Pain-point page vs. video page', 'pain_point', false, DATE '${LANDING_TEST_START_DAY}', NULL),
+  ('Pain-point page C vs. video page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
+  ('Pain-point page C vs. video page', 'pain_point_c', false, DATE '${LANDING_TEST_START_DAY}', NULL),
+  ('Pain-point page vs. video page', 'video', true, DATE '${LANDING_PAIN_POINT_START_DAY}', DATE '${LANDING_PAIN_POINT_LAST_DAY}'),
+  ('Pain-point page vs. video page', 'pain_point', false, DATE '${LANDING_PAIN_POINT_START_DAY}', DATE '${LANDING_PAIN_POINT_LAST_DAY}'),
   ('Video page vs. question card', 'white_card', true, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
   ('Video page vs. question card', 'white_video', false, DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
   ('Pricing 3.0', 'A3', true, DATE '2026-10-08', NULL),

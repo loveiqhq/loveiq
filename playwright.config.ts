@@ -30,7 +30,7 @@ const isLocalTarget = targetHost === "localhost" || targetHost === "127.0.0.1";
  * The pin reaches `next dev` only. A production build — CI's e2e job, and
  * visual-regression.yml — names the cookie `__Host-liq_lv` (below), so there a
  * bare `/` is still a coin flip. A spec whose assertions depend on the arm opens
- * `/?variant=video` or `/?variant=pain_point` instead, as the visual
+ * `/?variant=video` or `/?variant=pain_point_c` instead, as the visual
  * baselines, the a11y list and the landing specs do.
  *
  * Remote: deliberately NO arm cookie. Deployed builds name it `__Host-liq_lv`, and
