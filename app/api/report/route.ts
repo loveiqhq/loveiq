@@ -319,6 +319,7 @@ export async function GET(request: Request) {
       const reader = readerOf({
         finishedAt: submission.created_date_time,
         email: getSubmissionUserEmail(submission),
+        userId: submission.user_id,
       });
       scheduleAfterResponse("reader-return", () =>
         noteReaderReturn({ submissionId: submission.id, source: "report", via, reader })

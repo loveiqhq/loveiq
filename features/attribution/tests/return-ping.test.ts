@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn, mockReactivation } = vi.hoisted(
-  () => ({
+const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn, mockReactivation, mockTeam } =
+  vi.hoisted(() => ({
     mockSupabaseFetch: vi.fn(),
     mockPost: vi.fn(),
     mockConfigured: vi.fn(),
     mockWarn: vi.fn(),
     mockReactivation: vi.fn(),
-  })
-);
+    mockTeam: vi.fn(),
+  }));
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -25,6 +25,10 @@ vi.mock("@shared/observability/slack-bot", () => ({
 // that every claimed day is handed to it.
 vi.mock("@features/attribution/server/reactivation-post", () => ({
   postReactivation: (...args: unknown[]) => mockReactivation(...args),
+}));
+// The team's accounts (ap_team_user): its own read, cached, in features/admin/server/ap/team.ts.
+vi.mock("@features/admin/server/ap/team", () => ({
+  teamUserIds: () => mockTeam(),
 }));
 
 import {
@@ -216,9 +220,15 @@ describe("readerOf", () => {
       startedAt: null,
       internal: false,
       emailMasked: "j***@gmail.com",
+      userId: null,
     });
     expect(readerOf({ finishedAt: "x", email: "eman@loveiq.org" }).internal).toBe(true);
     expect(readerOf({ finishedAt: "x", email: null }).emailMasked).toBeNull();
+  });
+
+  it("carries the reader's user id for the team check", () => {
+    expect(readerOf({ finishedAt: "x", email: "r@example.com", userId: 4242 }).userId).toBe(4242);
+    expect(readerOf({ finishedAt: "x", email: "r@example.com" }).userId).toBeNull();
   });
 });
 
@@ -338,7 +348,50 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     vi.clearAllMocks();
     mockConfigured.mockReturnValue(true);
     mockPost.mockResolvedValue({ channel: MESSAGE.channel, ts: "1731650000.000200" });
+    mockTeam.mockResolvedValue(new Set());
     backend();
+  });
+
+  it("a reader on the team list never counts, whatever their address: no claim, no reply", async () => {
+    mockTeam.mockResolvedValue(new Set([4242]));
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      reader: { ...READER, userId: 4242 },
+    });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("a failed read of the team list counts nobody as team", async () => {
+    mockTeam.mockRejectedValue(new Error("ap_team_user failed (500)"));
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      reader: { ...READER, userId: 4242 },
+    });
+    expect(claims()).toHaveLength(1);
+  });
+
+  it("reads the user id with the reader when the caller has none", async () => {
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({
+      submission: [
+        {
+          created_date_time: READER.finishedAt,
+          start_date_time: READER.startedAt,
+          user_id: 4242,
+          app_user: { email: "r@example.com" },
+        },
+      ],
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "email", at: NEXT_DAY });
+    expect(
+      calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2790") && p.includes("user_id"))
+    ).toHaveLength(1);
+    expect(claims()).toHaveLength(0);
   });
 
   it("leaves out a reader who asked us to restrict processing: no claim, no reply, no post", async () => {
