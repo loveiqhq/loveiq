@@ -240,6 +240,56 @@ describe("Survey 2.0's details screen", () => {
 });
 
 /**
+ * Survey 2.0's expert question (17004, Mark's board "Q-new-expert"): a Yes opens the phone
+ * number one of our experts calls, and Next waits for it (Marcus, 24 Nov).
+ */
+describe("Survey 2.0's expert question", () => {
+  const EXPERT = surveyQuestions.find((q) => q.qId === "17004")!;
+  const YES = EXPERT.options[0]!;
+  const HEADING = { name: EXPERT.question };
+  const onExpert = () =>
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers: {},
+        currentIndex: at("17004"),
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+  const yes = () => screen.findByRole("radio", { name: /^Yes, I'd like a free talk/ });
+
+  it("holds Next on a Yes until the number is in, then goes on to the details page", async () => {
+    onExpert();
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    await user.click(await yes());
+    await user.click(screen.getByRole("button", { name: /^next/i }));
+    expect(screen.getByRole("heading", HEADING)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toMatch(/phone number/);
+
+    await user.type(screen.getByLabelText("Your phone number"), "151 2345678");
+    await user.click(screen.getByRole("button", { name: /^next/i }));
+    expect(
+      await screen.findByRole("heading", { name: /^Last step to your report to become a/ })
+    ).toBeTruthy();
+    expect(draft().answers).toMatchObject({ "17004": YES, "17004_other": "+49 151 2345678" });
+  });
+
+  it("does not auto-advance on a Yes, which still needs the number", async () => {
+    localStorage.setItem("loveiq-survey-autoadvance", "true");
+    onExpert();
+    const user = userEvent.setup();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    await user.click(await yes());
+    await new Promise((r) => setTimeout(r, 500)); // Auto-advance moves on after 350 ms
+    expect(screen.getByRole("heading", HEADING)).toBeTruthy();
+    expect(screen.getByLabelText("Your phone number")).toBeTruthy();
+  });
+});
+
+/**
  * Classic asks the expert's sheet BEFORE 01005 and leaves the reader there to answer it; 2.0
  * shows it AFTER 03012 (Mark's spot), so closing it carries on to the next screen, 08002.
  */
@@ -280,7 +330,7 @@ describe("Survey 2.0's expert sheet", () => {
 });
 
 describe("Survey 2.0's report map", () => {
-  it("opens after 17002 and counts the two screens left", async () => {
+  it("opens after 17002 and counts the three screens left", async () => {
     localStorage.setItem(
       "loveiq-survey-answers",
       JSON.stringify({
@@ -294,7 +344,7 @@ describe("Survey 2.0's report map", () => {
     const user = userEvent.setup();
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["reportMap"]} />);
     await user.click(await screen.findByRole("button", { name: /^next/i }));
-    expect(await screen.findByText(/2 questions left/)).toBeTruthy();
+    expect(await screen.findByText(/3 questions left/)).toBeTruthy();
   });
 });
 
@@ -315,7 +365,7 @@ describe("Survey 2.0's time", () => {
       })
     );
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
-    expect(await screen.findByText("1/61")).toBeTruthy();
+    expect(await screen.findByText("1/62")).toBeTruthy();
     expect(screen.getByText("~9 min")).toBeTruthy();
     expect(screen.queryByText("~15 min")).toBeNull();
   });
@@ -324,8 +374,8 @@ describe("Survey 2.0's time", () => {
     const { minutesLeft } = await import("@features/survey/ui/SurveyProgress");
     const { SURVEY_2_MINUTES } = await import("@features/survey/survey2/order");
     expect(SURVEY_2_MINUTES).toBe(9);
-    expect(minutesLeft(0, 61, SURVEY_2_MINUTES)).toBe(9);
-    expect(minutesLeft(59, 61, SURVEY_2_MINUTES)).toBe(1);
+    expect(minutesLeft(0, 62, SURVEY_2_MINUTES)).toBe(9);
+    expect(minutesLeft(60, 62, SURVEY_2_MINUTES)).toBe(1);
     expect(minutesLeft(0, 62)).toBe(15);
   });
 });

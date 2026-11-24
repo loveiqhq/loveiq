@@ -230,6 +230,14 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 - **Retention**: until the person deletes an entry, the journal or the account; deleted at once when Mira stops someone as under 18
 - **Withdraw**: turn either reading choice off (it applies from the next message); delete entries or the whole journal on the journal page or in Settings; stop the reminder there or from any reminder email; delete the account
 
+### A27 — Survey 2.0's expert call-back (from 2026-11-24, behind the `survey_2` switch)
+
+- **Data**: the answer to Q17004, "Would you like a free talk with one of our experts about improving your sex life?" (Yes, Maybe later or No), and on a Yes the phone number the reader leaves for the call, with its country code ("+49 151 2345678"). The number is stored as the Yes answer's `answer_text` (sent as `17004_other`; the server drops it with any other answer)
+- **Basis (proposed, before the switch goes on)**: (a) consent: the reader asks for the call by picking Yes and typing the number, under the question's words "We only get in touch if you say yes." The number serves only the call about the free talk
+- **Who sees it**: staff on AP's submission page. The team copy and AP's explorer mask it (`PERSONAL_TEXT_QUESTIONS`, features/admin/server/team-export.ts), Jarvis's MCP endpoint masks every `answer_text`, and the field is kept out of session recordings (`data-clarity-mask`, `ph-no-capture`). A draft that was never submitted can hold it in `survey_partial_save` (purged after 30 days, as A2's)
+- **Retention**: with the submission: erased by a DSAR delete and by the cascade
+- **Withdraw**: ask not to be called (email), or a DSAR delete
+
 ## Withdrawal of consent flows
 
 For activities under basis (a):
@@ -251,6 +259,8 @@ For activities under basis (a):
 | A26 journal    | Turn off Mira's reading or the reminder; delete entries, the journal or the account                  | Mira stops reading it from the next message; deleted entries are gone, with the account's                                                                                              |
 
 ## Outstanding work
+
+- **Expert call-back (A27)**, before the `survey_2` switch goes on: a privacy-policy line on the phone number (purpose, who calls, how long it is kept); if the coaches and therapists who call are not LoveIQ staff, a processor agreement; and confirmation that the talk is free with no strings, as the question says.
 
 - **Mira (A16 to A19, A21 to A26)**: the open points in [DPIA.md](DPIA.md) §7.9, the consent scope among them, and Eman's decision on Jarvis's live-data tool, which can read the `mira_*` tables (§7.9, point 7).
 - **Mira goals (A22)**: the open points in [DPIA.md](DPIA.md) §7.13 (a 12-month limit; Jarvis's live data tool).

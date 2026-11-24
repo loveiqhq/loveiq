@@ -66,10 +66,11 @@ export type ClassicOrderArm = Exclude<QuestionOrderArm, "survey2">;
 export const SURVEY_2_ARM = "survey2" satisfies QuestionOrderArm;
 
 /**
- * The questions only Survey 2.0 asks: its three closing questions, which every 2.0 run answers
- * (they are required), so a submitted run that holds one was a 2.0 run (questionOrderArmOfSubmission).
+ * The questions only Survey 2.0 asks: its three closing questions and the expert question after
+ * them (17004, Mark, 24 Nov), which every 2.0 run answers (they are required), so a submitted run
+ * that holds one was a 2.0 run (questionOrderArmOfSubmission).
  */
-export const SURVEY_2_ONLY_QIDS = ["17001", "17002", "17003"] as const;
+export const SURVEY_2_ONLY_QIDS = ["17001", "17002", "17003", "17004"] as const;
 
 /** The experiment's key in `survey_submission.utm_tracker`. */
 export const QUESTION_ORDER_ARM_KEY = "question_order_arm";

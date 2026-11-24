@@ -1704,4 +1704,26 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps us set a fair price for the full report. Your answer doesn't change what you pay.",
     formatGuidance: "Select one option.",
   },
+  {
+    qId: "17004",
+    cId: 17,
+    chapter: "Next steps",
+    question: "Would you like a free talk with one of our experts about improving your sex life?",
+    answerType: "single",
+    options: [
+      "Yes, I'd like a free talk with an expert",
+      "Maybe later, after I've read my report",
+      "No, thanks",
+    ],
+    required: true,
+    guide:
+      "It's free. Our trained coaches and therapists can help you understand your results and find next steps that fit you. We only get in touch if you say yes.",
+    supportAndGuidance:
+      "It's free. Our trained coaches and therapists can help you understand your results and find next steps that fit you. We only get in touch if you say yes.",
+    comment:
+      "So one of our experts can offer you a free talk about your results. We only ask for your phone number if you say yes.",
+    howAnswerIsUsed:
+      "So one of our experts can offer you a free talk about your results. We only ask for your phone number if you say yes.",
+    formatGuidance: "Select one option.",
+  },
 ];

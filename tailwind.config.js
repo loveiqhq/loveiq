@@ -228,8 +228,15 @@ module.exports = {
           "15%, 85%": { opacity: "1" },
           "50%": { transform: "translateY(54px)" },
         },
+        // Survey 2.0's expert question (Mark's board "Q-new-expert"): the phone box drops in
+        // under a picked Yes.
+        "expert-phone-in": {
+          "0%": { opacity: "0", transform: "translateY(-6px)" },
+          "100%": { opacity: "1", transform: "none" },
+        },
       },
       animation: {
+        "expert-phone-in": "expert-phone-in 260ms ease-out both",
         "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
         "mira-cloud":
           "mira-bloom 1.4s cubic-bezier(0.16, 1, 0.3, 1) both, mira-breathe 12s ease-in-out 1.4s infinite",

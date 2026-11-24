@@ -10,6 +10,11 @@ interface ChoiceCardProps {
   onClick: () => void;
   multi?: boolean;
   dimmed?: boolean;
+  /**
+   * A small green tag before the radio, such as the "Free" on Survey 2.0's expert question
+   * (Mark's board "Q-new-expert"). Hidden from screen readers: the label already says it.
+   */
+  badge?: string;
 }
 
 const CheckIcon: FC = () => (
@@ -34,6 +39,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
   onClick,
   multi = false,
   dimmed = false,
+  badge,
 }) => {
   const hasDescription = Boolean(description?.trim());
   const isDimmed = dimmed && !selected;
@@ -87,6 +93,15 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
           </span>
         ) : null}
       </span>
+
+      {badge ? (
+        <span
+          aria-hidden="true"
+          className="-mr-[14px] flex-none self-center rounded-full bg-[#e3f5ea] px-[10px] py-[3px] font-sans text-[12px] font-bold leading-[16px] text-[#1d6b3f]"
+        >
+          {badge}
+        </span>
+      ) : null}
 
       <span
         aria-hidden="true"
