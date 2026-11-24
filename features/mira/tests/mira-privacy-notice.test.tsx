@@ -59,6 +59,20 @@ describe("Mira's privacy notice, made true", () => {
     );
   });
 
+  // 24 Nov 2026: "without an account, your chat stays in your browser" stopped being true there.
+  it("is matched by the site's privacy policy on chats kept without an account", () => {
+    const site = readFileSync("app/privacy-policy/page.tsx", "utf8")
+      .replace(/\s+/g, " ")
+      .replace(/&apos;/g, "'");
+    expect(site).not.toContain("without an account, your chat stays in your browser.");
+    expect(site).toContain(
+      "Without an account, the chat Mira keeps once you agree to it, with a random id from your browser"
+    );
+    expect(site).toContain(
+      "Mira: without an account, your chat stays in your browser and, once you agree to it, Mira keeps it too, until you delete it on the chat page and at most 12 months after its last message."
+    );
+  });
+
   it("is matched by the site's privacy policy on pausing Mira's nudges", () => {
     const site = readFileSync("app/privacy-policy/page.tsx", "utf8")
       .replace(/\s+/g, " ")
