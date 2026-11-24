@@ -5,11 +5,11 @@ module.exports = {
       startServerCommand: "npm run start",
       startServerReadyPattern: "Ready in",
       startServerReadyTimeout: 30000,
-      // Both arms of the landing test, by name: a bare "/" would audit whichever
-      // arm the coin gave this run.
+      // Both live arms of the landing test, by name (A and, since 24 Nov 2026, the pain-point
+      // page's version C): a bare "/" would audit whichever arm the coin gave this run.
       url: [
         "http://localhost:3000/?variant=video",
-        "http://localhost:3000/?variant=pain_point",
+        "http://localhost:3000/?variant=pain_point_c",
         "http://localhost:3000/about",
       ],
       numberOfRuns: 1,

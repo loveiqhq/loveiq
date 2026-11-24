@@ -1811,16 +1811,21 @@ export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", para
  * only saved to the browser until the survey starts. `value` is the point picked (1-7), sent
  * to PostHog only, by owner decision (DPIA §6, 2026-10-13): question 1 rates the reader's sex
  * life, special-category data, which GA4 is not given. `changed`: a pick was already there
- * (an earlier tap, or a saved draft).
+ * (an earlier tap, or a saved draft). `question`: the survey question the card asks, sent
+ * with the value to PostHog only, since 24 Nov 2026, when the pain-point page's version C
+ * began asking Q10003 where every other card asks Q01002: without it, a value would not
+ * say which question it answers.
  */
 export const trackLandingCardAnswer = ({
   value,
+  question,
   ...params
 }: {
   location: "hero" | "footer";
   changed: boolean;
   value: number;
-}) => track("landing_card_answer", params, { value });
+  question: string;
+}) => track("landing_card_answer", params, { value, question });
 
 /**
  * The landing pages' sections, top to bottom (`data-landing-section` on each root): the

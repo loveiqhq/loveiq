@@ -140,7 +140,8 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
       "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
       "Survey time: *19 min*",
       "Original acquisition: *Google Ads* — performance_max (cross-network)",
-      "Landing page design: *Landing Page V4* (Pain Points)",
+      // #2826 came through B, the pain-point page as released, paused on 24 Nov 2026.
+      "Landing page design: *Landing Page V4* (Pain Points) _(retired arm)_",
       "Country (self-reported): *New Zealand*",
       "",
       `${GREEN} Survey done  →  ${GREEN} Report opened  →  ${GREEN} Paywall hit  →  ${RED} Checkout  →  ${RED} Paid`,
@@ -160,9 +161,9 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
       { journeyLink: PERMALINK }
     );
     const all = lines(built);
-    const at = all.indexOf("Landing page design: *Landing Page V4* (Pain Points)");
+    const at = all.indexOf("Landing page design: *Landing Page V4* (Pain Points) _(retired arm)_");
     expect(all.slice(at, at + 4)).toEqual([
-      "Landing page design: *Landing Page V4* (Pain Points)",
+      "Landing page design: *Landing Page V4* (Pain Points) _(retired arm)_",
       "€1.99 page: *Core Archetype shown* (new page)",
       "Gift email (E07): *Gifted* (Core Archetype free on day 1)",
       "Country (self-reported): *New Zealand*",

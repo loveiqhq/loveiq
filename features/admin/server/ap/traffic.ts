@@ -15,6 +15,8 @@ import { twoProportionSignal } from "@features/admin/server/statistics";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
@@ -1310,11 +1312,12 @@ export function buildTraffic(input: {
     const armOk = armStartsComplete(facts.from, today);
     const rows = [...arms].map((arm) => {
       const test = LANDING_TESTS.find((t) => t.arms.includes(arm));
+      const [first, second] = test?.letters ?? ["A", "B"];
       const mine = subs.filter((x) => x.arm === arm);
       return perfRow(
         arm,
         LANDING_ARM_NAMES.get(arm) ?? armLabel("landing", arm).long,
-        test ? `${test.name} · ${test.arms[0] === arm ? "A" : "B"}` : "",
+        test ? `${test.name} · ${test.arms[0] === arm ? first : second}` : "",
         mine,
         {
           visitors: vB ? null : visitTotal(facts, facts.from, facts.to, scope.source, arm),
@@ -1902,14 +1905,27 @@ function buildExperiments(
       });
     }
   };
-  // #10 · round 4: the video page (A) against Marcus's pain-point page (B).
+  // #10 · C: the video page (A) against version C of the pain-point page (sync 24 Nov 2026).
+  landingTest(
+    landingTestName("pain-point-c"),
+    [
+      ["video", landingVersionName("video")],
+      ["pain_point_c", landingVersionName("pain_point_c")],
+    ],
+    LANDING_TEST_START_DAY
+  );
+  // #10 · round 4: the video page (A) against Marcus's pain-point page (B), until B was paused.
   landingTest(
     landingTestName("pain-point"),
     [
       ["video", landingVersionName("video")],
       ["pain_point", landingVersionName("pain_point")],
     ],
-    LANDING_TEST_START_DAY
+    LANDING_PAIN_POINT_START_DAY,
+    {
+      lastDay: LANDING_PAIN_POINT_LAST_DAY,
+      why: "Paused on 24 Nov 2026: version C of the pain-point page took its half",
+    }
   );
   // #6 · round 3, the landing hero: ended at the 10 Nov 2026 sync, which kept the video.
   landingTest(

@@ -54,6 +54,7 @@ export const KPI_SEGMENTS = [
   "Landing: question card",
   "Landing: video",
   "Landing: pain points",
+  "Landing: pain points C",
 ] as const;
 export type KpiSegment = (typeof KPI_SEGMENTS)[number];
 
@@ -61,12 +62,15 @@ export type KpiSegment = (typeof KPI_SEGMENTS)[number];
  * The landing pages' segments and the arms that served each (shared/experiments/landingVariant.ts).
  * The video page is one segment across rounds 3 and 4: round 3's white_video and round 4's video
  * are the same page under a new cookie value, so the week round 4 began writes one row for it.
+ * The pain-point page's version C (24 Nov 2026) is a segment of its own, as it is a test of its
+ * own: pooled with B, the week C began would mix two hero questions.
  * A segment writes rows only in weeks it had visits.
  */
 const LANDING_SEGMENTS: Array<[KpiSegment, string[]]> = [
   ["Landing: question card", ["white_card"]],
   ["Landing: video", ["white_video", "video"]],
   ["Landing: pain points", ["pain_point"]],
+  ["Landing: pain points C", ["pain_point_c"]],
 ];
 
 /** A segment's count: its arms' counts added up. */
@@ -736,6 +740,8 @@ const SPLIT_LABEL: Record<string, string> = {
   Computer: "computer",
   "Landing: question card": "question card",
   "Landing: video": "video",
+  "Landing: pain points": "pain points",
+  "Landing: pain points C": "pain points C",
 };
 
 function splitLine(s: KpiSummary): Span[] | null {
@@ -743,7 +749,15 @@ function splitLine(s: KpiSummary): Span[] | null {
   const groups: Array<[string, string[]]> = [
     ["By source", ["Google Ads", "Other sources"]],
     ["By device", ["Phone", "Computer"]],
-    ["By landing page", ["Landing: question card", "Landing: video"]],
+    [
+      "By landing page",
+      [
+        "Landing: question card",
+        "Landing: video",
+        "Landing: pain points",
+        "Landing: pain points C",
+      ],
+    ],
   ];
   const parts = groups
     .map(([label, segs]) => {

@@ -1841,7 +1841,8 @@ describe("conversion-digest handler", () => {
      * Every one of them goes through `landingLiveBlocks()`, which reads ROUND 2 so
      * the block-building code stays covered. That leaves nobody asserting what the
      * handler really sends: since round 4 started, production compares V3's video
-     * page with V4's pain-point page — and nothing of the earlier rounds' arms.
+     * page with V4's pain-point page (since the 24 Nov 2026 sync its version C) — and
+     * nothing of the earlier rounds' arms.
      *
      * Asserted on the LIVE path, with fixtures that would happily draw round 2's
      * charts: makeStartFunnel() and makeAxisRows() carry V1 and V2, and the midway
@@ -1851,7 +1852,7 @@ describe("conversion-digest handler", () => {
      * A morning after the start (LANDING_TEST_START_DAY): before it the block says when
      * the test starts instead ("says when the test starts, not that nobody visited").
      */
-    vi.setSystemTime(new Date("2026-11-23T07:05:00.000Z"));
+    vi.setSystemTime(new Date(Date.parse(`${LANDING_TEST_START_DAY}T07:05:00.000Z`) + 86_400_000));
     mockFetchMidwayProgress.mockResolvedValue({
       // Above the fixture's 510 finishers, so the funnel keeps the midway row.
       overall: { sessions: 1000, reached: 620 },
@@ -1913,18 +1914,18 @@ describe("conversion-digest handler", () => {
     const startFunnel = (bVisitsPerDay = 22) => ({
       daily: days.flatMap((day) => [
         { day, arm: "video", visits: 20, starts: 2 },
-        ...(bVisitsPerDay ? [{ day, arm: "pain_point", visits: bVisitsPerDay, starts: 2 }] : []),
+        ...(bVisitsPerDay ? [{ day, arm: "pain_point_c", visits: bVisitsPerDay, starts: 2 }] : []),
         { day, arm: "white_video", visits: 99, starts: 9 },
       ]),
       totals: [
         { arm: "video", visits: 280, starts: 28 },
-        ...(bVisitsPerDay ? [{ arm: "pain_point", visits: bVisitsPerDay * 14, starts: 28 }] : []),
+        ...(bVisitsPerDay ? [{ arm: "pain_point_c", visits: bVisitsPerDay * 14, starts: 28 }] : []),
         { arm: "white_video", visits: 1386, starts: 126 },
       ],
     });
     const pastFirstTotals = [
       { arm: "video", sessions: 60, reached: 20 },
-      { arm: "pain_point", sessions: 70, reached: 25 },
+      { arm: "pain_point_c", sessions: 70, reached: 25 },
       { arm: "white_video", sessions: 170, reached: 75 },
     ];
     const startsPastFirst = {
@@ -1936,7 +1937,7 @@ describe("conversion-digest handler", () => {
     };
     const cohorts = [
       { axis: "landing" as const, arm: "video", n: 4, conversions: 0 },
-      { axis: "landing" as const, arm: "pain_point", n: 6, conversions: 1 },
+      { axis: "landing" as const, arm: "pain_point_c", n: 6, conversions: 1 },
       { axis: "landing" as const, arm: "white_video", n: 50, conversions: 3 },
     ];
     const build = async (over: Record<string, unknown> = {}) => {
@@ -1967,7 +1968,7 @@ describe("conversion-digest handler", () => {
       );
     };
     const card = armLabel("landing", "video").short;
-    const video = armLabel("landing", "pain_point").short;
+    const video = armLabel("landing", "pain_point_c").short;
 
     it("counts drafts past question one plus finished surveys over visits, per live arm", async () => {
       const text = await build();
@@ -1995,7 +1996,7 @@ describe("conversion-digest handler", () => {
      */
     const withFinishedTotals = [
       { arm: "video", sessions: 64, reached: 24, finished: 4 },
-      { arm: "pain_point", sessions: 76, reached: 31, finished: 6 },
+      { arm: "pain_point_c", sessions: 76, reached: 31, finished: 6 },
       { arm: "white_video", sessions: 170, reached: 75, finished: 0 },
     ];
     const withFinished = {
@@ -2019,7 +2020,7 @@ describe("conversion-digest handler", () => {
       );
       const otherCohorts = await build({
         startsPastFirst: withFinished,
-        cohorts: [{ axis: "landing" as const, arm: "pain_point", n: 99, conversions: 0 }],
+        cohorts: [{ axis: "landing" as const, arm: "pain_point_c", n: 99, conversions: 0 }],
       });
       expect(otherCohorts).toContain(
         `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
@@ -2040,7 +2041,7 @@ describe("conversion-digest handler", () => {
           daily: [
             ...early.flatMap((day) => [
               { day, arm: "video", visits: 50, starts: 9 },
-              { day, arm: "pain_point", visits: 50, starts: 9 },
+              { day, arm: "pain_point_c", visits: 50, starts: 9 },
             ]),
             ...base.daily,
           ],
@@ -2077,7 +2078,7 @@ describe("conversion-digest handler", () => {
           daily: [
             ...early.flatMap((day) => [
               { day, arm: "video", visits: 50, starts: 9 },
-              { day, arm: "pain_point", visits: 50, starts: 9 },
+              { day, arm: "pain_point_c", visits: 50, starts: 9 },
             ]),
             ...base.daily,
           ],
@@ -2151,8 +2152,9 @@ describe("conversion-digest handler", () => {
           } as Parameters<typeof buildConversionDigest>[0])
         ).blocks
       );
-      expect(text).toContain(`the landing test starts on 18 Nov, ${card} against ${video}`);
-      expect(text).toContain("its first numbers arrive in the 19 Nov digest");
+      // Version C's first whole day (sync 24 Nov 2026), LANDING_TEST_START_DAY.
+      expect(text).toContain(`the landing test starts on 25 Nov, ${card} against ${video}`);
+      expect(text).toContain("its first numbers arrive in the 26 Nov digest");
       expect(text).not.toContain("no visits recorded");
     });
 
@@ -2169,11 +2171,11 @@ describe("conversion-digest handler", () => {
             startFunnel: {
               daily: [
                 { day, arm: "video", visits: 200, starts: 14 },
-                { day, arm: "pain_point", visits: 210, starts: 10 },
+                { day, arm: "pain_point_c", visits: 210, starts: 10 },
               ],
               totals: [
                 { arm: "video", visits: 200, starts: 14 },
-                { arm: "pain_point", visits: 210, starts: 10 },
+                { arm: "pain_point_c", visits: 210, starts: 10 },
               ],
             },
             startsPastFirst: { ...withFinished, daily: [] },
@@ -2848,7 +2850,7 @@ describe("conversion-digest verdicts", () => {
     // Round 4's two live arms, so no includeRetired is needed.
     const verdict = buildArmVerdict("landing", [
       { arm: "video", n: 500, conversions: 60 },
-      { arm: "pain_point", n: 500, conversions: 20 },
+      { arm: "pain_point_c", n: 500, conversions: 20 },
     ]);
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
@@ -3328,7 +3330,7 @@ describe("the landing test's verdict waits for a window wholly after its start",
   // Decisive again; the round's first day is the only thing in the way.
   const cohorts = [
     { axis: "landing", arm: "video", n: 500, conversions: 80 },
-    { axis: "landing", arm: "pain_point", n: 500, conversions: 20 },
+    { axis: "landing", arm: "pain_point_c", n: 500, conversions: 20 },
   ];
   const digestOn = async (daysAfterStart: number) => {
     const day = new Date(

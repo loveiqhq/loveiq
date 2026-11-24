@@ -9,8 +9,30 @@
  * prints every line.
  */
 
-/** Question 1 of the survey (data/survey-data.ts, Q01002), asked in the hero. */
-export const QUESTION_1 = "Right now, I feel satisfied with my sex life.";
+/** A survey question the hero asks: its id in data/survey-data.ts and its words there. */
+export interface HeroQuestion {
+  qId: string;
+  text: string;
+}
+
+/**
+ * The page as released (round 4's B, `pain_point`, paused on 24 Nov 2026): question 1 of the
+ * survey (Q01002), beside the film.
+ */
+export const QUESTION_1: HeroQuestion = {
+  qId: "01002",
+  text: "Right now, I feel satisfied with my sex life.",
+};
+
+/**
+ * Version C (`pain_point_c`, LoveIQ Sync 24 Nov 2026): Q01002 loses more people than any
+ * other question, so Mark and Marcus picked Q10003, which almost nobody leaves at, and
+ * Marcus put it under the film. The survey still asks Q01002 in its place.
+ */
+export const QUESTION_C: HeroQuestion = {
+  qId: "10003",
+  text: "I'm comfortable expressing what turns me on.",
+};
 
 export const HERO = {
   titleLead: "Become a better and ",

@@ -760,12 +760,13 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
   const withCookie = (arm: string) =>
     makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm);
-  const LIVE = ["video", "pain_point"];
+  // Since the 24 Nov 2026 sync: the video page against the pain-point page's version C.
+  const LIVE = ["video", "pain_point_c"];
 
   it("assigns one of the two live arms on / and mints it as a sticky cookie", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // Round 4 is the video page vs the new pain-point page, 50/50 — either is valid here,
-    // and both sides of the coin are proved reachable below.
+    // Round 4 is the video page vs the pain-point page's version C, 50/50 — either is valid
+    // here, and both sides of the coin are proved reachable below.
     expect(LIVE).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
@@ -779,15 +780,15 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     /**
      * Driven through crypto.getRandomValues directly, so a coin that could only ever
      * land on one side — the bug a hard-coded arm would be — fails here rather than
-     * passing by never being exercised. Even bytes are arm A, odd bytes arm B.
+     * passing by never being exercised. Even bytes are arm A, odd bytes arm C.
      */
     const original = globalThis.crypto.getRandomValues;
     try {
       for (const [byte, arm] of [
         [0, "video"],
-        [1, "pain_point"],
+        [1, "pain_point_c"],
         [2, "video"],
-        [255, "pain_point"],
+        [255, "pain_point_c"],
       ] as const) {
         (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
           (buf: Uint8Array) => {
@@ -838,9 +839,17 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
      * `white` is the one that matters: every visitor between round 2's end
      * (2026-09-19) and this round's launch holds it for a year. Kept sticky, it would
      * have parked every returning visitor in arm A, and only new visitors could ever
-     * reach B. `white_prev` and `control` are older still.
+     * reach B. `white_prev` and `control` are older still. `pain_point` is B, paused at the
+     * 24 Nov 2026 sync: its visitors get a fresh coin between A and C.
      */
-    for (const old of ["white", "white_prev", "control", "white_card", "white_video"]) {
+    for (const old of [
+      "white",
+      "white_prev",
+      "control",
+      "white_card",
+      "white_video",
+      "pain_point",
+    ]) {
       mockNextOpts.value = null;
       mockCookiesSet.mockClear();
       await proxy(withCookie(old));
@@ -1036,7 +1045,7 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     await proxy(makeVisitRequest({ dest: "document" }));
     // The visit is tagged with the arm this same request was assigned on "/".
     const visitArm = mockNextOpts.value?.request?.headers?.get("x-liq-new-visit");
-    expect(["video", "pain_point"]).toContain(visitArm);
+    expect(["video", "pain_point_c"]).toContain(visitArm);
     expect(visitArm).toBe(mockNextOpts.value?.request?.headers?.get("x-landing-variant"));
     const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
     expect(dvCall).toBeDefined();
