@@ -789,7 +789,8 @@ describe("POST /api/survey", () => {
     });
 
     it("dates the details screen's newsletter text", () => {
-      expect(MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2).toBe("2026-11-23");
+      // 24 Nov 2026: the switch under the email (Mark's board 2b) replaced the Yes/No question.
+      expect(MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2).toBe("2026-11-24");
     });
 
     it("files a Survey 2.0 Yes under the details screen's version", async () => {

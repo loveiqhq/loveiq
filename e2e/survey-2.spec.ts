@@ -21,7 +21,8 @@ type Screen = (typeof SCREENS)[number];
 const DETAILS = "Last step to your report to become a more intelligent lover";
 const NAME = "E2E";
 const EMAIL = "e2e-survey2@loveiq.org";
-const NO = "No, thanks";
+/** The newsletter switch under the email (Mark's board 2b). */
+const SWITCH = "Keep learning after your report";
 
 const WRITES = [
   "**/api/survey-partial",
@@ -179,19 +180,23 @@ test.describe("Survey 2.0", () => {
     ]);
     for (const [after, id] of opened) if (id === "trustpilot") expect(after).toBe("03013");
 
-    // The details page: one field at a time, each opened by Next.
+    // The details page: one field at a time, each opened by Next. The newsletter switch opens
+    // under the email, off, and the country only on the Next that leaves the email.
     await expect(page.getByRole("heading", { name: DETAILS })).toBeVisible();
     await page.getByLabel("Name or nickname").fill(NAME);
     await next(page).click();
     await page.getByLabel("Email", { exact: true }).fill(EMAIL);
+    const optIn = page.getByRole("switch", { name: SWITCH });
+    await expect(optIn).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByPlaceholder(/search for a country/i)).toHaveCount(0);
+    // Left off, Next opens the "Sure you want to miss out?" sheet once: Not now keeps the No.
     await next(page).click();
-    // A No opens the "Sure you want to miss out?" sheet once: Not now keeps it.
-    await page.getByRole("radio", { name: NO }).click();
     const missOut = page.getByRole("dialog", { name: "Sure you want to miss out?" });
     await expect(missOut).toBeVisible();
     await page.waitForTimeout(450);
     await missOut.getByRole("button", { name: "Not now" }).click();
     await expect(missOut).toBeHidden();
+    await expect(optIn).toBeHidden(); // it goes with the email row (Mark's board 3)
     await page.getByPlaceholder(/search for a country/i).fill("Germany");
     await page.getByRole("option", { name: "Germany" }).first().click();
     await page.getByLabel(/^Postal code in Germany/).fill("101");
