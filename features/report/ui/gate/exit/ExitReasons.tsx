@@ -22,8 +22,11 @@ import { TickIcon } from "./exitIcons";
 
 interface ExitReasonsProps {
   stage: ExitStage;
-  /** The EUR 1.99, for the gate's "I wasn't sure what I'd get for €1.99". */
-  priceCents: number;
+  /**
+   * The EUR 1.99, for the gate's "I wasn't sure what I'd get for €1.99"; null on the price
+   * test's "Choose your price" half, which names no price.
+   */
+  priceCents: number | null;
   /** The reader's submission (or "preview"): one order per reader and page, however often it opens. */
   seed: string;
   /** Tests pin the order outright. */

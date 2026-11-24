@@ -16,6 +16,7 @@ import type {
 } from "@features/admin/server/ap/payment";
 import type { ExitPageRow } from "@features/admin/server/ap/paygate-exits";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { GATE_CHOOSE_COPY } from "@features/report/ui/gate/gateChoosePriceContent";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
@@ -101,7 +102,7 @@ const SECTIONS = [
   { id: "checkout", label: "Checkout & methods" },
   { id: "exits", label: "Paygate exits" },
   { id: "segments", label: "Segments" },
-  { id: "gate-test", label: "€1.99 page test" },
+  { id: "gate-test", label: "Pre-unlock price test" },
   { id: "experiments", label: "Pricing tests" },
   { id: "elasticity", label: "Price elasticity" },
 ];
@@ -185,6 +186,8 @@ interface Cell {
   left?: boolean;
   weight?: keyof typeof WEIGHT;
   shade?: Shade;
+  /** Set in under the row above it: the price test's picks under its choosing half. */
+  indent?: boolean;
 }
 
 /** A table as the design draws them here: grey uppercase headings, 13px figures, shaded cells. */
@@ -244,7 +247,7 @@ function PayTable({
               <span
                 key={i}
                 role={i === 0 && rowHeaders ? "rowheader" : "cell"}
-                className={`flex flex-col justify-center gap-px px-3 ${pad} text-[13px] tabular-nums ${c.left ? "text-left" : "text-right"} ${WEIGHT[c.weight ?? "medium"]} ${SHADE[c.shade ?? "plain"]}`}
+                className={`flex flex-col justify-center gap-px ${c.indent ? "pl-7 pr-3" : "px-3"} ${pad} text-[13px] tabular-nums ${c.left ? "text-left" : "text-right"} ${WEIGHT[c.weight ?? "medium"]} ${SHADE[c.shade ?? "plain"]}`}
               >
                 {c.v}
                 {c.sub ? (
@@ -993,75 +996,117 @@ function Segments({
   );
 }
 
-const GATE_COLUMNS = "minmax(170px, 1.5fr) minmax(170px, 1.4fr) repeat(7, minmax(96px, 1fr))";
+const PRICE_TEST_COLUMNS = "minmax(220px, 2fr) repeat(7, minmax(96px, 1fr))";
 
 /**
- * #11's lift on the decider with its confidence, as the pricing tests' AOV lift is drawn; shaded
- * only once credible, so a gap the test can't support never reads as a win.
+ * The pre-unlock price test (Marcus's board "Assessment A · Payment copy", 24 Nov 2026): EUR 1.99
+ * against "Choose your price", one row per half, the choosing half's paid picks under it, then
+ * those who took it for EUR 0. Green marks the half ahead on the pay rate and on revenue per
+ * finisher, the number the board decides it on; the sentence under the table says how far the
+ * numbers can be trusted.
  */
-function gateLiftCell(t: PaymentPayload["gateTest"]): Cell {
-  if (t.lift === null) return { v: EMPTY, sub: t.liftWhy ?? "" };
-  const credible = t.confidence !== null && t.confidence >= 0.95;
-  return {
-    v: `${t.lift > 0 ? "+" : ""}${fmt("pct", t.lift)}`,
-    sub:
-      t.confidence === null
-        ? ""
-        : `${Math.round(t.confidence * 100)}% confidence · ${credible ? "credible" : "not significant yet"}`,
-    weight: "bold",
-    shade: !credible ? "plain" : t.lift > 0 ? "good" : t.lift < 0 ? "bad" : "plain",
-  };
-}
-
-/** #11: Mark's new €1.99 page against today's, per half, and what the numbers can say. */
-function GateTest({ d }: { d: PaymentPayload }) {
-  const t = d.gateTest;
+function PriceTest({ d }: { d: PaymentPayload }) {
+  const t = d.priceTest;
+  const [a, b] = t.arms;
+  const perFinisher = (x: { revenue: number }, of: number) => ratio(x.revenue, of);
+  const ahead = (mine: number | null, theirs: number | null): Shade =>
+    mine !== null && theirs !== null && mine > theirs ? "good" : "plain";
+  const armRows =
+    a && b
+      ? [a, b].map((x, i) => {
+          const other = i === 0 ? b : a;
+          return {
+            key: x.arm,
+            cells: [
+              { v: x.name, sub: x.sub, left: true, weight: "bold" as const },
+              { v: fmt("count", x.finishers) },
+              x.reached === null
+                ? { v: EMPTY, sub: "could not be read" }
+                : { v: fmt("count", x.reached) },
+              { v: fmt("count", x.paid) },
+              {
+                v: fmt("pct", ratio(x.paid, x.finishers)),
+                weight: "bold" as const,
+                shade: ahead(ratio(x.paid, x.finishers), ratio(other.paid, other.finishers)),
+              },
+              { v: fmt("eur", ratio(x.revenue, x.paid), 2) },
+              {
+                v: fmt("eur", perFinisher(x, x.finishers), 2),
+                sub: `${fmt("eur", x.revenue, 2)} in total`,
+                weight: "bold" as const,
+                shade: ahead(perFinisher(x, x.finishers), perFinisher(other, other.finishers)),
+              },
+              { v: fmt("count", x.full) },
+            ],
+          };
+        })
+      : [];
+  const pickRows = b
+    ? t.options.map((o) => ({
+        key: `pick-${o.option}`,
+        dashed: true,
+        cells: [
+          { v: o.name, sub: o.sub, left: true, weight: "semibold" as const, indent: true },
+          { v: "" },
+          { v: "" },
+          { v: fmt("count", o.n) },
+          { v: fmt("pct", ratio(o.n, b.finishers)) },
+          { v: fmt("eur", ratio(o.revenue, o.n), 2) },
+          {
+            v: fmt("eur", perFinisher(o, b.finishers), 2),
+            sub: `${fmt("eur", o.revenue, 2)} in total`,
+          },
+          { v: "" },
+        ],
+      }))
+    : [];
+  const freeRow = b
+    ? [
+        {
+          key: "pick-free",
+          dashed: true,
+          cells: [
+            {
+              v: `€0 · ${GATE_CHOOSE_COPY.card.notes.free}`,
+              sub: `${fmt("count", b.free)} ${b.free === 1 ? "reader" : "readers"} · ${fmt("pct", ratio(b.free, b.finishers))} of finishers`,
+              left: true,
+              weight: "semibold" as const,
+              indent: true,
+            },
+            { v: "" },
+            { v: "" },
+            { v: EMPTY },
+            { v: EMPTY },
+            { v: fmt("eur", 0) },
+            { v: fmt("eur", 0) },
+            { v: "" },
+          ],
+        },
+      ]
+    : [];
   return (
     <Card id="gate-test" labelledBy="h-gate-test">
-      <SectionHead
-        id="h-gate-test"
-        title="€1.99 page test"
-        description="Mark's new €1.99 page, which shows the reader's Core Archetype before they pay, against today's page: half the free finishers each, by their survey's session. Who reached the page, who paid the €1.99 and who went on to the full report, so far. The share of free finishers who pay the €1.99 decides it."
-      />
+      <SectionHead id="h-gate-test" title={t.test} />
       {t.why ? (
         <Why>{t.why}</Why>
       ) : (
         <>
           <PayTable
-            label="€1.99 page test"
-            columns={GATE_COLUMNS}
-            minWidth={1120}
+            label={t.test}
+            columns={PRICE_TEST_COLUMNS}
+            minWidth={980}
             rowHeaders={false}
             head={[
-              { label: "Test", left: true },
-              { label: "Arm", left: true, info: "payment.gt-arm" },
-              { label: "Free finishers", info: "payment.gt-finishers" },
-              { label: "Reached the €1.99 page", info: "payment.gt-reached" },
-              { label: "Paid €1.99", info: "payment.gt-paid" },
-              { label: "€1.99 per finisher", info: "payment.gt-rate" },
-              { label: "€1.99 per reacher", info: "payment.gt-rate-reached" },
-              { label: "Full report bought", info: "payment.gt-full" },
-              { label: "Lift · confidence", info: "payment.gt-lift" },
+              { label: "Arm · price", left: true, info: "payment.gp-arm" },
+              { label: "Free finishers", info: "payment.gp-finishers" },
+              { label: "Reached the paywall", info: "payment.gp-reached" },
+              { label: "Paid", info: "payment.gp-paid" },
+              { label: "Pay rate", info: "payment.gp-rate" },
+              { label: "Avg. price paid", info: "payment.gp-avg" },
+              { label: "Revenue per finisher", info: "payment.gp-revenue" },
+              { label: "Full report", info: "payment.gp-full" },
             ]}
-            rows={t.arms.map((a, i) => ({
-              key: a.arm,
-              dashed: i > 0,
-              cells: [
-                i === 0
-                  ? { v: t.test, sub: t.note, left: true, weight: "bold" }
-                  : { v: "", left: true },
-                { v: a.name, sub: a.control ? "Control" : "", left: true, weight: "semibold" },
-                { v: fmt("count", a.finishers) },
-                a.reached === null
-                  ? { v: EMPTY, sub: "could not be read" }
-                  : { v: fmt("count", a.reached) },
-                { v: fmt("count", a.paid) },
-                { v: fmt("pct", ratio(a.paid, a.finishers)), weight: "bold" },
-                { v: fmt("pct", ratio(a.paidReached, a.reached)) },
-                { v: fmt("count", a.full) },
-                a.control ? { v: EMPTY } : gateLiftCell(t),
-              ],
-            }))}
+            rows={[...armRows, ...pickRows, ...freeRow]}
           />
           <p className="m-0 text-[13px] leading-relaxed text-ap-ink">{t.verdict}</p>
         </>
@@ -1899,34 +1944,53 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
         ]
       : []),
     {
-      name: "€1.99 page test",
+      name: "Pre-unlock price test",
       table: {
         columns: [
-          col("Test · arm", "text"),
-          col("Note", "text"),
+          col("Arm · price", "text"),
           col("Free finishers", "count"),
-          col("Reached the €1.99 page", "count"),
-          col("Paid €1.99", "count"),
-          col("€1.99 per finisher", "pct"),
-          col("€1.99 per reacher", "pct"),
-          col("Full report bought", "count"),
-          col("Lift", "pct"),
-          col("Confidence", "pct"),
+          col("Reached the paywall", "count"),
+          col("Paid", "count"),
+          col("Pay rate", "pct"),
+          col("Avg. price paid", "eur"),
+          col("Revenue per finisher", "eur"),
+          col("Revenue", "eur"),
+          col("Took it for €0", "count"),
+          col("Full report", "count"),
         ],
-        rows: d.gateTest.arms.map((a) => ({
-          label: `${d.gateTest.test} · ${a.name}${a.control ? " (control)" : ""}`,
-          values: [
-            d.gateTest.note,
-            a.finishers,
-            a.reached,
-            a.paid,
-            ratio(a.paid, a.finishers),
-            ratio(a.paidReached, a.reached),
-            a.full,
-            a.control ? null : d.gateTest.lift,
-            a.control ? null : d.gateTest.confidence,
-          ],
-        })),
+        rows: [
+          ...d.priceTest.arms.map((a) => ({
+            label: `${a.name}${a.control ? " (control)" : ""}`,
+            values: [
+              a.finishers,
+              a.reached,
+              a.paid,
+              ratio(a.paid, a.finishers),
+              ratio(a.revenue, a.paid),
+              ratio(a.revenue, a.finishers),
+              a.revenue,
+              a.control ? null : a.free,
+              a.full,
+            ],
+          })),
+          ...d.priceTest.options.map((o) => {
+            const of = d.priceTest.arms[1]?.finishers ?? null;
+            return {
+              label: `B · ${o.name}`,
+              values: [
+                null,
+                null,
+                o.n,
+                ratio(o.n, of),
+                ratio(o.revenue, o.n),
+                ratio(o.revenue, of),
+                o.revenue,
+                null,
+                null,
+              ],
+            };
+          }),
+        ],
       },
     },
     {
@@ -2081,7 +2145,7 @@ export default function ApPayment() {
           <Checkout d={data} />
           <Exits d={data} />
           <Segments d={data} segKey={segKey} onSegKey={setSegKey} />
-          <GateTest d={data} />
+          <PriceTest d={data} />
           <Pricing d={data} />
           <Elasticity el={data.elasticity} />
         </Busy>

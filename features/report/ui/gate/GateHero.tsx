@@ -35,7 +35,12 @@ export const GateHero: FC<{
    * way out and the badge stay, "Find Out Your Sexual Archetypes" goes.
    */
   headline?: boolean;
-}> = ({ headline = true }) => {
+  /**
+   * The headline's first words: the price test's "Choose your price" page reads "Unlock Your"
+   * where today's reads "Find Out Your" (gateChoosePriceContent.ts).
+   */
+  lead?: string;
+}> = ({ headline = true, lead = GATE_COPY.headline.lead }) => {
   const [reducedMotion] = useState(prefersReducedMotion);
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -88,7 +93,7 @@ export const GateHero: FC<{
         </div>
         {headline ? (
           <h1 className="iug-hero__title">
-            <span className="iug-hero__lead">{GATE_COPY.headline.lead}</span>{" "}
+            <span className="iug-hero__lead">{lead}</span>{" "}
             <em className="iug-hero__emph">{GATE_COPY.headline.emph}</em>
           </h1>
         ) : null}

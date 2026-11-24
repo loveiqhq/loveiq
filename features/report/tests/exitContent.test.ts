@@ -48,6 +48,13 @@ describe("the exit pages' reasons (Fatih, 28.10: fitted to what each reader has 
     expect(exitReasons("pre", 299).find((r) => r.code === "unclear_value")?.label).toBe(
       "I wasn’t sure what I’d get for €2.99"
     );
+    // The price test's "Choose your price" half has no price to name (Fatih, 24 Nov 2026).
+    expect(exitReasons("pre", null).find((r) => r.code === "unclear_value")?.label).toBe(
+      "I wasn’t sure what I’d get"
+    );
+    expect(exitReasons("pre", null).map((r) => r.code)).toEqual(
+      exitReasons("pre", 199).map((r) => r.code)
+    );
   });
 
   it("asks the full report's reader about what they have unlocked, not a free report", () => {

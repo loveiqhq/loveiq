@@ -1,0 +1,323 @@
+/* ════════════════════════════════════════════════════════════════════════
+   THE "CHOOSE YOUR PRICE" HALF OF THE EUR 1.99 PAGE TEST — Marcus's board "Paygate · €1,99
+   (Figma recreation) copy 2" (Claude Design "Paygate exit pages", RFD 24 Nov 2026).
+   Today's gate around it is unchanged (initial-unlock-gate.css); this styles what the board
+   adds: the card's title, its four price tiles and the box under it. Its sizes and colours are
+   the board's, inside today's card frame (badge, guarantee, lines, button).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* "Pay what is fair to you, choose a price.": ink, with "fair" in the brand ramp. */
+.iug-card--choose .iug-choose__title .rpg-card__lead {
+  color: var(--rpg-ink-strong);
+}
+
+.iug-choose__fair {
+  /* The italic leans past its box: a little room so the ramp paints its last letter. */
+  padding-right: 0.06em;
+  margin-right: -0.06em;
+  font-style: italic;
+  background-image: linear-gradient(90deg, #fe6839 0%, #d27aa8 55%, #a58cf4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* The 2 × 2 grid of tiles (a fieldset, so a radio group a screen reader names). */
+.iug-choose__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A tile: 1px lavender while free, a 2px violet ring and a soft violet shadow once picked.
+ * The second pixel is an inset shadow, so picking moves nothing. */
+.iug-choose__tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  box-sizing: border-box;
+  min-height: 68px;
+  padding: 12px 12px 10px;
+  border: 1px solid #ddd5fb;
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--rpg-ink-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.iug-choose__tile.is-checked {
+  border-color: #6a5ef0;
+  box-shadow:
+    inset 0 0 0 1px #6a5ef0,
+    0 10px 22px -14px rgba(106, 94, 240, 0.7);
+}
+
+.iug-choose__tile:has(input:focus-visible) {
+  outline: 2px solid var(--rpg-purple);
+  outline-offset: 2px;
+}
+
+.iug-choose__price {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.iug-choose__note {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  color: #6b6678;
+}
+
+.iug-choose__tile.is-checked .iug-choose__note {
+  font-weight: 700;
+  color: #5b52e8;
+}
+
+/* The round mark top right: an empty ring, filled violet with a tick once picked. */
+.iug-choose__mark {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #c9bff5;
+  border-radius: 9999px;
+  color: #ffffff;
+}
+
+.iug-choose__tile.is-checked .iug-choose__mark {
+  border: 0;
+  background: #6a5ef0;
+}
+
+/* The fourth tile, the reader's own amount: dashed while free, a field under its words. */
+.iug-choose__own {
+  gap: 4px;
+  padding: 10px 12px;
+  border-style: dashed;
+  border-color: #b9a6f2;
+  cursor: text;
+}
+
+.iug-choose__own.is-checked {
+  border-style: solid;
+}
+
+.iug-choose__own-label {
+  cursor: pointer;
+}
+
+.iug-choose__field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding-bottom: 2px;
+  border-bottom: 1.5px solid #ddd5fb;
+}
+
+.iug-choose__own.is-checked .iug-choose__field {
+  border-bottom-color: #6a5ef0;
+}
+
+.iug-choose__euro,
+.iug-choose__input {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.iug-choose__euro {
+  color: #9c95a3;
+}
+
+.iug-choose__own.is-checked .iug-choose__euro {
+  color: var(--rpg-ink-strong);
+}
+
+.iug-choose__input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--rpg-ink-strong);
+}
+
+/* Only while a typed amount can't be charged: what it can be. */
+.iug-choose__hint {
+  margin: -6px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: #a62700;
+  text-align: center;
+}
+
+/* ── The box under the card: "Why you choose the price" ─────────────────── */
+.iug-why-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 18px 18px 16px;
+  border-radius: 18px;
+  background: #f5f6f8;
+  color: var(--rpg-ink-strong);
+}
+
+.iug-why-choose__title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.iug-why-choose__lead {
+  align-self: center;
+  max-width: 280px;
+  margin: 10px 0 14px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 16px;
+  font-style: italic;
+  line-height: 24px;
+  color: #5b52e8;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.iug-why-choose__rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e9e6ee;
+  border-radius: 14px;
+  background: #ffffff;
+  font-size: 13px;
+  line-height: 18px;
+  color: #3f3a4d;
+}
+
+.iug-why-choose__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.iug-why-choose__row + .iug-why-choose__row {
+  border-top: 1px solid #f0edf4;
+}
+
+.iug-why-choose__row strong {
+  color: var(--rpg-ink-strong);
+  font-weight: 700;
+}
+
+.iug-why-choose__icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+}
+
+.iug-why-choose__icon--heart {
+  background: #fcf1f7;
+}
+
+.iug-why-choose__icon--free {
+  background: #fff4ef;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 13px;
+  font-weight: 700;
+  /* The exit page's AA orange (4.8:1 here), not the board's #fe6839 (2.7:1). */
+  color: #c2410c;
+}
+
+.iug-why-choose__icon--spark {
+  background: #f3f1fd;
+}
+
+/* The income guide: one bordered box, its caption as its header, the top band shaded. */
+.iug-why-choose__guide {
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid #e9e6ee;
+  border-radius: 14px;
+  background: #ffffff;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.iug-why-choose__guide table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.iug-why-choose__caption {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(22, 16, 33, 0.08);
+  font-weight: 700;
+  color: var(--rpg-ink-strong);
+  text-align: left;
+}
+
+.iug-why-choose__guide th,
+.iug-why-choose__guide td {
+  padding: 9px 14px;
+  font-weight: 400;
+  color: #3f3a4d;
+}
+
+.iug-why-choose__guide th {
+  text-align: left;
+}
+
+.iug-why-choose__guide td {
+  font-weight: 700;
+  color: var(--rpg-ink-strong);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.iug-why-choose__guide tr + tr th,
+.iug-why-choose__guide tr + tr td {
+  border-top: 1px solid rgba(22, 16, 33, 0.08);
+}
+
+.iug-why-choose__guide tr.is-highlight {
+  background: #f3f1fd;
+}
+
+.iug-why-choose__guide tr.is-highlight th {
+  font-weight: 700;
+  color: var(--rpg-ink-strong);
+}
+
+.iug-why-choose__guide tr.is-highlight td {
+  color: #5b52e8;
+}

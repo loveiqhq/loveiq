@@ -66,7 +66,9 @@ export type SystemFlagKey =
   | "survey_sheet_desire"
   | "survey_sheet_report_map"
   // Mark's redesigned EUR 1.99 page (12 Nov 2026): the Core Archetype shown on the gate. Off.
-  | "report_gate_archetype_reveal";
+  | "report_gate_archetype_reveal"
+  // The EUR 1.99 page's price test (24 Nov 2026): half the readers choose their price. Off.
+  | "report_gate_choose_price";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

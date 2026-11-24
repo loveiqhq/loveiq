@@ -138,7 +138,10 @@ const SESSION_METADATA = {
   unlockSource: "report_gate",
 };
 
-function stripe({ amountTotal = 199 }: { amountTotal?: number } = {}) {
+function stripe({
+  amountTotal = 199,
+  metadata = SESSION_METADATA,
+}: { amountTotal?: number; metadata?: Record<string, string> } = {}) {
   return {
     charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_initial_1" }) },
     checkout: {
@@ -149,7 +152,7 @@ function stripe({ amountTotal = 199 }: { amountTotal?: number } = {}) {
           currency: "eur",
           customer: null,
           customer_details: { email: "alice@example.com" },
-          metadata: SESSION_METADATA,
+          metadata,
           payment_intent: "pi_initial_1",
           payment_status: "paid",
           total_details: { amount_discount: 0 },
@@ -221,6 +224,36 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
     expect(row?.metadata).toMatchObject({ plan: "initial", gateRevealArm: "control" });
+  });
+
+  // The price test's Choose your price half (24 Nov 2026): the pick rides on the session and is
+  // kept on the payment beside the price it was paid at, and the buyer's half beside them.
+  it("keeps the pick and the price chosen on the payment row", async () => {
+    const seen = backend({
+      tracker: JSON.stringify({ landing_path: "/", gate_reveal_arm: "choose" }),
+    });
+    await processStripeWebhookEvent({
+      event: completed(),
+      stripe: stripe({
+        amountTotal: 699,
+        metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+      }) as never,
+    });
+    const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
+    expect(row).toMatchObject({ amount: 6.99 });
+    expect(row?.metadata).toMatchObject({
+      plan: "initial",
+      priceOption: "fair",
+      currentPrice: "6.99",
+      gateRevealArm: "choose",
+    });
+  });
+
+  it("names no pick for today's EUR 1.99", async () => {
+    const seen = backend();
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
+    expect(row?.metadata).toMatchObject({ priceOption: null });
   });
 
   it("has one payment item, the Core Archetype", async () => {

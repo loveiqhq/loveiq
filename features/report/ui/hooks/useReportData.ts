@@ -53,6 +53,12 @@ export interface ReportData {
    * words the EUR 10 by it. Absent on older responses and for a recipient.
    */
   initialUnlockSource?: InitialUnlockSource | null;
+  /**
+   * What the initial unlock cost the owner, in cents, when its payment says (the price test's
+   * readers chose it): the full report's exit page's "your €X". Absent before it and for a
+   * recipient; the page then says today's EUR 1.99.
+   */
+  initialUnlockPaidCents?: number | null;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;
@@ -375,6 +381,11 @@ interface ReportIdentifier {
   /** `?reveal=1` with a preview gate: Mark's redesigned page, the archetype on the gate. */
   previewReveal?: boolean;
   /**
+   * `?price=1` with a preview gate: the price test's "Choose your price" page; `?price=0`, its
+   * half on today's page (shared/experiments/gatePriceArm.ts).
+   */
+  previewPrice?: "1" | "0" | null;
+  /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
    * the per-report session id read from local storage so the recipient lands
@@ -422,6 +433,7 @@ export function useReportData(identifier: ReportIdentifier) {
     previewGate,
     previewGift,
     previewReveal,
+    previewPrice,
     v4,
   } = identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
@@ -486,6 +498,7 @@ export function useReportData(identifier: ReportIdentifier) {
               ...(previewGate ? { gate: previewGate === "tour" ? "tour" : "1" } : {}),
               ...(previewGift ? { gift: "1" } : {}),
               ...(previewReveal ? { reveal: "1" } : {}),
+              ...(previewPrice ? { price: previewPrice } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -586,6 +599,7 @@ export function useReportData(identifier: ReportIdentifier) {
     previewGate,
     previewGift,
     previewReveal,
+    previewPrice,
     v4,
   ]);
 

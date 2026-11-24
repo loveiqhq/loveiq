@@ -109,6 +109,54 @@ reasons and reviews.
   `&gate=tour&reveal=1` (the first open: the tour's anonymous report, its menu naming the new
   offer, then the page), with `&archetype=<slug>` for another archetype.
 
+## Choose your price (Marcus's RFD, 24 Nov 2026)
+
+Marcus, #all-loveiq, 24 Nov: "Replace & Retire the 'Core Archetype shown' pre-payment wall /
+funnel with the new 'Choose your price' … two version a) 1.99 to pre-unlock b) choose your
+price to pre-unlock". The design is the board "Paygate · €1,99 (Figma recreation) copy 2" in
+Claude Design "Paygate exit pages" (`DcAp94scdVtH6pPTfFmRFp`, board link `42c8ab1355e3`); the
+readout is "Assessment A · Payment copy" in the AP canvas (`5SkhvkohZMdPfohcbwgPCz`, board link
+`18c795d17902`).
+
+- **Switch:** `report_gate_choose_price` (system flag, off when its row is missing; insert the
+  row, the admin PATCH only updates one). While it is on, the reveal above is retired whatever
+  its own switch says (`gateRevealArmFor` gives no half), and the same session split
+  (`shared/experiments/gatePriceArm.ts`) gives the half that met the reveal **Choose your
+  price** (`choose`) and the other today's page (`fixed`). A reader whose survey sheets told
+  them the archetype was free lands on a page with a EUR 0 price.
+- **The page** (`features/report/ui/gate/GateChoosePrice.tsx`): today's gate with the board's
+  changes only: "Unlock Your Sexual Archetypes", the card "Pay What Is Fair to You, Choose a
+  Price." with four tiles (EUR 0 "Paying nothing is fair", EUR 6.99 "Recommended" and picked as
+  the page opens, EUR 19.99 "Support our research", the reader's own amount, EUR 0.50 to 100),
+  "One-time payment, no subscription" as the first line under the guarantee, and the box "Why
+  You Choose the Price" with the income guide. The button and the sticky bar follow the pick.
+  Prices, options and limits: `features/report/logic/choosePrice.ts`.
+- **Paying:** `POST /api/stripe/initial-unlock` takes `priceOption` (and `amountCents` for an own
+  amount), reads the survey's session and charges only when the server deals that reader the
+  `choose` half: EUR 6.99, 19.99 or the amount. EUR 0 skips Stripe: a succeeded EUR 0 `initial`
+  row (`metadata.priceOption = "free"`, `grantChosenFreeInitialUnlock`), then the report opens.
+  Every price carries the EUR 10 credit (`getReportCredits`). The full report's exit page names
+  the price paid ("You earned it with your €6.99 unlock"), and a EUR 0 choice is worded as the gift.
+- **The halves elsewhere** (Fatih, 24 Nov): the choosing half skips the halfway sheet and the
+  report map (nothing in them is true of its page), its wizard map and tour menu name no price,
+  and its exit page says "Choose your price" where it said EUR 1.99, both buttons back to the
+  picker. Today's page's half is unchanged: its EUR 1.99 sheets, wizard map, menu and exit page.
+- **Records:** the survey's server stamps `utm_tracker.gate_reveal_arm` = `fixed` or `choose`
+  (same key, so the funnel digest's list of tracker stamps needs no change); payments carry it as
+  `metadata.gateRevealArm`, with `metadata.priceOption` and `currentPrice`. Exposure:
+  `experiment: gate_price_2026_11`. Slack: "€1.99 page: _Choose your price_ (new page)" or
+  "_Fixed €1.99_ (today's page)".
+- **Reading it:** AP-Analytics › Payment › "Pre-unlock price test: €1.99 vs choose your price"
+  (`features/admin/server/ap/gate-price-test.ts`), in #11's place: per half, free finishers,
+  reached, paid, pay rate, average price, revenue per finisher (the decider) and full reports;
+  under B its paid picks and the EUR 0 claims. #11's readout on the Funnel and paywall page
+  keeps the price test's finishers out of both its halves.
+- **Previews:** `/report?preview=1&v4=1&gate=1&price=1` (Choose your price) or `&price=0` (today's
+  page), and `&gate=tour&price=1`; the survey with `?price=1&reveal=1&sheets=all` (the choosing
+  half, no halfway sheet or map) or `&reveal=0`.
+- **Not in it:** the emails still say EUR 1.99 (I1, I2), and AP's other sections, which Marcus's
+  board also changes, are Eman's.
+
 ## Switch it off
 
 - `report_initial_unlock_gate` off: nobody is gated any more. Readers in the cohort get their
@@ -117,6 +165,8 @@ reasons and reviews.
 - `initial_unlock_gift_email` is its own switch: with the gate off for good, switch it off
   too, or readers who met the gate before still get the gift on day 1.
 - `report_paywall_enforced` off (the paywall's kill switch) opens every report, gate included.
+- `report_gate_choose_price` off: both halves meet today's EUR 1.99 page again (or Mark's reveal
+  page, if its own switch is still on). Prices chosen and EUR 0 claims made stand.
 
 ## Old reports, for the campaign
 

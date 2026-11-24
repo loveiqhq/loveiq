@@ -222,7 +222,11 @@ list (`get_business_numbers` with `group_by: price_list`) were always right. Sin
 2026-11-24 a report checkout's payment also carries `metadata.gateRevealArm`, its buyer's half
 of the EUR 1.99 page test, copied from the survey's `utm_tracker.gate_reveal_arm` at
 fulfillment: null when the survey has no stamp, and absent on pay-to-start, E07 gift and
-unlock-feedback rows.
+unlock-feedback rows. Its values are `control` / `reveal` (Mark's 50/50) or, from the price test
+that replaced it (switch `report_gate_choose_price`), `fixed` / `choose`. A sale on the
+"Choose your price" half also carries `metadata.priceOption` (`fair`, `support` or `custom`)
+beside `currentPrice`, the price paid; EUR 0 chosen there is a EUR 0 `initial` row with
+`priceOption: "free"` (no Stripe), which grants the same EUR 10 credit as the E07 gift.
 
 `essentials` (EUR 9.99) and `core` (EUR 39) are no longer sold; their buyers keep what they
 bought. Before 3.0, `full_report` was EUR 29 and `all_reports` EUR 49 for everyone.

@@ -131,11 +131,18 @@ const sessionIn = (arm: "control" | "reveal") => {
 const engine = (
   sheets: readonly SurveySheetId[] = SURVEY_SHEET_IDS,
   payToStart = false,
-  arm: "control" | "reveal" = "reveal"
+  arm: "control" | "reveal" = "reveal",
+  gatePrice = false
 ) => {
   sessionStorage.setItem(SURVEY_SESSION_KEY, sessionIn(arm));
   return render(
-    <SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} sheets={sheets} payToStart={payToStart} />
+    <SurveyEngine
+      onExit={vi.fn()}
+      onComplete={vi.fn()}
+      sheets={sheets}
+      payToStart={payToStart}
+      gatePrice={gatePrice}
+    />
   );
 };
 const next = () => screen.getByRole("button", { name: /^next$/i });
@@ -519,5 +526,40 @@ describe("the sheets in Mark's 50/50 of the new EUR 1.99 page", () => {
     );
     expect(map).toHaveTextContent("Read your Core Archetype for free.");
     for (const reason of REASONS) expect(map).not.toHaveTextContent(reason);
+  });
+});
+
+// Fatih, 24 Nov 2026: in the price test that replaced the 50/50, the half that chooses its price
+// meets neither sheet that tells what EUR 1.99 opens: nothing in them is true of its page.
+describe("the sheets in the EUR 1.99 page's price test", () => {
+  it("the half that chooses its price: no halfway sheet after 11003", () => {
+    onQuestion(at("11003"));
+    engine(SURVEY_SHEET_IDS, false, "reveal", true);
+    fireEvent.click(next());
+    expect(dialog(/You’re already halfway/)).toBeNull();
+    expect(heading(at("11003") + 1)).toBeInTheDocument();
+  });
+
+  it("the half that chooses its price: no map at three left", () => {
+    onQuestion(ORDER.length - 4);
+    engine(SURVEY_SHEET_IDS, false, "reveal", true);
+    fireEvent.click(next());
+    expect(dialog(/Only 3 questions left/)).toBeNull();
+  });
+
+  it("today's page's half keeps both, in their EUR 1.99 words", () => {
+    onQuestion(at("11003"));
+    engine(SURVEY_SHEET_IDS, false, "control", true);
+    fireEvent.click(next());
+    expect(dialog(/You’re already halfway/)).toHaveTextContent(
+      "Unlock your Core Archetype for €1.99"
+    );
+  });
+
+  it("keeps every other sheet for the half that chooses", () => {
+    onQuestion(at("02004"));
+    engine(SURVEY_SHEET_IDS, false, "reveal", true);
+    fireEvent.click(next());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

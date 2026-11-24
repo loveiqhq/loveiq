@@ -1484,6 +1484,9 @@ async function syncCheckoutSessionPayment({
       (typeof existingPayment?.metadata?.gateRevealArm === "string"
         ? existingPayment.metadata.gateRevealArm
         : null),
+    // The price test's pick on the "Choose your price" half ("fair", "support", "custom"),
+    // stamped on the session by /api/stripe/initial-unlock; the price is `currentPrice`.
+    priceOption: settledSession.metadata?.priceOption ?? null,
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
     pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,

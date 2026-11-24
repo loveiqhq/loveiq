@@ -1738,7 +1738,9 @@ export async function getUpgradeCreditCents(personalReportId: number): Promise<n
  * - `initialCents`, the initial unlock's EUR 10 off the full report
  *   (`features/report/logic/initialUnlock.ts`): granted by a succeeded, non-test EUR 1.99
  *   payment that was not refunded in full, or by E07's day-1 gift (a EUR 0 row marked
- *   `gifted`), which promises the same EUR 10; used up by the report's first full-report
+ *   `gifted`), which promises the same EUR 10, or by EUR 0 chosen on the price test's "Choose
+ *   your price" page (`priceOption` "free": "Every price includes €10 off", Marcus's board,
+ *   24 Nov 2026); used up by the report's first full-report
  *   purchase: one EUR 10, "toward the full Premium Report" (Marcus, 14.10: a EUR 10
  *   voucher), never off every single report bought after it. Its money counts towards
  *   All 14 like any single's, so the two never stack on one plan.
@@ -1770,7 +1772,9 @@ export async function getReportCredits(
     upgradeCents += Math.max(0, paid);
     if (
       isInitialUnlockPlan(row.metadata?.plan) &&
-      (paid > 0 || row.metadata?.gifted === INITIAL_UNLOCK_GIFT)
+      (paid > 0 ||
+        row.metadata?.gifted === INITIAL_UNLOCK_GIFT ||
+        row.metadata?.priceOption === "free")
     ) {
       initialCents = INITIAL_UNLOCK_CREDIT_CENTS;
     }

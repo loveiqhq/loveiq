@@ -784,6 +784,11 @@ describe("funnel, money, first page and returns", () => {
       "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
     ],
     [
+      "EUR 0 chosen on Choose your price",
+      { gateCohort: true, freeUnlocks: ["chosen"] },
+      "Funnel: *€1.99 after the survey*  |  *Free* (chose €0 on Choose your price)",
+    ],
+    [
       "a gift and the feedback grant",
       { gateCohort: true, freeUnlocks: ["gift", "feedback"] },
       "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted, full report for feedback)",
@@ -1436,6 +1441,16 @@ describe("the EUR 1.99 page's 50/50 on the survey's message", () => {
 
   it("says nothing when no half was stamped (the switch was off)", () => {
     expect(half({ gateCohort: true })).toBeUndefined();
+  });
+
+  // Marcus, 24 Nov 2026: the price test replaced the 50/50, its halves as his board names them.
+  it("names the price test's halves", () => {
+    expect(half({ gateCohort: true, gateRevealArm: "choose" })).toBe(
+      "€1.99 page: *Choose your price* (new page)"
+    );
+    expect(half({ gateCohort: true, gateRevealArm: "fixed" })).toBe(
+      "€1.99 page: *Fixed €1.99* (today's page)"
+    );
   });
 
   it("says nothing for a reader who never meets the EUR 1.99 page", () => {

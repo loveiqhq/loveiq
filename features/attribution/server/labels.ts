@@ -21,7 +21,7 @@
  * error — it invents a 16x result for a test that was already over.
  */
 
-import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { GateArmStamp } from "@shared/experiments/gatePriceArm";
 import type { InitialGiftArm } from "@shared/experiments/initialGiftArm";
 
 /** The four experiment axes we can attribute a person to, server-side. */
@@ -313,15 +313,19 @@ export const AXIS_TITLES: Record<ExperimentAxis, string> = {
 
 /**
  * Mark's 50/50 of the EUR 1.99 page (shared/experiments/gateRevealArm.ts), named for
- * #incoming-surveys (Mark, 17 Nov: "whether the Core Archetype was shown or not"). Kept apart
- * from ExperimentAxis on purpose: the axes drive the readouts, the trends and the digest,
- * and none of them reads this test yet.
+ * #incoming-surveys (Mark, 17 Nov: "whether the Core Archetype was shown or not"), and the
+ * price test that replaced it (shared/experiments/gatePriceArm.ts, Marcus 24 Nov: "A · Fixed
+ * €1.99", "B · Choose your price"), stamped under the same key. Kept apart from ExperimentAxis
+ * on purpose: the axes drive the readouts, the trends and the digest, and none of them reads
+ * these tests yet.
  */
 export const GATE_REVEAL_TITLE = "€1.99 page";
 
-export const GATE_REVEAL_LABELS: Record<GateRevealArm, string> = {
+export const GATE_REVEAL_LABELS: Record<GateArmStamp, string> = {
   reveal: "Core Archetype shown (new page)",
   control: "Core Archetype not shown (today's page)",
+  choose: "Choose your price (new page)",
+  fixed: "Fixed €1.99 (today's page)",
 };
 
 /**

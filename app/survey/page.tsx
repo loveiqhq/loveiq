@@ -6,7 +6,7 @@ import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/log
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
-import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { gatePriceTestForVisit, surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
 import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -66,7 +66,7 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
 
 interface SurveyRouteProps {
   /** Next always passes it; a direct call (features/pay-to-start/tests) may not. */
-  searchParams?: Promise<{ sheets?: string | string[] }>;
+  searchParams?: Promise<{ sheets?: string | string[]; price?: string | string[] }>;
 }
 
 export default async function Page({ searchParams }: SurveyRouteProps = {}) {
@@ -88,12 +88,13 @@ export default async function Page({ searchParams }: SurveyRouteProps = {}) {
     after(() => recordSurveyPageView(newSurveyVariant, utmSource));
   }
 
-  const [journey, sheets] = await Promise.all([
+  const params = searchParams ?? Promise.resolve({ sheets: undefined, price: undefined });
+  const [journey, sheets, gatePrice] = await Promise.all([
     payToStartJourney(headersList.get("cookie")),
     // The sheets between questions: their switches, or a staging preview (?sheets=all).
-    (searchParams ?? Promise.resolve({ sheets: undefined })).then((params) =>
-      surveySheetsForVisit(params.sheets)
-    ),
+    params.then((p) => surveySheetsForVisit(p.sheets)),
+    // The EUR 1.99 page's price test: its switch, or a staging preview (?price=1).
+    params.then((p) => gatePriceTestForVisit(p.price)),
   ]);
-  return <SurveyPage journey={journey} sheets={sheets} />;
+  return <SurveyPage journey={journey} sheets={sheets} gatePrice={gatePrice} />;
 }

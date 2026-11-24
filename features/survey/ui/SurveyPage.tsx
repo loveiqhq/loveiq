@@ -1328,11 +1328,17 @@ interface SurveyPageProps {
    * staging preview). None by default.
    */
   sheets?: readonly SurveySheetId[];
+  /** The EUR 1.99 page's price test runs (app/survey/page.tsx): see SurveyEngine's `gatePrice`. */
+  gatePrice?: boolean;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
 
-const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS }) => {
+const SurveyPage: FC<SurveyPageProps> = ({
+  journey = null,
+  sheets = NO_SHEETS,
+  gatePrice = false,
+}) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -1535,6 +1541,7 @@ const SurveyPage: FC<SurveyPageProps> = ({ journey = null, sheets = NO_SHEETS })
         onStartOver={handleStartOver}
         payToStart={journey !== null}
         sheets={sheets}
+        gatePrice={gatePrice}
       />
     );
   }

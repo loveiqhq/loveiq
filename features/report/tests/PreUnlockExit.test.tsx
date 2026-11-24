@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@features/analytics/client", () => ({
@@ -20,6 +20,7 @@ vi.mock("@shared/ui/trustpilot/config", () => ({
 }));
 
 import PreUnlockExit from "@features/report/ui/gate/exit/PreUnlockExit";
+import { trackInitialGateCta } from "@features/analytics/client";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 
 const GATE: InitialUnlockGatePayload = {
@@ -79,5 +80,68 @@ describe("PreUnlockExit — the phone's Back on the EUR 1.99 page's exit page", 
 
     act(() => watchers[0]!.onclose?.());
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Fatih, 24 Nov 2026: the price test's Choose your price half has no exit-page design, so its
+// exit page keeps everything but the EUR 1.99: its price and both buttons say "Choose your
+// price", and both go back to the gate's picker.
+describe("PreUnlockExit — the price test's Choose your price half", () => {
+  const renderChoose = (onBack = vi.fn()) => {
+    render(
+      <PreUnlockExit
+        gate={{ ...GATE, priceArm: "choose" }}
+        reportToken={GATE.reportToken}
+        reportSessionId={null}
+        onBack={onBack}
+      />
+    );
+    return onBack;
+  };
+  const text = () => (document.body.textContent ?? "").replace(/\s+/g, " ");
+
+  it("names no EUR 1.99 anywhere: its price and both buttons say Choose your price", () => {
+    renderChoose();
+    expect(text()).not.toContain("1.99");
+    expect(screen.getAllByRole("button", { name: /^Choose your price/ })).toHaveLength(2);
+    expect(text()).toContain("One-time payment, no subscription");
+    expect(text()).toContain("I wasn’t sure what I’d get");
+  });
+
+  it("goes back to the gate's picker from either button, counted as pressed, with no checkout", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const listener = vi.fn();
+    window.addEventListener("iug:pick-price", listener);
+    const raf = vi.fn((cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    });
+    vi.stubGlobal("requestAnimationFrame", raf);
+    const onBack = renderChoose();
+    const [card, sticky] = screen.getAllByRole("button", { name: /^Choose your price/ });
+    fireEvent.click(card!);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(trackInitialGateCta).toHaveBeenCalledWith({ place: "exit_card" });
+    fireEvent.click(sticky!);
+    expect(trackInitialGateCta).toHaveBeenCalledWith({ place: "exit_sticky" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Once the page goes (the gate's back on screen), the gate is asked to show its picker.
+    cleanup();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener("iug:pick-price", listener);
+  });
+
+  it("keeps today's page's EUR 1.99 for the other half", () => {
+    render(
+      <PreUnlockExit
+        gate={{ ...GATE, priceArm: "fixed" }}
+        reportToken={GATE.reportToken}
+        reportSessionId={null}
+        onBack={vi.fn()}
+      />
+    );
+    expect(text()).toContain("€1.99");
+    expect(screen.queryByRole("button", { name: /^Choose your price/ })).toBeNull();
   });
 });

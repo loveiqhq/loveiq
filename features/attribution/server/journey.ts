@@ -23,7 +23,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readGateRevealStamp, readStampedArms, type TrafficInfo } from "./traffic";
-import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { GateArmStamp } from "@shared/experiments/gatePriceArm";
 import type { InitialGiftArm } from "@shared/experiments/initialGiftArm";
 import { PRICE_TEST_END_AT } from "@features/checkout/server/reportPurchase";
 import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
@@ -38,7 +38,7 @@ import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
 const UNLOCK_FEEDBACK_SOURCE = "unlock_feedback";
 
 /** A EUR 0 (or test) unlock: E07's gift, the feedback grant, a 100% code, or the team's own. */
-export type FreeUnlock = "gift" | "feedback" | "code" | "test";
+export type FreeUnlock = "gift" | "feedback" | "chosen" | "code" | "test";
 
 export interface JourneyArms {
   /** Raw stored values — "white" | "white_prev" | "control" | null etc. Label via labels.ts. */
@@ -148,9 +148,10 @@ export interface SubmissionJourney {
   /**
    * The reader's half of Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp
    * (readGateRevealStamp): `reveal` meets his page with the Core Archetype, `control` today's
+   * page; in the price test that replaced it, `choose` picks the price, `fixed` meets today's
    * page. Absent when nothing is stamped. Read from the row, so every edit of the message keeps it.
    */
-  gateRevealArm?: GateRevealArm;
+  gateRevealArm?: GateArmStamp;
   /**
    * The E07 gift email's arm (`personal_report.initial_gift_arm`): `gift` was given the Core
    * Archetype free a day after the EUR 1.99 page stopped them, `holdout` was held out. Absent
@@ -226,6 +227,7 @@ interface PaymentRow {
     offer?: unknown;
     gifted?: unknown;
     source?: unknown;
+    priceOption?: unknown;
   } | null;
 }
 
@@ -510,6 +512,8 @@ function freeUnlockOf(p: PaymentRow): FreeUnlock {
   if (p.is_test) return "test";
   if (p.metadata?.gifted === INITIAL_UNLOCK_GIFT) return "gift";
   if (p.metadata?.source === UNLOCK_FEEDBACK_SOURCE) return "feedback";
+  // EUR 0 picked on the price test's "Choose your price" page (logic/choosePrice.ts).
+  if (p.metadata?.priceOption === "free") return "chosen";
   return "code";
 }
 

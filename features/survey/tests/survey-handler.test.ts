@@ -147,10 +147,12 @@ describe("POST /api/survey", () => {
     __resetSurveyStatusCacheForTests(false);
     // Default: kill switch ENABLED (survey accepting). The kill-switch test
     // flips it to false. Mark's new EUR 1.99 page stays off, as in production until its
-    // 50/50 starts: its arm stamp has its own file (survey-gate-reveal-arm.test.ts).
+    // 50/50 starts, and so does the price test that replaced it: their arm stamps have their own
+    // file (survey-gate-reveal-arm.test.ts).
     mockIsFeatureEnabled.mockImplementation(
       (async (key: string) =>
-        key !== "report_gate_archetype_reveal") as unknown as () => Promise<boolean>
+        key !== "report_gate_archetype_reveal" &&
+        key !== "report_gate_choose_price") as unknown as () => Promise<boolean>
     );
   });
 

@@ -422,6 +422,9 @@ with recursive b as (
      and lower(btrim(coalesce(j->>'utm_medium', ''))) <> 'probe'
      and lower(btrim(coalesce(j->>'utm_source', ''))) not in
          ('prod-verification', 'prod-e2e-check', 'staging-e2e-check', 'verify')
+     -- The price test that replaced it (24 Nov 2026) stamps its own halves under the same key:
+     -- those finishers are in neither of #11's.
+     and coalesce(j->>'gate_reveal_arm', '') not in ('fixed', 'choose')
 ), fnv as (
   -- An unstamped finisher's half: FNV-1a (32-bit) over 'gate_reveal_2026_11:' || session_id ...
   select id, 'gate_reveal_2026_11:' || session_id::text as seed, 0 as i, 2166136261::bigint as h
@@ -465,6 +468,76 @@ select arm, count(*) as free_finishers,
   from halves
  group by arm
  order by arm;`;
+
+const GATE_PRICE_Q = `-- The pre-unlock price test (24 Nov 2026): EUR 1.99 against "Choose your price", one half each,
+-- by the stamp the survey's server writes while the test runs (utm_tracker's gate_reveal_arm:
+-- 'fixed' or 'choose'). The range's free finishers in each half, who reached the page, who paid
+-- for the pre-unlock and what, who took it for EUR 0, and who bought a full unlock, so far; then
+-- the choosing half's sales per pick (metadata.priceOption; one without a pick is 'custom').
+with b as (
+  select (date :from)::timestamp at time zone 'Europe/Berlin' as since,
+         ((date :to) + 1)::timestamp at time zone 'Europe/Berlin' as until
+), fin as (
+  select s.id,
+         case when s.utm_tracker is not null and pg_input_is_valid(s.utm_tracker, 'jsonb')
+                   and jsonb_typeof(s.utm_tracker::jsonb) = 'object'
+              then s.utm_tracker::jsonb end as j
+    from survey_submission s, b
+   where s.status = 'completed'
+     and s.created_date_time >= b.since and s.created_date_time < b.until
+     and ${NOT_STAFF}
+     -- Bought before the survey (pay to start): never meets a EUR 1.99 page.
+     and not exists (select 1 from prepaid_report_access pa
+                      where pa.consumed_submission_id = s.id and pa.offer is not null
+                        and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
+), half as (
+  select id, j->>'gate_reveal_arm' as arm from fin
+   where j->>'gate_reveal_arm' in ('fixed', 'choose')
+     and coalesce(j->>'journey', '') <> 'pay_to_start'
+     -- Our own probes and checks, which tag themselves.
+     and lower(btrim(coalesce(j->>'utm_medium', ''))) <> 'probe'
+     and lower(btrim(coalesce(j->>'utm_source', ''))) not in
+         ('prod-verification', 'prod-e2e-check', 'staging-e2e-check', 'verify')
+), per as (
+  select h.id, h.arm,
+         exists (select 1 from personal_report pr where pr.survey_submission_id = h.id
+                   and pr.initial_gate_seen_at is not null) as reached,
+         paid.amount, paid.pick,
+         exists (select 1 from personal_report pr join payment p on p.personal_report_id = pr.id
+                  where pr.survey_submission_id = h.id and p.status = 'succeeded'
+                    and not coalesce(p.is_test, false) and ${PRE_PLAN}
+                    and p.metadata->>'priceOption' = 'free') as took_free,
+         exists (select 1 from personal_report pr join payment p on p.personal_report_id = pr.id
+                  where pr.survey_submission_id = h.id and ${REAL_SALE} and ${FULL_PLAN}) as full_unlock
+    from half h
+    left join lateral (
+      -- The first paid pre-unlock, and the pick it was paid with.
+      select p.amount, coalesce(p.metadata->>'priceOption', 'custom') as pick
+        from personal_report pr join payment p on p.personal_report_id = pr.id
+       where pr.survey_submission_id = h.id and ${REAL_SALE} and ${PRE_PLAN}
+       order by coalesce(p.payment_date_time, p.created_date_time)
+       limit 1
+    ) paid on true
+)
+select arm, 'all' as pick,
+       count(*) as free_finishers,
+       count(*) filter (where reached) as reached_paywall,
+       count(amount) as paid,
+       round(100.0 * count(amount) / nullif(count(*), 0), 1) as pay_rate_pct,
+       round(avg(amount), 2) as avg_price_paid,
+       round(coalesce(sum(amount), 0) / nullif(count(*), 0), 2) as revenue_per_finisher,
+       round(coalesce(sum(amount), 0), 2) as revenue,
+       count(*) filter (where took_free) as took_it_for_0,
+       count(*) filter (where full_unlock) as full_report
+  from per
+ group by arm
+union all
+select arm, pick, null, null, count(*), null, round(avg(amount), 2), null,
+       round(sum(amount), 2), null, null
+  from per
+ where arm = 'choose' and amount is not null
+ group by arm, pick
+ order by 1, 2;`;
 
 const PT_BASE_Q = `-- The price lists (get_price_list_changes): each arm's starting price per plan, the latest
 -- change before now. Pricing 2.0 and 2.1 read the lists in force in their stretches.
@@ -610,7 +683,9 @@ const CHECKOUT_RULES =
 const PRICE_TEST_RULES =
   "A test is one stretch of unchanged price lists; its readers are those who finished in it (within this range) and were first priced by it, each on the arm their first quote was dealt.";
 const GATE_TEST_RULES =
-  "Test #11: half the free finishers meet Mark's new €1.99 page, which shows their Core Archetype before they pay; half meet today's page. The price, the guarantee and what €1.99 opens are the same in both. Counted from the switch-on, 17 Nov 2026 at 10:01: readers who finished before it are left out, even if they meet the new page now. The code went out at 01:32 that night, but the page, its sheets and the half's stamp on the survey all began with the switch. A reader's half is the one stamped on their survey (utm_tracker's gate_reveal_arm), else the one their survey's session gives, as the report's server works it out; without a session, today's page. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising.";
+  "Test #11: half the free finishers meet Mark's new €1.99 page, which shows their Core Archetype before they pay; half meet today's page. The price, the guarantee and what €1.99 opens are the same in both. Counted from the switch-on, 17 Nov 2026 at 10:01: readers who finished before it are left out, even if they meet the new page now. The code went out at 01:32 that night, but the page, its sheets and the half's stamp on the survey all began with the switch. A reader's half is the one stamped on their survey (utm_tracker's gate_reveal_arm), else the one their survey's session gives, as the report's server works it out; without a session, today's page. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising. From 24 Nov 2026 the price test that replaced it stamps its own halves (fixed, choose) under the same key: those readers are in neither half.";
+const GATE_PRICE_RULES =
+  "The pre-unlock price test (24 Nov 2026): half the free finishers meet today's €1.99 page, half the \"Choose your price\" page, where they pick €0, €6.99 (recommended, picked as the page opens), €19.99 or their own amount (€0.50 to €100) for the same pre-unlock and its €10 credit. It replaced test #11 (the Core Archetype shown): the choosing half is the half that met that page. A reader is in the test when their survey carries its stamp, fixed or choose under utm_tracker's gate_reveal_arm, which the survey's server writes while its switch (report_gate_choose_price) is on; #11's control and reveal never count. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising.";
 const E07_RULE =
   "A day after the page, E07 gives the Core Archetype free to 4 in 5 readers still unpaid (test #9), in both halves alike: its €0 gift is no payment, and a reader who got it can no longer pay the €1.99.";
 const MODEL_RULES =
@@ -676,6 +751,52 @@ const gateTest = (
   tables: GATE_TABLES,
   query: { lang: "SQL", text: GATE_TEST_Q },
   related: ["payment.gt-rate", "payment.gt-reached", "payment.gt-lift"],
+  ...extra,
+});
+
+const GATE_PRICE_TABLES: FieldTable[] = [
+  {
+    ...SUBMISSION,
+    columns:
+      "id, user_id, status, created_date_time, utm_tracker (gate_reveal_arm, journey, utm_source, utm_medium)",
+    watch:
+      "status completed is a finished survey. The half: gate_reveal_arm, fixed or choose, stamped by the survey's server while the test's switch is on; a survey without either isn't in the test.",
+  },
+  {
+    ...REPORT,
+    columns: "id, survey_submission_id, initial_gate_seen_at",
+    filters:
+      "None of its own: whether the finisher's report showed the page, its first view stamped by the server (so far).",
+  },
+  {
+    ...COHORT_PAYMENT,
+    columns: `${COHORT_PAYMENT.columns}, metadata (plan, priceOption)`,
+  },
+  {
+    source: "production",
+    table: "prepaid_report_access",
+    columns: "consumed_submission_id, offer, status, paid_at",
+    filters:
+      "None of its own: it leaves out a survey a completed pay-to-start purchase claimed (paid, kept or refunded).",
+  },
+  STAFF,
+];
+
+const gatePrice = (
+  label: string,
+  what: string,
+  formula: FieldDef["formula"],
+  extra: Partial<FieldDef> = {}
+): FieldDef => ({
+  label,
+  what,
+  stat: "Count",
+  per: "per free finisher of the half",
+  formula,
+  caveat: `${GATE_PRICE_RULES} ${LEFT_OUT}`,
+  tables: GATE_PRICE_TABLES,
+  query: { lang: "SQL", text: GATE_PRICE_Q },
+  related: ["payment.gp-revenue", "payment.gp-rate", "payment.gp-reached"],
   ...extra,
 });
 
@@ -1457,6 +1578,77 @@ export const fields: FieldRegistry = {
       caveat: `${GATE_TEST_RULES} The confidence is 1 − p from a two-sided test of the two proportions (the query gives each half's finishers and payers, the page turns them into 1 − p); 95% or more counts as credible. It is blank, with why, while the test can't be called: under 50 free finishers in all, under 30 in either half ("too early to compare"), or under 5 who paid (or 5 who didn't) in either half. The sentence under the table says the same in words, as the shared A/B readouts do.`,
       related: ["payment.gt-rate", "payment.gt-paid"],
     }
+  ),
+
+  // ---- the pre-unlock price test (it replaced #11 on the page)
+  "payment.gp-arm": gatePrice(
+    "Arm · price",
+    'The half of the test: today\'s €1.99 page (A, the control), or the "Choose your price" page (B), €6.99 recommended. Under B, its sales by the pick they were paid with, then the readers who took it for €0.',
+    { num: "The half stamped on each free finisher's survey (fixed or choose)" },
+    { related: ["payment.gp-finishers", "payment.gp-revenue"] }
+  ),
+  "payment.gp-finishers": gatePrice(
+    "Free finishers",
+    "The range's finishers whose survey carries the test's stamp and who didn't pay before the survey, in this half.",
+    { num: "Finished surveys stamped fixed or choose, in the half, not pay to start" },
+    { related: ["payment.gp-reached", "payment.gp-rate"] }
+  ),
+  "payment.gp-reached": gatePrice(
+    "Reached the paywall",
+    "Of the half's free finishers, those whose report showed them the page. A reader who leaves during the report's tour, before the page, hasn't reached it.",
+    { num: "Free finishers whose report has initial_gate_seen_at (so far)" },
+    { related: ["payment.gp-rate", "payment.exit-came"] }
+  ),
+  "payment.gp-paid": gatePrice(
+    "Paid",
+    "Of the half's free finishers, those who paid for the pre-unlock, above €0, as the Pre-unlock CVR tile counts them. On B, under the half, the same by the pick they paid with; €0 is no sale.",
+    { num: "Free finishers with a real Initial plan payment above €0 (so far)" },
+    {
+      good: "up",
+      caveat: `${GATE_PRICE_RULES} ${E07_RULE} ${LEFT_OUT}`,
+      related: ["payment.gp-rate", "payment.pre-cvr"],
+    }
+  ),
+  "payment.gp-rate": gatePrice(
+    "Pay rate",
+    "The share of the half's free finishers who paid for the pre-unlock. Read beside revenue per finisher: a lower price can raise it and still earn less.",
+    { num: "Paid", den: "Free finishers", mult: "× 100" },
+    {
+      stat: "Share",
+      per: "per free finisher",
+      good: "up",
+      caveat: `${GATE_PRICE_RULES} ${E07_RULE} The sentence under the table compares the two rates as the shared A/B readouts do: a two-sided test of two proportions, and nothing called under 50 free finishers in all, under 30 in either half, or under 5 who paid (or 5 who didn't) in either half. ${LEFT_OUT}`,
+      related: ["payment.gp-revenue", "payment.gp-paid"],
+    }
+  ),
+  "payment.gp-avg": gatePrice(
+    "Avg. price paid",
+    "What the half's payers paid for the pre-unlock, on average: €1.99 on today's page, the prices chosen on the other. €0 is left out: it is no sale.",
+    { num: "What the half's payers paid", den: "Paid" },
+    {
+      stat: "Average",
+      per: "per payer",
+      caveat: `${GATE_PRICE_RULES} ${E07_RULE} ${LEFT_OUT}`,
+      related: ["payment.gp-revenue", "payment.gp-paid"],
+    }
+  ),
+  "payment.gp-revenue": gatePrice(
+    "Revenue per finisher",
+    "What the half's pre-unlocks earned, over its free finishers: the number the test is decided on, with the pay rate and the €0 claims read beside it. Under it, the half's total.",
+    { num: "What the half's payers paid for the pre-unlock", den: "Free finishers" },
+    {
+      stat: "Average",
+      per: "per free finisher",
+      good: "up",
+      caveat: `${GATE_PRICE_RULES} ${E07_RULE} Revenue is the price paid, before Stripe's fees and the VAT it includes; the page reports it and never calls a winner on it. ${LEFT_OUT}`,
+      related: ["payment.gp-rate", "payment.gp-avg"],
+    }
+  ),
+  "payment.gp-full": gatePrice(
+    "Full report",
+    "Of the half's free finishers, those who bought a full unlock (Full, Full All or Core), straight away or as an upgrade after the pre-unlock.",
+    { num: "Free finishers with a real full-unlock payment (so far)" },
+    { good: "up", related: ["payment.gp-revenue", "payment.full-cvr"] }
   ),
 
   // ---- pricing tests

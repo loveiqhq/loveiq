@@ -117,10 +117,12 @@ function trackerOnPayload(): Record<string, unknown> | null {
 }
 
 let revealOn = true;
+let priceOn = false;
 
 beforeEach(() => {
   vi.resetAllMocks();
   revealOn = true;
+  priceOn = false;
   mockVerifyCsrf.mockResolvedValue(true);
   mockCheckRateLimit.mockResolvedValue({
     allowed: true,
@@ -141,7 +143,11 @@ beforeEach(() => {
   mockJoinGate.mockResolvedValue(true);
   // Every other switch as production has it (`survey_submissions` is asked with no fallback).
   mockIsFeatureEnabled.mockImplementation(async (key: string, fallback?: boolean) =>
-    key === "report_gate_archetype_reveal" ? revealOn : (fallback ?? true)
+    key === "report_gate_archetype_reveal"
+      ? revealOn
+      : key === "report_gate_choose_price"
+        ? priceOn
+        : (fallback ?? true)
   );
 });
 
@@ -198,5 +204,45 @@ describe("POST /api/survey — Mark's 50/50 of the new EUR 1.99 page", () => {
   it("still starts no tracker just to hold the half", async () => {
     await submit(sessionIn("reveal"), { utmTracker: undefined });
     expect(trackerOnPayload()).toBeNull();
+  });
+});
+
+// Marcus, 24 Nov 2026: the price test replaced the 50/50. Same split, its own values under the
+// same key (no new key in the tracker), and the wizard tells the choosing half no price.
+describe("POST /api/survey — the EUR 1.99 page's price test", () => {
+  it("stamps the choosing half `choose`, never `reveal`, and tells the wizard no price", async () => {
+    priceOn = true;
+    const res = await submit(sessionIn("reveal"));
+    expect(res.status).toBe(200);
+    expect(trackerOnPayload()).toMatchObject({ utm_source: "google", gate_reveal_arm: "choose" });
+    const body = await res.json();
+    expect(body).not.toHaveProperty("initialGatePriceCents");
+    expect(body).not.toHaveProperty("initialGateArm");
+  });
+
+  it("stamps today's page's half `fixed`, and tells the wizard its EUR 1.99", async () => {
+    priceOn = true;
+    const res = await submit(sessionIn("control"));
+    expect(trackerOnPayload()).toMatchObject({ gate_reveal_arm: "fixed" });
+    expect(await res.json()).toMatchObject({
+      initialGatePriceCents: 199,
+      initialGateArm: "control",
+    });
+  });
+
+  it("runs whatever the reveal's own switch says", async () => {
+    priceOn = true;
+    revealOn = false;
+    await submit(sessionIn("reveal"));
+    expect(trackerOnPayload()).toMatchObject({ gate_reveal_arm: "choose" });
+  });
+
+  it("tells a reader the gate won't stop neither a half nor a price", async () => {
+    priceOn = true;
+    mockJoinGate.mockResolvedValue(false);
+    const res = await submit(sessionIn("reveal"));
+    const body = await res.json();
+    expect(body).not.toHaveProperty("initialGateArm");
+    expect(body).not.toHaveProperty("initialGatePriceCents");
   });
 });

@@ -12,6 +12,7 @@ import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
+import type { ChoosePriceOption } from "@features/report/logic/choosePrice";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isOnOverlayEntry } from "@shared/ui/overlay-history";
@@ -30,6 +31,12 @@ export interface InitialUnlockCheckoutState {
 
 const IDLE: InitialUnlockCheckoutState = { status: "idle", message: null, place: null };
 
+/** The price test's pick (logic/choosePrice.ts): the option, and what it charges in cents. */
+export interface InitialUnlockChoice {
+  option: ChoosePriceOption;
+  cents: number;
+}
+
 /**
  * The gate's two buttons: one POST to /api/stripe/initial-unlock, then off to Stripe.
  *
@@ -41,17 +48,23 @@ const IDLE: InitialUnlockCheckoutState = { status: "idle", message: null, place:
  *   back-forward cache (`pageshow`, persisted) puts both buttons back.
  * - A preview (`?preview=1`) has no report to buy: the buttons open the preview of the
  *   report after the EUR 1.99 (previewCheckout.ts), with no request and nothing recorded.
+ * - On the "Choose your price" half of the price test (`choice`), the request names the pick
+ *   and, for an own amount, the amount; the server checks both and charges that. EUR 0 needs
+ *   no Stripe: the server records the pre-unlock and answers with the report's own address,
+ *   followed the same way, and nothing counts it as a checkout begun.
  */
 export function useInitialUnlockCheckout({
   priceCents,
   reportSessionId,
   reportToken,
   preview = false,
+  choice = null,
 }: {
   priceCents: number;
   reportSessionId: string | null;
   reportToken: string | null;
   preview?: boolean;
+  choice?: InitialUnlockChoice | null;
 }) {
   const [state, setState] = useState<InitialUnlockCheckoutState>(IDLE);
   const inFlight = useRef(false);
@@ -76,7 +89,8 @@ export function useInitialUnlockCheckout({
         return;
       }
       trackInitialGateCta({ place });
-      trackBeginCheckout("initial", priceCents / 100, "EUR");
+      const cents = choice ? choice.cents : priceCents;
+      if (cents > 0) trackBeginCheckout("initial", cents / 100, "EUR");
 
       const fail = (message: string) => {
         inFlight.current = false;
@@ -94,6 +108,12 @@ export function useInitialUnlockCheckout({
             gaClientId: ga.clientId ?? undefined,
             gaConsent: ga.consent,
             gaSessionId: ga.sessionId ?? undefined,
+            ...(choice
+              ? {
+                  priceOption: choice.option,
+                  ...(choice.option === "custom" ? { amountCents: choice.cents } : {}),
+                }
+              : {}),
           }),
         });
         const json = (await response.json().catch(() => null)) as
@@ -123,7 +143,13 @@ export function useInitialUnlockCheckout({
           fail(GATE_COPY.checkout.noUrl);
           return;
         }
-        posthog.capture("checkout_started", { currency: "EUR", plan: "initial" });
+        if (cents > 0) {
+          posthog.capture("checkout_started", {
+            currency: "EUR",
+            plan: "initial",
+            ...(choice ? { price_option: choice.option, price_cents: choice.cents } : {}),
+          });
+        }
         // Replace, not push, when the entry on top is the Back catch's own (useGateBack), the
         // same rule as the pricing modal (startReportCheckout): pushed on top, Stripe left that
         // same-URL duplicate behind, and Back from Stripe walked through an extra copy of the
@@ -134,7 +160,7 @@ export function useInitialUnlockCheckout({
         fail(GATE_COPY.checkout.unreachable);
       }
     },
-    [preview, priceCents, reportSessionId, reportToken]
+    [choice, preview, priceCents, reportSessionId, reportToken]
   );
 
   return { start, state };
