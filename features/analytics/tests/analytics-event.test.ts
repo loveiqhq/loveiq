@@ -532,6 +532,32 @@ describe("POST /api/analytics-event — email returns", () => {
   });
 });
 
+describe("POST /api/analytics-event — the active minute (report_active_1min)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(4242);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return insert ? JSON.parse(String(insert[1]?.body)) : null;
+  };
+
+  it("persists report_active_1min against the report", async () => {
+    const metadata = { active_seconds: 60, report_type: "full_report", via: "initial_gift" };
+    const res = await POST(
+      makeRequest({ event_type: "report_active_1min", submission_id: 4242, metadata })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "report_active_1min",
+      entity_type: "report",
+      survey_submission_id: 4242,
+      metadata,
+    });
+  });
+});
+
 /**
  * The wiring between a dwell milestone and the Slack "Report time" line.
  *

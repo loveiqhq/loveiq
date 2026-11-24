@@ -97,6 +97,8 @@ const ALLOWED_EVENTS = [
   "paygate_exit_leave",
   // The report opened from an email's link: a return, for the Slack journey message
   "email_return",
+  // A minute of active reading, which the #report-reactivations post waits for
+  "report_active_1min",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -128,6 +130,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "tour_left":
     case "tour_replayed":
     case "email_return":
+    case "report_active_1min":
       return "report";
     case "paywall_view":
     case "paywall_initiated":

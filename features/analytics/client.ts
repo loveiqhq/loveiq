@@ -130,6 +130,9 @@ const PERSISTED_EVENTS = new Set([
   "paygate_exit_leave",
   // The report opened from an email's link (from=email / utm_source=email): a return
   "email_return",
+  // A minute on the report with input in the last 30 s (a real read): #report-reactivations
+  // waits for it
+  "report_active_1min",
 ]);
 
 /**
@@ -1082,6 +1085,30 @@ export const trackReportEngagement = (
   };
   track(eventName, params);
   persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
+};
+
+/**
+ * The email a report page was opened from, in one word, as the server's return rows write it
+ * (features/attribution/server/return-ping.ts): the link's campaign, "email" for one of our
+ * links that names none, null for any other link.
+ */
+export const pageEmailVia = (search: string): string | null => {
+  const emailReturn = emailReturnOf(new URLSearchParams(search));
+  return emailReturn ? (emailReturn.campaign ?? "email") : null;
+};
+
+/**
+ * A minute of active reading: on screen, with a touch, click, wheel or key press in the last 30
+ * seconds (useReportEngagementTimers). Our own table only, no GA4 or PostHog event:
+ * #report-reactivations posts a returning reader once it arrives
+ * (features/attribution/server/reactivation-post.ts).
+ */
+export const trackReportActiveMinute = (reportType: ReportEngagementType, via: string | null) => {
+  persistAnalyticsEvent(
+    "report_active_1min",
+    { active_seconds: 60, report_type: reportType, via },
+    60_000
+  );
 };
 
 /** The survey's Pause (back since Marcus's review of 20.10): where, and how far in. */
