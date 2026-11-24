@@ -70,11 +70,11 @@ describe("Survey 2.0's own funnel", () => {
     null
   );
 
-  it("counts 2.0's runs along its 61 screens, apart from the classic runs", () => {
+  it("counts 2.0's runs along its 62 screens, apart from the classic runs", () => {
     expect(q.survey2).not.toBeNull();
     expect(q.survey2!.people).toBe(2);
     expect(q.survey2!.rows.map((r) => r.id)).toEqual(s2);
-    expect(q.survey2!.rows).toHaveLength(61);
+    expect(q.survey2!.rows).toHaveLength(62);
     expect(q.survey2!.rows.slice(0, 6).map((r) => r.reached)).toEqual([2, 2, 2, 1, 1, 1]);
     expect(q.test!.people).toBe(1);
   });
@@ -84,7 +84,7 @@ describe("Survey 2.0's own funnel", () => {
     expect(row("00010")).toMatchObject({
       text: "Last step to your report to become a more intelligent lover",
       chapter: "Your details",
-      n: 61,
+      n: 62,
     });
     expect(row("16016a").text).toBe(
       "Beyond sex, which areas would you most like to understand about yourself?"

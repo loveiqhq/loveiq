@@ -18,6 +18,8 @@ const ROOT = join(__dirname, "..", "..", "..");
 const MIGRATION = "supabase/migrations/20261123215058_survey_2_feedback_questions.sql";
 const sql = readFileSync(join(ROOT, MIGRATION), "utf8");
 const byId = (qId: string) => surveyQuestions.find((q) => q.qId === qId);
+/** The three this migration creates (the expert question, 17004, has its own: survey2Expert). */
+const CLOSING = ["17001", "17002", "17003"] as const;
 
 /** Today's classic orders, captured before Survey 2.0 touched the order code. */
 const CONTROL_TODAY = ["00001","01002","01005","01006","02001","02002","02003","02004","03003","03004","03005","03006","03008","03009","03010","03011","03012","03013","08002","08003","08004","08005","08006","08012","09013","10002","10003","10004","10005","11001","11002","11003","11004","14020","14021","15001","15002","15003","15004","15005","15006","15007","15008","15009","15010","15011","16001","16002","16005","16006","16007","16009","16011","16012","16013","16014","16019","16020","16016","16017","16018","00000","16015"]; // prettier-ignore
@@ -66,6 +68,10 @@ describe("the three closing questions", () => {
     expect(price!.options).toEqual(PRICE_BANDS);
   });
 
+  it("are, with the expert question, the questions that mark a run as Survey 2.0's", () => {
+    expect([...SURVEY_2_ONLY_QIDS]).toEqual([...CLOSING, "17004"]);
+  });
+
   it("never shuffles the price ladder", () => {
     expect(RANDOMISE_QIDS.has("17003")).toBe(false);
   });
@@ -82,7 +88,7 @@ describe("their database rows", () => {
   it("creates each question, scale or single, under its own id", () => {
     expect(sql).toContain("INSERT INTO survey_question");
     expect(sql).toContain("INSERT INTO survey_question_mapping");
-    for (const qId of SURVEY_2_ONLY_QIDS) {
+    for (const qId of CLOSING) {
       expect(sql, qId).toContain(`'${qId}'`);
       expect(sql, qId).toContain(byId(qId)!.question.replace(/'/g, "''"));
     }
@@ -98,7 +104,7 @@ describe("their database rows", () => {
       join(ROOT, "supabase/rollbacks/20261123215058_survey_2_feedback_questions_down.sql"),
       "utf8"
     );
-    for (const qId of SURVEY_2_ONLY_QIDS) expect(down).toContain(`'${qId}'`);
+    for (const qId of CLOSING) expect(down).toContain(`'${qId}'`);
   });
 });
 

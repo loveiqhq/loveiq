@@ -19,6 +19,7 @@ import {
   maskRow,
   MASKED,
   PERSONAL_QUESTIONS,
+  PERSONAL_TEXT_QUESTIONS,
   type Masker,
 } from "@features/admin/server/team-export";
 import { hogqlTable } from "@features/ux-review/server/review";
@@ -319,19 +320,27 @@ const NEEDED_FOR_MASKING: Record<string, string[]> = {
 
 let personalQuestionCache: { at: number; ids: Promise<Set<unknown>> } | null = null;
 
-/** survey_question ids of the email, name and postcode questions (cached for an hour). */
+/**
+ * survey_question ids of the email, name and postcode questions, and of Survey 2.0's expert
+ * question where the database has it (its text is a phone number) — cached for an hour.
+ */
 function personalQuestionIds(): Promise<Set<unknown>> {
   const now = Date.now();
   if (personalQuestionCache && now - personalQuestionCache.at < 3_600_000)
     return personalQuestionCache.ids;
   const ids = (async () => {
+    const wanted = [...PERSONAL_QUESTIONS, ...PERSONAL_TEXT_QUESTIONS];
     const res = await supabaseFetch(
-      `/rest/v1/survey_question?select=id&frontend_qid=in.(${PERSONAL_QUESTIONS.map((q) => `"${q}"`).join(",")})`
+      `/rest/v1/survey_question?select=id,frontend_qid&frontend_qid=in.(${wanted.map((q) => `"${q}"`).join(",")})`
     );
     if (!res.ok) throw new Error(`survey_question ${res.status}`);
-    const rows = (await res.json()) as Array<{ id: unknown }>;
-    // All three must resolve, or an email answer would read as an ordinary one.
-    if (rows.length < PERSONAL_QUESTIONS.length) throw new Error("personal questions not found");
+    const rows = (await res.json()) as Array<{ id: unknown; frontend_qid: unknown }>;
+    // The email, name and postcode questions must all resolve, or an email answer would read as
+    // an ordinary one. The expert question may be missing: then nothing answers it.
+    const found = new Set(rows.map((r) => String(r.frontend_qid)));
+    if (!PERSONAL_QUESTIONS.every((q) => found.has(q))) {
+      throw new Error("personal questions not found");
+    }
     return new Set(rows.map((r) => r.id));
   })();
   personalQuestionCache = { at: now, ids };

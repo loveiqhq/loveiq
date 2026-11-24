@@ -80,7 +80,7 @@ const SurveySheetHost: FC<SurveySheetHostProps> = ({
                 open={isOpen}
                 offer={offer}
                 // The screens after the one it opens over: 3 in the classic survey, where it opens
-                // when three are left; 2 in Survey 2.0, after 17002 (17003, then the details page).
+                // when three are left; 3 in Survey 2.0, after 17002 (17003, 17004, the details page).
                 left={Math.max(1, total - 1 - progressIndex)}
                 progressIndex={progressIndex}
                 total={total}

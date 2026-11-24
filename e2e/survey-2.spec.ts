@@ -9,7 +9,7 @@ import { instantScroll } from "./fixtures/instant-scroll";
  * Survey 2.0 (Mark's survey review, behind the `survey_2` switch) in a real browser, through the
  * `?order=survey2` preview (the production build allows it only where the test server sets
  * SURVEY_SHEETS_PREVIEW=1, see playwright.config.ts): its short guide and two-tick consent, then
- * every one of its 61 screens in Mark's order with the six sheets at his spots, the one-page
+ * every one of its 62 screens in Mark's order with the six sheets at his spots, the one-page
  * details screen, and what the submission carries.
  *
  * NOTHING IS WRITTEN. Every survey write is answered locally.
@@ -21,6 +21,8 @@ type Screen = (typeof SCREENS)[number];
 const DETAILS = "Last step to your report to become a more intelligent lover";
 const NAME = "E2E";
 const EMAIL = "e2e-survey2@loveiq.org";
+/** The number left with a Yes to the expert question (17004); every write is answered locally. */
+const PHONE = "151 0000000";
 /** The newsletter switch under the email (Mark's board 2b). */
 const SWITCH = "Keep learning after your report";
 
@@ -85,6 +87,12 @@ async function pressFirst(page: Page, role: "radio" | "checkbox"): Promise<void>
 }
 
 async function answer(page: Page, q: Screen): Promise<void> {
+  if (q.qId === "17004") {
+    // The expert question: its first option, Yes, opens the phone number, and Next waits for it.
+    await pressFirst(page, "radio");
+    await page.getByLabel("Your phone number").fill(PHONE);
+    return;
+  }
   if (q.answerType === "scale") {
     await page.getByRole("button", { name: "4 of 7", exact: true }).click();
   } else if (q.answerType === "single") {
@@ -137,7 +145,7 @@ test.describe("Survey 2.0", () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
-  test("asks its 61 screens in Mark's order, with the sheets, and submits the details page's answers", async ({
+  test("asks its 62 screens in Mark's order, with the sheets, and submits the details page's answers", async ({
     page,
   }) => {
     test.setTimeout(420_000);
@@ -152,7 +160,7 @@ test.describe("Survey 2.0", () => {
     // `next dev` only: its badge sits over the bottom-left corner and takes the taps there.
     await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
 
-    expect(SCREENS.map((q) => q.qId)).toHaveLength(61);
+    expect(SCREENS.map((q) => q.qId)).toHaveLength(62);
     // Which sheet opened after which screen.
     const opened: Array<[string, string]> = [];
     let answered = "";
@@ -215,6 +223,9 @@ test.describe("Survey 2.0", () => {
       "17002": 4,
     });
     expect(String(answers["16015"]).toLowerCase()).toMatch(/^no/);
+    // The expert question's Yes, with the number its expert calls in its text box.
+    expect(String(answers["17004"])).toMatch(/^Yes, I'd like a free talk/);
+    expect(answers["17004_other"]).toBe(`+49 ${PHONE}`);
     expect(answers["17003"]).toBeTruthy();
     // Its own two screens are never submitted, and 16009 is not asked.
     expect(answers).not.toHaveProperty("16016a");

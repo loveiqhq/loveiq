@@ -53,7 +53,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       survey_question_id:
         "The question, in survey_question (its frontend_qid, such as 15003, is the id the survey uses).",
       answer_text:
-        "The answer as text: free text, a number or the option's words. The email, name and postcode answers are masked.",
+        "The answer as text: free text, a number or the option's words. The email, name and postcode answers, and the phone number on the expert question (17004), are masked.",
       answer_option_id:
         "The chosen option of a single-choice question (multiple choice: survey_submission_answer_options).",
       normalized_value: "The answer on the scoring scale.",
@@ -72,7 +72,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       id: "Draft id.",
       session_id: "The survey session (the submission's session_id once finished).",
       answers:
-        "The answers so far, by question id. The email, name and postcode answers are masked.",
+        "The answers so far, by question id. The email, name and postcode answers, and the expert question's phone number (17004_other), are masked.",
       current_index: "The step reached, counted from 0.",
       started_at: "When the survey was started.",
       utm_tracker:
