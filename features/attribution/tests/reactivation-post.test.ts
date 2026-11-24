@@ -321,11 +321,17 @@ function backend(
     reactivations?: unknown[];
     patchOk?: boolean;
     claimed?: unknown[] | (() => unknown[]);
+    /** The day's active minutes, as their email is looked up: none unless given. */
+    minutes?: unknown[];
+    minutesOk?: boolean;
   } = {}
 ) {
   mockSupabaseFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
     if (path.startsWith("/rest/v1/slack_journey_message?"))
       return res(opts.journeyRow ?? [JOURNEY_ROW]);
+    if (path.startsWith("/rest/v1/analytics_event?")) {
+      return res(opts.minutes ?? [], opts.minutesOk ?? true);
+    }
     if (path.startsWith("/rest/v1/reader_return?") && init?.method === "PATCH") {
       // The claim: the database's conditional update answers the row it took, or none.
       if (path.includes("reactivation_channel=is.null")) {
@@ -431,17 +437,43 @@ describe("postReactivationOnRead: a returning reader is posted once they have re
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
-  it("names the email the read came through when the day's row has none, and keeps it for the redraws", async () => {
-    backend({ claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }] });
+  it("names the email the day's first minute came through, and never writes it onto the day's row: AP reads the row's own way back", async () => {
+    backend({
+      claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }],
+      minutes: [{ metadata: { via: "initial_gift" } }],
+    });
     await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
     const shown = lines(posted());
     expect(shown).toContain("Reactivation source: *Email*");
     expect(shown.find((l) => l.startsWith("Email: "))).toMatch(/\(opened the report through it\)$/);
+
+    const minutes = calls((p) => p.startsWith("/rest/v1/analytics_event?"))[0]?.[0];
+    expect(minutes).toContain("survey_submission_id=eq.2826");
+    expect(minutes).toContain("event_type=eq.report_active_1min");
+    expect(minutes).toContain(`event_time=gte.${encodeURIComponent(RETURNED_AT)}`);
+    expect(minutes).toContain("order=event_time.asc&limit=1");
     expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({
       reactivation_channel: CHANNEL,
       reactivation_ts: DONE_TS,
-      via: "initial_gift",
     });
+  });
+
+  it("falls back to the minute's own email when the day's minutes cannot be read", async () => {
+    backend({
+      claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }],
+      minutesOk: false,
+    });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
+    expect(lines(posted())).toContain("Reactivation source: *Email*");
+  });
+
+  it("drops a minute's email that is not utm-shaped", async () => {
+    backend({
+      claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }],
+      minutes: [{ metadata: { via: "x y" } }],
+    });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(lines(posted())).toContain("Reactivation source: *Report link* (no email)");
   });
 
   it("keeps the day's own email when it has one", async () => {
@@ -454,7 +486,10 @@ describe("postReactivationOnRead: a returning reader is posted once they have re
   });
 
   it("drops a via that is not utm-shaped", async () => {
-    backend({ claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }] });
+    backend({
+      claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }],
+      minutesOk: false,
+    });
     await postReactivationOnRead({ submissionId: 2826, at: AT, via: "x y" });
     expect(lines(posted())).toContain("Reactivation source: *Report link* (no email)");
   });
@@ -553,6 +588,16 @@ describe("refreshReactivationPost", () => {
       `returned_at=gte.${encodeURIComponent(new Date(now - REDRAW_WINDOW_MS).toISOString())}`
     );
     expect(read).toContain("order=returned_at.desc&limit=1");
+  });
+
+  it("a redraw names the email the day's first minute came through when the row names none", async () => {
+    backend({
+      reactivations: [{ ...ROW, source: "report", via: null }],
+      minutes: [{ metadata: { via: "initial_gift" } }],
+    });
+    await refreshReactivationPost(4201);
+    const edit = mockUpdate.mock.calls[0]![0] as { blocks: unknown[] };
+    expect(lines(edit)).toContain("Reactivation source: *Email*");
   });
 
   it("redraws the stored post in place, the time measured from its return", async () => {

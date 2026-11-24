@@ -246,6 +246,27 @@ interface ClaimedRow {
   via: string | null;
 }
 
+/**
+ * The email the day's first minute of reading came through (`report_active_1min`'s `via`), for
+ * a return whose row names none. The post and its redraws both read it here, so they agree, and
+ * it is never written onto the row: AP-Analytics names a reader's way back by the row's own.
+ * Undefined when it cannot be read.
+ */
+async function readEmailOfRead(
+  submissionId: number,
+  returnedAt: string
+): Promise<string | null | undefined> {
+  const res = await supabaseFetch(
+    `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
+      `&event_type=eq.report_active_1min&event_time=gte.${encodeURIComponent(returnedAt)}` +
+      `&select=metadata&order=event_time.asc&limit=1`
+  );
+  if (!res.ok) return undefined;
+  const rows = (await res.json()) as Array<{ metadata?: { via?: unknown } | null }>;
+  const via = rows[0]?.metadata?.via;
+  return typeof via === "string" && VIA.test(via) ? via : null;
+}
+
 /** Give a claimed day back, so a later minute that day can post it. Never throws. */
 async function releaseClaim(rowFilter: string): Promise<void> {
   try {
@@ -296,12 +317,16 @@ export async function postReactivationOnRead(input: {
     if (!isReactivationSource(row.source)) return;
 
     // The day's own email first (the click, the email link the return came through); else the
-    // one the page was opened from, kept on the row below so the redraws name it too.
-    const via = row.via ?? (input.via && VIA.test(input.via) ? input.via : null);
-    const [journey, message] = await Promise.all([
+    // one its first minute of reading came through, as every redraw reads it; else, if that
+    // cannot be read, this minute's own.
+    const [journey, message, readEmail] = await Promise.all([
       buildSubmissionJourney(submissionId, { dwellSince: row.returned_at }),
       readJourneyMessage(submissionId),
+      row.via ? null : readEmailOfRead(submissionId, row.returned_at),
     ]);
+    const via =
+      row.via ??
+      (readEmail === undefined ? (input.via && VIA.test(input.via) ? input.via : null) : readEmail);
     if (!journey) return;
     const post = buildReactivationMessage(
       journey,
@@ -315,11 +340,11 @@ export async function postReactivationOnRead(input: {
     await supabaseFetch(rowFilter, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
+      // Never `via`: AP-Analytics names a reader's way back by the row's own (report-page.ts).
       body: JSON.stringify({
         // Slack's own id for the channel, which the redraws' chat.update needs.
         reactivation_channel: posted.channel,
         reactivation_ts: posted.ts,
-        ...(row.via === null && via ? { via } : {}),
       }),
     });
     logger.info({ submissionId, source: row.source }, "reactivation post: posted");
@@ -383,14 +408,21 @@ export async function refreshReactivationPost(
       if (!slot.allowed) return;
     }
 
-    const [journey, message] = await Promise.all([
+    // The email as the post named it: the row's own, else its first minute's (postReactivationOnRead).
+    const [journey, message, readEmail] = await Promise.all([
       buildSubmissionJourney(submissionId, { dwellSince: row.returned_at }),
       readJourneyMessage(submissionId),
+      row.via ? null : readEmailOfRead(submissionId, row.returned_at),
     ]);
     if (!journey) return;
     const post = buildReactivationMessage(
       journey,
-      { submissionId, source: row.source, via: row.via, returnedAt: row.returned_at },
+      {
+        submissionId,
+        source: row.source,
+        via: row.via ?? readEmail ?? null,
+        returnedAt: row.returned_at,
+      },
       { floor: furthest(message?.state, witnessed), journeyLink: await linkOf(message) }
     );
     await updateJourneyMessage({
