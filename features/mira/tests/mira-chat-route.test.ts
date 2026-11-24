@@ -23,6 +23,7 @@ vi.mock("@features/mira/server/session", () => ({
 }));
 vi.mock("@features/mira/server/anon", () => ({
   anonId: vi.fn().mockResolvedValue("anon_test_123456789"),
+  knownAnonId: vi.fn().mockResolvedValue("anon_test_123456789"),
 }));
 vi.mock("@features/mira/server/model", () => ({ askModel: vi.fn() }));
 vi.mock("@features/mira/server/alerts", () => ({
@@ -39,15 +40,19 @@ vi.mock("@features/mira/server/store", () => ({
   getProfile: vi.fn(),
   logMiraEvent: vi.fn(),
   ownsChat: vi.fn().mockResolvedValue(false),
+  // Signed-out chats kept under the browser's id (24 Nov 2026).
+  keepAnonExchange: vi.fn().mockResolvedValue("9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"),
+  deleteAnonChats: vi.fn().mockResolvedValue(undefined),
 }));
 
 import miraConfig from "@features/mira/content/mira-config.json";
-import { POST, maxDuration } from "@/app/api/mira/chat/route";
+import { DELETE, POST, maxDuration } from "@/app/api/mira/chat/route";
 import { alertAnonShare, alertDailyCeiling } from "@features/mira/server/alerts";
-import { anonId } from "@features/mira/server/anon";
+import { anonId, knownAnonId } from "@features/mira/server/anon";
 import {
   ANON_FREE_MESSAGES,
   ANON_GLOBAL_DAILY_MESSAGES,
+  CONSENT_VERSION,
   GLOBAL_DAILY_MESSAGES,
   MODEL_BUDGET_MS,
   MODEL_FIRST_TRY_MS,
@@ -58,9 +63,11 @@ import { getMiraAccount } from "@features/mira/server/session";
 import {
   addMessages,
   createChat,
+  deleteAnonChats,
   deleteChats,
   getMessages,
   getProfile,
+  keepAnonExchange,
   logMiraEvent,
   ownsChat,
   updateProfile,
@@ -1302,5 +1309,198 @@ describe("POST /api/mira/chat", () => {
       expect(events("minor_stop")).toHaveLength(1);
       expect(cookieJar.get("mira_minor")).toBe("1");
     });
+  });
+
+  // Eman, 24 Nov 2026: a signed-out chat is kept too, under the browser's id, so the team can
+  // read what was asked and answered (a signed-out demo's poor answer couldn't be looked at).
+  describe("signed-out chats are kept", () => {
+    const BROWSER = { anonId: "anon_test_123456789", consentVersion: CONSENT_VERSION };
+    const KEPT = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+    const NEUTRAL = /^Chat on \d{1,2} [A-Z][a-z]{2}$/;
+    const agreed = { consent: true, consentVersion: CONSENT_VERSION };
+    const kept = () => vi.mocked(keepAnonExchange).mock.calls;
+
+    it("keeps the exchange under the browser's id, with the consent it was kept under", async () => {
+      const body = await (await post({ message: "I hide during sex", ...agreed })).json();
+      expect(kept()).toEqual([
+        [
+          BROWSER,
+          undefined,
+          "I hide during sex",
+          [
+            { role: "user", content: "I hide during sex" },
+            { role: "assistant", content: "That makes sense.", sources: [], ask: null, goal: null },
+            // As the browser shows it: free messages left, so the intake invitation follows.
+            { role: "assistant", content: miraConfig.intakeInvitation },
+          ],
+        ],
+      ]);
+      expect(body).toMatchObject({ reply: "That makes sense.", anonChat: KEPT, chatId: null });
+      // Never as an account's chat.
+      expect(createChat).not.toHaveBeenCalled();
+      expect(addMessages).not.toHaveBeenCalled();
+    });
+
+    it("goes on in the chat the browser sends back", async () => {
+      await post({ message: "and then?", ...agreed, history: openChat, anonChat: KEPT });
+      expect(kept()[0]![1]).toBe(KEPT);
+    });
+
+    it("keeps a spoken turn's words like typed ones, without a voice session (an account's)", async () => {
+      const session = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+      await post({ message: "I hide during sex", ...agreed, voice: { session } });
+      for (const m of kept()[0]![3]) expect(m.voiceSession).toBeUndefined();
+    });
+
+    it("keeps nothing under an older consent, or without the version", async () => {
+      for (const body of [
+        { message: "hi", consent: true },
+        { message: "hi", consent: true, consentVersion: "mira-2026-11-21-2" },
+        { message: "I want to kill myself", consent: true, consentVersion: "mira-2026-11-21-2" },
+      ]) {
+        const res = await (await post(body)).json();
+        expect(res.anonChat).toBeUndefined();
+      }
+      expect(keepAnonExchange).not.toHaveBeenCalled();
+      expect(CONSENT_VERSION).not.toBe("mira-2026-11-21-2"); // the tick now names keeping it
+    });
+
+    it("keeps a crisis exchange too, named by its date, even past the free message", async () => {
+      limitHit("mira-anon-messages");
+      const body = await (
+        await post({ message: "I want to kill myself", ...agreed, anonChat: KEPT })
+      ).json();
+      expect(body).toMatchObject({ reply: miraConfig.crisisMessage, anonChat: KEPT });
+      expect(kept()).toEqual([
+        [
+          BROWSER,
+          KEPT,
+          expect.stringMatching(NEUTRAL),
+          [
+            { role: "user", content: "I want to kill myself" },
+            { role: "assistant", content: miraConfig.crisisMessage },
+          ],
+        ],
+      ]);
+    });
+
+    it("names a new chat by its date when its first reply brought the support lines", async () => {
+      vi.mocked(askModel).mockResolvedValueOnce({ ok: true, text: "", refused: true });
+      await post({ message: "something happened to me", ...agreed });
+      expect(kept()[0]![2]).toMatch(NEUTRAL);
+    });
+
+    it("keeps nothing a gated message carried: it wasn't sent to Mira", async () => {
+      limitHit("mira-anon-messages");
+      expect(await (await post({ message: "and then?", ...agreed })).json()).toEqual({
+        gate: true,
+        freeLeft: 0,
+      });
+      expect(keepAnonExchange).not.toHaveBeenCalled();
+    });
+
+    it("still answers when the exchange can't be kept", async () => {
+      vi.mocked(keepAnonExchange).mockRejectedValueOnce(new Error("down"));
+      const res = await post({ message: "I hide during sex", ...agreed });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.reply).toBe("That makes sense.");
+      expect(body.anonChat).toBeUndefined();
+      vi.mocked(keepAnonExchange).mockRejectedValueOnce(new Error("down"));
+      const crisis = await (await post({ message: "I want to kill myself", ...agreed })).json();
+      expect(crisis.reply).toBe(miraConfig.crisisMessage);
+    });
+
+    it("keeps nothing from a browser stopped as under 18, crisis messages included", async () => {
+      cookieJar.set("mira_minor", "1");
+      await post({ message: "hello?", ...agreed });
+      await post({ message: "I want to kill myself", ...agreed });
+      expect(keepAnonExchange).not.toHaveBeenCalled();
+    });
+
+    it("an under-18 stop keeps nothing of the exchange and deletes what the browser had", async () => {
+      cookieJar.set("mira_anon", BROWSER.anonId);
+      vi.mocked(askModel).mockResolvedValueOnce({
+        ok: true,
+        text: "I can only talk about this with adults.\n[[MINOR]]",
+        refused: false,
+      });
+      const body = await (await post({ message: "im 15", ...agreed, anonChat: KEPT })).json();
+      expect(body).toMatchObject({ minor: true });
+      expect(body.anonChat).toBeUndefined();
+      expect(keepAnonExchange).not.toHaveBeenCalled();
+      expect(deleteAnonChats).toHaveBeenCalledWith(BROWSER.anonId);
+    });
+
+    it("never keeps a signed-in message under a browser id", async () => {
+      vi.mocked(getMiraAccount).mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(getProfile).mockResolvedValue({
+        id: "u1",
+        email: "lea@example.com",
+        style: {},
+        remember_chats: false,
+        use_assessment: false,
+      } as never);
+      await post({ message: "hi", ...agreed, anonChat: KEPT });
+      await post({ message: "I want to kill myself", ...agreed, anonChat: KEPT });
+      expect(keepAnonExchange).not.toHaveBeenCalled();
+    });
+  });
+});
+
+/** "Delete this chat" without an account (24 Nov 2026). */
+describe("DELETE /api/mira/chat", () => {
+  const remove = () =>
+    DELETE(
+      new Request("http://localhost/api/mira/chat", {
+        method: "DELETE",
+        headers: { "x-csrf-token": "t" },
+      })
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetAt: new Date(),
+    });
+    vi.mocked(knownAnonId).mockResolvedValue("anon_test_123456789");
+    vi.mocked(deleteAnonChats).mockResolvedValue(2);
+  });
+
+  it("deletes every chat Mira kept from this browser, counted without an id or words", async () => {
+    const res = await remove();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true });
+    expect(deleteAnonChats).toHaveBeenCalledWith("anon_test_123456789");
+    expect(logMiraEvent).toHaveBeenCalledWith("chat_deleted", { anonId: "anon_test_123456789" });
+  });
+
+  it("answers 404 when this browser kept none or has no id, and never makes one", async () => {
+    vi.mocked(deleteAnonChats).mockResolvedValueOnce(0);
+    expect((await remove()).status).toBe(404);
+    vi.mocked(knownAnonId).mockResolvedValueOnce(null);
+    expect((await remove()).status).toBe(404);
+    expect(deleteAnonChats).toHaveBeenCalledTimes(1);
+    expect(anonId).not.toHaveBeenCalled();
+    expect(logMiraEvent).not.toHaveBeenCalled();
+  });
+
+  it("needs the CSRF token and a calm pace, and says so when the delete fails", async () => {
+    vi.mocked(verifyCsrfToken).mockResolvedValueOnce(false);
+    expect((await remove()).status).toBe(403);
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetAt: new Date(),
+    });
+    expect((await remove()).status).toBe(429);
+    expect(deleteAnonChats).not.toHaveBeenCalled();
+    vi.mocked(deleteAnonChats).mockRejectedValueOnce(new Error("down"));
+    const failed = await remove();
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({ error: "Unable to delete this chat." });
   });
 });

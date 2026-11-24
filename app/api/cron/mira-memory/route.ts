@@ -6,8 +6,9 @@
  * for good), KPI events (mira_event) older than 12 months, and the logins Mira's sign-in made for
  * a sign-up that never finished. Since 22 Nov 2026 also passkey challenges past their 5 minutes,
  * email changes waiting more than a day, and signed-in devices not seen for 90 days (they sign in
- * again; features/mira/server/devices.ts). Production host only. Protected by
- * `Authorization: Bearer ${CRON_SECRET}`.
+ * again; features/mira/server/devices.ts). Since 24 Nov 2026 also each chat kept without an
+ * account (mira_chat.anon_id) 12 months after its last message (`updated_at`, which every new
+ * message moves). Production host only. Protected by `Authorization: Bearer ${CRON_SECRET}`.
  */
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
@@ -169,6 +170,14 @@ export async function GET(request: Request) {
       const res = await supabaseFetch(path, { method: "DELETE" });
       if (!res.ok) throw new Error(`sign-in leftovers: status ${res.status}`);
     }
+    // Chats kept without an account: the same 12 months, each from its own last message.
+    const yearAgo = new Date(startedAtMs);
+    yearAgo.setUTCMonth(yearAgo.getUTCMonth() - MEMORY_MONTHS);
+    const anon = await supabaseFetch(
+      `/rest/v1/mira_chat?anon_id=not.is.null&updated_at=lt.${encodeURIComponent(yearAgo.toISOString())}`,
+      { method: "DELETE", headers: { Prefer: "return=minimal,count=exact" } }
+    );
+    if (!anon.ok) throw new Error(`signed-out chats: status ${anon.status}`);
     const events = await forgetOldEvents(isOutOfTime);
     const signUps = await removeUnfinishedSignUps(startedAtMs, isOutOfTime);
     const stoppedEarly = events.stoppedEarly || signUps.stoppedEarly;
@@ -186,6 +195,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       chatsDeleted: deleted,
+      anonChatsDeleted: deletedCount(anon),
       eventsDeleted: events.deleted,
       signUpsDeleted: signUps.deleted,
       signUpsFailed: signUps.failed,

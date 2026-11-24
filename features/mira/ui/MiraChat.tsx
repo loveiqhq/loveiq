@@ -159,6 +159,9 @@ export default function MiraChat({
   const [country, setCountry] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(initialChatId);
+  // Signed out: the chat Mira keeps from this browser (from 24 Nov 2026, under the tick that names
+  // it), sent back with each message and carried into an account at sign-up.
+  const [anonChat, setAnonChat] = useState<string | null>(null);
   const [crisis, setCrisis] = useState<CrisisCountry | null>(null);
   // Said they are under 18: nothing of this chat is kept in the browser any more.
   const [minor, setMinor] = useState(stopped);
@@ -264,6 +267,7 @@ export default function MiraChat({
         setMessages(saved.turns);
         setFreeLeft(saved.freeLeft);
         if (saved.gate) setGate(true);
+        setAnonChat(saved.anonChat ?? null);
       }
       const given = local.consent();
       setConsented(given?.version === CONSENT_VERSION);
@@ -312,7 +316,8 @@ export default function MiraChat({
   }, [messages.length, sending]); // not on a rating: that rewrites a message, not adds one
 
   // The anonymous chat lives in this browser, with its sources and ratings, after every change
-  // (nothing is written for a first visit until there is something to keep).
+  // (nothing is written for a first visit until there is something to keep), and with the id of
+  // the copy Mira keeps of it.
   useEffect(() => {
     if (!ready || signedIn || minor || (messages.length === 0 && !local.chat())) return;
     local.saveChat({
@@ -327,8 +332,9 @@ export default function MiraChat({
       })),
       freeLeft,
       ...(gate ? { gate: true } : {}),
+      ...(anonChat ? { anonChat } : {}),
     });
-  }, [ready, signedIn, minor, messages, freeLeft, gate]);
+  }, [ready, signedIn, minor, messages, freeLeft, gate, anonChat]);
 
   // A starter from the address waits in the composer, unsent: "Ask Mira to help" on the goals
   // card (?prompt=goal), the guide's "Ask Mira about this" (?ask=N, counted once as guide_ask) and
@@ -411,6 +417,8 @@ export default function MiraChat({
       signIn?: boolean;
       minor?: boolean;
       refer?: boolean;
+      /** Signed out: the chat Mira kept this exchange in (24 Nov 2026). */
+      anonChat?: string;
     }>("/api/mira/chat", {
       body: {
         message,
@@ -421,6 +429,10 @@ export default function MiraChat({
         history,
         // Signed in: a sign-in that ended meanwhile asks for a new one, never goes anonymous.
         ...(signedIn ? { signedIn: true } : { style }),
+        // Signed out, once this wording was agreed to (now, or before): the server keeps the chat
+        // only under it, in the chat it kept before.
+        ...(!signedIn && (consented || opts.agreed) ? { consentVersion: CONSENT_VERSION } : {}),
+        ...(!signedIn && anonChat ? { anonChat } : {}),
         ...(answering ? { answering } : {}),
         ...(opts.voice ? { voice: { session: voice.sessionId() ?? undefined } } : {}),
         ...(opts.session ? { session: true } : {}),
@@ -476,6 +488,7 @@ export default function MiraChat({
       spoken ? "" : `Mira: ${[res.data.reply, res.data.invitation].filter(Boolean).join(" ")}`
     );
     setFreeLeft(res.data.freeLeft ?? freeLeft);
+    if (res.data.anonChat) setAnonChat(res.data.anonChat);
     // The last free message's reply brings the sign-up card. Not beside a crisis reply: the
     // composer stays, and the server answers a crisis message whatever the limits. Nor after an
     // under-18 stop: nobody under 18 is asked to make an account.
@@ -484,8 +497,10 @@ export default function MiraChat({
     if (res.data.refer) referred.current = true;
     if (res.data.minor) {
       // Under 18 (rail 15): the reply stays on screen, but this browser forgets the chat and the
-      // 18+ tick, and no question of ours follows. An account's chats are gone on the server.
+      // 18+ tick, and no question of ours follows. An account's chats are gone on the server, and
+      // so is what Mira kept from this browser.
       local.forget();
+      setAnonChat(null);
       setMinor(true);
       setConsented(false);
       setTick(false);
@@ -615,6 +630,7 @@ export default function MiraChat({
     voice.dismissEnded();
     setMessages([]);
     setChatId(null);
+    setAnonChat(null); // a new chat is kept apart from the last one
     setError(null);
     setUnloaded(false);
     setNotice(null);
@@ -631,13 +647,16 @@ export default function MiraChat({
   /**
    * The confirm step's Delete: the open saved chat goes (its messages and voice sessions with it),
    * leaves the list at once, and a new chat begins. One already gone (404) ends the same way.
+   * Signed out (24 Nov 2026): every chat Mira kept from this browser goes, and this browser's copy.
    */
   async function deleteThisChat() {
-    if (!chatId || deleting === "busy") return;
-    const id = chatId;
+    const id = signedIn ? chatId : anonChat;
+    if (!id || deleting === "busy") return;
     setDeleting("busy");
     setDeleteError(null);
-    const res = await miraApi(`/api/mira/chats/${id}`, { method: "DELETE" });
+    const res = await miraApi(signedIn ? `/api/mira/chats/${id}` : "/api/mira/chat", {
+      method: "DELETE",
+    });
     if (!res.ok && res.status !== 404) {
       setDeleting("ask");
       setDeleteError(res.data.error ?? "That didn't go through. Please try again.");
@@ -645,6 +664,7 @@ export default function MiraChat({
     }
     setDeleting(null);
     setChats((all) => all.filter((c) => c.id !== id));
+    if (!signedIn) local.saveChat(null);
     newChat();
     setNotice("Chat deleted.");
   }
@@ -1129,11 +1149,16 @@ export default function MiraChat({
                     </div>
                   ) : null}
                   {/* A saved chat can be deleted on its own (Settings deletes them all). Here,
-                      at its end, rather than in a header that has no room on a small phone. */}
-                  {signedIn && chatId && !sending && !voiceOn ? (
+                      at its end, rather than in a header that has no room on a small phone.
+                      Signed out, a chat Mira kept (24 Nov 2026), with any other she kept here. */}
+                  {(signedIn ? chatId : anonChat) && !sending && !voiceOn ? (
                     deleting ? (
                       <ConfirmDelete
-                        question="Delete this chat? Its messages, and any voice session in it, are deleted for good. Your other chats stay. This can't be undone."
+                        question={
+                          signedIn
+                            ? "Delete this chat? Its messages, and any voice session in it, are deleted for good. Your other chats stay. This can't be undone."
+                            : "Delete this chat? It goes for good, here and on our servers, and so does any other chat Mira kept from this browser. This can't be undone."
+                        }
                         action={deleting === "busy" ? "Deleting…" : "Delete"}
                         busy={deleting === "busy"}
                         error={deleteError}
@@ -1181,8 +1206,11 @@ export default function MiraChat({
                         </p>
                         <p className="mt-1 text-[14px] leading-normal text-ap-body">
                           You&apos;ve had your {FREE_LABEL} with Mira. Create a free account to
-                          carry on. She&apos;ll remember where you left off, and this chat comes
-                          with you.
+                          carry on.
+                          {/* Only while there is a chat to bring along (one just deleted isn't). */}
+                          {started
+                            ? " She'll remember where you left off, and this chat comes with you."
+                            : null}
                         </p>
                       </div>
                       {/* This browser's chat goes into the new account at sign-up. */}
@@ -1384,7 +1412,8 @@ export default function MiraChat({
               <span>
                 I&apos;m 18 or older, and I agree that Mira may process what I share about my sex
                 life and health to coach me, and to count, without my words, how Mira is used and
-                whether she helps. Our analytics tools also see what I type.{" "}
+                whether she helps. Mira keeps our conversation, to coach me and so her team can read
+                it to improve her. Our analytics tools also see what I type.{" "}
                 <Link href="/mira/privacy" className="underline">
                   How Mira handles your data
                 </Link>

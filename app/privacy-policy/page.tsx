@@ -136,6 +136,10 @@ export default function PrivacyPolicyPage() {
                   conversations&quot; is on
                 </li>
                 <li>
+                  Without an account, the chat Mira keeps once you agree to it, with a random id
+                  from your browser
+                </li>
+                <li>
                   Your LoveIQ test result, only if you choose to let Mira use it to tailor your
                   coaching
                 </li>
@@ -455,11 +459,12 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p className="mb-4">Pseudonymized statistical data may be stored longer.</p>
               <p className="mb-4">
-                Mira: without an account, your chat stays in your browser. With an account, Mira
-                saves your chats while &quot;Remember our conversations&quot; is on. If you turn it
-                off, she stops saving new chats. Saved chats stay until you delete them or your
-                account, and at most 12 months after the last message you wrote. Body check answers
-                stay until you delete your Mira account.
+                Mira: without an account, your chat stays in your browser and, once you agree to it,
+                Mira keeps it too, until you delete it on the chat page and at most 12 months after
+                its last message. With an account, Mira saves your chats while &quot;Remember our
+                conversations&quot; is on. If you turn it off, she stops saving new chats. Saved
+                chats stay until you delete them or your account, and at most 12 months after the
+                last message you wrote. Body check answers stay until you delete your Mira account.
               </p>
               <p>
                 Mira&apos;s log of labels, ratings, feedback and the text of replies you let us read

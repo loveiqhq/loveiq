@@ -1405,6 +1405,139 @@ describe("after a voice session", () => {
   });
 });
 
+// Eman, 24 Nov 2026: a chat without an account is kept too, under the consent that names it.
+describe("A chat Mira keeps without an account", () => {
+  const KEPT = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  const step = () => screen.getByRole("dialog", { name: "Before your first message" });
+  const sent = () => calls("POST /api/mira/chat");
+  const deletes = () => fetchMock.mock.calls.filter(([, i]) => i?.method === "DELETE");
+  const ask = () => screen.getByRole("group", { name: /^Delete this chat\?/ });
+
+  it("is named in the tick: kept, to coach and for her team to read to improve her", async () => {
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByRole("dialog", { name: "Before your first message" });
+    expect(within(step()).getByRole("checkbox").closest("label")).toHaveTextContent(
+      "I'm 18 or older, and I agree that Mira may process what I share about my sex life and health to coach me, and to count, without my words, how Mira is used and whether she helps. Mira keeps our conversation, to coach me and so her team can read it to improve her. Our analytics tools also see what I type."
+    );
+  });
+
+  it("sends that tick's version, from the first message the tick lets go", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByRole("dialog", { name: "Before your first message" });
+    fireEvent.click(within(step()).getByRole("checkbox"));
+    fireEvent.click(within(step()).getByRole("button", { name: "Start chatting" }));
+    await screen.findByText("Try this.");
+    expect(sent()[0]).toMatchObject({ consentVersion: CONSENT_VERSION });
+  });
+
+  it("sends no version for a stopped browser or a signed-in page", async () => {
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: miraConfig.minorMessage } });
+    const stopped = render(<MiraChat signedIn={false} initialChatId={null} stopped />);
+    typeAndSend("hello");
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    stopped.unmount();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn initialChatId={null} />);
+    typeAndSend("hello");
+    await screen.findByText("Try this.");
+    for (const body of sent()) expect(body).not.toHaveProperty("consentVersion");
+  });
+
+  it("goes on in the kept chat, after a reload too, and a new chat starts another", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = (b) => ({
+      body: { reply: `Reply to ${String(b.message)}`, anonChat: KEPT },
+    });
+    const first = render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Reply to hi");
+    expect(sent()[0]).not.toHaveProperty("anonChat");
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({ anonChat: KEPT })
+    );
+    first.unmount();
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    await screen.findByText("Reply to hi");
+    typeAndSend("and then?");
+    await screen.findByText("Reply to and then?");
+    expect(sent()[1]).toMatchObject({ consentVersion: CONSENT_VERSION, anonChat: KEPT });
+    fireEvent.click(screen.getAllByRole("button", { name: /New chat/ })[0]!);
+    typeAndSend("fresh");
+    await screen.findByText("Reply to fresh");
+    expect(sent()[2]).not.toHaveProperty("anonChat");
+  });
+
+  it("can be deleted from the chat page: here, on the server, and any other kept from here", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", anonChat: KEPT } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+    expect(ask()).toHaveTextContent(
+      "Delete this chat? It goes for good, here and on our servers, and so does any other chat Mira kept from this browser. This can't be undone."
+    );
+    replies["DELETE /api/mira/chat"] = () => ({ body: { success: true } });
+    fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Chat deleted.")).toBeInTheDocument();
+    expect(deletes().map(([url]) => url)).toEqual(["/api/mira/chat"]);
+    expect(screen.queryByText("Try this.")).toBeNull();
+    expect(localStorage.getItem("mira.chat.v1")).toBeNull();
+  });
+
+  it("keeps the chat and says so when the delete doesn't go through", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this.", anonChat: KEPT } });
+    replies["DELETE /api/mira/chat"] = () => ({
+      status: 500,
+      body: { error: "Unable to delete this chat." },
+    });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+    fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
+    expect(await within(ask()).findByRole("alert")).toHaveTextContent(
+      "Unable to delete this chat."
+    );
+    expect(screen.getByText("Try this.")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("mira.chat.v1")!)).toMatchObject({ anonChat: KEPT });
+  });
+
+  it("offers no delete for a chat Mira didn't keep", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({ body: { reply: "Try this." } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    await screen.findByText("Try this.");
+    expect(screen.queryByRole("button", { name: "Delete this chat" })).toBeNull();
+  });
+
+  it("the sign-up card promises the chat comes along only while there is one", async () => {
+    giveConsent();
+    replies["POST /api/mira/chat"] = () => ({
+      body: { reply: "Try this.", freeLeft: 0, anonChat: KEPT },
+    });
+    replies["DELETE /api/mira/chat"] = () => ({ body: { success: true } });
+    render(<MiraChat signedIn={false} initialChatId={null} />);
+    typeAndSend("hi");
+    const card = () => screen.getByText(/had your free message with Mira/);
+    await screen.findByText("Keep talking with Mira, for free");
+    expect(card()).toHaveTextContent("this chat comes with you");
+    fireEvent.click(screen.getByRole("button", { name: "Delete this chat" }));
+    fireEvent.click(within(ask()).getByRole("button", { name: "Delete" }));
+    await screen.findByText("Chat deleted.");
+    expect(screen.getByText("Keep talking with Mira, for free")).toBeInTheDocument();
+    expect(card()).toHaveTextContent(
+      "You've had your free message with Mira. Create a free account to carry on."
+    );
+    expect(card()).not.toHaveTextContent(/this chat|left off/);
+  });
+});
+
 describe("Free messages", () => {
   it("shows the sign-up card once the last free message is answered, and keeps the chat", async () => {
     giveConsent();

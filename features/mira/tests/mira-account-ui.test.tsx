@@ -244,6 +244,54 @@ describe("A chat the account doesn't keep", () => {
   });
 });
 
+// Eman, 24 Nov 2026: Mira keeps a signed-out chat too. "Your current chat comes with you": the
+// sign-in names the copy she kept, so it becomes the account's own and is never kept twice.
+describe("The chat Mira kept without an account", () => {
+  const KEPT = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  const chat = () =>
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hello" }], freeLeft: 0, anonChat: KEPT })
+    );
+  const carried = () =>
+    calls("POST /api/mira/auth").filter((c) => c.action === "verify" || c.action === "carry");
+
+  it("goes along at a code sign-in, with a passkey and back from Google", async () => {
+    chat();
+    await codeSignIn({ success: true, chatId: KEPT });
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/mira/home"));
+    cleanup();
+    chat();
+    replies["POST /api/mira/passkeys"] = (b) =>
+      b.action === "sign-in-options"
+        ? { body: { options: { challenge: "c" } } }
+        : { body: { success: true, needsProfile: false } };
+    replies["POST /api/mira/auth"] = () => ({ body: { success: true, chatId: KEPT } });
+    render(<SignUpFlow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledTimes(2));
+    cleanup();
+    chat();
+    render(<SignUpFlow googleResult="done" />);
+    await waitFor(() => expect(router.replace).toHaveBeenCalledTimes(3));
+    expect(carried().map((c) => [c.action, c.anonChat, c.carry])).toEqual([
+      ["verify", KEPT, [{ role: "user", content: "hello" }]],
+      ["carry", KEPT, [{ role: "user", content: "hello" }]],
+      ["carry", KEPT, [{ role: "user", content: "hello" }]],
+    ]);
+  });
+
+  it("isn't named when Mira kept none", async () => {
+    localStorage.setItem(
+      "mira.chat.v1",
+      JSON.stringify({ turns: [{ role: "user", content: "hello" }], freeLeft: 0 })
+    );
+    await codeSignIn({ success: true });
+    await waitFor(() => expect(router.replace).toHaveBeenCalled());
+    expect(carried()[0]).not.toHaveProperty("anonChat");
+  });
+});
+
 // Round-3 R3-UXA-6: in Dark on Chromium the sign-up's fields kept the browser's own grey
 // (rgb(59,59,59)), a slab on the plum page; Mira's paper and the field's edge, as the feedback
 // form's (UX-7), and the passkey's Name field in Settings the same.

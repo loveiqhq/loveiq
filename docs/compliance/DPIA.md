@@ -24,7 +24,7 @@ GDPR Art. 35 requires a DPIA when processing involves "systematic monitoring of 
 | Engagement analytics              | analytics_event rows (from 2026-10-16 incl. report chapter reading time and actions, pre-report slides skipped), survey_behavior_event rows (from 2026-10-16 incl. `is_tablet`), scroll depth, time-on-section, click telemetry; funnel_event rows (from 2026-10-16 incl. each survey intro card and its Back and Skip); landing section time (PostHog and GA4) | our own tables: legitimate interest since 2026-09-18 (privacy policy §7.4); funnel_event: every visitor from 2026-10-16 (visitor ID cookie with consent, a page-only id held in memory otherwise), legitimate interest; GA4: cookies and identifiers with consent, cookieless events on every visit from 2026-10-16 (Google Consent Mode), legitimate interest | Supabase (`analytics_event`, `survey_behavior_event`, `funnel_event`) + GA4 + Microsoft Clarity + PostHog |
 | Admin operations                  | admin email, action, IP, target resource                                                                                                                                                                                                                                                                                                                        | legitimate interest (operational forensics)                                                                                                                                                                                                                                                                                                                    | Supabase (`admin_action_log`)                                                                             |
 | GDPR DSAR                         | email, action (export/delete), admin email, IP, rows_affected JSON                                                                                                                                                                                                                                                                                              | legal obligation (Art. 17 / Art. 20)                                                                                                                                                                                                                                                                                                                           | Supabase (`data_subject_request_log`)                                                                     |
-| Mira, the AI coach (beta, §7)     | what people write about their sex life and health, Mira's replies, account data, labels, ratings, feedback, body check answers, nudge records, a random browser id; IP and email in rate-limit counters; from 2026-11-21 weekly sessions and from 2026-11-22 goals, journal, self-checks, voice sessions, passkeys and devices                                  | explicit consent (Art. 6(1)(a), 9(2)(a)) for coaching and the Art. 9 features; contract for the account and its emails; legitimate interest for steps, ratings, email opens and clicks and abuse prevention                                                                                                                                                    | Supabase (Zurich), the browser (chats without an account), Anthropic (30 days)                            |
+| Mira, the AI coach (beta, §7)     | what people write about their sex life and health, Mira's replies, account data, labels, ratings, feedback, body check answers, nudge records, a random browser id; IP and email in rate-limit counters; from 2026-11-21 weekly sessions and from 2026-11-22 goals, journal, self-checks, voice sessions, passkeys and devices                                  | explicit consent (Art. 6(1)(a), 9(2)(a)) for coaching and the Art. 9 features; contract for the account and its emails; legitimate interest for steps, ratings, email opens and clicks and abuse prevention                                                                                                                                                    | Supabase (Zurich; from 2026-11-24 also chats without an account), the browser, Anthropic (30 days)        |
 
 ## 2. Categories of data subjects
 
@@ -230,16 +230,23 @@ names the use of AI to steer the interaction with the people concerned.
 8. Weekly sessions (from 2026-11-21), only for account holders who book one: a weekly 15-minute
    slot, the calendar invite by email, a reminder email 30 to 60 minutes before each session, and
    whether a reminded session was opened within 30 minutes of its start.
+9. Keeping chats without an account (from 2026-11-24, Eman: "so we have access to everything",
+   after a signed-out demo's poor answer could not be looked at): under the browser's random id,
+   from the first message sent after the tick that names it, to coach (the chat moves into an
+   account at sign-up) and for the team to read to improve Mira.
 
-**Data subjects**: adults (18+) using Mira without an account (the chat lives in their browser) or
-with a free account; the people they write about (partners, former partners, family); people
+**Data subjects**: adults (18+) using Mira without an account (the chat lives in their browser and,
+from 2026-11-24, in `mira_chat` under the browser id) or with a free account; the people they
+write about (partners, former partners, family); people
 under 18 who use Mira despite the 18+ tick, until they say their age. Team members' own browsers
 are left out of Mira's statistics.
 
 **Personal data**
 
-- Art. 9 (sex life, health): the messages and Mira's replies; for account holders the saved chats
-  (`mira_chat`, `mira_message`); the labels, among them `crisis_shown` with the country
+- Art. 9 (sex life, health): the messages and Mira's replies; the saved chats (`mira_chat`,
+  `mira_message`): an account holder's while memory is on and, from 2026-11-24, a browser's
+  without an account (`mira_chat.anon_id`, with the consent version it was kept under); the
+  labels, among them `crisis_shown` with the country
   (`mira_event`); body check answers and score (`mira_body_check`); self-check answers
   (`mira_check`, scored by the app; §7.16); the LoveIQ result on opt-in.
 - Art. 9, Challenges & goals (from 2026-11-22, §7.13): an account holder's goals in their own
@@ -260,7 +267,8 @@ are left out of Mira's statistics.
   and, only with its own consent, one sentence with the first name or initials and age range the
   person chose, its consent version and time, and its review status. Covered by data requests
   (export by the account; erased with the account) and purged by an under-18 stop.
-- Technical: a random browser id (`mira_anon` cookie, one year), the sign-in cookie (`mira-auth`),
+- Technical: a random browser id (`mira_anon` cookie, one year; from 2026-11-24 it also keys the
+  chat kept without an account), the sign-in cookie (`mira-auth`),
   the display choice (`mira_look` cookie, one year, Mira's pages only: light, dark or system and the
   text size, with or without an account), an email link's signed token (`mira_link` cookie,
   httpOnly, one hour, sent only to the link's own page, so the token stays out of page addresses;
@@ -287,9 +295,13 @@ are left out of Mira's statistics.
 reply and support lines without a model call (`features/mira/server/safety.ts`). Otherwise the
 route sends the fixed instructions (no personal data), the person's context and the turns to
 Anthropic's Messages API. It sets no `inference_geo`, so Anthropic routes the request globally. For
-account holders with memory on, the turns are stored in Supabase in Zurich. Anonymous chats stay in
-the browser's local storage until a sign-up carries them into the account. Nothing logs the prompt
-or the conversation.
+account holders with memory on, the turns are stored in Supabase in Zurich. Without an account
+the browser keeps the chat in its local storage and, from 2026-11-24, each answered exchange (a
+crisis one too) is also stored in Supabase under the browser id, once the browser agreed to the
+tick that names it: the version is checked on every message and stored with the chat, and nothing
+is stored for a browser stopped as under 18 or for a message the sign-up card holds back. A sign-up
+moves that chat into the account in one update, or deletes it when the account keeps no chats.
+Nothing logs the prompt or the conversation.
 
 ### 7.3 Recipients and transfers
 
@@ -375,15 +387,19 @@ controller service ([business.safety.google/adsservices](https://business.safety
   Coaching rests on explicit consent (Art. 6(1)(a), 9(2)(a)): a required tick before a first
   message without an account ("I'm 18 or older, and I agree that Mira may process what I share
   about my sex life and health to coach me, and to count, without my words, how Mira is used and
-  whether she helps. Our analytics tools also see what I type."), or at sign-up a required "Mira
-  may process what I share about my sex life and health to coach me, and to count, without my
-  words, how Mira is used and whether she helps". The wording's version is stored with each
-  consent.
-- **Purpose limitation**: chats are used for coaching, never for advertising. We do not train
-  models on them, and Anthropic may not.
+  whether she helps. Mira keeps our conversation, to coach me and so her team can read it to
+  improve her. Our analytics tools also see what I type.", version `mira-2026-11-24`, which added
+  its second sentence), or at sign-up a required "Mira may process what I share about my sex life
+  and health to coach me, and to count, without my words, how Mira is used and whether she
+  helps". The wording's version is stored with each consent, and with each chat kept without an
+  account (only the current version's are kept).
+- **Purpose limitation**: chats are used for coaching and, for chats kept without an account,
+  read by the team to improve Mira (2026-11-24), never for advertising. We do not train models on
+  them, and Anthropic may not.
 - **Data minimisation**: Mira works without an account (one message, then a free account; a crisis
-  message is always answered). The profile asks for little. Chats are stored only while memory is
-  on. The test result is used only on opt-in, off by default. A rating keeps the thumbs only. The
+  message is always answered). The profile asks for little. An account's chats are stored only
+  while memory is on, and a chat without an account only after the tick that names keeping it.
+  The test result is used only on opt-in, off by default. A rating keeps the thumbs only. The
   labels and the log of steps hold ids, never words. The model gets the latest 24 turns. Prompts
   and chats are never logged. Nudge subjects are neutral, the inbox preview line is hidden, and a
   nudge's words live only in the chat. Ops alerts carry counts only. Team browsers are left out of
@@ -397,7 +413,11 @@ controller service ([business.safety.google/adsservices](https://business.safety
   and a pending change of email (never a code's hash or a challenge); the DPO is named in both
   notices. From 2026-11-23 a copy leaves out what a browser did before signing in, which on a
   shared browser can be someone else's (Art. 15(4)); the export's note says so, and the chat
-  carried into the account at sign-in is the account's own and included. The staff data-subject tool (`features/admin/server/data-subject.ts`) exports the
+  carried into the account at sign-in is the account's own and included. From 2026-11-24 the
+  chats kept without an account are left out the same way, unless one came into the account;
+  without an account, "Delete this chat" on the chat page deletes every chat kept from that
+  browser, and the notice says an email request can't be matched to a browser's chat (Art.
+  11(2)). The staff data-subject tool (`features/admin/server/data-subject.ts`) exports the
   weekly session's `mira_session_slot` and `mira_session_reminder` rows and erases them with the
   account (by cascade); a weekly session is changed, its reminders paused or the session cancelled
   in Settings, and every session email has a stop link.
@@ -420,14 +440,17 @@ details.
   30 days; nothing logs the conversation.
 - **Staff access**: AP's Mira pages show counts and ids, and the words of ratings waiting for
   approval (7.14); Jarvis's live-data tool can currently read the `mira_*` tables, chat words
-  included (7.3, "The team's data tool"), an open decision for Eman (7.9, point 7).
+  included (7.3, "The team's data tool"), an open decision for Eman (7.9, point 7). From
+  2026-11-24 that includes chats kept without an account, which the team reads to improve Mira
+  under that chat's consent.
 - **Residual**: low to medium.
 
 #### M2 — Minors (HIGH before, MEDIUM after)
 
 - **Measures**: an 18+ tick before the first message and at sign-up; the terms of use require 18+.
   Anyone who says they are under 18 is stopped for good on that account or browser
-  (`server/minor.ts`): a browser chat is cleared; the account's nudges go off, its reply language
+  (`server/minor.ts`): a browser chat is cleared, with every chat Mira kept from that browser
+  (2026-11-24), and nothing more is kept from it; the account's nudges go off, its reply language
   and display choices are cleared, and its saved chats, goals, journal, self-check and body check
   results (with the account's earlier counts of the mood check's support lines), voice sessions,
   rating and words, passkeys, weekly session (without any email), "Notify me" requests and the
@@ -547,7 +570,12 @@ are Art. 9 data.
 
 ### 7.6 Retention
 
-- Without an account: the chat stays in the browser; a new chat or clearing site data removes it.
+- Without an account: the browser's copy until a new chat or clearing site data. From 2026-11-24
+  Mira's copy too (`mira_chat` with an `anon_id`, kept only under the consent that names it):
+  until "Delete this chat" (every chat kept from that browser), a sign-up (moved into the
+  account, or deleted when it keeps no chats or the sign-in is refused as under 18), an under-18
+  stop, or 12 months after its last message (`app/api/cron/mira-memory`, daily, the same run as
+  account chats; the purge cron stays off).
 - Saved chats: until deleted in Settings, with the account, or 12 months after the person's last
   message (`mira_forget_old_memory`, daily). With "Remember our conversations" off, no new chats
   are saved; earlier ones stay until deleted or the 12-month limit.
@@ -618,6 +646,11 @@ take one of the M5 measures.
 6. **§7 UWG**: nudges on by default (M8).
 7. **The team's data tool**: Jarvis's live-data tool can read the `mira_*` tables (7.3). For Eman
    to decide: leave them out, as the team export does, or keep them readable to staff.
+8. **Chats kept without an account** (2026-11-24, staging only until confirmed): the DPO and
+   Sanjin to confirm the tick's new sentence and its version, that the team reading such chats to
+   improve Mira fits the consent and the notice, how a request without an account is answered
+   (Art. 11(2): the notice points to "Delete this chat"), the 12 months counted per chat, and that
+   deleting an account leaves the chats its browsers kept without carrying them unlinked rather than deleting them.
 
 ### 7.10 DPO's opinion (Art. 35(2))
 
@@ -846,8 +879,10 @@ session's words a second time, to write the key points.
   pauses the microphone; someone stopped as under 18 is refused on every voice route.
 
 **Retention**: as the chat (7.6): the session and its words go with the chat or the account, at the
-latest 12 months after the person's last message. Without an account nothing is kept beyond the
-events (the session's count and the voice tick's record, 12 months, as `mira_event`).
+latest 12 months after the person's last message. Without an account, from 2026-11-24 a spoken
+turn's words are kept in the chat like typed ones (7.6), without a voice session; of the session
+itself nothing is kept beyond the events (the session's count and the voice tick's record, 12
+months, as `mira_event`).
 
 **Open**: (1) whether a browser maker's speech service must be named per browser in the notice
 (it names Apple's and Google's as examples); (2) Android: whether Chrome reports its own voices as
