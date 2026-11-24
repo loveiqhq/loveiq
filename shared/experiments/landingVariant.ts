@@ -45,8 +45,11 @@
  * satisfied with my sex life." (Q01002), loses more people than any other, so Mark and
  * Marcus swapped it for Q10003, "I'm comfortable expressing what turns me on." (almost no
  * drop-off, a short median time; Mark's DM of the same morning names the id). It is asked
- * where B asks its question, and the privacy line moves under the film (Marcus, 24 Nov). It
- * runs as a new version rather than a change to B, so B's numbers stay as they were (Mark):
+ * where B asks its question, and the privacy line moves under the film (Marcus, 24 Nov).
+ * C also carries the page's v2 sections (the pain points as a carousel, four tiles, the
+ * video page's stat cards, Hana's animations), as on staging, where Marcus approved it; B
+ * ran with v1's. It runs as a new version rather than a change to B, so B's numbers stay
+ * as they were (Mark):
  *   - `"video"`        — arm A, the control, unchanged
  *   - `"pain_point_c"` — arm C, the pain-point page asking Q10003, privacy line under the film
  * `"pain_point"` (B) is paused: never assigned any more, its cookie re-rolled like an

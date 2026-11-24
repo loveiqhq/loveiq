@@ -73,8 +73,8 @@ export interface LandingTest {
  * named by the pages it compares, new page first. The rebuild test (V1 vs V2, Aug–Sep 2026) was
  * taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new page against the
  * video page, under the number the registry gives it at its release. "#10 · C" is its version
- * C (sync 24 Nov 2026: Q10003, the privacy line under the film) against the same video page,
- * in B's place, so B's days stay #10's and C is read from its own first day.
+ * C (sync 24 Nov 2026: Q10003, the privacy line under the film, v2's sections) against the
+ * same video page, in B's place, so B's days stay #10's and C is read from its own first day.
  */
 export const LANDING_TESTS: LandingTest[] = [
   {
@@ -84,7 +84,7 @@ export const LANDING_TESTS: LandingTest[] = [
     from: LANDING_TEST_START_DAY,
     to: null,
     outcome: "Running, read over up to 28 days.",
-    note: "Version C asks “I'm comfortable expressing what turns me on.” where B asked about satisfaction, and moves the privacy line under the film.",
+    note: "Version C asks “I'm comfortable expressing what turns me on.” where B asked about satisfaction, moves the privacy line under the film, and has v2's sections: a pain-point carousel, four tiles, stat cards and animations.",
     arms: ["video", "pain_point_c"],
     letters: ["A", "C"],
   },
@@ -95,7 +95,7 @@ export const LANDING_TESTS: LandingTest[] = [
     from: LANDING_PAIN_POINT_START_DAY,
     to: LANDING_PAIN_POINT_LAST_DAY,
     outcome:
-      "Paused on 25 Nov 2026, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question and the privacy line under the film.",
+      "Paused on 25 Nov 2026, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question, the privacy line under the film and v2's sections.",
     arms: ["video", "pain_point"],
   },
   {
