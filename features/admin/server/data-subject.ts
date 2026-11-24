@@ -34,7 +34,8 @@
  *     settings too, such as the reply language and the appearance of 21 Nov 2026), its mira_chat +
  *     mira_message, mira_body_check, mira_check (the self-checks), mira_nudge and mira_event rows (by user_id;
  *     never a browser's rows from before it signed in, which on a shared browser can be someone
- *     else's, GDPR Art. 15(4): the export's note says so; the chat carried in at sign-in is the
+ *     else's, GDPR Art. 15(4): the export's note says so, nor a chat kept without an account
+ *     (mira_chat with an anon_id, from 24 Nov 2026); the chat carried in at sign-in is the
  *     account's own mira_chat and mira_message), and a pending
  *     mira_sign_in_code (by email). Challenges & goals (22 Nov 2026): its mira_goal and
  *     mira_goal_log rows (by user_id), which go with the account (ON DELETE CASCADE). Voice
@@ -289,9 +290,11 @@ async function exportMira(emailNorm: string, result: DsrResult): Promise<void> {
   }
   // What a browser did before signing in (logged under its browser id only) stays out: on a
   // shared browser it can be someone else's, and a copy must not reveal others' data (GDPR
-  // Art. 15(4)); the export's note says so. The chat carried in at sign-in is the account's own.
+  // Art. 15(4)); the export's note says so. So do the chats Mira keeps without an account (from
+  // 24 Nov 2026, mira_chat with an anon_id, never read here). The chat carried in at sign-in is
+  // the account's own.
   result.warnings.push(
-    "mira_event: not included: what a browser did before signing in, which on a shared browser can be someone else's (GDPR Art. 15(4)); the chat carried into the account at sign-in is in mira_chat and mira_message"
+    "mira_event, and chats kept without an account (mira_chat with an anon_id): not included: what a browser did before signing in, which on a shared browser can be someone else's (GDPR Art. 15(4)); the chat carried into the account at sign-in is in mira_chat and mira_message"
   );
 }
 

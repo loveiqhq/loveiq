@@ -47,6 +47,10 @@ beforeEach(() => {
   vi.mocked(deleteAccount).mockResolvedValue(undefined);
   vi.mocked(supabaseFetch).mockImplementation(async (path, init) => {
     if (path.startsWith("/rest/v1/rpc/mira_forget_old_memory")) return json(0);
+    // Chats kept without an account (24 Nov 2026).
+    if (path.startsWith("/rest/v1/mira_chat?anon_id=not.is.null&updated_at=lt.")) {
+      return json(null, { "content-range": "*/3" });
+    }
     if (path.startsWith("/rest/v1/mira_sign_in_code?issued_at")) return json([]);
     // Sign-in & security (22 Nov 2026): the passkey, email-change and device leftovers.
     if (/^\/rest\/v1\/mira_(webauthn_challenge|email_change|session)\?/.test(path)) return json([]);
@@ -93,6 +97,21 @@ describe("mira-memory: sign-in leftovers (22 Nov 2026)", () => {
       90 * DAY - 1_000
     );
     expect(before - cut("/rest/v1/mira_session?", "last_seen_at")).toBeLessThan(91 * DAY);
+  });
+});
+
+// Eman, 24 Nov 2026: a chat kept without an account lasts as long as an account's: until it is
+// deleted, at the latest 12 months after its last message.
+describe("mira-memory: chats kept without an account", () => {
+  it("deletes one 12 months after its last message, and only those", async () => {
+    const body = await (await run()).json();
+    const path = deletes().find((p) => p.startsWith("/rest/v1/mira_chat"));
+    expect(path).toMatch(/^\/rest\/v1\/mira_chat\?anon_id=not\.is\.null&updated_at=lt\.[^&]+$/);
+    const cut = decodeURIComponent(path!.split("updated_at=lt.")[1]!);
+    const yearAgo = new Date();
+    yearAgo.setUTCMonth(yearAgo.getUTCMonth() - 12);
+    expect(Math.abs(Date.parse(cut) - yearAgo.getTime())).toBeLessThan(60_000);
+    expect(body).toMatchObject({ ok: true, anonChatsDeleted: 3 });
   });
 });
 

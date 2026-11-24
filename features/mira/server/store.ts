@@ -13,7 +13,9 @@ import type { CoachingStyle } from "./prompt";
 /**
  * Mira's database reads and writes (supabase/migrations/20261118120000_mira_mvp.sql), all with
  * the service role from API routes. Every read of a chat or message is scoped to the signed-in
- * account's id, so one person can never reach another's chats by guessing an id.
+ * account's id, so one person can never reach another's chats by guessing an id. A chat kept
+ * without an account (20261124010000_mira_anon_chats.sql) has a browser id instead of an account
+ * id, so none of those reads reach it; it is written and deleted by that browser id only.
  */
 
 export type MiraProfile = {
@@ -181,15 +183,95 @@ export async function getMessages(
   return newest.reverse();
 }
 
-export async function createChat(userId: string, title: string): Promise<string> {
+/** A browser without an account, and the first-message consent it agreed to. */
+export type AnonOwner = { anonId: string; consentVersion: string };
+
+/** A new chat of the account's, or of a browser's without an account (`AnonOwner`). */
+export async function createChat(owner: string | AnonOwner, title: string): Promise<string> {
+  const who =
+    typeof owner === "string"
+      ? { user_id: owner }
+      : { anon_id: owner.anonId, consent_version: owner.consentVersion };
   const res = await supabaseFetch("/rest/v1/mira_chat", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ user_id: userId, title: title.slice(0, 120) || "New chat" }),
+    body: JSON.stringify({ ...who, title: title.slice(0, 120) || "New chat" }),
   });
   if (!res.ok) throw new Error(`mira chat create failed (${res.status})`);
   const out = (await res.json()) as Array<{ id: string }>;
   return out[0]!.id;
+}
+
+/**
+ * A signed-out exchange, kept under the browser's id (Eman, 24 Nov 2026): in the browser's own
+ * kept chat when `chatId` is one, else in a new one named `title`. The caller keeps it only under
+ * the consent that names keeping it. The kept chat's id, for the browser to send back.
+ */
+export async function keepAnonExchange(
+  owner: AnonOwner,
+  chatId: string | null | undefined,
+  title: string,
+  messages: Parameters<typeof addMessages>[1]
+): Promise<string> {
+  const mine =
+    chatId && isUuid(chatId)
+      ? await rows<{ id: string }>(
+          `/rest/v1/mira_chat?id=eq.${enc(chatId)}&anon_id=eq.${enc(owner.anonId)}&select=id&limit=1`
+        )
+      : [];
+  const id = mine[0]?.id ?? (await createChat(owner, title));
+  await addMessages(id, messages);
+  return id;
+}
+
+/**
+ * A sign-up's "Your current chat comes with you": the browser's kept chat becomes the account's
+ * own in one update, with its title, sources and times, so it is never kept twice. Not when the
+ * kept copy has fewer messages than the browser shows (`shown`: the chat began before Mira kept
+ * chats, or a turn wasn't saved): then that copy goes, and the caller carries the browser's turns
+ * as before. True when it moved.
+ */
+export async function adoptAnonChat(
+  anonId: string,
+  chatId: string,
+  userId: string,
+  shown: number
+): Promise<boolean> {
+  if (!isUuid(chatId)) return false;
+  // Only counted here: the writes below name the browser, so another's chat is never touched.
+  const kept = await rows<{ id: number }>(
+    `/rest/v1/mira_message?chat_id=eq.${enc(chatId)}&select=id`
+  );
+  if (kept.length < shown) {
+    await deleteAnonChats(anonId, chatId);
+    return false;
+  }
+  const res = await supabaseFetch(
+    `/rest/v1/mira_chat?id=eq.${enc(chatId)}&anon_id=eq.${enc(anonId)}&select=id`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ user_id: userId, anon_id: null }),
+    }
+  );
+  if (!res.ok) throw new Error(`mira chat move failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length > 0;
+}
+
+/**
+ * Deletes the chats Mira keeps from this browser without an account, or only the one named; their
+ * messages go with them (ON DELETE CASCADE). A name that isn't a chat id deletes nothing. How many
+ * went.
+ */
+export async function deleteAnonChats(anonId: string, chatId?: string): Promise<number> {
+  if (chatId !== undefined && !isUuid(chatId)) return 0;
+  const one = chatId === undefined ? "" : `&id=eq.${enc(chatId)}`;
+  const res = await supabaseFetch(`/rest/v1/mira_chat?anon_id=eq.${enc(anonId)}${one}&select=id`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
+  if (!res.ok) throw new Error(`mira chat delete failed (${res.status})`);
+  return ((await res.json()) as unknown[]).length;
 }
 
 export async function addMessages(

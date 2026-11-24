@@ -3,12 +3,12 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { forgetNotify } from "./coaches";
 import { deleteChecks } from "./checks";
-import { MINOR_COOKIE } from "./config";
+import { ANON_COOKIE, MINOR_COOKIE } from "./config";
 import { deleteGoals } from "./goals";
 import { refreshPublicReviews, withdrawReview } from "./reviews";
 import { removePasskeys } from "./passkeys";
 import { forgetJournal } from "./journal";
-import { deleteChats, forgetEventText, updateProfile } from "./store";
+import { deleteAnonChats, deleteChats, forgetEventText, updateProfile } from "./store";
 import { deleteRecordings } from "./voice";
 import { deleteSlot } from "./weekly-sessions";
 import { deleteBodyChecks } from "./body-check";
@@ -64,15 +64,26 @@ export async function carryMinorStop(
   return true;
 }
 
-/** Remembers the stop on this browser and the account. A failed write is logged, never shown. */
+/**
+ * Remembers the stop on this browser and the account. A failed write is logged, never shown.
+ * The chats Mira kept from this browser without an account go too (24 Nov 2026), with or without
+ * an account, as the browser forgets its own: its id is read from its cookie, never made here.
+ */
 export async function stopForMinor(userId: string | null): Promise<void> {
-  (await cookies()).set(MINOR_COOKIE, "1", {
+  const jar = await cookies();
+  jar.set(MINOR_COOKIE, "1", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });
+  const browser = jar.get(ANON_COOKIE)?.value;
+  if (browser) {
+    await deleteAnonChats(browser).catch((err: unknown) =>
+      logger.error({ err }, "mira: an under-18 stop was not saved in full")
+    );
+  }
   if (!userId) return;
   // Each step on its own, so one that fails, even at once, never stops the others.
   const steps: Array<() => Promise<unknown>> = [

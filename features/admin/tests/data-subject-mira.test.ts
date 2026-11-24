@@ -154,7 +154,7 @@ describe("DSAR export covers Mira (Art. 15)", () => {
     expect(result.exportData?.mira_chat).toEqual([{ from: "/rest/v1/mira_chat" }]);
     expect(result.exportData?.mira_message).toEqual([{ from: "/rest/v1/mira_message" }]);
     expect(result.warnings).toEqual([
-      "mira_event: not included: what a browser did before signing in, which on a shared browser can be someone else's (GDPR Art. 15(4)); the chat carried into the account at sign-in is in mira_chat and mira_message",
+      "mira_event, and chats kept without an account (mira_chat with an anon_id): not included: what a browser did before signing in, which on a shared browser can be someone else's (GDPR Art. 15(4)); the chat carried into the account at sign-in is in mira_chat and mira_message",
     ]);
   });
 

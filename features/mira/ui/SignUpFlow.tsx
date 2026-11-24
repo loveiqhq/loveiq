@@ -83,6 +83,15 @@ const carriedChat = () =>
     .slice(-48);
 
 /**
+ * The copy Mira kept of that chat (24 Nov 2026, the chat route's `anonChat`), named with it, so
+ * it becomes the account's own chat instead of being kept twice.
+ */
+const keptChat = () => {
+  const id = local.chat()?.anonChat;
+  return id ? { anonChat: id } : {};
+};
+
+/**
  * "Check your inbox", kept in this tab for the code's hour, so a reload, Back or a tab the phone
  * discarded while the person read their mail comes back to the code field (round-2 ID-5).
  */
@@ -249,7 +258,7 @@ export default function SignUpFlow({
       };
       if (carry.length) {
         const res = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
-          body: { action: "carry", carry },
+          body: { action: "carry", carry, ...keptChat() },
         });
         if (res.ok) local.saveChat(null);
         if (res.data.memoryOff) return notKept(goOn);
@@ -305,7 +314,7 @@ export default function SignUpFlow({
         email,
         code,
         useAssessment,
-        ...(carry.length ? { carry } : {}),
+        ...(carry.length ? { carry, ...keptChat() } : {}),
       },
     });
     if (!res.ok) {
@@ -360,7 +369,7 @@ export default function SignUpFlow({
     };
     if (carry.length) {
       const moved = await miraApi<{ memoryOff?: boolean }>("/api/mira/auth", {
-        body: { action: "carry", carry },
+        body: { action: "carry", carry, ...keptChat() },
       });
       if (moved.ok) local.saveChat(null);
       if (moved.data.memoryOff) return notKept(goOn);

@@ -168,7 +168,10 @@ export function useReloadWhenRestored(): void {
   }, []);
 }
 
-/** The anonymous chat lives only in this browser until sign-up carries it into the account. */
+/**
+ * The anonymous chat lives in this browser until sign-up carries it into the account; from 24 Nov
+ * 2026 Mira also keeps a copy of it, under the tick that names that.
+ */
 const LOCAL_CHAT = "mira.chat.v1";
 const LOCAL_CONSENT = "mira.consent.v1";
 const LOCAL_STYLE = "mira.style.v1";
@@ -203,9 +206,16 @@ function write(key: string, value: unknown): void {
 
 /**
  * This browser's anonymous chat; `gate` is set once the free messages are used, `keepOff` once
- * "Not now" put the "Keep this chat" card away for this chat.
+ * "Not now" put the "Keep this chat" card away for this chat, `anonChat` once Mira kept it on the
+ * server (24 Nov 2026; the chat route's `anonChat`, which sign-up moves into the account).
  */
-type LocalChat = { turns: LocalTurn[]; freeLeft: number | null; gate?: boolean; keepOff?: boolean };
+type LocalChat = {
+  turns: LocalTurn[];
+  freeLeft: number | null;
+  gate?: boolean;
+  keepOff?: boolean;
+  anonChat?: string;
+};
 
 /** The first-message consent: its wording's version. */
 export type LocalConsent = { version: string };
