@@ -14,8 +14,9 @@ import { LANDING_PREFILL_QID, SURVEY_STATE_KEY } from "@features/survey/ui/hooks
 /**
  * Version C of the pain-point page (`pain_point_c`, LoveIQ Sync 24 Nov 2026): B's question,
  * "Right now, I feel satisfied with my sex life." (Q01002), loses more people than any other,
- * so Mark and Marcus picked Q10003, "I'm comfortable expressing what turns me on.", and
- * Marcus moved it under the film. B (`pain_point`) stays as it was, for `?variant=`.
+ * so Mark and Marcus picked Q10003, "I'm comfortable expressing what turns me on.", asked in
+ * the same place, and Marcus moved the privacy line under the film. B (`pain_point`) stays
+ * as it was, for `?variant=`.
  */
 class FakeObserver {
   constructor(public cb: IntersectionObserverCallback) {}
@@ -76,21 +77,26 @@ describe("version C's hero (pain_point_c)", () => {
     expect(screen.getByTestId("pp-hero").textContent).not.toContain(B_QUESTION);
   });
 
-  it("puts the question under the film, and the live and privacy lines after it", () => {
+  it("asks it where B asks its question, and puts the privacy line under the film", () => {
     renderC();
     const hero = screen.getByTestId("pp-hero");
     const media = within(hero).getByTestId("pp-hero-media");
     const film = within(media).getByTestId("hero-video");
-    const scale = within(media).getByRole("radiogroup", { name: C_QUESTION });
-    // In reading order, and so on a phone: the headline, the film, the question, the lines.
-    const h1 = within(hero).getByRole("heading", { level: 1 });
-    expect(follows(h1, film)).toBe(true);
-    expect(follows(film, scale)).toBe(true);
+    const scale = within(hero).getByRole("radiogroup", { name: C_QUESTION });
     const privacy = within(hero).getByRole("link", { name: /Trust Center/ });
-    expect(media.contains(privacy)).toBe(false);
-    expect(follows(scale, privacy)).toBe(true);
-    // The film is above it, so B's hairline over the question goes.
-    expect(hero.querySelector("#start")!.className).not.toContain("border-t");
+    // The question stays in the headline's column, under B's hairline; the privacy line
+    // moves into the film's column, under the film.
+    expect(media.contains(scale)).toBe(false);
+    expect(hero.querySelector("#start")!.className).toContain("border-t border-[#e9e6ee] pt-6");
+    expect(media.contains(privacy)).toBe(true);
+    // In reading order, and so on a phone: the headline, the question, the live line, the
+    // film, then the privacy line.
+    const h1 = within(hero).getByRole("heading", { level: 1 });
+    const live = hero.querySelector(".pp-live")!;
+    expect(follows(h1, scale)).toBe(true);
+    expect(follows(scale, live)).toBe(true);
+    expect(follows(live, film)).toBe(true);
+    expect(follows(film, privacy)).toBe(true);
   });
 
   it("keeps the question's answer as Q10003's, prefilled, and continues to the survey", () => {
@@ -143,8 +149,10 @@ describe("B's hero (pain_point), paused but still open for ?variant=", () => {
     expect(within(hero).queryByTestId("pp-hero-media")).toBeNull();
     expect(hero.getAttribute("data-hero-version")).toBeNull();
     expect(hero.querySelector("#start")!.className).toContain("border-t border-[#e9e6ee] pt-6");
-    // Its question comes before the film, as the board draws it.
+    // Its question and both lines come before the film, as the board draws them.
+    const film = within(hero).getByTestId("hero-video");
     const scale = within(hero).getByRole("radiogroup", { name: B_QUESTION });
-    expect(follows(scale, within(hero).getByTestId("hero-video"))).toBe(true);
+    expect(follows(scale, film)).toBe(true);
+    expect(follows(within(hero).getByRole("link", { name: /Trust Center/ }), film)).toBe(true);
   });
 });

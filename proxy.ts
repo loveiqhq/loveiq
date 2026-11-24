@@ -113,7 +113,7 @@ const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
 /**
  * Landing variant for a `/` request. **Round 4: a 50/50 split between "video" (round 3's
  * video page, the control) and, since the 2026-11-24 sync, "pain_point_c" (Marcus's
- * pain-point page with Q10003 under the film).** "pain_point" (the page as released, B)
+ * pain-point page asking Q10003).** "pain_point" (the page as released, B)
  * is paused: never assigned, and re-rolled like an earlier round's value.
  * See shared/experiments/landingVariant.ts for all four rounds.
  *

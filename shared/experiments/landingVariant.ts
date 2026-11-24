@@ -44,11 +44,11 @@
  * ROUND 4, VERSION C (LoveIQ Sync 2026-11-24): B's hero question, "Right now, I feel
  * satisfied with my sex life." (Q01002), loses more people than any other, so Mark and
  * Marcus swapped it for Q10003, "I'm comfortable expressing what turns me on." (almost no
- * drop-off, a short median time; Mark's DM of the same morning names the id), and Marcus
- * moved it under the film to calm the hero (Mark and Hana agreed). It runs as a new version
- * rather than a change to B, so B's numbers stay as they were (Mark):
+ * drop-off, a short median time; Mark's DM of the same morning names the id). It is asked
+ * where B asks its question, and the privacy line moves under the film (Marcus, 24 Nov). It
+ * runs as a new version rather than a change to B, so B's numbers stay as they were (Mark):
  *   - `"video"`        — arm A, the control, unchanged
- *   - `"pain_point_c"` — arm C, the pain-point page with Q10003 under the film
+ *   - `"pain_point_c"` — arm C, the pain-point page asking Q10003, privacy line under the film
  * `"pain_point"` (B) is paused: never assigned any more, its cookie re-rolled like an
  * earlier round's, and still rendered for `?variant=pain_point`. The experiment id stays
  * the same, as A does. C's readouts start at LANDING_TEST_START_DAY.
@@ -122,7 +122,7 @@ export const LANDING_PAIN_POINT_LAST_DAY = "2026-11-24";
 
 /**
  * The first whole (Berlin) reporting day of the CURRENT landing comparison, where its
- * readouts start: version C (the pain-point page with Q10003 under the film) against the
+ * readouts start: version C (the pain-point page asking Q10003) against the
  * video page. A against B kept its own days (LANDING_PAIN_POINT_START_DAY to
  * LANDING_PAIN_POINT_LAST_DAY); round 3's restart is LANDING_HERO_RESTART_DAY.
  * The axis trend and the conversion digest's landing blocks and verdict start here, and

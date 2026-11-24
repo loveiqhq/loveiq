@@ -87,7 +87,7 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // Round 4's two live arms (from LANDING_TEST_START_DAY), first so charts read them in
     // the test's order, A then C. `video` is V3 exactly as round 3 kept it, so it takes V3's
     // name and blue. `pain_point_c` is version C of Marcus's page (sync 24.11): V4 asking
-    // Q10003 under the film. It keeps V4's emerald, because the colour follows the page: B is
+    // Q10003. It keeps V4's emerald, because the colour follows the page: B is
     // retired and charts draw only live arms, so the two never share a chart, as `video`
     // keeps V3's blue beside the retired `white_video`. Checked 24.11 with the data-viz
     // validator: no new hue clears blue, orange and emerald at once (violets fail against
@@ -100,7 +100,7 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     },
     pain_point_c: {
       short: "Landing Page V4 C (Pain Points, Turn-Ons Question)",
-      long: "Landing Page V4 C: the pain-point page, asking about turn-ons under the film",
+      long: "Landing Page V4 C: the pain-point page, asking about turn-ons",
       color: SERIES.EMERALD,
     },
     // Round 4's B, the pain-point page as released (V4): paused at the 24.11 sync, when
