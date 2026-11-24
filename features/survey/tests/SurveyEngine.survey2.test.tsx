@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -237,6 +237,46 @@ describe("Survey 2.0's details screen", () => {
     await user.click(screen.getByRole("radio", { name: "Yes, keep learning" }));
     await user.click(screen.getByRole("radio", { name: "No, thanks" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+/**
+ * Classic asks the expert's sheet BEFORE 01005 and leaves the reader there to answer it; 2.0
+ * shows it AFTER 03012 (Mark's spot), so closing it carries on to the next screen, 08002.
+ */
+describe("Survey 2.0's expert sheet", () => {
+  const onLastBeforeIt = () =>
+    localStorage.setItem(
+      "loveiq-survey-answers",
+      JSON.stringify({
+        answers: { "03012": 4 },
+        currentIndex: at("03012"),
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+        orderArm: "survey2",
+      })
+    );
+  /** Past the sheet's guard against taps that land as it opens. */
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 450)));
+  const nextScreen = () => screen.findByRole("heading", { name: SCREENS[at("08002")]!.question });
+
+  it("opens after 03012, and Keep going carries on to 08002", async () => {
+    onLastBeforeIt();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["expert"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^next/i }));
+    const keepGoing = await screen.findByRole("button", { name: "Keep going" });
+    await settle();
+    fireEvent.click(keepGoing);
+    expect(await nextScreen()).toBeTruthy();
+  });
+
+  it("carries on to 08002 when closed with Esc too", async () => {
+    onLastBeforeIt();
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["expert"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^next/i }));
+    await screen.findByRole("button", { name: "Keep going" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(await nextScreen()).toBeTruthy();
   });
 });
 

@@ -69,6 +69,7 @@ import {
   sheetBeforeQuestion,
   desireTickedFor,
   rememberDesireTick,
+  placementFor,
   sheetsShownFor,
   surveySheetDef,
   type SheetContext,
@@ -1052,12 +1053,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
 
   // A sheet between questions: Keep going (and the map's Next) closes it and the survey
   // carries on. One shown before a question leaves the reader on that question to answer it.
+  // Which it was is this run's order's: classic shows the expert's before 01005, Survey 2.0
+  // after 03012 (placementFor).
+  const sheetWasBefore = useCallback(
+    (id: SurveySheetId) => placementFor(surveySheetDef(id), orderArm).kind === "before",
+    [orderArm]
+  );
   const handleSheetKeepGoing = useCallback(
     (extra?: { ticked?: boolean }) => {
       const id = closeSheet("keep_going", extra);
-      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+      if (id && !sheetWasBefore(id)) goNextRef.current();
     },
-    [closeSheet]
+    [closeSheet, sheetWasBefore]
   );
 
   // Closed without the button (the scrim, Esc, a swipe down). These sheets ask nothing, so it
@@ -1065,9 +1072,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const handleSheetDismiss = useCallback(
     (via: SheetDismissVia, extra?: { ticked?: boolean }) => {
       const id = closeSheet(via, extra);
-      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+      if (id && !sheetWasBefore(id)) goNextRef.current();
     },
-    [closeSheet]
+    [closeSheet, sheetWasBefore]
   );
 
   // The map's Previous (and its Esc): back to the question on screen, which can still change.
