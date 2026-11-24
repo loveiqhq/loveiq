@@ -136,7 +136,10 @@ describe("Survey 2.0's two 16016 screens", () => {
 
 describe("Survey 2.0's details screen", () => {
   const OPT_IN = surveyQuestions.find((q) => q.qId === "16015")!;
-  const { yes: YES } = optInLabels(OPT_IN.options);
+  const { yes: YES, no: NO } = optInLabels(OPT_IN.options);
+  /** Mark's board 2b: the newsletter switch that opens under the email. */
+  const SWITCH = { name: "Keep learning after your report" };
+  const COUNTRY = { name: "Which country do you live in?" };
   const onDetails = (answers: Record<string, unknown>) =>
     localStorage.setItem(
       "loveiq-survey-answers",
@@ -148,29 +151,27 @@ describe("Survey 2.0's details screen", () => {
         orderArm: "survey2",
       })
     );
+  const next = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole("button", { name: /^next/i }));
+  /** The miss-out sheet ignores taps for its first 400 ms. */
+  const pastTapGuard = () => new Promise((r) => setTimeout(r, 450));
 
-  it("steps through the fields on Next and submits the five answers under today's ids", async () => {
+  it("steps through the fields on Next, the switch under the email, and submits the five answers under today's ids", async () => {
     run.submit.mockClear();
     onDetails({});
     const user = userEvent.setup();
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
-    const next = () => user.click(screen.getByRole("button", { name: /^next/i }));
 
     await user.type(await screen.findByLabelText("Name or nickname"), "Sam");
-    await next();
+    await next(user);
     await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
-    await next();
-    await user.type(
-      await screen.findByRole("combobox", { name: "Which country do you live in?" }),
-      "Germany"
-    );
+    await user.click(await screen.findByRole("switch", SWITCH));
+    await next(user);
+    expect(screen.queryByRole("dialog")).toBeNull(); // switched on: no miss-out sheet
+    await user.type(await screen.findByRole("combobox", COUNTRY), "Germany");
     await user.click(await screen.findByRole("option", { name: /Germany/ }));
     await user.type(await screen.findByPlaceholderText("e.g. 10115"), "101");
-    await next();
-    expect(run.submit).not.toHaveBeenCalled(); // the newsletter answer is still missing
-    await screen.findByText("Choose yes or no to finish.");
-    await user.click(screen.getByRole("radio", { name: "Yes, keep learning" }));
-    await next();
+    await next(user);
 
     await waitFor(() => expect(run.submit).toHaveBeenCalledTimes(1));
     expect(run.submit.mock.calls[0]![0]).toMatchObject({
@@ -182,60 +183,58 @@ describe("Survey 2.0's details screen", () => {
     });
   });
 
-  it("closes the miss-out sheet back onto the page while a field is still open, with no error", async () => {
-    // The sheet opens on picking No, which can come before the country (the newsletter question
-    // shows once the email is in): Not now keeps the No and returns to the page.
+  it("asks 'Sure you want to miss out?' when the email is left with the switch off; Not now opens the country", async () => {
     run.submit.mockClear();
     const { trackSurveyFormError } = await import("@features/analytics/client");
     vi.mocked(trackSurveyFormError).mockClear();
-    onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
+    onDetails({ "00001": "Sam" });
     const user = userEvent.setup();
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
-    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
+    await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
+    expect(screen.queryByRole("combobox", COUNTRY)).toBeNull(); // the country opens through Next only
+    await next(user);
+
     const sheet = await screen.findByRole("dialog");
-    await new Promise((r) => setTimeout(r, 450)); // it ignores taps for its first 400 ms
+    expect(within(sheet).getByText(/Sure you want to/)).toBeTruthy();
+    await pastTapGuard();
     await user.click(within(sheet).getByRole("button", { name: "Not now" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    expect(screen.getByRole("radio", { name: "No, thanks" })).toHaveAttribute(
-      "aria-checked",
-      "true"
-    );
-    expect(screen.queryByText("Pick your country and add your postal code.")).toBeNull();
+    expect(await screen.findByRole("combobox", COUNTRY)).toBeTruthy();
+    await waitFor(() => expect(draft().answers["16015"]).toBe(NO));
     expect(vi.mocked(trackSurveyFormError)).not.toHaveBeenCalled();
     expect(run.submit).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox", { name: "Which country do you live in?" })).toBeTruthy();
   });
 
-  it("submits from the miss-out sheet once every field is filled", async () => {
-    run.submit.mockClear();
-    onDetails({
-      "00001": "Sam",
-      "00000": "sam.private@example.com",
-      "15001": "Germany",
-      "15002": "101",
-    });
+  it("takes the sheet's Yes as the switch turned on, and opens the country", async () => {
+    onDetails({ "00001": "Sam" });
     const user = userEvent.setup();
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
-    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
-    const sheet = await screen.findByRole("dialog");
-    await new Promise((r) => setTimeout(r, 450));
-    await user.click(within(sheet).getByRole("button", { name: "Not now" }));
+    await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
+    await next(user);
 
-    await waitFor(() => expect(run.submit).toHaveBeenCalledTimes(1));
-    expect(String(run.submit.mock.calls[0]![0]["16015"])).toMatch(/^no/i);
+    const sheet = await screen.findByRole("dialog");
+    await pastTapGuard();
+    await user.click(within(sheet).getByRole("button", { name: "Yes, I want to keep learning" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    expect(await screen.findByRole("combobox", COUNTRY)).toBeTruthy();
+    await waitFor(() => expect(draft().answers["16015"]).toBe(YES));
   });
 
-  it("offers the miss-out sheet once, when No is picked", async () => {
+  it("offers the miss-out sheet once: closed, the next Next opens the country", async () => {
     onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
     const user = userEvent.setup();
     render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
-    await user.click(await screen.findByRole("radio", { name: "No, thanks" }));
+    expect(await screen.findByRole("switch", SWITCH)).toHaveAttribute("aria-checked", "false");
+    await next(user);
     expect(await screen.findByRole("dialog")).toBeTruthy();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await user.click(screen.getByRole("radio", { name: "Yes, keep learning" }));
-    await user.click(screen.getByRole("radio", { name: "No, thanks" }));
+    expect(screen.getByRole("switch", SWITCH)).toBeTruthy(); // still on the email
+
+    await next(user);
+    expect(await screen.findByRole("combobox", COUNTRY)).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

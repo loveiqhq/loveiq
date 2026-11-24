@@ -437,18 +437,21 @@ live before checking in with us", Mark 2026-11-19).
 - **16016 in two screens.** `16016a` asks for up to two of the 13 areas; 16016 then lists only those
   areas' topics, under small headings, up to three. Going back and changing the areas drops the topics
   outside them. `16016a` is never submitted.
-- **One details page.** `00010`, the last screen, asks for the name, the email (with the privacy tip),
-  the newsletter question (Yes or No, nothing picked; No opens the miss-out sheet once), the country
-  and the postal code, one field at a time
-  ([`DetailsStep.tsx`](../features/survey/ui/questions/DetailsStep.tsx)). It writes today's ids
+- **One details page.** `00010`, the last screen, asks for the name, the email (with the privacy tip
+  until there is one), then the country and the postal code, one field at a time
+  ([`DetailsStep.tsx`](../features/survey/ui/questions/DetailsStep.tsx)). Once there is an email, the
+  newsletter switch opens under it (Mark's board 2b, 24 Nov 2026), off until the reader turns it on:
+  a switch that starts on is no valid consent. The country opens only on the Next that leaves the
+  email; with the switch off, that Next stores a No and first opens the miss-out sheet, once per run.
+  A step still to come opens only through Next, never by a tap on its row. It writes today's ids
   (00001, 00000, 16015, 15001, 15002), so emails, Slack, pricing and exports read them as before. An
   email the server refuses brings the reader back to this page with the email field open. `00010` is
   never submitted.
 - **Sheets.** The same six, at Mark's spots: Science after 02004, Trustpilot after 03013, the expert
   after 03012, Halfway after 14021, State of Desire after 16005 and the report map after 17002
   (`survey2Placement` in [`surveySheets.ts`](../features/survey/surveySheets.ts)).
-- **Consent records.** A 2.0 submission is filed under `CONSENT_TERMS_VERSION_SURVEY_2` and a
-  newsletter Yes under `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2`, both 2026-11-23
+- **Consent records.** A 2.0 submission is filed under `CONSENT_TERMS_VERSION_SURVEY_2` (2026-11-23)
+  and a newsletter Yes under `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (2026-11-24, the switch)
   ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A2 and A6).
 - **AP-Analytics.** A run is Survey 2.0's when its first questions follow 2.0's screens (it opens on
   10003 and asks the name last, so no classic run fits it). The Survey page gives it its own funnel
