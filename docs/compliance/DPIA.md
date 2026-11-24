@@ -651,6 +651,9 @@ take one of the M5 measures.
    improve Mira fits the consent and the notice, how a request without an account is answered
    (Art. 11(2): the notice points to "Delete this chat"), the 12 months counted per chat, and that
    deleting an account leaves the chats its browsers kept without carrying them unlinked rather than deleting them.
+   Also known: a chat kept from a browser whose cookies were later cleared can't be reached from the chat any more,
+   so only the 12-month limit deletes it; after "New chat", an earlier kept chat goes with the next kept chat's
+   "Delete this chat".
 
 ### 7.10 DPO's opinion (Art. 35(2))
 
