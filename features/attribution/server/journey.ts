@@ -843,6 +843,7 @@ export function journeyFromPurchase(input: {
   // runs and never for a buyer who paid before the survey, so a stamp means they met a half.
   const gateRevealArm = readGateRevealStamp(input.utmTracker);
   const giftArm = readGiftArm(input.giftArm);
+  const traffic = classifyTraffic(input.utmTracker);
 
   return {
     submissionId: input.submissionId,
@@ -865,7 +866,7 @@ export function journeyFromPurchase(input: {
       // Slack message never rendered this axis (see armFields).
       paywall: null,
     },
-    traffic: classifyTraffic(input.utmTracker),
+    traffic,
     device: input.deviceType,
     // The Stripe webhook carries no country — the session metadata never held
     // one — so this stays null rather than being guessed from the pricing tier.
@@ -902,14 +903,26 @@ export function journeyFromPurchase(input: {
     recordingSessionId: null,
     ...(gateRevealArm ? { gateCohort: true, gateRevealArm } : {}),
     ...(giftArm ? { giftArm } : {}),
+    // A pay-to-start buyer buying again: the page they paid on stands in for the landing
+    // page, as on #incoming-surveys. This builder reads no payment row, so the tracker's
+    // label says pay to start and its first page says which offer.
+    ...(isPayToStartTracker(input.utmTracker)
+      ? {
+          payToStart: true,
+          ...(traffic.landingPath?.startsWith("/sexual-archetype/initial")
+            ? { payToStartOffer: "pre" as const }
+            : {}),
+        }
+      : {}),
   };
 }
 
 /**
- * The Pricing 3.0 arm, only for a reader who finished the survey while the test ran. It ended
- * when the EUR 1.99 gate went on (PRICE_TEST_END_AT): every free survey finished since is
- * quoted list A3 by the gate, so their quote's "A3" is today's price list, not an arm. An
- * unknown finish keeps the arm, as before.
+ * The Pricing 3.0 arm, as a reader met it. The test ended when the EUR 1.99 gate went on
+ * (PRICE_TEST_END_AT): every free survey finished since is quoted list A3 by the gate, so
+ * "A3" after the end is today's price list, not an arm. Any other arm after the end is still
+ * what the reader was shown (the pricing falls back to the hashed arm when the gate's stamp is
+ * missing), so it stays. An unknown finish keeps the arm, as before.
  */
 function pricingArmWhileTested(
   submittedAt: string | null | undefined,
@@ -917,7 +930,7 @@ function pricingArmWhileTested(
 ): string | null {
   if (!arm || !submittedAt) return arm;
   const at = Date.parse(submittedAt);
-  return Number.isFinite(at) && at >= Date.parse(PRICE_TEST_END_AT) ? null : arm;
+  return Number.isFinite(at) && at >= Date.parse(PRICE_TEST_END_AT) && arm === "A3" ? null : arm;
 }
 
 /** E07's two arms only; anything else on the row is no arm. */

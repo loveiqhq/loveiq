@@ -1124,4 +1124,30 @@ describe("journeyFromPurchase", () => {
     });
     expect(journey.arms.pricing).toBe("B3");
   });
+
+  // After the end only A3 is today's list: a B3 quote (the hashed fallback) is what they saw.
+  it("keeps a B3 arm after the test ended, as the reader was still quoted it", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      experimentGroup: "B3",
+      submittedAt: "2026-11-22T21:44:46.000Z",
+    });
+    expect(journey.arms.pricing).toBe("B3");
+  });
+
+  // As on #incoming-surveys: the page they paid on stands in for the landing page.
+  it("marks a pay-to-start buyer's later purchase as pay to start, with the page they paid on", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      utmTracker: JSON.stringify({
+        journey: "pay_to_start",
+        landing_path: "/sexual-archetype/initial",
+      }),
+    });
+    expect(journey.payToStart).toBe(true);
+    expect(journey.payToStartOffer).toBe("pre");
+    expect(journeyFromPurchase(purchase).payToStart).toBeUndefined();
+  });
 });
