@@ -89,41 +89,48 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   utmTracker: string | null;
   /** When the survey was finished: Pricing 3.0's arm is named only for a survey before its end. */
   submittedAt: string | null;
-  /** The report's E07 gift email arm (`personal_report.initial_gift_arm`), once the cron drew it. */
-  giftArm: string | null;
 }> {
-  const none = { email: null, firstName: null, utmTracker: null, submittedAt: null, giftArm: null };
+  const none = { email: null, firstName: null, utmTracker: null, submittedAt: null };
   try {
-    // The report is embedded by its constraint's name, so PostgREST never has two relations
-    // between the tables to choose between.
+    // The receipt's address comes from here, so this reads only the survey and its user. The
+    // E07 arm, which only the Slack post needs, has a read of its own (lookupGiftArm): a
+    // failing embed here would have cost the buyer their receipt.
     const response = await supabaseServiceFetch(
       `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,created_date_time,` +
-        `app_user!fk_survey_submission_user(email,first_name),` +
-        `personal_report!fk_personal_report_submission(initial_gift_arm)&limit=1`
+        `app_user!fk_survey_submission_user(email,first_name)&limit=1`
     );
     if (!response.ok) return none;
 
-    type ReportRow = { initial_gift_arm?: string | null };
     const rows = (await response.json()) as Array<{
       utm_tracker?: string | null;
       created_date_time?: string | null;
       app_user?: { email?: string | null; first_name?: string | null } | null;
-      // An array for a one-to-many embed, an object if the column is ever made unique.
-      personal_report?: ReportRow[] | ReportRow | null;
     }>;
     const user = rows[0]?.app_user;
-    const embedded = rows[0]?.personal_report;
-    const report = Array.isArray(embedded) ? embedded[0] : embedded;
     return {
       email: user?.email?.toLowerCase().trim() || null,
       firstName: user?.first_name?.trim() || null,
       utmTracker: rows[0]?.utm_tracker ?? null,
       submittedAt: rows[0]?.created_date_time ?? null,
-      giftArm: report?.initial_gift_arm ?? null,
     };
   } catch (err) {
     logger.warn({ err, submissionId }, "lookupRecipientForSubmission failed");
     return none;
+  }
+}
+
+/** The report's E07 gift email arm, for the purchase's Slack post only. Best effort: null on any failure. */
+async function lookupGiftArm(submissionId: number): Promise<string | null> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=initial_gift_arm&limit=1`
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{ initial_gift_arm?: string | null }>;
+    return rows[0]?.initial_gift_arm ?? null;
+  } catch (err) {
+    logger.warn({ err, submissionId }, "lookupGiftArm failed");
+    return null;
   }
 }
 
@@ -1422,6 +1429,9 @@ async function syncCheckoutSessionPayment({
   const promotionSummary = getStripeCheckoutPromotionSummary(settledSession);
   const requestIp = getMetadataString(settledSession.metadata?.requestIp);
   const requestUserAgent = getMetadataString(settledSession.metadata?.requestUserAgent);
+  // The buyer's survey: who they are and its tracker. Read before the existing-payment check,
+  // not between it and the insert, so it never widens the window two runs can both pass.
+  const recipient = await lookupRecipientForSubmission(context.submissionId);
   const existingPayment = await fetchExistingPayment({
     checkoutSessionId: settledSession.id,
     stripeChargeId: charge?.id ?? null,
@@ -1453,10 +1463,6 @@ async function syncCheckoutSessionPayment({
           : null
       );
 
-  // The buyer's survey: who they are, its tracker and the report's E07 arm. Read once and
-  // before the row, so the row carries the EUR 1.99 page's half and the purchase ping reuses it.
-  const recipient = await lookupRecipientForSubmission(context.submissionId);
-
   const metadata = {
     archetype: unlockedArchetype,
     checkoutSessionId: settledSession.id,
@@ -1472,7 +1478,12 @@ async function syncCheckoutSessionPayment({
     // Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp (utm_tracker stays the
     // record, as for landingVariant), so a payment says which half its buyer met without a
     // join to the survey: Metabase and exports could not split the test (sync, 23 Nov 2026).
-    gateRevealArm: readGateRevealStamp(recipient.utmTracker),
+    // A re-run whose lookup failed keeps the half an earlier run (or the backfill) stored.
+    gateRevealArm:
+      readGateRevealStamp(recipient.utmTracker) ??
+      (typeof existingPayment?.metadata?.gateRevealArm === "string"
+        ? existingPayment.metadata.gateRevealArm
+        : null),
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
     pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,
@@ -1672,7 +1683,7 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
-        giftArm: recipient.giftArm,
+        giftArm: await lookupGiftArm(context.submissionId),
         internal: isInternalPayment,
         paymentId,
         plan,

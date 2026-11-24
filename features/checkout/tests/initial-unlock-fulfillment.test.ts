@@ -236,7 +236,10 @@ describe("a paid EUR 1.99 Core Archetype", () => {
   it("writes nothing on the report itself: no payment fields, no archetype tier", async () => {
     const seen = backend();
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
-    expect(seen.filter((s) => s.url.includes("/rest/v1/personal_report?"))).toEqual([]);
+    // Reads are fine (the Slack post reads the report's E07 arm); nothing writes to it.
+    expect(
+      seen.filter((s) => s.url.includes("/rest/v1/personal_report?") && s.method !== "GET")
+    ).toEqual([]);
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
     expect(unlockAllArchetypesForPersonalReport).not.toHaveBeenCalled();
   });
