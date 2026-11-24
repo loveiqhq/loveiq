@@ -39,7 +39,7 @@ const SLOW = 1.6;
 /**
  * The design's chapter groups under the charts: its own short names, by the id's chapter. Survey
  * 2.0's details page (00010: name, email, newsletter, country, postal code) is the reader's
- * details, its closing questions (17001 to 17003) feedback, and its 16016 areas screen (16016a)
+ * details, its closing questions (17001 to 17004) feedback, and its 16016 areas screen (16016a)
  * sits with 16016.
  */
 export function chapterBand(id: string): string {

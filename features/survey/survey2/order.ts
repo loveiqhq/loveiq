@@ -1,6 +1,7 @@
 /**
  * Survey 2.0's order (Mark's Survey Review, 19 Nov 2026: the "Working copy · new question order"
- * board on canvas LcXv9Kc2vTQR1jGhacobak, unchanged on 23 Nov).
+ * board on canvas LcXv9Kc2vTQR1jGhacobak; on 24 Nov he placed the expert question, 17004, right
+ * after the price question).
  *
  * Its own list, never derived from the classic one: a 2.0 draft resumes by its saved position in
  * THIS list, so it must not change while 2.0 is live. Two of its entries are screens, not
@@ -32,5 +33,5 @@ export const SURVEY_2_ORDER: readonly string[] = [
   "14021", "01005", "02001", "01006", "15003", "15004", "15005", "15006", "15007", "15008",
   "15009", "15010", "16001", "16002", "16005", "16006", "16007", SURVEY_2_AREAS_QID, "16016",
   "16017", "16018", "16011", "16012", "16013", "16014", "16019", "16020", "17001", "17002",
-  "17003", SURVEY_2_DETAILS_QID,
+  "17003", "17004", SURVEY_2_DETAILS_QID,
 ];

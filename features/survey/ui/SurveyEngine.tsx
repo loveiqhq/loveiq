@@ -41,6 +41,7 @@ import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questio
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
 import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
 import { type DetailsField } from "@features/survey/survey2/details";
+import { EXPERT_QID, expertPhoneValid, isExpertYes } from "@features/survey/survey2/expert";
 import DetailsStep, { type DetailsStepHandle } from "./questions/DetailsStep";
 
 /** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
@@ -531,6 +532,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     return currentAnswer.length <= question.maxSelections;
   }, [question, currentAnswer]);
 
+  // Survey 2.0's expert question: a Yes needs the number our expert calls (Mark's board turns
+  // Next solid at six digits); the field under the Yes says what is missing.
+  const isExpertPhoneValid = useMemo(() => {
+    if (question?.qId !== EXPERT_QID || !isExpertYes(currentAnswer)) return true;
+    return expertPhoneValid(otherText);
+  }, [question, currentAnswer, otherText]);
+
   /**
    * Why the last move on was refused. "missing": the footer says what is needed. "invalid":
    * the fields say what is wrong, as you type (forceValidation). Kept apart: a tap on the
@@ -671,7 +679,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     // A tap on the blocked Next lands here now (it used to be a disabled button), so an
     // unanswered required question must stop here too, not only at the keyboard's gate.
     const missingAnswer = !!question?.required && !hasAnswer;
-    if (missingAnswer || !isEmailValid || !isSelectionCountValid) {
+    if (missingAnswer || !isEmailValid || !isSelectionCountValid || !isExpertPhoneValid) {
       /**
        * A blocked Next is the only "form error" this survey can produce, and
        * until now nothing recorded it: `trackSurveyFormError` was defined in
@@ -692,7 +700,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       if (question?.qId) {
         trackSurveyFormError({
           question_id: question.qId,
-          error_kind: missingAnswer ? "required" : !isEmailValid ? "invalid_email" : "out_of_range",
+          error_kind: missingAnswer
+            ? "required"
+            : !isEmailValid
+              ? "invalid_email"
+              : !isExpertPhoneValid
+                ? "invalid_phone"
+                : "out_of_range",
         });
       }
       setBlocked(missingAnswer ? "missing" : "invalid");
@@ -825,6 +839,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     hasAnswer,
     isEmailValid,
     isSelectionCountValid,
+    isExpertPhoneValid,
     utmTracker,
     savePartial,
     markBase,
@@ -896,7 +911,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
    */
   const navigateFromHistory = useRef<(index: number) => void>(() => {});
   // What a Next press would accept here: the button's rule and goNext's own checks.
-  const mayMoveOn = (hasAnswer || !question?.required) && isEmailValid && isSelectionCountValid;
+  const mayMoveOn =
+    (hasAnswer || !question?.required) &&
+    isEmailValid &&
+    isSelectionCountValid &&
+    isExpertPhoneValid;
   const answerMissing = !!question?.required && !hasAnswer;
   useEffect(() => {
     navigateFromHistory.current = (index: number) => {
@@ -1104,7 +1123,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         return;
       }
       // "Other" waits for its text; a cleared country is no answer.
-      if (value === "" || (question.answerType === "single" && /^other\b/i.test(String(value)))) {
+      // No auto-advance onto a text box still to fill: "Other", or the number under a Yes on
+      // Survey 2.0's expert question.
+      if (
+        value === "" ||
+        (question.answerType === "single" &&
+          (/^other\b/i.test(String(value)) || (question.qId === EXPERT_QID && isExpertYes(value))))
+      ) {
         return;
       }
       autoAdvanceTimer.current = setTimeout(() => {
@@ -1346,7 +1371,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       />
     );
   }
-  const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
+  const canGoNext =
+    (hasAnswer && isEmailValid && isSelectionCountValid && isExpertPhoneValid) ||
+    !question.required;
   // Only for an answer that is missing: a wrong one (an email, too many picks) is already
   // explained at the field.
   const blockedHint =
@@ -1450,6 +1477,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                   onChange={handleChange}
                   otherText={otherText}
                   onOtherTextChange={handleOtherTextChange}
+                  forceValidation={blocked === "invalid"}
                 />
               )}
               {question.answerType === "multiple" && (

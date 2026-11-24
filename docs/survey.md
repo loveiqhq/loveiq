@@ -421,7 +421,7 @@ live before checking in with us", Mark 2026-11-19).
   in the draft (`orderArm: "survey2"`), as C13's order was: a classic draft keeps its order when the
   switch goes on, and a 2.0 draft keeps 2.0 when it goes off. A reader who paid before the survey
   (pay to start) gets the classic survey. The server stamps `question_order_arm = 'survey2'` on a
-  submission that answered 17001, 17002 or 17003 (`isSurvey2Run`).
+  submission that answered one of its own questions, 17001 to 17004 (`isSurvey2Run`).
 - **The short guide.** In place of the intro and its four slides: three cards under a "Short guide /
   before you start" header (three rules, the perspective of today, privacy) on steps 0 to 2
   ([`features/survey/ui/guide/`](../features/survey/ui/guide/)), then the consent on step 5 in 2.0's
@@ -429,12 +429,20 @@ live before checking in with us", Mark 2026-11-19).
   under the buttons. The page shows the guide and consent of the version the run's questions use. The
   cards record `guide_card_1..3`, `guide_back_2..3` and `guide_skip_1..3` in `funnel_event`;
   `consent_view`, `consent_back` and `survey_engine_mount` are recorded as before.
-- **The screens.** 61, in Mark's order (`SURVEY_2_ORDER` in
-  [`features/survey/survey2/order.ts`](../features/survey/survey2/order.ts)): his 60 entries with
+- **The screens.** 62, in Mark's order (`SURVEY_2_ORDER` in
+  [`features/survey/survey2/order.ts`](../features/survey/survey2/order.ts)): his 61 entries with
   16016 split in two. The landing card's question (01002) is dropped when it was answered there, as in
   the classic survey. 16009 is not asked. Three closing questions are new: 17001 (how much the reader
   enjoyed the survey, 1 to 7), 17002 (how much it helped them reflect, 1 to 7) and 17003 (a fair price
   for the full report, seven bands).
+- **The expert question.** 17004, right after the price question (Mark, 24 Nov 2026), offers a free
+  talk with one of our experts: Yes, Maybe later or No, the Yes tagged "Free". A Yes opens a phone
+  field under it (a country code, Germany's first, and the number; Marcus's ask), and Next waits for
+  six digits ([`expert.ts`](../features/survey/survey2/expert.ts)). The number travels as the
+  question's text box (`17004_other`), filed as the Yes answer's text; the server keeps it only with
+  a Yes. It is personal: AP's submission page shows it to staff, the team copy and AP's explorer mask
+  it, and the field is kept out of session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md)
+  A27).
 - **Simpler words, same answers.** Ten questions take Mark's wording in 2.0 only
   ([`copy.ts`](../features/survey/survey2/copy.ts)). A reworded option shows its new label but is
   stored, scored and matched under its old value (`optionLabels`), so scoring, boosts and the pricing
@@ -468,7 +476,9 @@ live before checking in with us", Mark 2026-11-19).
   everyone's survey.
 - **Apply before deploying.** `20261123215058_survey_2_feedback_questions.sql` (the three closing
   questions; on the production database since 23 Nov 2026, because the `survey-db-sync` check reads
-  it), `20261123130000_funnel_event_guide_steps.sql` (the guide's records) and
+  it), `20261124190000_survey_2_expert_question.sql` (the expert question; the same check needs it
+  on the production database before a push that carries it),
+  `20261123130000_funnel_event_guide_steps.sql` (the guide's records) and
   `20261123140000_ap_guide_facts.sql` (AP's reader for them). Each has its rollback in
   `supabase/rollbacks/`.
 

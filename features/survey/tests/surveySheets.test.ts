@@ -226,9 +226,9 @@ describe("Survey 2.0's sheet spots", () => {
     });
   });
 
-  it("puts the halfway sheet halfway: after screen 31 of 61", () => {
+  it("puts the halfway sheet halfway: after screen 31 of 62", () => {
     expect(index("14021") + 1).toBe(31);
-    expect(screens2).toHaveLength(61);
+    expect(screens2).toHaveLength(62);
   });
 
   it("leaves the classic spots as they were", () => {

@@ -67,8 +67,15 @@ module.exports = {
           "0%": { transform: "scale(1)", opacity: "0.55" },
           "75%, 100%": { transform: "scale(1.45)", opacity: "0" },
         },
+        // Survey 2.0's expert question (Mark's board "Q-new-expert"): the phone box drops in
+        // under a picked Yes.
+        "expert-phone-in": {
+          "0%": { opacity: "0", transform: "translateY(-6px)" },
+          "100%": { opacity: "1", transform: "none" },
+        },
       },
       animation: {
+        "expert-phone-in": "expert-phone-in 260ms ease-out both",
         "play-pulse": "play-pulse 2.2s cubic-bezier(0, 0, 0.2, 1) infinite",
       },
     },
