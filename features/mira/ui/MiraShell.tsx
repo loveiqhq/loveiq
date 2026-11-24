@@ -50,14 +50,17 @@ export function Wordmark({ home = false, onHome }: { home?: boolean; onHome?: ()
 /**
  * The soft coral, orchid and lavender cloud behind Mira's welcome (board V2): it blooms in, then
  * breathes slowly. Still for anyone who asks for less motion. On the dark theme it glows a little
- * stronger (--mira-cloud, tailwind.config.js), or the deep plum would swallow it.
+ * stronger (--mira-cloud, tailwind.config.js), or the deep plum would swallow it. Clipped in a
+ * layer of its own: wider than a phone, it would otherwise let its box scroll sideways, as a
+ * signed-out "Delete this chat" did (24 Nov 2026), cutting off the card and the composer.
  */
 export function MiraCloud({ className = "" }: { className?: string }) {
   return (
-    <div
-      aria-hidden="true"
-      className={`pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,calc(0.14*var(--mira-cloud,1))),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,calc(0.16*var(--mira-cloud,1))),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,calc(0.18*var(--mira-cloud,1))),rgba(149,142,246,0)_100%)] blur-[72px] motion-safe:animate-mira-cloud sm:h-[560px] sm:w-[1000px] ${className}`}
-    />
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        className={`absolute left-1/2 top-1/2 h-[460px] w-[680px] -translate-x-1/2 -translate-y-[46%] rounded-full bg-[radial-gradient(closest-side_at_28%_58%,rgba(254,104,57,calc(0.14*var(--mira-cloud,1))),rgba(254,104,57,0)_100%),radial-gradient(closest-side_at_52%_42%,rgba(191,102,217,calc(0.16*var(--mira-cloud,1))),rgba(191,102,217,0)_100%),radial-gradient(closest-side_at_74%_60%,rgba(149,142,246,calc(0.18*var(--mira-cloud,1))),rgba(149,142,246,0)_100%)] blur-[72px] motion-safe:animate-mira-cloud sm:h-[560px] sm:w-[1000px] ${className}`}
+      />
+    </div>
   );
 }
 

@@ -790,3 +790,18 @@ describe("the support lines, from any page (SET-9)", () => {
     expect(signedOut.props.country).toBeNull();
   });
 });
+
+// 24 Nov 2026: the cloud (680 px, wider than a phone) made the chat's clipped box scrollable
+// sideways, and a signed-out "Delete this chat" then scrolled it 37 px left, cutting off the
+// sign-up card and the composer. It is clipped in a layer of its own now.
+describe("MiraCloud", () => {
+  it("is clipped in a layer of its own, so it never widens the box it glows in", async () => {
+    const { MiraCloud } = await import("@features/mira/ui/MiraShell");
+    const { container } = render(<MiraCloud className="opacity-90" />);
+    const layer = container.firstElementChild!;
+    expect(layer.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(["absolute", "inset-0", "overflow-hidden", "pointer-events-none"])
+    );
+    expect(layer.firstElementChild!.className).toMatch(/w-\[680px\].*opacity-90/);
+  });
+});
