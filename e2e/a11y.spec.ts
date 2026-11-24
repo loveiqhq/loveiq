@@ -4,10 +4,11 @@ import AxeBuilder from "@axe-core/playwright";
 import { buildInitialGateFixture, buildPricingQuote, mockReport } from "./fixtures/report";
 
 const criticalRoutes = [
-  // Both landing arms by name: the video page (A) and the new pain-point page (B).
+  // Both live landing arms by name: the video page (A) and, since 24 Nov 2026, the
+  // pain-point page's version C (B, paused, is the same page with another hero question).
   // A bare "/" would be a coin flip in CI's production build (see playwright.config.ts).
   "/?variant=video",
-  "/?variant=pain_point",
+  "/?variant=pain_point_c",
   "/about",
   "/glossary",
   "/glossary/abandonment-insecurity",

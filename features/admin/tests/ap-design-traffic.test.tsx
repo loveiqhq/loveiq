@@ -334,14 +334,17 @@ describe("the Traffic builder, as the design reads", () => {
           ...facts.visits,
           { day: "2026-10-16", arm: "video", src: null, n: 10 },
           { day: "2026-10-16", arm: "pain_point", src: null, n: 10 },
+          { day: "2026-10-16", arm: "pain_point_c", src: null, n: 10 },
         ],
       },
     }).breakdowns.landing.rows.map((r) => [r.key, r.name, r.sub]);
     // One name per page, as the Landing page's table has it; the line under it says which test
     // and which version, so round 3's video page and round 4's can't be taken for each other.
+    // The video page is version A of the running test, C's.
     expect(names).toEqual(
       expect.arrayContaining([
-        ["video", "Video page (V3)", "Pain-point page vs. video page · A"],
+        ["video", "Video page (V3)", "Pain-point page C vs. video page · A"],
+        ["pain_point_c", "Pain-point page C (V4 C)", "Pain-point page C vs. video page · C"],
         ["pain_point", "Pain-point page (V4)", "Pain-point page vs. video page · B"],
         ["white_card", "Question card (V2)", "Video page vs. question card · A"],
         ["white_video", "Video page (V3)", "Video page vs. question card · B"],
@@ -357,7 +360,9 @@ describe("the Traffic builder, as the design reads", () => {
       "Direct / unattributed",
     ]);
     expect([...new Set(p.experiments.arms.map((a) => `${a.test}: ${a.note}`))]).toEqual([
-      "Pain-point page vs. video page: Since 17 Nov 2026 · live",
+      "Pain-point page C vs. video page: Since 25 Nov 2026 · live",
+      // B's days, paused on 24 Nov 2026 for version C.
+      "Pain-point page vs. video page: 18 Nov – 24 Nov 2026 · ended",
       // Registry #6's days, written as an ended test is.
       "Video page vs. question card: 14 Oct – 11 Nov 2026 · ended",
       "Pricing 3.0: Since 8 Oct 2026, 17:23 · live",

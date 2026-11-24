@@ -20,9 +20,10 @@ import {
  *   - `trackExperimentExposure` → canonical `experiment_exposure` event for
  *     LANDING_VARIANT_EXPERIMENT (no submission exists yet at landing time).
  *
- * Every landing renders this with the arm it was served: `video` / `pain_point` in the
- * current test (round 4), `white_video` for crawlers, and the retired values (`white`,
- * `white_card`, `white_prev`) only through `?variant=`. Required, so no landing can register a default
+ * Every landing renders this with the arm it was served: `video` / `pain_point_c` in the
+ * current test (round 4, since the 24 Nov 2026 sync), `white_video` for crawlers, and the
+ * retired values (`pain_point`, `white`, `white_card`, `white_prev`) only through
+ * `?variant=`. Required, so no landing can register a default
  * arm it was not served. The ref guards against React strict-mode double-mount in
  * dev so the counts stay accurate. A reader the EUR 1.99 gate sent back here is neither.
  */

@@ -258,31 +258,67 @@ describe("Traffic page builder", () => {
     expect(hero[1]!.why).toBe("Visits don't record the device.");
   });
 
-  it("reads round 4's test from its first day, A the video page, and says #6 has ended", () => {
+  it("reads version C's test from its first day, A the video page, and C the pain-point page C", () => {
     const p = traffic({
       filters: parseFilters(
-        { period: "custom", from: "2026-11-17", to: "2026-11-18" },
-        "2026-11-19"
+        { period: "custom", from: "2026-11-25", to: "2026-11-26" },
+        "2026-11-27"
       ),
       facts: factsFixture({
-        from: "2026-11-17",
-        to: "2026-11-18",
-        asOf: "2026-11-19",
+        from: "2026-11-25",
+        to: "2026-11-26",
+        asOf: "2026-11-27",
         visits: [
-          { day: "2026-11-17", arm: "video", src: null, n: 40 },
-          { day: "2026-11-17", arm: "pain_point", src: null, n: 50 },
-          // A re-rolled browser's round-3 stamp: in neither of #10's arms.
-          { day: "2026-11-17", arm: "white_video", src: null, n: 9 },
+          { day: "2026-11-25", arm: "video", src: null, n: 30 },
+          { day: "2026-11-25", arm: "pain_point_c", src: null, n: 35 },
+          // A browser that kept B's cookie past the switch: in neither of C's arms.
+          { day: "2026-11-25", arm: "pain_point", src: null, n: 3 },
         ],
         starts: [],
         subs: [],
       }),
-      today: "2026-11-19",
+      today: "2026-11-27",
     });
+    const c = p.experiments.arms.filter((a) => a.test === "Pain-point page C vs. video page");
+    expect(c.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
+      ["Video page (V3)", true, 30, "Since 25 Nov 2026 · live", false],
+      ["Pain-point page C (V4 C)", false, 35, "Since 25 Nov 2026 · live", false],
+    ]);
+    // B's test is over these days: nothing to read, and it says why.
+    const b = p.experiments.arms.filter((a) => a.test === "Pain-point page vs. video page");
+    expect(b.map((a) => [a.visitors, a.ended])).toEqual([
+      [null, true],
+      [null, true],
+    ]);
+    expect(b[1]!.why).toBe("Paused on 24 Nov 2026: version C of the pain-point page took its half");
+  });
+
+  it("reads round 4's test from its first day, A the video page, and says #6 has ended", () => {
+    const p = traffic({
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-18", to: "2026-11-19" },
+        "2026-11-20"
+      ),
+      facts: factsFixture({
+        from: "2026-11-18",
+        to: "2026-11-19",
+        asOf: "2026-11-20",
+        visits: [
+          { day: "2026-11-18", arm: "video", src: null, n: 40 },
+          { day: "2026-11-18", arm: "pain_point", src: null, n: 50 },
+          // A re-rolled browser's round-3 stamp: in neither of #10's arms.
+          { day: "2026-11-18", arm: "white_video", src: null, n: 9 },
+        ],
+        starts: [],
+        subs: [],
+      }),
+      today: "2026-11-20",
+    });
+    // B was paused on 24 Nov 2026 for version C: its test reads its own days, as ended.
     const t = p.experiments.arms.filter((a) => a.test === "Pain-point page vs. video page");
     expect(t.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
-      ["Video page (V3)", true, 40, "Since 17 Nov 2026 · live", false],
-      ["Pain-point page (V4)", false, 50, "Since 17 Nov 2026 · live", false],
+      ["Video page (V3)", true, 40, "18 Nov – 24 Nov 2026 · ended", true],
+      ["Pain-point page (V4)", false, 50, "18 Nov – 24 Nov 2026 · ended", true],
     ]);
     const hero = p.experiments.arms.filter((a) => a.test === "Video page vs. question card");
     expect(hero.map((a) => [a.note, a.visitors, a.ended])).toEqual([
@@ -372,8 +408,10 @@ describe("Traffic page builder", () => {
         .filter((a) => a.test !== "Email question")
         .map((a) => [a.test, a.ended ?? false])
     ).toEqual([
-      ["Pain-point page vs. video page", false],
-      ["Pain-point page vs. video page", false],
+      ["Pain-point page C vs. video page", false],
+      ["Pain-point page C vs. video page", false],
+      ["Pain-point page vs. video page", true],
+      ["Pain-point page vs. video page", true],
       ["Video page vs. question card", true],
       ["Video page vs. question card", true],
       ["Pricing 3.0", false],

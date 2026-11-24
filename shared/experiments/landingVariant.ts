@@ -39,7 +39,19 @@
  * New values re-roll every round-3 cookie and keep round 3's rows apart from round 4's.
  * Crawlers now get `white_video` (the video page, no longer an arm): the card page is
  * nobody's page any more, and the index should show what half of all visitors see.
- * Its readouts start at LANDING_TEST_START_DAY.
+ * A against B ran from LANDING_PAIN_POINT_START_DAY to LANDING_PAIN_POINT_LAST_DAY.
+ *
+ * ROUND 4, VERSION C (LoveIQ Sync 2026-11-24): B's hero question, "Right now, I feel
+ * satisfied with my sex life." (Q01002), loses more people than any other, so Mark and
+ * Marcus swapped it for Q10003, "I'm comfortable expressing what turns me on." (almost no
+ * drop-off, a short median time; Mark's DM of the same morning names the id), and Marcus
+ * moved it under the film to calm the hero (Mark and Hana agreed). It runs as a new version
+ * rather than a change to B, so B's numbers stay as they were (Mark):
+ *   - `"video"`        — arm A, the control, unchanged
+ *   - `"pain_point_c"` — arm C, the pain-point page with Q10003 under the film
+ * `"pain_point"` (B) is paused: never assigned any more, its cookie re-rolled like an
+ * earlier round's, and still rendered for `?variant=pain_point`. The experiment id stays
+ * the same, as A does. C's readouts start at LANDING_TEST_START_DAY.
  *
  * The variant flows through the funnel for attribution:
  *   - `LandingPageTracker` sets it as a GA4 user property and PostHog
@@ -55,7 +67,14 @@
 const isProduction = process.env.NODE_ENV === "production";
 
 export type LandingVariant =
-  "control" | "white" | "white_prev" | "white_card" | "white_video" | "video" | "pain_point";
+  | "control"
+  | "white"
+  | "white_prev"
+  | "white_card"
+  | "white_video"
+  | "video"
+  | "pain_point"
+  | "pain_point_c";
 
 /**
  * Bumped every round so GA4 and PostHog keep the tests apart: `landing-white-ab` is
@@ -89,22 +108,37 @@ export const LANDING_HERO_RESTART_DAY = "2026-10-14";
 export const LANDING_HERO_LAST_DAY = "2026-11-11";
 
 /**
- * The first whole (Berlin) reporting day of round 4, where its readouts start. Round 3's
- * restart is LANDING_HERO_RESTART_DAY.
- * The axis trend and the conversion digest's landing blocks and verdict start here, and
- * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads round 4
- * (registry #10) from its own start date. Set for a production deploy on Mon 2026-11-16:
- * if the release reaches production later, move this to the first whole day after its
- * deploy, and the moment below with it.
+ * Round 4's first whole (Berlin) reporting day, registry #10's start: the video page (A)
+ * against the pain-point page (B), released on Tue 2026-11-17.
  */
-export const LANDING_TEST_START_DAY = "2026-11-17";
+export const LANDING_PAIN_POINT_START_DAY = "2026-11-18";
+
+/**
+ * B's last day in the readouts: the day before version C's first whole day. B is paused
+ * there, so A against B is read from LANDING_PAIN_POINT_START_DAY to this day, and never
+ * moves again. Move it with LANDING_TEST_START_DAY if C's release slips.
+ */
+export const LANDING_PAIN_POINT_LAST_DAY = "2026-11-24";
+
+/**
+ * The first whole (Berlin) reporting day of the CURRENT landing comparison, where its
+ * readouts start: version C (the pain-point page with Q10003 under the film) against the
+ * video page. A against B kept its own days (LANDING_PAIN_POINT_START_DAY to
+ * LANDING_PAIN_POINT_LAST_DAY); round 3's restart is LANDING_HERO_RESTART_DAY.
+ * The axis trend and the conversion digest's landing blocks and verdict start here, and
+ * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads a test
+ * from its registry entry's own start date. Set for a production deploy on Tue 2026-11-24:
+ * if the release reaches production later, move this to the first whole day after its
+ * deploy, with the moment below and LANDING_PAIN_POINT_LAST_DAY.
+ */
+export const LANDING_TEST_START_DAY = "2026-11-25";
 
 /**
  * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin (CET, UTC+1, in
  * November). Not the deploy's own moment, which is not known when this is written: a cut a
- * few hours late loses a few hours of readers, a cut too early would count round 3's.
+ * few hours late loses a few hours of readers, a cut too early would count B's.
  */
-export const LANDING_TEST_START_AT = "2026-11-16T23:00:00Z";
+export const LANDING_TEST_START_AT = "2026-11-24T23:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +
@@ -128,25 +162,26 @@ export function isLandingVariant(value: string | null | undefined): value is Lan
     value === "white_card" ||
     value === "white_video" ||
     value === "video" ||
-    value === "pain_point"
+    value === "pain_point" ||
+    value === "pain_point_c"
   );
 }
 
 /**
- * The two arms currently in the test, in reading order (A, then B). `control`, `white`,
- * `white_prev`, `white_card` and `white_video` are history: valid on stored rows and for
- * `?variant=`, never assigned.
+ * The two arms currently in the test, in reading order (A, then C). `pain_point` (B, paused
+ * on 2026-11-24), `control`, `white`, `white_prev`, `white_card` and `white_video` are
+ * history: valid on stored rows and for `?variant=`, never assigned.
  */
 export const LANDING_VARIANT_ARMS = [
   "video",
-  "pain_point",
+  "pain_point_c",
 ] as const satisfies readonly LandingVariant[];
 
 export type LiveLandingArm = (typeof LANDING_VARIANT_ARMS)[number];
 
 /** True only for an arm the current test assigns — not for a valid but retired value. */
 export function isLiveLandingArm(value: string | null | undefined): value is LiveLandingArm {
-  return value === "video" || value === "pain_point";
+  return value === "video" || value === "pain_point_c";
 }
 
 /**

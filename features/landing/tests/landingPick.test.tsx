@@ -15,11 +15,13 @@ import { LANDING_PREFILL_QID, SURVEY_STATE_KEY } from "@features/survey/ui/hooks
  * page's hero and closing cards, and the new page's hero question. Every reader of the
  * hook sees the same pick, read from the survey draft the answer is saved into.
  */
-const Reader: React.FC<{ id: string; picks?: Array<[number, LandingPickLocation]> }> = ({
-  id,
-  picks = [],
-}) => {
-  const { selected, pick } = useLandingPick();
+const Reader: React.FC<{
+  id: string;
+  picks?: Array<[number, LandingPickLocation]>;
+  /** The question the page asks: the video page's (Q01002) when unset. */
+  qId?: string;
+}> = ({ id, picks = [], qId }) => {
+  const { selected, pick } = useLandingPick(qId);
   return (
     <div>
       <span data-testid={id}>{selected === null ? "none" : String(selected)}</span>
@@ -71,6 +73,29 @@ describe("useLandingPick — one answer to question 1 per landing page", () => {
     expect(screen.getByTestId("a").textContent).toBe("5");
   });
 
+  it("keeps the pain-point page's version C on its own question, Q10003", () => {
+    // Sync 24 Nov 2026: version C asks Q10003. Its pick is that question's answer, prefilled
+    // so the survey skips it, and never shows as question 1's.
+    render(
+      <>
+        <Reader id="c" qId="10003" picks={[[2, "hero"]]} />
+        <Reader id="q1" />
+      </>
+    );
+    press("pick 2 hero");
+    expect(screen.getByTestId("c").textContent).toBe("2");
+    expect(screen.getByTestId("q1").textContent).toBe("none");
+    const draft = JSON.parse(localStorage.getItem(SURVEY_STATE_KEY) ?? "{}");
+    expect(draft.answers).toEqual({ "10003": 2 });
+    expect(draft.prefilled).toEqual(["10003"]);
+    expect(trackLandingCardAnswer).toHaveBeenLastCalledWith({
+      location: "hero",
+      changed: false,
+      value: 2,
+      question: "10003",
+    });
+  });
+
   it("reports the first pick as new and a later one as a change", () => {
     render(
       <Reader
@@ -86,12 +111,14 @@ describe("useLandingPick — one answer to question 1 per landing page", () => {
       location: "hero",
       changed: false,
       value: 3,
+      question: LANDING_PREFILL_QID,
     });
     press("pick 4 footer");
     expect(trackLandingCardAnswer).toHaveBeenLastCalledWith({
       location: "footer",
       changed: true,
       value: 4,
+      question: LANDING_PREFILL_QID,
     });
   });
 });
