@@ -341,7 +341,7 @@ describe("a walk through Survey 2.0", () => {
   const answers = persona.answers as Record<string, unknown>;
 
   it("recognises every 2.0 screen by its heading, its own two too", () => {
-    expect(screens).toHaveLength(61);
+    expect(screens).toHaveLength(62);
     for (const s of screens) expect(findQuestion([s.question])?.qId, s.qId).toBe(s.qId);
   });
 
