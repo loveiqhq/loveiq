@@ -98,3 +98,69 @@ export async function grantGiftedInitialUnlock({
     return null;
   }
 }
+
+/**
+ * EUR 0 chosen on the price test's "Choose your price" page (shared/experiments/gatePriceArm.ts,
+ * logic/choosePrice.ts): the initial unlock at the reader's own price, written as the gift is,
+ * a succeeded EUR 0 `initial` row, so it opens what the EUR 1.99 does and carries its EUR 10
+ * credit ("Every price includes €10 off": `getReportCredits` reads `priceOption`). Money readers
+ * skip it as every EUR 0 row; AP's price test counts it as a free claim. No Stripe, no receipt.
+ *
+ * POST /api/stripe/initial-unlock writes it only for an owner the gate stops, in the half that
+ * chooses, so it never opens a report for anyone else. Written once: a second call finds the
+ * report's initial unlock and returns its id. Null when it could not be read or written.
+ */
+export async function grantChosenFreeInitialUnlock({
+  personalReportId,
+  userId,
+  email,
+  landingVariant,
+}: {
+  personalReportId: number;
+  userId: number | null;
+  email: string | null;
+  landingVariant: string | null;
+}): Promise<number | null> {
+  try {
+    const existing = await serviceFetch(
+      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&metadata->>plan=eq.${INITIAL_UNLOCK_PLAN}&status=eq.succeeded&select=id&limit=1`
+    );
+    if (!existing.ok) throw new Error(`free_lookup_failed:${existing.status}`);
+    const found = (await existing.json()) as Array<{ id: number }>;
+    if (found[0]) return found[0].id;
+
+    const now = new Date().toISOString();
+    const created = await serviceFetch("/rest/v1/payment", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        amount: 0,
+        currency: "EUR",
+        description: `LoveIQ ${INITIAL_UNLOCK_TITLE} (chosen price, EUR 0)`,
+        is_test: isStaffEmail(email),
+        metadata: {
+          plan: INITIAL_UNLOCK_PLAN,
+          priceOption: "free",
+          currentPrice: "0.00",
+          // Its half, as a sale's row carries it (fulfillment): only that half can choose.
+          gateRevealArm: "choose",
+          landingVariant,
+          // Where it was taken: the gate, as the EUR 1.99's own `unlockSource`.
+          unlockSource: "report_gate",
+        },
+        payment_date_time: now,
+        personal_report_id: personalReportId,
+        status: "succeeded",
+        user_id: userId,
+        created_date_time: now,
+        updated_date_time: now,
+      }),
+    });
+    if (!created.ok) throw new Error(`free_write_failed:${created.status}`);
+    const rows = (await created.json()) as Array<{ id: number }>;
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    logger.warn({ err, personalReportId }, "initial-unlock: the EUR 0 choice could not be written");
+    return null;
+  }
+}

@@ -14,6 +14,7 @@ vi.mock("@features/survey/ui/SurveyPage", () => ({ default: () => null }));
 vi.mock("@features/pay-to-start/server/entitlement", () => ({ findEntitlementByToken: vi.fn() }));
 vi.mock("@features/survey/server/sheetSwitches", () => ({
   surveySheetsForVisit: async () => [],
+  gatePriceTestForVisit: async () => false,
 }));
 vi.mock("@features/survey/server/survey2Switch", () => ({
   survey2ForVisit: (order: unknown) => mockSurvey2(order),

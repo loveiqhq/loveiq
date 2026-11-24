@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { trackInitialGateCta } from "@features/analytics/client";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { GATE_PICK_PRICE_EVENT } from "../gateChoosePriceContent";
 import { useExitCloseRequest } from "../useGateBack";
 import { useInitialUnlockCheckout } from "../useInitialUnlockCheckout";
 import PaygateExitPage, { type ExitCtaPlace } from "./PaygateExitPage";
@@ -45,14 +47,24 @@ export default function PreUnlockExit({
   // as the page goes, as a phone's Back always was (`browser_back`).
   useExitCloseRequest(true, onBack);
 
+  // The price test's "Choose your price" half (shared/experiments/gatePriceArm.ts): this page names
+  // no price, and its two buttons go back to the gate's picker (Fatih, 24 Nov 2026), recorded as
+  // pressed here as the EUR 1.99's are, with no checkout of their own.
+  const choosePrice = gate.priceArm === "choose";
+  const toPicker = useRef(false);
+
   // The link sat at the top of the gate; the exit page opens at its own top too, and going back
-  // (the arrow or "Maybe later") finds the gate where the reader left it.
+  // (the arrow or "Maybe later") finds the gate where the reader left it, or, after "Choose your
+  // price", at its picker once the gate is on screen again (InitialUnlockGate).
   useEffect(() => {
     const gateY = window.scrollY;
     const path = window.location.pathname;
     window.scrollTo({ top: 0, behavior: "instant" });
     return () => {
       if (window.location.pathname === path) window.scrollTo({ top: gateY, behavior: "instant" });
+      if (toPicker.current) {
+        window.requestAnimationFrame(() => window.dispatchEvent(new Event(GATE_PICK_PRICE_EVENT)));
+      }
     };
   }, []);
 
@@ -66,13 +78,23 @@ export default function PreUnlockExit({
       creditCents={gate.creditCents}
       guaranteeDays={gate.guaranteeDays}
       surveyMinutes={gate.surveyMinutes ?? null}
+      choosePrice={choosePrice}
       seed={String(gate.submissionId ?? "preview")}
       checkout={{
         busy: state.status === "redirecting",
         error: state.status === "error" ? state.message : null,
         errorPlace,
       }}
-      onUnlock={(place) => void start(place === "card" ? "exit_card" : "exit_sticky")}
+      onUnlock={(place) => {
+        const exitPlace = place === "card" ? "exit_card" : "exit_sticky";
+        if (choosePrice) {
+          trackInitialGateCta({ place: exitPlace });
+          toPicker.current = true;
+          onBack();
+          return;
+        }
+        void start(exitPlace);
+      }}
       onBack={onBack}
       onLeave={onBack}
     />

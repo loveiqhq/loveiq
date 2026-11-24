@@ -103,4 +103,14 @@ describe("the report menu's offer during the tour", () => {
     expect(tourMenuOffer(false, undefined)).toBe("today");
     expect(tourMenuOffer(false, "nonsense")).toBe("today");
   });
+
+  // The price test that replaced the 50/50 (24 Nov 2026): today's page's half is told its
+  // EUR 1.99, as its survey's sheets told it; the half that chooses its price is told none.
+  it("in the price test: EUR 1.99 for today's page's half, no price for the half that chooses", () => {
+    expect(tourMenuOffer(false, undefined, "fixed")).toBe("price");
+    expect(tourMenuOffer(false, undefined, "choose")).toBe("today");
+    // It retired the reveal: its half wins over a reveal or a 50/50 half.
+    expect(tourMenuOffer(true, "reveal", "choose")).toBe("today");
+    expect(tourMenuOffer(false, "control", "nonsense")).toBe("price");
+  });
 });

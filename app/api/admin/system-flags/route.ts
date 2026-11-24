@@ -66,6 +66,8 @@ const ALLOWED_KEYS = new Set([
   "survey_sheet_report_map",
   // The EUR 1.99 page that shows the Core Archetype before payment.
   "report_gate_archetype_reveal",
+  // The EUR 1.99 page's price test: half the readers choose their price, EUR 0 included.
+  "report_gate_choose_price",
 ]);
 
 export async function GET() {

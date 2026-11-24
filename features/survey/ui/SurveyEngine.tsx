@@ -65,6 +65,7 @@ import {
 } from "@features/survey/optInSheet";
 import {
   forgetSheetsShown,
+  GATE_TEST_SHEETS,
   rememberSheetShown,
   sheetAfterQuestion,
   sheetBeforeQuestion,
@@ -137,6 +138,13 @@ interface SurveyEngineProps {
    * screens. A draft keeps the order it began in (resolveDraftQuestionOrderArm). Off by default.
    */
   survey2?: boolean;
+  /**
+   * The EUR 1.99 page's price test runs (shared/experiments/gatePriceArm.ts): the half that will
+   * choose its price meets neither sheet that tells what EUR 1.99 opens (GATE_TEST_SHEETS), as
+   * nothing in either is true of its page (Fatih, 24 Nov 2026); today's page's half meets them
+   * in their EUR 1.99 words, as before.
+   */
+  gatePrice?: boolean;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -191,6 +199,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
   survey2 = false,
+  gatePrice = false,
 }) => {
   // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
   // meets every sheet, and the halfway sheet and the report map tell the EUR 1.99 offer in the
@@ -205,11 +214,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         assignGateRevealArm(getSessionId()))
   );
   const sheetOffer: LightMapOffer = revealArm === "reveal" ? "light" : "price";
+  // The price test's half that chooses its price is the same session half (gatePriceArm.ts).
+  const choosesPrice = gatePrice && revealArm === "reveal";
   // A sheet that would draw nothing is never opened, or it would hold the move with nothing
   // on screen: the Trustpilot sheet needs the site's Trustpilot switch and its numbers.
   const sheets = useMemo(
-    () => sheetsOffered.filter((id) => id !== "trustpilot" || trustpilotSheetReady()),
-    [sheetsOffered]
+    () =>
+      sheetsOffered.filter(
+        (id) =>
+          (id !== "trustpilot" || trustpilotSheetReady()) &&
+          !(choosesPrice && GATE_TEST_SHEETS.has(id))
+      ),
+    [sheetsOffered, choosesPrice]
   );
   const {
     answers,

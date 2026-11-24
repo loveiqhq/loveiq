@@ -11,9 +11,15 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { grantGiftedInitialUnlock } from "@features/report/server/initialUnlockGift";
+import {
+  grantChosenFreeInitialUnlock,
+  grantGiftedInitialUnlock,
+} from "@features/report/server/initialUnlockGift";
 import { initialUnlockGiftEmail } from "@features/report/server/emails/initial-unlock-gift";
-import { initialUnlockSourceOf } from "@features/report/server/personalReport";
+import {
+  initialUnlockPaidCentsOf,
+  initialUnlockSourceOf,
+} from "@features/report/server/personalReport";
 
 const json = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response;
@@ -125,6 +131,137 @@ describe("initialUnlockSourceOf", () => {
   it("is nothing without an initial unlock", () => {
     expect(initialUnlockSourceOf([])).toBeNull();
     expect(initialUnlockSourceOf([full, { metadata: null }])).toBeNull();
+  });
+
+  // The price test's EUR 0 is no more paid than the gift: "You earned it with your €1.99
+  // unlock" would not be true of it.
+  it("is the gift for EUR 0 chosen on Choose your price", () => {
+    const free = { metadata: { plan: "initial", priceOption: "free", currentPrice: "0.00" } };
+    expect(initialUnlockSourceOf([free])).toBe("gift");
+    expect(initialUnlockSourceOf([free, bought])).toBe("paid");
+  });
+});
+
+describe("initialUnlockPaidCentsOf", () => {
+  const row = (metadata: Record<string, unknown>) => ({
+    metadata: { plan: "initial", ...metadata },
+  });
+
+  it("is the price the reader paid: EUR 1.99 on today's page, the price chosen on the other", () => {
+    expect(initialUnlockPaidCentsOf([row({ currentPrice: "1.99" })])).toBe(199);
+    expect(initialUnlockPaidCentsOf([row({ currentPrice: "6.99", priceOption: "fair" })])).toBe(
+      699
+    );
+    expect(initialUnlockPaidCentsOf([row({ currentPrice: "4.50", priceOption: "custom" })])).toBe(
+      450
+    );
+  });
+
+  it("reads the newest paid row first (payments come newest first)", () => {
+    expect(
+      initialUnlockPaidCentsOf([
+        row({ currentPrice: "19.99", priceOption: "support" }),
+        row({ currentPrice: "1.99" }),
+      ])
+    ).toBe(1999);
+  });
+
+  it("is nothing for the gift, EUR 0, a row naming no price, or another plan", () => {
+    expect(initialUnlockPaidCentsOf([row({ gifted: "e07", currentPrice: "0.00" })])).toBeNull();
+    expect(
+      initialUnlockPaidCentsOf([row({ priceOption: "free", currentPrice: "0.00" })])
+    ).toBeNull();
+    expect(initialUnlockPaidCentsOf([row({ journey: "pay_to_start" })])).toBeNull();
+    expect(
+      initialUnlockPaidCentsOf([{ metadata: { plan: "full_report", currentPrice: "29.99" } }])
+    ).toBeNull();
+  });
+});
+
+/** EUR 0 chosen on the price test's Choose your price page: no Stripe, a EUR 0 initial row. */
+describe("grantChosenFreeInitialUnlock", () => {
+  function routeFree({ existing }: { existing: unknown[] }) {
+    const posted: Record<string, unknown>[] = [];
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          posted.push(JSON.parse(options.body ?? "{}") as Record<string, unknown>);
+          return json([{ id: 401 }], 201);
+        }
+        if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) return json(existing);
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+    return posted;
+  }
+
+  it("writes one EUR 0 initial payment, marked as the free pick of the choosing half", async () => {
+    const posted = routeFree({ existing: [] });
+    const id = await grantChosenFreeInitialUnlock({
+      personalReportId: 9,
+      userId: 7,
+      email: "reader@example.com",
+      landingVariant: "video",
+    });
+    expect(id).toBe(401);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toEqual(
+      expect.objectContaining({
+        amount: 0,
+        currency: "EUR",
+        status: "succeeded",
+        description: "LoveIQ Your Core Archetype (chosen price, EUR 0)",
+        personal_report_id: 9,
+        user_id: 7,
+        is_test: false,
+        metadata: {
+          plan: "initial",
+          priceOption: "free",
+          currentPrice: "0.00",
+          gateRevealArm: "choose",
+          landingVariant: "video",
+          unlockSource: "report_gate",
+        },
+      })
+    );
+  });
+
+  it("adds nothing when the report holds its initial unlock already", async () => {
+    const posted = routeFree({ existing: [{ id: 377 }] });
+    const id = await grantChosenFreeInitialUnlock({
+      personalReportId: 9,
+      userId: 7,
+      email: "reader@example.com",
+      landingVariant: "white",
+    });
+    expect(id).toBe(377);
+    expect(posted).toHaveLength(0);
+    const lookup = String(mockFetchWithTimeout.mock.calls[0]![0]);
+    expect(lookup).toContain("metadata->>plan=eq.initial");
+    expect(lookup).toContain("status=eq.succeeded");
+  });
+
+  it("marks a staff reader's as a test, and gives nothing back when the write fails", async () => {
+    const posted = routeFree({ existing: [] });
+    await grantChosenFreeInitialUnlock({
+      personalReportId: 9,
+      userId: 7,
+      email: "fh@loveiq.org",
+      landingVariant: null,
+    });
+    expect(posted[0]).toEqual(expect.objectContaining({ is_test: true }));
+
+    mockFetchWithTimeout.mockImplementation(async (_url: string, options?: { method?: string }) =>
+      options?.method === "POST" ? json({}, 500) : json([])
+    );
+    expect(
+      await grantChosenFreeInitialUnlock({
+        personalReportId: 9,
+        userId: 7,
+        email: "reader@example.com",
+        landingVariant: null,
+      })
+    ).toBeNull();
   });
 });
 

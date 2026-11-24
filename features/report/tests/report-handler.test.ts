@@ -1119,9 +1119,10 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
     allowCsrf();
     allowRateLimit();
     // The paywall is enforced; Mark's archetype-on-the-gate page (gateReveal.ts) is off, as
-    // it is in production until the EUR 1.99 change.
+    // it is in production until the EUR 1.99 change, and so is the price test that replaced it.
     mockIsFeatureEnabled.mockImplementation(
-      async (key: string) => key !== "report_gate_archetype_reveal"
+      async (key: string) =>
+        key !== "report_gate_archetype_reveal" && key !== "report_gate_choose_price"
     );
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({ ...NOTHING_BOUGHT });
     vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
@@ -1180,11 +1181,17 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   type RevealBody = {
     reveal?: { archetype: string; aspects: Array<{ locked: boolean }> };
     revealArm?: string;
+    priceArm?: string;
   };
+  // Every switch on but the price test's: Mark's 50/50 as it ran before the price test.
+  const revealOnly = () =>
+    mockIsFeatureEnabled.mockImplementation(
+      async (key: string) => key !== "report_gate_choose_price"
+    );
 
   // Mark, 13 Nov: his page runs as a 50/50 test, decided by the survey's session.
   it("shows the new page's half its archetype and cards when report_gate_archetype_reveal is on", async () => {
-    mockIsFeatureEnabled.mockResolvedValue(true);
+    revealOnly();
     submittedUnder(sessionIn("reveal"));
     const body = (await (await meetGet()).json()) as RevealBody;
     expect(body.reveal?.archetype).toBe(SCORING.v5_primary_archetype || SCORING.primary_archetype);
@@ -1194,15 +1201,38 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
   });
 
   it("keeps today's page for the other half, and tells the gate which half it is", async () => {
-    mockIsFeatureEnabled.mockResolvedValue(true);
+    revealOnly();
     submittedUnder(sessionIn("control"));
     const body = (await (await meetGet()).json()) as RevealBody;
     expect(body.reveal).toBeUndefined();
     expect(body.revealArm).toBe("control");
   });
 
-  it("keeps today's page for a submission with no session, in the control half", async () => {
+  // Marcus, 24 Nov: "Replace & Retire the 'Core Archetype shown' pre-payment wall … with the new
+  // 'Choose your price'": the same half picks its price, and nobody meets the reveal any more.
+  it("gives the reveal's half Choose your price, and no archetype, while the price test runs", async () => {
     mockIsFeatureEnabled.mockResolvedValue(true);
+    submittedUnder(sessionIn("reveal"));
+    const body = (await (await meetGet()).json()) as RevealBody;
+    expect(body.priceArm).toBe("choose");
+    expect(body.reveal).toBeUndefined();
+    expect(body.revealArm).toBeUndefined();
+    expect(mockIsFeatureEnabled).toHaveBeenCalledWith("report_gate_choose_price", false);
+  });
+
+  it("keeps today's page for the other half of the price test, and tells the gate so", async () => {
+    mockIsFeatureEnabled.mockImplementation(
+      async (key: string) => key !== "report_gate_archetype_reveal"
+    );
+    submittedUnder(sessionIn("control"));
+    const body = (await (await meetGet()).json()) as RevealBody;
+    expect(body.priceArm).toBe("fixed");
+    expect(body.reveal).toBeUndefined();
+    expect(body.revealArm).toBeUndefined();
+  });
+
+  it("keeps today's page for a submission with no session, in the control half", async () => {
+    revealOnly();
     const body = (await (await meetGet()).json()) as RevealBody;
     expect(body.reveal).toBeUndefined();
     expect(body.revealArm).toBe("control");

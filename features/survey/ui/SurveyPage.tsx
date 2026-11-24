@@ -1349,6 +1349,8 @@ interface SurveyPageProps {
    * 2.0 screens. Off by default.
    */
   survey2?: boolean;
+  /** The EUR 1.99 page's price test runs (app/survey/page.tsx): see SurveyEngine's `gatePrice`. */
+  gatePrice?: boolean;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -1357,6 +1359,7 @@ const SurveyPage: FC<SurveyPageProps> = ({
   journey = null,
   sheets = NO_SHEETS,
   survey2 = false,
+  gatePrice = false,
 }) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine (Survey 2.0: 0–2 = the short guide)
   const [step, setStep] = useState(0);
@@ -1597,6 +1600,7 @@ const SurveyPage: FC<SurveyPageProps> = ({
         payToStart={journey !== null}
         sheets={sheets}
         survey2={survey2}
+        gatePrice={gatePrice}
       />
     );
   }
