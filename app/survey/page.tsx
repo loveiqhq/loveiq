@@ -6,7 +6,7 @@ import { readPrepaidToken, type SurveyJourney } from "@features/pay-to-start/log
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { findEntitlementByToken } from "@features/pay-to-start/server/entitlement";
 import { recordSurveyPageView } from "@shared/observability/recordVisit";
-import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { gatePriceTestForVisit, surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
 import { survey2ForVisit } from "@features/survey/server/survey2Switch";
 import { PRIVATE_PAGE_METADATA } from "@shared/seo/private-page";
 
@@ -67,7 +67,11 @@ async function payToStartJourney(cookieHeader: string | null): Promise<SurveyJou
 
 interface SurveyRouteProps {
   /** Next always passes it; a direct call (features/pay-to-start/tests) may not. */
-  searchParams?: Promise<{ sheets?: string | string[]; order?: string | string[] }>;
+  searchParams?: Promise<{
+    sheets?: string | string[];
+    order?: string | string[];
+    price?: string | string[];
+  }>;
 }
 
 export default async function Page({ searchParams }: SurveyRouteProps = {}) {
@@ -89,14 +93,17 @@ export default async function Page({ searchParams }: SurveyRouteProps = {}) {
     after(() => recordSurveyPageView(newSurveyVariant, utmSource));
   }
 
-  const params = searchParams ?? Promise.resolve({ sheets: undefined, order: undefined });
-  const [journey, sheets, survey2] = await Promise.all([
+  const params =
+    searchParams ?? Promise.resolve({ sheets: undefined, order: undefined, price: undefined });
+  const [journey, sheets, survey2, gatePrice] = await Promise.all([
     payToStartJourney(headersList.get("cookie")),
     // The sheets between questions: their switches, or a staging preview (?sheets=all).
     params.then((p) => surveySheetsForVisit(p.sheets)),
     // Survey 2.0: its switch, or a staging preview (?order=survey2). One answer for the guide and
     // for the order a fresh run is asked, so the two never mix.
     params.then((p) => survey2ForVisit(p.order)),
+    // The EUR 1.99 page's price test: its switch, or a staging preview (?price=1).
+    params.then((p) => gatePriceTestForVisit(p.price)),
   ]);
-  return <SurveyPage journey={journey} sheets={sheets} survey2={survey2} />;
+  return <SurveyPage journey={journey} sheets={sheets} survey2={survey2} gatePrice={gatePrice} />;
 }

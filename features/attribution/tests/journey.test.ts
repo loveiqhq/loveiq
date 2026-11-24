@@ -508,6 +508,11 @@ describe("buildSubmissionJourney", () => {
       ["E07's gift", pay(0, { plan: "initial", gifted: "e07" }), "gift"],
       ["the unlock-feedback grant", pay(0, { source: UNLOCK_FEEDBACK_SOURCE }), "feedback"],
       ["a 100% code", pay(0, { plan: "initial", unlockSource: "report_gate" }), "code"],
+      [
+        "EUR 0 chosen on Choose your price",
+        pay(0, { plan: "initial", unlockSource: "report_gate", priceOption: "free" }),
+        "chosen",
+      ],
       ["the team's own purchase", pay(29.99, {}, { is_test: true }), "test"],
     ])("says what a free unlock was: %s", async (_label, payment, kind) => {
       route({ payments: [payment] });

@@ -71,7 +71,9 @@ export type SystemFlagKey =
   | "report_gate_archetype_reveal"
   // Survey 2.0 (Mark's Survey Review, 19 Nov 2026): fresh runs get the new guide and the 2.0
   // screens. Off until Mark and Marcus check in.
-  | "survey_2";
+  | "survey_2"
+  // The EUR 1.99 page's price test (24 Nov 2026): half the readers choose their price. Off.
+  | "report_gate_choose_price";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

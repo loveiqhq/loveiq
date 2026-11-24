@@ -97,6 +97,20 @@ function test2(c: [n: number, paid: number], r: [n: number, paid: number]) {
 beforeEach(() => mockFetchAllRows.mockReset());
 
 describe("AP Payment · #11, the €1.99 page test", () => {
+  // 24 Nov 2026: the price test that replaced #11 stamps its own halves under the same key.
+  // Its finishers are in neither of #11's halves, whatever their session's hash would say.
+  it("leaves the price test's finishers out of both halves", () => {
+    const subs = [finisher(1), finisher(2), finisher(3)];
+    const rows = [
+      row(1, "control"),
+      { ...row(2, "reveal"), utm_tracker: JSON.stringify({ gate_reveal_arm: "choose" }) },
+      { ...row(3, "control"), utm_tracker: JSON.stringify({ gate_reveal_arm: "fixed" }) },
+    ];
+    const b = build(subs, rows);
+    expect(half(b, "control").finishers).toBe(1);
+    expect(half(b, "reveal").finishers).toBe(0);
+  });
+
   it("counts from the switch-on: a survey finished a second before it is left out", () => {
     const subs = [
       finisher(1, { at: at(START - 1000) }),

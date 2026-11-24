@@ -84,6 +84,35 @@ describe("the initial unlock's credit", () => {
     expect(await getReportCredits(165)).toEqual({ upgradeCents: 0, initialCents: 1000 });
   });
 
+  // Marcus's board: "Every price includes €10 off", EUR 0 chosen on Choose your price too.
+  it("is EUR 10 for EUR 0 chosen on the price test's Choose your price page", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([
+        {
+          amount: 0,
+          refund_amount: null,
+          currency: "EUR",
+          metadata: { plan: "initial", priceOption: "free", currentPrice: "0.00" },
+        },
+      ])
+    );
+    expect(await getReportCredits(165)).toEqual({ upgradeCents: 0, initialCents: 1000 });
+  });
+
+  it("is EUR 10 for a chosen price too, which counts toward All 14 as paid", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      json([
+        {
+          amount: 19.99,
+          refund_amount: null,
+          currency: "EUR",
+          metadata: { plan: "initial", priceOption: "support", currentPrice: "19.99" },
+        },
+      ])
+    );
+    expect(await getReportCredits(165)).toEqual({ upgradeCents: 1999, initialCents: 1000 });
+  });
+
   it("counts only succeeded, non-test rows, and no other EUR 0 initial row", async () => {
     mockFetchWithTimeout.mockResolvedValueOnce(
       json([{ amount: 0, refund_amount: null, currency: "EUR", metadata: { plan: "initial" } }])

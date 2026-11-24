@@ -14,11 +14,14 @@ import {
   readGateSeen,
   readPaygateExitRows,
 } from "@features/admin/server/ap/paygate-exits";
-import { readGateTestRows } from "@features/admin/server/ap/gate-reveal-test";
+import {
+  GATE_PRICE_FROM,
+  readPriceTestChoices,
+  readPriceTestRows,
+} from "@features/admin/server/ap/gate-price-test";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { readInitialUnlockGateSwitch } from "@features/report/server/initialGateState";
-import { GATE_REVEAL_START_AT } from "@shared/experiments/gateRevealArm";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
@@ -62,39 +65,48 @@ export async function GET(request: Request) {
   const fit = peopleBlocked(filters, CHECKOUT_FROM) ? null : fitMonths(filters.to);
 
   try {
-    const [facts, uplift, fitFacts, gateOn, exitRows, gateSeen, gateRows] = await Promise.all([
-      fetchFactsFor(filters.from, filters.to, filters),
-      upliftFlag(),
-      fit && fit.from < filters.from ? fetchFactsFor(fit.from, fit.to, filters) : null,
-      // The report's EUR 1.99 gate, for its payment type's line: null when the switch can't be
-      // read (the gate itself reads that as off), and the line says so.
-      readInitialUnlockGateSwitch().catch((err: unknown) => {
-        logger.warn({ err }, "AP payment: the EUR 1.99 gate's switch could not be read");
-        return null;
-      }),
-      // The paygate's exit pages, none before 28 Oct 2026: their section says so when this
-      // fails, and the page still loads.
-      filters.to < EXITS_FROM
-        ? null
-        : readPaygateExitRows(filters.from).catch((err: unknown) => {
-            logger.warn({ err }, "AP payment: the exit pages' events could not be read");
-            return null;
-          }),
-      // Who saw the EUR 1.99 page: what the exit page's ways in are shares of (blank without).
-      filters.to < EXITS_FROM
-        ? null
-        : readGateSeen(filters.from).catch((err: unknown) => {
-            logger.warn({ err }, "AP payment: the EUR 1.99 page's viewers could not be read");
-            return null;
-          }),
-      // #11's halves, from the day it began: its section says so when this fails.
-      filters.to < reportingDay(new Date(GATE_REVEAL_START_AT))
-        ? null
-        : readGateTestRows(filters.from).catch((err: unknown) => {
-            logger.warn({ err }, "AP payment: #11's halves could not be read");
-            return null;
-          }),
-    ]);
+    const priceTestInRange = filters.to >= GATE_PRICE_FROM;
+    const [facts, uplift, fitFacts, gateOn, exitRows, gateSeen, priceRows, priceChoices] =
+      await Promise.all([
+        fetchFactsFor(filters.from, filters.to, filters),
+        upliftFlag(),
+        fit && fit.from < filters.from ? fetchFactsFor(fit.from, fit.to, filters) : null,
+        // The report's EUR 1.99 gate, for its payment type's line: null when the switch can't be
+        // read (the gate itself reads that as off), and the line says so.
+        readInitialUnlockGateSwitch().catch((err: unknown) => {
+          logger.warn({ err }, "AP payment: the EUR 1.99 gate's switch could not be read");
+          return null;
+        }),
+        // The paygate's exit pages, none before 28 Oct 2026: their section says so when this
+        // fails, and the page still loads.
+        filters.to < EXITS_FROM
+          ? null
+          : readPaygateExitRows(filters.from).catch((err: unknown) => {
+              logger.warn({ err }, "AP payment: the exit pages' events could not be read");
+              return null;
+            }),
+        // Who saw the EUR 1.99 page: what the exit page's ways in are shares of (blank without).
+        filters.to < EXITS_FROM
+          ? null
+          : readGateSeen(filters.from).catch((err: unknown) => {
+              logger.warn({ err }, "AP payment: the EUR 1.99 page's viewers could not be read");
+              return null;
+            }),
+        // The price test's halves and the choosing half's picks, from the day it could begin:
+        // its section says so when either fails.
+        priceTestInRange
+          ? readPriceTestRows(filters.from).catch((err: unknown) => {
+              logger.warn({ err }, "AP payment: the price test's halves could not be read");
+              return null;
+            })
+          : null,
+        priceTestInRange
+          ? readPriceTestChoices(filters.from).catch((err: unknown) => {
+              logger.warn({ err }, "AP payment: the price test's picks could not be read");
+              return null;
+            })
+          : null,
+      ]);
     return NextResponse.json(
       buildPayment({
         facts,
@@ -106,7 +118,8 @@ export async function GET(request: Request) {
         gateOn,
         exitRows,
         gateSeen,
-        gateRows,
+        priceRows,
+        priceChoices,
       }),
       {
         headers: NO_STORE,

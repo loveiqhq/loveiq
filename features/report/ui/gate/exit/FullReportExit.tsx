@@ -18,6 +18,8 @@ export interface FullReportExitProps {
   /** The reader's own full-report quote, the EUR 10 already off (creditKind "initial"). */
   quote: ReportPriceQuoteSnapshot;
   unlockSource: InitialUnlockSource | null;
+  /** What the initial unlock cost them, in cents; null for today's EUR 1.99. */
+  paidCents?: number | null;
   /** On the way to Stripe: both buttons wait. Failures show in the report's own hand-off. */
   busy: boolean;
   onUnlock: () => void;
@@ -38,6 +40,7 @@ export interface FullReportExitProps {
 export default function FullReportExit({
   quote,
   unlockSource,
+  paidCents = null,
   busy,
   onUnlock,
   onBack,
@@ -77,7 +80,7 @@ export default function FullReportExit({
         }}
         creditCents={creditCents}
         guaranteeDays={INITIAL_UNLOCK_GUARANTEE_DAYS}
-        initialPriceCents={INITIAL_UNLOCK_PRICE_CENTS}
+        initialPriceCents={paidCents ?? INITIAL_UNLOCK_PRICE_CENTS}
         unlockSource={unlockSource}
         seed={seed}
         checkout={{ busy, error: null, errorPlace: null }}

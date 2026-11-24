@@ -12,6 +12,7 @@ import {
   TRUSTPILOT_FALLBACK_URL,
 } from "@shared/ui/trustpilot/config";
 import { PaymentLogos } from "../../PaymentLogos";
+import { GATE_CHOOSE_COPY } from "../gateChoosePriceContent";
 import { euros } from "../gateContent";
 import ExitReasons from "./ExitReasons";
 import {
@@ -54,6 +55,12 @@ export interface PaygateExitPageProps {
   unlockSource?: InitialUnlockSource | null;
   /** Main only: the reader's minutes on the survey, for the box under the guarantee. */
   surveyMinutes?: number | null;
+  /**
+   * Main only, the price test's "Choose your price" half (shared/experiments/gatePriceArm.ts):
+   * no EUR 1.99 anywhere on the page. The card's price and both buttons say "Choose your price",
+   * and `onUnlock` takes the reader back to the gate's picker (Fatih, 24 Nov 2026).
+   */
+  choosePrice?: boolean;
   /**
    * The reader's submission, or "preview": it seeds the reasons' order. Neither page binds it
    * to the events: the gate stays mounted under its exit page and keeps it bound, and the full
@@ -152,6 +159,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
   initialPriceCents = 199,
   unlockSource = null,
   surveyMinutes = null,
+  choosePrice = false,
   seed,
   checkout,
   onUnlock,
@@ -161,6 +169,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
 }) => {
   const offerTitleId = useId();
   const full = stage === "full";
+  const choose = !full && choosePrice;
 
   // The page takes the focus as it opens, at its own top: the link that opened it went with the
   // gate (pre) or sits under the layer (full). A container, so no ring; Tab finds the arrow.
@@ -250,7 +259,10 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
         unlockSource === "gift" ? "gift" : "paid",
         initialPriceCents
       )
-    : EXIT_COPY.offer.pre.features(creditCents);
+    : choose
+      ? // The gate's card in this half leads with the board's one-time line, so this one does too.
+        [GATE_CHOOSE_COPY.card.oneTime, ...EXIT_COPY.offer.pre.features(creditCents)]
+      : EXIT_COPY.offer.pre.features(creditCents);
 
   return (
     <div className="pge-shell">
@@ -401,7 +413,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
 
         <ExitReasons
           stage={stage}
-          priceCents={full ? initialPriceCents : offer.priceCents}
+          priceCents={full ? initialPriceCents : choose ? null : offer.priceCents}
           seed={seed}
           random={random}
         />
@@ -418,11 +430,19 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
                 offer.strikeCents ? "pge-offer__price pge-offer__price--struck" : "pge-offer__price"
               }
             >
-              <span className="pge-offer__amount">{euros(offer.priceCents)}</span>
-              {offer.strikeCents ? (
-                <s className="pge-offer__strike">{euros(offer.strikeCents)}</s>
-              ) : null}
-              <span className="pge-offer__suffix">{EXIT_COPY.offer.priceSuffix}</span>
+              {choose ? (
+                <span className="pge-offer__amount pge-offer__amount--choose">
+                  {EXIT_COPY.choose.price}
+                </span>
+              ) : (
+                <>
+                  <span className="pge-offer__amount">{euros(offer.priceCents)}</span>
+                  {offer.strikeCents ? (
+                    <s className="pge-offer__strike">{euros(offer.strikeCents)}</s>
+                  ) : null}
+                  <span className="pge-offer__suffix">{EXIT_COPY.offer.priceSuffix}</span>
+                </>
+              )}
             </div>
             <button
               type="button"
@@ -431,7 +451,11 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
               aria-busy={checkout.busy}
               onClick={() => unlock("card")}
             >
-              {full ? EXIT_COPY.offer.full.cta : EXIT_COPY.offer.pre.cta}
+              {full
+                ? EXIT_COPY.offer.full.cta
+                : choose
+                  ? EXIT_COPY.choose.cta
+                  : EXIT_COPY.offer.pre.cta}
               <ArrowRightIcon />
             </button>
             {checkout.error && checkout.errorPlace === "card" ? (
@@ -490,7 +514,7 @@ const PaygateExitPage: FC<PaygateExitPageProps> = ({
             aria-busy={checkout.busy}
             onClick={() => unlock("sticky")}
           >
-            {EXIT_COPY.sticky.cta(offer.priceCents)}
+            {choose ? EXIT_COPY.choose.cta : EXIT_COPY.sticky.cta(offer.priceCents)}
           </button>
           <span className="pge-sticky__line">
             {EXIT_COPY.sticky.guarantee(guaranteeDays)} ·{" "}

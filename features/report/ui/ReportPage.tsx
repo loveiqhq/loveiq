@@ -2948,6 +2948,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     previewGift: isPreview && searchParams.get("gift") === "1",
     // `&reveal=1` with a gate: Mark's redesigned EUR 1.99 page (logic/gateReveal.ts).
     previewReveal: isPreview && searchParams.get("reveal") === "1",
+    // `&price=1` with a gate: the price test's "Choose your price" page; `&price=0` its other half.
+    previewPrice: isPreview
+      ? searchParams.get("price") === "1"
+        ? "1"
+        : searchParams.get("price") === "0"
+          ? "0"
+          : null
+      : null,
     // Only the V4 page asks for V4's chapters: no other version draws them, and a
     // locked reader's copy of them is the real one under the blur (final review 26.09).
     v4: isV4,
@@ -4030,7 +4038,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
                 tourFirst
                   ? tourMenuOffer(
                       isGateReveal(data.initialGate?.reveal),
-                      data.initialGate?.revealArm
+                      data.initialGate?.revealArm,
+                      data.initialGate?.priceArm
                     )
                   : "today"
               }
@@ -4238,6 +4247,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         <FullReportExit
           quote={fullReportQuote}
           unlockSource={data.initialUnlockSource ?? null}
+          paidCents={data.initialUnlockPaidCents ?? null}
           busy={checkoutHandoff?.status === "redirecting"}
           // Back from Stripe lands where the plan picker was opened, not on the layer's button.
           onUnlock={() => beginCheckout("full_report", primaryArchetype)}

@@ -619,6 +619,12 @@
   line-height: 1;
 }
 
+/* The price test's "Choose your price" half: its words in the price's place, one line on a phone. */
+.pge-offer__amount--choose {
+  font-size: 30px;
+  line-height: 1.15;
+}
+
 .pge-offer__strike {
   font-size: 18px;
   line-height: 24px;

@@ -17,7 +17,9 @@ export const GateStickyBar: FC<{
   onUnlock: (place: GateCtaPlace) => void;
   priceCents: number;
   state: InitialUnlockCheckoutState;
-}> = ({ guaranteeDays, onUnlock, priceCents, state }) => {
+  /** The button's words where they follow the reader's pick (the price test's "Choose your price"). */
+  ctaLabel?: string;
+}> = ({ guaranteeDays, onUnlock, priceCents, state, ctaLabel }) => {
   const busy = state.status === "redirecting";
   const failed = state.status === "error" && state.place === "sticky" ? state.message : null;
   const barRef = useRef<HTMLDivElement>(null);
@@ -78,7 +80,7 @@ export const GateStickyBar: FC<{
           aria-busy={busy || undefined}
           onClick={() => onUnlock("sticky")}
         >
-          {GATE_COPY.sticky.cta(priceCents)}
+          {ctaLabel ?? GATE_COPY.sticky.cta(priceCents)}
           <span aria-hidden="true">{" →"}</span>
         </button>
       </div>

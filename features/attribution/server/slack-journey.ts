@@ -353,6 +353,8 @@ function freeUnlockText(kind: FreeUnlock): string {
       return `${euros(INITIAL_UNLOCK_PRICE_CENTS)} unlock gifted`;
     case "feedback":
       return "full report for feedback";
+    case "chosen":
+      return "chose €0 on Choose your price";
     case "test":
       return "team test";
     case "code":

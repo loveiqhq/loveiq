@@ -2,6 +2,7 @@ import { getOfferDefinition } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_CREDIT_CENTS } from "@features/report/logic/initialUnlock";
 import type { GateReveal } from "@features/report/logic/gateReveal";
 import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { GatePriceArm } from "@shared/experiments/gatePriceArm";
 
 /**
  * The forced EUR 1.99 gate after the survey (Notion "RFD > Pre-Unlock", Figma Report-3.0
@@ -92,6 +93,13 @@ export interface InitialUnlockGatePayload {
    * switch is on: the gate counts its exposure in both halves. Absent while no test runs.
    */
   revealArm?: GateRevealArm | null;
+  /**
+   * Which half of the price test that replaced that 50/50 the reader is in
+   * (shared/experiments/gatePriceArm.ts), while its switch is on: `choose` picks the price
+   * (logic/choosePrice.ts) on Marcus's "Choose your price" page, `fixed` meets today's page.
+   * Absent while it doesn't run; never beside `reveal`, which it retired.
+   */
+  priceArm?: GatePriceArm | null;
 }
 
 /** Below this a run is a skim, above it the survey was left open: neither is time "invested". */
@@ -133,12 +141,14 @@ export function buildInitialUnlockGatePayload({
   surveyMinutes = null,
   reveal = null,
   revealArm = null,
+  priceArm = null,
 }: {
   reportToken: string | null;
   submissionId: number | null;
   surveyMinutes?: number | null;
   reveal?: GateReveal | null;
   revealArm?: GateRevealArm | null;
+  priceArm?: GatePriceArm | null;
 }): InitialUnlockGatePayload {
   return {
     gate: "initial_unlock",
@@ -152,6 +162,7 @@ export function buildInitialUnlockGatePayload({
     surveyMinutes,
     ...(reveal ? { reveal } : {}),
     ...(revealArm ? { revealArm } : {}),
+    ...(priceArm ? { priceArm } : {}),
   };
 }
 

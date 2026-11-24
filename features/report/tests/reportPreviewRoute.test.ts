@@ -130,6 +130,31 @@ describe("GET /api/report/preview — the gate with the archetype on it", () => 
   });
 });
 
+/** `&price=1` / `&price=0`: the price test that replaced the 50/50 (24 Nov 2026), either half. */
+describe("GET /api/report/preview — the gate in the price test", () => {
+  type Gate = { priceArm?: string; revealArm?: string; reveal?: unknown };
+
+  it("shows the Choose your price half with price=1, and no reveal, as its switch does", async () => {
+    const gate = (await get("archetype=Spark%20Seeker&v4=1&gate=1&price=1&reveal=1")).json as Gate;
+    expect(gate.priceArm).toBe("choose");
+    expect(gate.reveal).toBeUndefined();
+    expect(gate.revealArm).toBeUndefined();
+  });
+
+  it("shows today's page's half with price=0, and the same in the tour's gate", async () => {
+    expect(
+      ((await get("archetype=Spark%20Seeker&v4=1&gate=1&price=0")).json as Gate).priceArm
+    ).toBe("fixed");
+    const tour = (await get("archetype=Spark%20Seeker&v4=1&gate=tour&price=1")).json as {
+      initialGate?: Gate;
+    };
+    expect(tour.initialGate?.priceArm).toBe("choose");
+    expect(
+      ((await get("archetype=Spark%20Seeker&v4=1&gate=1")).json as Gate).priceArm
+    ).toBeUndefined();
+  });
+});
+
 /** `?plan=initial`: the report the EUR 1.99 journey lands in (features/report/logic/initialUnlock.ts). */
 describe("GET /api/report/preview — the initial unlock", () => {
   it("opens the Core Archetype card and the Summary in full, and nothing else", async () => {

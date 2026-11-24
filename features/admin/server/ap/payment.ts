@@ -62,7 +62,8 @@ import {
 } from "./metrics";
 import { genderShort, relationshipShort } from "./traffic";
 import { buildPaygateExits, type ExitEventRow, type PaygateExitsBlock } from "./paygate-exits";
-import { buildGateTest, type GateTestBlock, type GateTestRow } from "./gate-reveal-test";
+import { buildPriceTest, type PriceTestBlock, type PriceTestRow } from "./gate-price-test";
+import type { ChoosePriceOption } from "@features/report/logic/choosePrice";
 
 export interface OverTimeRow {
   label: string;
@@ -249,8 +250,11 @@ export interface PaymentPayload extends PageHead {
   elasticity: Elasticity;
   /** The paygate's exit pages (paygate-exits.ts): reached, why not, pressed, paid after. */
   exits: PaygateExitsBlock;
-  /** #11, Mark's new EUR 1.99 page against today's (gate-reveal-test.ts), per half. */
-  gateTest: GateTestBlock;
+  /**
+   * The pre-unlock price test, EUR 1.99 against "Choose your price" (gate-price-test.ts), per
+   * half and per pick. It replaced #11 (the Core Archetype shown) and took its section.
+   */
+  priceTest: PriceTestBlock;
 }
 
 /** The per-visitor price switch, as system_flags holds it; null when it couldn't be read. */
@@ -479,8 +483,10 @@ export function buildPayment(input: {
   exitRows?: ExitEventRow[] | null;
   /** The surveys whose report saw the EUR 1.99 page (readGateSeen); null when unreadable. */
   gateSeen?: ReadonlySet<number> | null;
-  /** #11's surveys with their session and tracker (readGateTestRows); null when unreadable. */
-  gateRows?: GateTestRow[] | null;
+  /** The price test's surveys with their tracker (readPriceTestRows); null when unreadable. */
+  priceRows?: PriceTestRow[] | null;
+  /** The choosing half's picks by survey (readPriceTestChoices); null when unreadable. */
+  priceChoices?: ReadonlyMap<number, ChoosePriceOption> | null;
 }): PaymentPayload {
   const { facts, filters: f, today, now, uplift } = input;
   const scope: Scope = assessmentScope(f);
@@ -1203,14 +1209,13 @@ export function buildPayment(input: {
       blocked: tablet,
       to: facts.to,
     }),
-    gateTest: buildGateTest({
+    priceTest: buildPriceTest({
       subs,
-      rows: input.gateRows ?? null,
+      rows: input.priceRows ?? null,
+      choices: input.priceChoices ?? null,
       gateSeen: input.gateSeen ?? null,
       blocked: tablet,
-      from: facts.from,
       to: facts.to,
-      today,
     }),
   };
 }

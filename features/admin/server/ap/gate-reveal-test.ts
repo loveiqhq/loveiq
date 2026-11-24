@@ -12,6 +12,7 @@ import {
   isGateRevealArm,
   type GateRevealArm,
 } from "@shared/experiments/gateRevealArm";
+import { isGatePriceArm } from "@shared/experiments/gatePriceArm";
 import { reportingDateTime, reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 import { fetchAllRows } from "../supabase";
@@ -113,6 +114,12 @@ export async function readGateTestRows(from: string): Promise<GateTestRow[] | nu
  * left in it, has no stamp.
  */
 export function gateArmOf(row: Pick<GateTestRow, "session_id" | "utm_tracker">): GateRevealArm {
+  const stamped = gateStampOf(row);
+  return isGateRevealArm(stamped) ? stamped : assignGateRevealArm(row.session_id);
+}
+
+/** The value stamped under gate_reveal_arm, whichever test wrote it, or null. */
+function gateStampOf(row: Pick<GateTestRow, "utm_tracker">): unknown {
   let stamped: unknown = null;
   try {
     const j: unknown = JSON.parse(row.utm_tracker ?? "null");
@@ -123,7 +130,9 @@ export function gateArmOf(row: Pick<GateTestRow, "session_id" | "utm_tracker">):
   } catch {
     // Not JSON: no stamp.
   }
-  return isGateRevealArm(stamped) ? stamped : assignGateRevealArm(row.session_id);
+  // The price test that replaced this one writes its own halves under the same key
+  // (shared/experiments/gatePriceArm.ts): those are kept apart by buildGateTest, never hashed.
+  return isGateRevealArm(stamped) || isGatePriceArm(stamped) ? stamped : null;
 }
 
 interface Half {
@@ -238,6 +247,9 @@ export function buildGateTest(input: {
     // completed purchase (pts), or carrying the journey's label. A finisher the read missed
     // (finished between the two reads) is counted on the next load.
     if (Date.parse(s.at) < start || s.pts || !row || isPayToStartTracker(row.utm_tracker)) continue;
+    // A finisher of the price test that retired this one (24 Nov 2026) is in neither half: its
+    // stamp is `fixed` or `choose`, and its session's hash would file it here by mistake.
+    if (isGatePriceArm(gateStampOf(row))) continue;
     halves.get(gateArmOf(row))!.push(s);
   }
   const seen = input.gateSeen;

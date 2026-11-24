@@ -54,13 +54,23 @@ export interface ExitReason {
  * (features/unlock-feedback/logic/reasons.ts), so the two surfaces read side by side.
  * The gate's reader has seen no result yet, so its list asks about paying before seeing;
  * the full report's reader has read the open chapters, so "free" became "what I've unlocked".
+ * No price (`null`): the price test's "Choose your price" half has none to name.
  */
-export function exitReasons(stage: ExitStage, priceCents: number): ReadonlyArray<ExitReason> {
+export function exitReasons(
+  stage: ExitStage,
+  priceCents: number | null
+): ReadonlyArray<ExitReason> {
   if (stage === "pre") {
     return [
       { code: "unexpected_payment", label: "I didn’t expect to pay after the survey" },
       { code: "see_first", label: "I want to see some of it before I pay" },
-      { code: "unclear_value", label: `I wasn’t sure what I’d get for ${euros(priceCents)}` },
+      {
+        code: "unclear_value",
+        label:
+          priceCents === null
+            ? "I wasn’t sure what I’d get"
+            : `I wasn’t sure what I’d get for ${euros(priceCents)}`,
+      },
       { code: "fit_doubt", label: "I’m not sure the result will feel like me" },
       { code: "too_expensive", label: "It was too expensive and more than I wanted to pay" },
       { code: "privacy", label: "Paying for something this personal felt uncomfortable" },
@@ -204,6 +214,11 @@ export const EXIT_COPY = {
     paymentsLabel: GATE_COPY.paymentsLabel,
     fineprint: "Anonymous · No subscription · Discreet billing",
   },
+  /**
+   * The price test's "Choose your price" half (Fatih, 24 Nov 2026): no EUR 1.99 on its exit page.
+   * Its price and both buttons say "Choose your price" and lead back to the gate's picker.
+   */
+  choose: { price: "Choose your price", cta: "Choose your price" },
   leave: { pre: "Maybe later", full: "Back to my open chapters" },
   sticky: {
     cta: (priceCents: number) => `Unlock risk-free · ${euros(priceCents)}`,
