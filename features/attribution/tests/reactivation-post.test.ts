@@ -47,7 +47,7 @@ import {
   buildReactivationMessage,
   emailTitleOf,
   formatSince,
-  postReactivation,
+  postReactivationOnRead,
   reactivationsChannel,
   refreshReactivationPost,
   REDRAW_WINDOW_MS,
@@ -289,13 +289,26 @@ const JOURNEY_ROW = {
   backfilled_at: null,
 };
 
+/** The day's return row, as the post's claim hands it back (Prefer: return=representation). */
+const CLAIMED = { returned_at: RETURNED_AT, source: "email", via: "gift_unopened" };
+
 function backend(
-  opts: { journeyRow?: unknown[]; reactivations?: unknown[]; patchOk?: boolean } = {}
+  opts: {
+    journeyRow?: unknown[];
+    reactivations?: unknown[];
+    patchOk?: boolean;
+    claimed?: unknown[] | (() => unknown[]);
+  } = {}
 ) {
   mockSupabaseFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
     if (path.startsWith("/rest/v1/slack_journey_message?"))
       return res(opts.journeyRow ?? [JOURNEY_ROW]);
     if (path.startsWith("/rest/v1/reader_return?") && init?.method === "PATCH") {
+      // The claim: the database's conditional update answers the row it took, or none.
+      if (path.includes("reactivation_channel=is.null")) {
+        const claimed = typeof opts.claimed === "function" ? opts.claimed() : opts.claimed;
+        return res(claimed ?? [CLAIMED]);
+      }
       return res(null, opts.patchOk ?? true);
     }
     if (path.startsWith("/rest/v1/reader_return?")) return res(opts.reactivations ?? []);
@@ -308,8 +321,18 @@ const calls = (match: (path: string, method?: string) => boolean) =>
     match(String(p), (init as { method?: string } | undefined)?.method)
   );
 
-describe("postReactivation", () => {
-  const AT = new Date(RETURNED_AT);
+describe("postReactivationOnRead: a returning reader is posted once they have read for a minute", () => {
+  /** The active minute, a minute and a half after the day's return. */
+  const AT = new Date("2026-11-19T07:13:38.000Z");
+  const DONE_TS = "1795072330.000100";
+
+  type Call = [string, { body: string; headers?: Record<string, string> }];
+  const claims = () =>
+    calls((p, m) => m === "PATCH" && p.includes("reactivation_channel=is.null")) as Call[];
+  const otherPatches = () =>
+    calls((p, m) => m === "PATCH" && !p.includes("reactivation_channel=is.null")) as Call[];
+  const posted = (n = 0) =>
+    mockPost.mock.calls[n]![0] as { channel: string; threadTs?: string; blocks: unknown[] };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -317,74 +340,113 @@ describe("postReactivation", () => {
     mockConfigured.mockReturnValue(true);
     mockBuild.mockResolvedValue(journey());
     mockPermalink.mockResolvedValue(PERMALINK);
-    mockPost.mockResolvedValue({ channel: CHANNEL, ts: "1795072330.000100" });
+    mockPost.mockResolvedValue({ channel: CHANNEL, ts: DONE_TS });
     backend();
   });
 
-  it("posts into the channel, top level, and keeps the post's channel and ts on the day's row", async () => {
-    await postReactivation({
-      submissionId: 2826,
-      source: "email",
-      via: "gift_unopened",
-      at: AT,
-      day: "2026-11-19",
-    });
+  it("claims the day's unposted return, posts it top level, and keeps the ts", async () => {
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
 
-    // The journey, with the visit's time measured from the return.
+    expect(claims()).toHaveLength(1);
+    const [claimPath, claimInit] = claims()[0]!;
+    expect(claimPath).toContain("survey_submission_id=eq.2826");
+    expect(claimPath).toContain("day=eq.2026-11-19");
+    // Never a finished draft: that is a submission, with a message of its own.
+    expect(claimPath).toContain("source=neq.draft");
+    expect(claimPath).toContain("reactivation_channel=is.null");
+    expect(JSON.parse(claimInit.body)).toEqual({ reactivation_channel: CHANNEL });
+    expect(claimInit.headers).toMatchObject({ Prefer: "return=representation" });
+
+    // The visit measured from the day's return, as every redraw measures it.
     expect(mockBuild).toHaveBeenCalledWith(2826, { dwellSince: RETURNED_AT });
-    expect(mockPermalink).toHaveBeenCalledWith("C0JOURNEY", "1794893911.183509");
     expect(mockPost).toHaveBeenCalledTimes(1);
-    const posted = mockPost.mock.calls[0]![0] as {
-      channel: string;
-      threadTs?: string;
-      blocks: unknown[];
-    };
-    expect(posted.channel).toBe(CHANNEL);
-    expect(posted.threadTs).toBeUndefined();
-    expect(lines(posted)[0]).toContain(`<${PERMALINK}|#2826>`);
+    expect(posted().channel).toBe(CHANNEL);
+    expect(posted().threadTs).toBeUndefined();
+    expect(lines(posted())[0]).toContain(`<${PERMALINK}|#2826>`);
 
-    const patch = calls((p, m) => p.startsWith("/rest/v1/reader_return?") && m === "PATCH");
-    expect(patch).toHaveLength(1);
-    expect(patch[0]![0]).toBe(
+    expect(otherPatches()).toHaveLength(1);
+    expect(otherPatches()[0]![0]).toBe(
       "/rest/v1/reader_return?survey_submission_id=eq.2826&day=eq.2026-11-19"
     );
-    expect(JSON.parse((patch[0]![1] as { body: string }).body)).toEqual({
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({
       reactivation_channel: CHANNEL,
-      reactivation_ts: "1795072330.000100",
+      reactivation_ts: DONE_TS,
     });
+  });
+
+  it("the day is Berlin's: 23:30 UTC is already the next day there", async () => {
+    await postReactivationOnRead({
+      submissionId: 2826,
+      at: new Date("2026-11-23T23:30:00.000Z"),
+      via: null,
+    });
+    expect(claims()[0]![0]).toContain("day=eq.2026-11-24");
+  });
+
+  it("posts nothing without an unposted return that day: none, already posted, a draft, or a forged event", async () => {
+    backend({ claimed: [] });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+    expect(mockBuild).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("two minutes at once post once: the second claim finds the row taken", async () => {
+    let taken = false;
+    backend({
+      claimed: () => {
+        if (taken) return [];
+        taken = true;
+        return [CLAIMED];
+      },
+    });
+    await Promise.all([
+      postReactivationOnRead({ submissionId: 2826, at: AT, via: null }),
+      postReactivationOnRead({ submissionId: 2826, at: AT, via: null }),
+    ]);
+    expect(claims()).toHaveLength(2);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the email the read came through when the day's row has none, and keeps it for the redraws", async () => {
+    backend({ claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }] });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
+    const shown = lines(posted());
+    expect(shown).toContain("Reactivation source: *Email*");
+    expect(shown.find((l) => l.startsWith("Email: "))).toMatch(/\(opened the report through it\)$/);
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({
+      reactivation_channel: CHANNEL,
+      reactivation_ts: DONE_TS,
+      via: "initial_gift",
+    });
+  });
+
+  it("keeps the day's own email when it has one", async () => {
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
+    expect(lines(posted())).toContain("Email: *Your gift is still unopened* (clicked)");
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({
+      reactivation_channel: CHANNEL,
+      reactivation_ts: DONE_TS,
+    });
+  });
+
+  it("drops a via that is not utm-shaped", async () => {
+    backend({ claimed: [{ returned_at: RETURNED_AT, source: "report", via: null }] });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: "x y" });
+    expect(lines(posted())).toContain("Reactivation source: *Report link* (no email)");
   });
 
   it("takes the rail's floor from the reader's #incoming-surveys message", async () => {
     backend({ journeyRow: [{ ...JOURNEY_ROW, state: "checkout" }] });
-    await postReactivation({
-      submissionId: 2826,
-      source: "email",
-      via: "gift_unopened",
-      at: AT,
-      day: "2026-11-19",
-    });
-    expect(lines(mockPost.mock.calls[0]![0] as { blocks: unknown[] }).at(-1)).toContain(
-      `${GREEN} Checkout`
-    );
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(lines(posted()).at(-1)).toContain(`${GREEN} Checkout`);
   });
 
   it("posts with the plain id when the reader has no message, or only a catch-up one", async () => {
     backend({ journeyRow: [] });
-    await postReactivation({
-      submissionId: 1722,
-      source: "report",
-      via: null,
-      at: AT,
-      day: "2026-11-19",
-    });
+    await postReactivationOnRead({ submissionId: 1722, at: AT, via: null });
     backend({ journeyRow: [{ ...JOURNEY_ROW, backfilled_at: "2026-08-25T10:00:00Z" }] });
-    await postReactivation({
-      submissionId: 1722,
-      source: "report",
-      via: null,
-      at: AT,
-      day: "2026-11-19",
-    });
+    await postReactivationOnRead({ submissionId: 1722, at: AT, via: null });
 
     expect(mockPermalink).not.toHaveBeenCalled();
     expect(mockPost).toHaveBeenCalledTimes(2);
@@ -393,67 +455,41 @@ describe("postReactivation", () => {
     }
   });
 
-  it("never posts a finished draft: it is a submission, not a reactivation", async () => {
-    await postReactivation({
-      submissionId: 2844,
-      source: "draft",
-      via: null,
-      at: AT,
-      day: "2026-11-18",
-    });
-    expect(mockBuild).not.toHaveBeenCalled();
-    expect(mockPost).not.toHaveBeenCalled();
-    expect(mockSupabaseFetch).not.toHaveBeenCalled();
-  });
-
-  it("does nothing at all without the channel", async () => {
-    delete process.env.SLACK_REACTIVATIONS_CHANNEL_ID;
-    await postReactivation({
-      submissionId: 2826,
-      source: "email",
-      via: "gift_unopened",
-      at: AT,
-      day: "2026-11-19",
-    });
-    expect(mockSupabaseFetch).not.toHaveBeenCalled();
-    expect(mockBuild).not.toHaveBeenCalled();
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it("stores nothing when Slack refuses the post", async () => {
+  it("releases the claim when Slack refuses the post, so a later minute can post", async () => {
     mockPost.mockResolvedValue(null);
-    await postReactivation({
-      submissionId: 2826,
-      source: "email",
-      via: "gift_unopened",
-      at: AT,
-      day: "2026-11-19",
-    });
-    expect(calls((_, m) => m === "PATCH")).toHaveLength(0);
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(otherPatches()).toHaveLength(1);
+    expect(otherPatches()[0]![0]).toBe(
+      "/rest/v1/reader_return?survey_submission_id=eq.2826&day=eq.2026-11-19&reactivation_ts=is.null"
+    );
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({ reactivation_channel: null });
   });
 
-  it("posts nothing when the journey cannot be read", async () => {
+  it("releases the claim when Slack throws, too", async () => {
+    mockPost.mockRejectedValue(new Error("slack down"));
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({ reactivation_channel: null });
+    expect(mockWarn).toHaveBeenCalled();
+  });
+
+  it("releases the claim when the journey cannot be read", async () => {
     mockBuild.mockResolvedValue(null);
-    await postReactivation({
-      submissionId: 2826,
-      source: "email",
-      via: "gift_unopened",
-      at: AT,
-      day: "2026-11-19",
-    });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(JSON.parse(otherPatches()[0]![1].body)).toEqual({ reactivation_channel: null });
+  });
+
+  it("makes no request without the channel", async () => {
+    delete process.env.SLACK_REACTIVATIONS_CHANNEL_ID;
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
     expect(mockPost).not.toHaveBeenCalled();
   });
 
   it("never throws", async () => {
-    mockBuild.mockRejectedValue(new Error("boom"));
+    mockSupabaseFetch.mockRejectedValue(new Error("boom"));
     await expect(
-      postReactivation({
-        submissionId: 2826,
-        source: "email",
-        via: "gift_unopened",
-        at: AT,
-        day: "2026-11-19",
-      })
+      postReactivationOnRead({ submissionId: 2826, at: AT, via: null })
     ).resolves.toBeUndefined();
     expect(mockWarn).toHaveBeenCalled();
   });

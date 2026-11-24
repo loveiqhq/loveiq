@@ -24,8 +24,9 @@
  * row stays whether or not a reply went out (no stored message, no bot, Slack refused it):
  * AP-Analytics' Report page counts it, "Came back within 7 days".
  *
- * The same claim feeds #report-reactivations (reactivation-post.ts): every return but a draft
- * also gets a top-level post there, which the team sees without opening threads.
+ * The same claim gates #report-reactivations (reactivation-post.ts), but posts nothing there by
+ * itself: a returning reader is posted once they read for a minute that day (the report page's
+ * `report_active_1min`, `postReactivationOnRead`). A browser reopening a tab claims a day too.
  *
  * Never throws. Every caller runs it after its response, and neither Slack nor the database may
  * touch the request that triggered it.
@@ -35,7 +36,6 @@ import { EMAILS } from "@features/admin/server/ap/email-registry";
 import { teamUserIds } from "@features/admin/server/ap/team";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { EMAIL_RETURN_AFTER_MS } from "@features/attribution/server/journey";
-import { postReactivation } from "@features/attribution/server/reactivation-post";
 import { EMAIL_NAMES } from "@features/attribution/server/slack-journey";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
@@ -114,7 +114,7 @@ export function isCrawler(userAgent: string | null | undefined): boolean {
 export const EMAIL_LINK = "email";
 
 /** A utm-shaped token, as the report page keeps an email return's campaign (and the table's CHECK). */
-const VIA = /^[A-Za-z0-9_.-]{1,64}$/;
+export const VIA = /^[A-Za-z0-9_.-]{1,64}$/;
 
 export function readerOf(row: {
   finishedAt: string | null;
@@ -349,30 +349,24 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     }
     if (((await claim.json()) as unknown[]).length === 0) return;
 
-    // Its own top-level post in #report-reactivations (every source but a draft), whether or
-    // not the reader has a thread here to reply in: alongside the reply, and awaited however
-    // the reply ends. Off without its channel; it never rejects.
-    const reactivation = postReactivation({ submissionId, source, via, at, day });
-    try {
-      if (!isSlackBotConfigured()) return;
-      const message = await readMessage(submissionId);
-      if (!message) return;
-      const reply = buildReturnReply({ submissionId, source, at, via }, reader);
-      const posted = await postJourneyMessage({
-        ...reply,
-        channel: message.channel,
-        threadTs: message.message_ts,
-      });
-      if (!posted) return;
-      await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ slack_ts: posted.ts }),
-      });
-      logger.info({ submissionId, source }, "return ping: posted");
-    } finally {
-      await reactivation;
-    }
+    // #report-reactivations waits for a minute of reading that day (postReactivationOnRead,
+    // which claims this row for its post): only the thread reply goes out here.
+    if (!isSlackBotConfigured()) return;
+    const message = await readMessage(submissionId);
+    if (!message) return;
+    const reply = buildReturnReply({ submissionId, source, at, via }, reader);
+    const posted = await postJourneyMessage({
+      ...reply,
+      channel: message.channel,
+      threadTs: message.message_ts,
+    });
+    if (!posted) return;
+    await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ slack_ts: posted.ts }),
+    });
+    logger.info({ submissionId, source }, "return ping: posted");
   } catch (err) {
     logger.warn({ err, submissionId, source }, "return ping failed");
   }

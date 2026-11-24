@@ -6,12 +6,16 @@
  * again days later: the "Came back" replies (return-ping.ts) sit in each reader's thread,
  * which the channel never shows.
  *
- * Fed by the return ping's own claim: `noteReaderReturn` calls `postReactivation` once it has
- * claimed the reader's Berlin day in `reader_return`, so this post has the same rules (a report
- * visit on a later day and SAME_SITTING_MS after the survey, a click in our email, the
- * unlock-feedback answer), the same once-per-reader-per-day and the same exclusions (the team,
- * crawlers, our probes, share views). Every source but `draft`: a survey finished on a later
- * day is a submission, and it gets its own #incoming-surveys message.
+ * Gated twice. The return ping (return-ping.ts, `noteReaderReturn`) claims the reader's Berlin
+ * day in `reader_return` with its own rules (a report visit on a later day and SAME_SITTING_MS
+ * after the survey, a click in our email, the unlock-feedback answer), once per reader per day
+ * and without the team, crawlers, our probes or share views. That claim alone posts nothing:
+ * a browser reopening its tabs loads the report too, with nobody reading (24 Nov 2026: none of
+ * the channel's first eleven customer posts had a minute on screen). The post waits for the
+ * page's `report_active_1min`, a minute on screen with a touch, click, wheel or key in the
+ * last 30 seconds (useReportEngagementTimers), and `postReactivationOnRead` then posts the
+ * day's row. Every source but `draft`: a survey finished on a later day is a submission, and
+ * it gets its own #incoming-surveys message.
  *
  * Kept current for REDRAW_WINDOW_MS: the post's channel and ts go on the claimed row, and
  * `refreshJourneyDetail` / `refreshJourneyMessage` (journey-message.ts) redraw it, so "Report
@@ -31,7 +35,7 @@ import {
   buildSubmissionJourney,
   type SubmissionJourney,
 } from "@features/attribution/server/journey";
-import type { ReturnSource } from "@features/attribution/server/return-ping";
+import { VIA, type ReturnSource } from "@features/attribution/server/return-ping";
 import {
   cameFromValue,
   EMAIL_NAMES,
@@ -54,6 +58,7 @@ import {
   postJourneyMessage,
   updateJourneyMessage,
 } from "@shared/observability/slack-bot";
+import { reportingDay } from "@shared/time/reporting-day";
 
 /** A return that gets a post: every source but a finished draft. */
 export type ReactivationSource = Exclude<ReturnSource, "draft">;
@@ -219,43 +224,94 @@ async function linkOf(message: JourneyRow | null): Promise<string | null> {
   return link;
 }
 
-/**
- * Post a reactivation, once `noteReaderReturn` has claimed the reader's day, and keep its
- * channel and ts on that row for the redraws. Never throws.
- */
-export async function postReactivation(input: {
-  submissionId: number;
-  source: ReturnSource;
+/** The day's return row, as the post's claim hands it back. */
+interface ClaimedRow {
+  returned_at: string;
+  source: string;
   via: string | null;
+}
+
+/** Give a claimed day back, so a later minute that day can post it. Never throws. */
+async function releaseClaim(rowFilter: string): Promise<void> {
+  try {
+    await supabaseFetch(`${rowFilter}&reactivation_ts=is.null`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ reactivation_channel: null }),
+    });
+  } catch (err) {
+    logger.warn({ err }, "reactivation post: could not release its claim");
+  }
+}
+
+/**
+ * Post a returning reader once they have read for a minute: `/api/analytics-event` hands each
+ * stored `report_active_1min` over. The day's return row is the gate, so a minute on a day with
+ * no return, or a forged event, finds nothing to post. The row is claimed for the post with a
+ * conditional update on `reactivation_channel`, so two tabs' minutes post once; a post that
+ * does not go out gives the claim back. Times are measured from the day's return, as the
+ * redraws measure them. A minute that crosses Berlin midnight looks for the new day's row only.
+ * Never throws.
+ */
+export async function postReactivationOnRead(input: {
+  submissionId: number;
+  /** When the minute arrived: its Berlin day picks the return row. */
   at: Date;
-  /** The claimed row's Berlin day (reader_return.day). */
-  day: string;
+  /** The page's email (`pageEmailVia`): the link's campaign, "email", or null. */
+  via: string | null;
 }): Promise<void> {
   const channel = reactivationsChannel();
-  const { submissionId, source, via, day } = input;
-  if (!channel || !isReactivationSource(source)) return;
+  if (!channel) return;
+  const { submissionId } = input;
+  const rowFilter = `${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${reportingDay(input.at)}`;
+  let claimed = false;
   try {
-    const returnedAt = input.at.toISOString();
+    const claim = await supabaseFetch(
+      `${rowFilter}&source=neq.draft&reactivation_channel=is.null&select=returned_at,source,via`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ reactivation_channel: channel }),
+      }
+    );
+    if (!claim.ok) return;
+    const row = ((await claim.json()) as ClaimedRow[])[0];
+    if (!row) return;
+    claimed = true;
+    if (!isReactivationSource(row.source)) return;
+
+    // The day's own email first (the click, the email link the return came through); else the
+    // one the page was opened from, kept on the row below so the redraws name it too.
+    const via = row.via ?? (input.via && VIA.test(input.via) ? input.via : null);
     const [journey, message] = await Promise.all([
-      buildSubmissionJourney(submissionId, { dwellSince: returnedAt }),
+      buildSubmissionJourney(submissionId, { dwellSince: row.returned_at }),
       readJourneyMessage(submissionId),
     ]);
     if (!journey) return;
     const post = buildReactivationMessage(
       journey,
-      { submissionId, source, via, returnedAt },
+      { submissionId, source: row.source, via, returnedAt: row.returned_at },
       { floor: furthest(message?.state), journeyLink: await linkOf(message) }
     );
     const posted = await postJourneyMessage({ ...post, channel });
     if (!posted) return;
-    await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
+    // Out: never give the claim back now, or a later minute would post it again.
+    claimed = false;
+    await supabaseFetch(rowFilter, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ reactivation_channel: posted.channel, reactivation_ts: posted.ts }),
+      body: JSON.stringify({
+        // Slack's own id for the channel, which the redraws' chat.update needs.
+        reactivation_channel: posted.channel,
+        reactivation_ts: posted.ts,
+        ...(row.via === null && via ? { via } : {}),
+      }),
     });
-    logger.info({ submissionId, source }, "reactivation post: posted");
+    logger.info({ submissionId, source: row.source }, "reactivation post: posted");
   } catch (err) {
-    logger.warn({ err, submissionId, source }, "reactivation post failed");
+    logger.warn({ err, submissionId }, "reactivation post failed");
+  } finally {
+    if (claimed) await releaseClaim(rowFilter);
   }
 }
 
