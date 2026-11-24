@@ -36,11 +36,12 @@ const ExpertPhoneField: FC<{
         {EXPERT_COPY.phoneLabel}
       </label>
       <div className="mt-2 flex gap-2">
+        {/* 16px, not 15 as on the board: iOS zooms into a smaller form control and never back out. */}
         <select
           aria-label={EXPERT_COPY.codeLabel}
           value={code}
           onChange={(e) => onChange(joinExpertPhone(e.target.value, number))}
-          className={`${field} w-[104px] flex-none px-[10px] text-[15px] font-semibold`}
+          className={`${field} w-[104px] flex-none px-[10px] text-[16px] font-semibold`}
         >
           {EXPERT_COUNTRY_CODES.map((c) => (
             <option key={c.code} value={c.code}>
