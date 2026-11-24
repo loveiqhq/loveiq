@@ -1907,19 +1907,22 @@ async function answerQuestion(
       await page.getByLabel("Name or nickname").fill(a.name);
       await next.click();
       await page.getByLabel("Email", { exact: true }).fill(a.email);
-      await next.click();
-      // The newsletter question, once there is an email: the persona's Yes or No. A No opens
-      // the "Sure you want to miss out?" sheet, where the persona keeps its No.
+      // The newsletter switch under the email, off until turned on: on for the persona's Yes.
+      // Next past the email with it off opens the "Sure you want to miss out?" sheet, where the
+      // persona keeps its No (past the sheet's 400 ms tap guard).
       const yes = typeof a.optIn === "string" && a.optIn.trim().toLowerCase().startsWith("yes");
-      await page.getByRole("radio", { name: yes ? "Yes, keep learning" : "No, thanks" }).click();
+      if (yes) await page.getByRole("switch", { name: "Keep learning after your report" }).click();
+      await next.click();
       const notNow = page.getByRole("button", { name: "Not now" });
       if (
         await notNow.waitFor({ state: "visible", timeout: 2_000 }).then(
           () => true,
           () => false
         )
-      )
+      ) {
+        await page.waitForTimeout(450);
         await notNow.click();
+      }
       await page.getByPlaceholder(/search for a country/i).fill(country);
       await page.getByRole("option", { name: country }).first().click();
       await page.getByLabel(/^Postal code in/).fill(a.postal);

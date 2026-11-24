@@ -40,7 +40,7 @@ import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/sur
 import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
 import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
-import { detailsComplete, type DetailsField } from "@features/survey/survey2/details";
+import { type DetailsField } from "@features/survey/survey2/details";
 import DetailsStep, { type DetailsStepHandle } from "./questions/DetailsStep";
 
 /** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
@@ -359,8 +359,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const question = orderedQuestions[currentIndex];
   /** Survey 2.0 tells its own time (its guide's), the classic survey the progress's default. */
   const totalMinutes = orderArm === SURVEY_2_ARM ? SURVEY_2_MINUTES : undefined;
-  /** On Survey 2.0's details screen (the miss-out sheet's handlers read it). */
-  const onDetails = question?.answerType === "details";
 
   // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
   // "white" for everyone. The `?survey=dark` preview went with the 2026-10-04
@@ -700,15 +698,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       setBlocked(missingAnswer ? "missing" : "invalid");
       return;
     }
-    // Survey 2.0's details screen moves through its own fields first (DetailsStep), and only
-    // goes on, to the last step's sheet and submit below, once every one is filled.
+    // Survey 2.0's details screen moves through its own steps first (DetailsStep), holds while
+    // the miss-out sheet is up, and only goes on, to the submit below, once every one is done.
     if (question?.answerType === "details") {
       const step = detailsRef.current?.advance(getLatestAnswers());
-      if (!step || step.kind === "moved") return;
-      if (step.kind === "blocked") {
+      if (step?.kind === "blocked") {
         trackSurveyFormError({ question_id: question.qId, error_kind: "required" });
-        return;
       }
+      if (step?.kind !== "done") return;
     }
     // A sheet after this question (Mark's placements, features/survey/surveySheets.ts) holds
     // the move, once per run. Every way on lands here (Next, Auto-advance, Enter, ArrowRight,
@@ -996,16 +993,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // (submit_survey matches the option text), through setAnswer so the submit reads it at
   // once, and the run is submitted as Next would. Then filed with the sheet's version.
   /**
-   * Survey 2.0's details screen: a No on its newsletter question offers "Sure you want to miss
-   * out?" at once (Mark's board "alt · Yes/No opt-in"), once per run like the classic last step.
-   * Its Yes and Not now carry on as there (Next), which on the details screen opens the next
-   * empty field or, with every field filled, submits.
+   * Survey 2.0's details screen: Next leaving the email with the newsletter switch off offers
+   * "Sure you want to miss out?" (Mark's sheet of 10 Nov), once per run like the classic last
+   * step. Says whether it opened (or was open), so the page holds for it.
    */
-  const offerOptInSheet = useCallback(() => {
-    if (optInSheetOpenRef.current) return;
-    if (optInSheetShown.current || optInSheetShownFor(startedAt)) return;
+  const offerOptInSheet = useCallback((): boolean => {
+    if (optInSheetOpenRef.current) return true;
+    if (optInSheetShown.current || optInSheetShownFor(startedAt)) return false;
     const optInYes = optInYesOption(optInQuestion()?.options);
-    if (!optInYes) return;
+    if (!optInYes) return false;
     optInSheetShown.current = true;
     rememberOptInSheetShown(startedAt);
     optInSheetYes.current = optInYes;
@@ -1013,18 +1009,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     cancelAutoAdvance();
     setOptInSheetOpen(true);
     trackOptInSheetShown();
+    return true;
   }, [startedAt, cancelAutoAdvance]);
 
   /**
-   * On from the miss-out sheet, as Next would. On Survey 2.0's details screen the sheet opens on
-   * picking No, which can come before the country is in (the question shows once the email is):
-   * there it goes on only once every field is filled, else back to the page to finish it, with
-   * no "missing" said for a field the reader has not reached yet.
+   * On from the miss-out sheet, as Next would: the submit on the classic last question; on
+   * Survey 2.0's details screen, where the sheet opens on leaving the email, the country.
    */
   const carryOnFromOptInSheet = useCallback(() => {
-    if (onDetails && !detailsComplete(getLatestAnswers())) return;
     goNextRef.current();
-  }, [onDetails, getLatestAnswers]);
+  }, []);
 
   const handleOptInSheetYes = useCallback(() => {
     closeOptInSheet();
@@ -1480,7 +1474,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                   ref={detailsRef}
                   answers={answers}
                   onAnswer={setAnswer}
-                  onOptInNo={offerOptInSheet}
+                  onOptInOff={offerOptInSheet}
                   optInOptions={optInQuestion()?.options ?? []}
                   countryQuestion={countryQuestion() ?? question}
                   focusField={detailsFocus}

@@ -61,14 +61,16 @@ export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
 
 /**
- * T-11 for Survey 2.0, which asks the newsletter question on its details screen in its own words
- * (DETAILS_COPY in features/survey/survey2/details.ts: "Free LoveIQ hints and insights by email?
- * Research, small practices, first access to new tests. We track opens and clicks to improve
- * them. Unsubscribe any time." Yes, keep learning / No, thanks). Dated when those words were
- * written (Mark's Survey Review, built 23 Nov 2026); bump it with them. A Yes once the miss-out
- * sheet has been shown names both texts, as MARKETING_OPT_IN_SHEET_TERMS_VERSION does.
+ * T-11 for Survey 2.0, which asks for the newsletter on its details screen in its own words: a
+ * switch under the email, off until the reader turns it on (DETAILS_COPY in
+ * features/survey/survey2/details.ts: "Keep learning after your report" · New research on desire
+ * and intimacy · Small practices to try the same day · First access to new tests · "Free emails.
+ * We track opens and clicks to improve them. Unsubscribe any time."). Dated when those words were
+ * written (Mark's board 2b, 24 Nov 2026; the Yes/No question before it was 2026-11-23); bump it
+ * with them. A Yes once the miss-out sheet has been shown names both texts, as
+ * MARKETING_OPT_IN_SHEET_TERMS_VERSION does.
  */
-export const MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2 = "2026-11-23";
+export const MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2 = "2026-11-24";
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2 = `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
 
 /**
