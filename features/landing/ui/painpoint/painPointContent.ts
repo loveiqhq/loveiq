@@ -26,8 +26,8 @@ export const QUESTION_1: HeroQuestion = {
 
 /**
  * Version C (`pain_point_c`, LoveIQ Sync 24 Nov 2026): Q01002 loses more people than any
- * other question, so Mark and Marcus picked Q10003, which almost nobody leaves at, and
- * Marcus put it under the film. The survey still asks Q01002 in its place.
+ * other question, so Mark and Marcus picked Q10003, which almost nobody leaves at, asked
+ * where B asks Q01002. Q01002 stays the survey's second question.
  */
 export const QUESTION_C: HeroQuestion = {
   qId: "10003",

@@ -25,8 +25,8 @@ import { PP_REUSED_H2, PP_REUSED_SHELL, PP_TYPE } from "./ppStyles";
  * "Mobile · Hero 3" at 390, reviewed by Hana). Since the 24 Nov 2026 sync its version C
  * (`pain_point_c`) runs 50/50 against the video page (`video`,
  * features/landing/ui/white/LandingPageWhite.tsx) in B's place: the same page, its hero
- * asking Q10003 under the film (PHero). B is paused but still opens for `?variant=pain_point`;
- * see shared/experiments/landingVariant.ts.
+ * asking Q10003, with the privacy line under the film (PHero). B is paused but still opens
+ * for `?variant=pain_point`; see shared/experiments/landingVariant.ts.
  *
  * Its sections live in this folder. Where the design reuses a live section (archetypes,
  * reviews, research) it renders the live component with the design's sizes, so a fix

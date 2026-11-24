@@ -21,9 +21,9 @@ describe("arm labels", () => {
     expect(armLabel("landing", "pain_point").long).toBe("Landing Page V4: the pain-point page");
     expect(armLabel("landing", "pain_point").short).toBe("Landing Page V4 (Pain Points)");
     // Since the 24 Nov 2026 sync V4's version C runs in B's place: the same page, its hero
-    // asking about turn-ons under the film. Named apart from B, so the two never pool.
+    // asking about turn-ons. Named apart from B, so the two never pool.
     expect(armLabel("landing", "pain_point_c").long).toBe(
-      "Landing Page V4 C: the pain-point page, asking about turn-ons under the film"
+      "Landing Page V4 C: the pain-point page, asking about turn-ons"
     );
     expect(armLabel("landing", "pain_point_c").short).toBe(
       "Landing Page V4 C (Pain Points, Turn-Ons Question)"

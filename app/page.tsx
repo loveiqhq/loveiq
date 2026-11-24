@@ -155,7 +155,7 @@ const academicBoardSchema = {
 
 export default async function Page() {
   // Round 4, 50/50: the video page ("video", the control) or Marcus's pain-point page,
-  // since the 2026-11-24 sync as version C ("pain_point_c": Q10003 under the film); the
+  // since the 2026-11-24 sync as version C ("pain_point_c", asking Q10003); the
   // page as released ("pain_point", paused B) stays open for QA. The arm is decided in
   // proxy.ts and handed over as a request header rather than read from cookies() here —
   // on the visit that MINTS the cookie, cookies() cannot see it yet, so the first render
