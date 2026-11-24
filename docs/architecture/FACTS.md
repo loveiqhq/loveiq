@@ -218,7 +218,11 @@ changed its prices in the middle of the 2.x test, on 2026-08-24. `rpc/get_price_
 lists every change: the three 2.x ones are pinned there, with the deploy each moment comes
 from, and the history records every later one. A payment's own
 `metadata.experimentGroup` is stamped at checkout and never changes, so sales by price
-list (`get_business_numbers` with `group_by: price_list`) were always right.
+list (`get_business_numbers` with `group_by: price_list`) were always right. Since
+2026-11-24 a report checkout's payment also carries `metadata.gateRevealArm`, its buyer's half
+of the EUR 1.99 page test, copied from the survey's `utm_tracker.gate_reveal_arm` at
+fulfillment: null when the survey has no stamp, and absent on pay-to-start, E07 gift and
+unlock-feedback rows.
 
 `essentials` (EUR 9.99) and `core` (EUR 39) are no longer sold; their buyers keep what they
 bought. Before 3.0, `full_report` was EUR 29 and `all_reports` EUR 49 for everyone.

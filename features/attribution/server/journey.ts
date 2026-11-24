@@ -24,6 +24,8 @@ import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readGateRevealStamp, readStampedArms, type TrafficInfo } from "./traffic";
 import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { InitialGiftArm } from "@shared/experiments/initialGiftArm";
+import { PRICE_TEST_END_AT } from "@features/checkout/server/reportPurchase";
 import { PAY_TO_START_JOURNEY, isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import { offerDefinitionOf } from "@features/pay-to-start/logic/offer";
 import { INITIAL_UNLOCK_GIFT } from "@features/report/logic/initialUnlockGate";
@@ -149,6 +151,12 @@ export interface SubmissionJourney {
    * page. Absent when nothing is stamped. Read from the row, so every edit of the message keeps it.
    */
   gateRevealArm?: GateRevealArm;
+  /**
+   * The E07 gift email's arm (`personal_report.initial_gift_arm`): `gift` was given the Core
+   * Archetype free a day after the EUR 1.99 page stopped them, `holdout` was held out. Absent
+   * until the cron draws it, and for anyone who paid first: they are in neither arm.
+   */
+  giftArm?: InitialGiftArm;
   /** The money taken, one entry per succeeded payment above EUR 0 that is no test, oldest first. */
   paid?: Array<{ amount: number; currency: string }>;
   /** The EUR 0 unlocks on the report, when nothing was paid, each kind once. */
@@ -616,9 +624,10 @@ export async function buildSubmissionJourney(
       "payment"
     ),
     // The EUR 1.99 gate's cohort stamp, its own query as initialGateState.ts reads it.
-    fetchJson<{ initial_gate_cohort_at: string | null }>(
+    // The E07 gift email's arm rides along: drawn on the same row, a day later.
+    fetchJson<{ initial_gate_cohort_at: string | null; initial_gift_arm?: string | null }>(
       `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}` +
-        `&select=initial_gate_cohort_at&limit=1`,
+        `&select=initial_gate_cohort_at,initial_gift_arm&limit=1`,
       "personal_report"
     ),
     // Its own query, for the metadata the events query above leaves out of its 500 rows.
@@ -640,6 +649,7 @@ export async function buildSubmissionJourney(
 
   const stamped = readStampedArms(sub.utm_tracker);
   const gateRevealArm = readGateRevealStamp(sub.utm_tracker);
+  const giftArm = readGiftArm(reports[0]?.initial_gift_arm);
 
   // Any quote carries the person's pricing arm and their resolved device/country —
   // they are frozen per reader, not per plan. Prefer a purchased quote so the
@@ -718,8 +728,12 @@ export async function buildSubmissionJourney(
       landing: stamped.landing,
       survey: stamped.survey,
       // experiment_group is the arm; base_price_bucket follows it since Pricing 2.0
-      // but is the better fallback for legacy rows than nothing.
-      pricing: anyQuote?.experiment_group ?? anyQuote?.base_price_bucket ?? null,
+      // but is the better fallback for legacy rows than nothing. None for a survey
+      // finished after the test ended: the gate quotes those readers list A3.
+      pricing: pricingArmWhileTested(
+        sub.created_date_time,
+        anyQuote?.experiment_group ?? anyQuote?.base_price_bucket ?? null
+      ),
       paywall: anyQuote?.forced_paywall_arm ?? null,
     },
     traffic: classifyTraffic(sub.utm_tracker),
@@ -785,6 +799,7 @@ export async function buildSubmissionJourney(
     ...ptsOffer,
     gateCohort: stampedAtSubmit(sub.created_date_time, reports[0]?.initial_gate_cohort_at),
     ...(gateRevealArm ? { gateRevealArm } : {}),
+    ...(giftArm ? { giftArm } : {}),
     paid,
     freeUnlocks: paid.length > 0 ? [] : [...new Set(payments.map(freeUnlockOf))],
     emailReturns: backByEmail,
@@ -817,9 +832,18 @@ export function journeyFromPurchase(input: {
   currency: string | null;
   plan: string | null;
   purchasedAt?: string;
+  /** When the survey was finished (`survey_submission.created_date_time`), for Pricing 3.0's end. */
+  submittedAt?: string | null;
+  /** The E07 gift email's arm off the report (`personal_report.initial_gift_arm`), when drawn. */
+  giftArm?: string | null;
 }): SubmissionJourney {
   const stamped = readStampedArms(input.utmTracker);
   const purchasedAt = input.purchasedAt ?? new Date().toISOString();
+  // The survey's own stamp, as on #incoming-surveys: it is written only while Mark's 50/50
+  // runs and never for a buyer who paid before the survey, so a stamp means they met a half.
+  const gateRevealArm = readGateRevealStamp(input.utmTracker);
+  const giftArm = readGiftArm(input.giftArm);
+  const traffic = classifyTraffic(input.utmTracker);
 
   return {
     submissionId: input.submissionId,
@@ -833,13 +857,16 @@ export function journeyFromPurchase(input: {
       // No stamp reads "Not recorded", as on the survey message.
       landing: stamped.landing,
       survey: stamped.survey,
-      pricing: input.experimentGroup ?? input.basePriceBucket,
+      pricing: pricingArmWhileTested(
+        input.submittedAt,
+        input.experimentGroup ?? input.basePriceBucket
+      ),
       // The forced-paywall axis was removed on 2026-08-31 and nothing stamps it
       // any more. Historical purchases keep their arm on report_price_quote; the
       // Slack message never rendered this axis (see armFields).
       paywall: null,
     },
-    traffic: classifyTraffic(input.utmTracker),
+    traffic,
     device: input.deviceType,
     // The Stripe webhook carries no country — the session metadata never held
     // one — so this stays null rather than being guessed from the pricing tier.
@@ -874,5 +901,39 @@ export function journeyFromPurchase(input: {
     // offer. The purchase message therefore carries no replay link; the survey
     // message for the same person does.
     recordingSessionId: null,
+    ...(gateRevealArm ? { gateCohort: true, gateRevealArm } : {}),
+    ...(giftArm ? { giftArm } : {}),
+    // A pay-to-start buyer buying again: the page they paid on stands in for the landing
+    // page, as on #incoming-surveys. This builder reads no payment row, so the tracker's
+    // label says pay to start and its first page says which offer.
+    ...(isPayToStartTracker(input.utmTracker)
+      ? {
+          payToStart: true,
+          ...(traffic.landingPath?.startsWith("/sexual-archetype/initial")
+            ? { payToStartOffer: "pre" as const }
+            : {}),
+        }
+      : {}),
   };
+}
+
+/**
+ * The Pricing 3.0 arm, as a reader met it. The test ended when the EUR 1.99 gate went on
+ * (PRICE_TEST_END_AT): every free survey finished since is quoted list A3 by the gate, so
+ * "A3" after the end is today's price list, not an arm. Any other arm after the end is still
+ * what the reader was shown (the pricing falls back to the hashed arm when the gate's stamp is
+ * missing), so it stays. An unknown finish keeps the arm, as before.
+ */
+function pricingArmWhileTested(
+  submittedAt: string | null | undefined,
+  arm: string | null
+): string | null {
+  if (!arm || !submittedAt) return arm;
+  const at = Date.parse(submittedAt);
+  return Number.isFinite(at) && at >= Date.parse(PRICE_TEST_END_AT) && arm === "A3" ? null : arm;
+}
+
+/** E07's two arms only; anything else on the row is no arm. */
+function readGiftArm(value: string | null | undefined): InitialGiftArm | null {
+  return value === "gift" || value === "holdout" ? value : null;
 }

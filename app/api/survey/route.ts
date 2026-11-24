@@ -589,11 +589,36 @@ export async function POST(request: Request) {
    */
   const gateRevealArm = sessionId && !prepaidToken ? await gateRevealArmFor(sessionId) : null;
 
+  let mergedUtmTracker = await stampLandingArm(utmTracker, { arm: !prepaidToken });
+  /**
+   * The first page this browser opened. Unlike the stamps below it is attribution, which
+   * the session id cannot give back, so it may start a tracker of its own: a visitor who
+   * came straight to a glossary term from an AI chat carries no campaign, no referrer and
+   * no landing cookie, and their first page is the whole answer to "where from". AP reads
+   * the tracker's keys, so a tracker holding only this classifies as a null one does.
+   * A report's address holds its token, which must not reach the database. A crawler or
+   * our own probes start none: proxy.ts's filter for a visit, the same regex and cookie.
+   *
+   * It goes FIRST (23 Nov 2026). Stamped after the arms, it started a tracker they had
+   * already been refused for, so a reader who came straight to /survey kept no arm at all:
+   * 6 of the 7 such finishers from 17 to 23 Nov had no EUR 1.99 page half on record, and
+   * the Slack posts and payments that read the stamp showed none. Near the 1000-char
+   * budget the first page now wins over the arms, which the session id gives back.
+   */
+  const notVisitor =
+    BOT_UA_REGEX.test(request.headers.get("user-agent") || "") ||
+    isProbeRequest(request.headers.get("cookie"));
+  if (landingPath && !notVisitor) {
+    mergedUtmTracker = mergeTrackerArm(
+      mergedUtmTracker ?? "{}",
+      LANDING_PATH_TRACKER_KEY,
+      redactReportToken(landingPath).slice(0, 100)
+    );
+  }
   // A visitor who paid before the survey is in no landing arm (stampLandingArm), and is
   // labelled by the server, never the browser: `journey` is stripped from everyone
-  // else's tracker. Like every stamp here it never creates a tracker; the entitlement's
+  // else's tracker. Like every stamp below it never creates a tracker; the entitlement's
   // consumed_submission_id is the record, the label a convenience for grouping.
-  let mergedUtmTracker = await stampLandingArm(utmTracker, { arm: !prepaidToken });
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,
     JOURNEY_TRACKER_KEY,
@@ -608,14 +633,15 @@ export async function POST(request: Request) {
    * have no tracker and all of them have a session id — so stamping the arm
    * unconditionally would pull every one of them into those charts as 'direct',
    * inflating that bucket by more than half. So the C13 arm only joins a tracker
-   * that exists already: the client's, or the one the landing stamp made.
+   * that exists already: the client's, the one the landing stamp made, or the one the
+   * first page started above.
    *
    * The arm is a pure function of the session id and the run's start, both stored on
    * the submission, so nothing is lost: an unstamped respondent's arm is recomputed
    * rather than read. The stamp is a convenience for grouping, never the record.
    *
-   * It commits only if it still fits the 1000-char budget, AFTER the landing arm,
-   * so a tracker near the limit loses this stamp and keeps the older one. A client's
+   * It commits only if it still fits the 1000-char budget, AFTER the landing arm and
+   * the first page, so a tracker near the limit loses this stamp and keeps the older ones. A client's
    * own `question_order_arm` is dropped either way, as the landing stamp drops its
    * `landing_variant`: the arm is derived, never claimed. The rules live in
    * `mergeTrackerArm`, shared with the email question test's arm below.
@@ -638,25 +664,6 @@ export async function POST(request: Request) {
   );
   // Mark's 50/50, by the same rules: derived, never claimed, never starting a tracker.
   mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, GATE_REVEAL_ARM_KEY, gateRevealArm);
-  /**
-   * The first page this browser opened. Unlike the arms above it is attribution, which
-   * the session id cannot give back, so it may start a tracker of its own: a visitor who
-   * came straight to a glossary term from an AI chat carries no campaign, no referrer and
-   * no landing cookie, and their first page is the whole answer to "where from". AP reads
-   * the tracker's keys, so a tracker holding only this classifies as a null one does.
-   * A report's address holds its token, which must not reach the database. A crawler or
-   * our own probes start none: proxy.ts's filter for a visit, the same regex and cookie.
-   */
-  const notVisitor =
-    BOT_UA_REGEX.test(request.headers.get("user-agent") || "") ||
-    isProbeRequest(request.headers.get("cookie"));
-  if (landingPath && !notVisitor) {
-    mergedUtmTracker = mergeTrackerArm(
-      mergedUtmTracker ?? "{}",
-      LANDING_PATH_TRACKER_KEY,
-      redactReportToken(landingPath).slice(0, 100)
-    );
-  }
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget

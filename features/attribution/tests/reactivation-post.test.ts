@@ -151,6 +151,24 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
     );
   });
 
+  // Sync, 23 Nov: the post named only the landing page, so a reader in the EUR 1.99 page's new
+  // half who got the E07 gift came back with neither on show.
+  it("names every experiment the reader was in, as the survey's message does", () => {
+    const built = buildReactivationMessage(
+      journey({ gateRevealArm: "reveal", giftArm: "gift" }),
+      { submissionId: 2826, source: "email", via: "gift_unopened", returnedAt: RETURNED_AT },
+      { journeyLink: PERMALINK }
+    );
+    const all = lines(built);
+    const at = all.indexOf("Landing page design: *Landing Page V4* (Pain Points)");
+    expect(all.slice(at, at + 4)).toEqual([
+      "Landing page design: *Landing Page V4* (Pain Points)",
+      "€1.99 page: *Core Archetype shown* (new page)",
+      "Gift email (E07): *Gifted* (Core Archetype free on day 1)",
+      "Country (self-reported): *New Zealand*",
+    ]);
+  });
+
   it("names the email a report link came through, by AP's name first", () => {
     const built = buildReactivationMessage(journey(), {
       submissionId: 2813,

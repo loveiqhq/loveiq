@@ -40,7 +40,7 @@ import {
   funnelLine,
   JOURNEY_STEPS,
   journeyRail,
-  landingValue,
+  experimentLines,
   type JourneyStep,
 } from "@features/attribution/server/slack-journey";
 import { EMAIL_LINKS } from "@shared/emails/email-link";
@@ -158,7 +158,7 @@ export function buildReactivationMessage(
     funnelLine(journey),
     `Survey time: *${formatDuration(journey.timings.durationMs) ?? "—"}*`,
     `Original acquisition: ${cameFromValue(journey)}`,
-    `Landing page design: ${landingValue(journey)}`,
+    ...experimentLines(journey),
     ...(journey.country ? [`Country (self-reported): *${escapeSlack(journey.country)}*`] : []),
   ];
 

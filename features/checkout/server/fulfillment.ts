@@ -87,15 +87,23 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   email: string | null;
   firstName: string | null;
   utmTracker: string | null;
+  /** When the survey was finished: Pricing 3.0's arm is named only for a survey before its end. */
+  submittedAt: string | null;
 }> {
+  const none = { email: null, firstName: null, utmTracker: null, submittedAt: null };
   try {
+    // The receipt's address comes from here, so this reads only the survey and its user. The
+    // E07 arm, which only the Slack post needs, has a read of its own (lookupGiftArm): a
+    // failing embed here would have cost the buyer their receipt.
     const response = await supabaseServiceFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,app_user!fk_survey_submission_user(email,first_name)&limit=1`
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,created_date_time,` +
+        `app_user!fk_survey_submission_user(email,first_name)&limit=1`
     );
-    if (!response.ok) return { email: null, firstName: null, utmTracker: null };
+    if (!response.ok) return none;
 
     const rows = (await response.json()) as Array<{
       utm_tracker?: string | null;
+      created_date_time?: string | null;
       app_user?: { email?: string | null; first_name?: string | null } | null;
     }>;
     const user = rows[0]?.app_user;
@@ -103,10 +111,26 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
       email: user?.email?.toLowerCase().trim() || null,
       firstName: user?.first_name?.trim() || null,
       utmTracker: rows[0]?.utm_tracker ?? null,
+      submittedAt: rows[0]?.created_date_time ?? null,
     };
   } catch (err) {
     logger.warn({ err, submissionId }, "lookupRecipientForSubmission failed");
-    return { email: null, firstName: null, utmTracker: null };
+    return none;
+  }
+}
+
+/** The report's E07 gift email arm, for the purchase's Slack post only. Best effort: null on any failure. */
+async function lookupGiftArm(submissionId: number): Promise<string | null> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=initial_gift_arm&limit=1`
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{ initial_gift_arm?: string | null }>;
+    return rows[0]?.initial_gift_arm ?? null;
+  } catch (err) {
+    logger.warn({ err, submissionId }, "lookupGiftArm failed");
+    return null;
   }
 }
 
@@ -118,7 +142,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import { EMAIL_LINKS, tagEmailLink } from "@shared/emails/email-link";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
-import { classifyTraffic } from "@features/attribution/server/traffic";
+import { classifyTraffic, readGateRevealStamp } from "@features/attribution/server/traffic";
 
 export { classifyTraffic };
 
@@ -138,11 +162,13 @@ async function notifySlackPurchase({
   email,
   experimentGroup,
   firstName,
+  giftArm,
   internal,
   paymentId,
   plan,
   purchaseTitle,
   submissionId,
+  submittedAt,
   utmTracker,
 }: {
   amount: number | null;
@@ -154,6 +180,8 @@ async function notifySlackPurchase({
   email: string | null;
   experimentGroup: string | null;
   firstName: string | null;
+  /** The report's E07 gift email arm, when drawn. */
+  giftArm: string | null;
   /** `isInternalPayment` — the verdict `is_test` and the ops lines' tag carry. */
   internal: boolean;
   paymentId: number;
@@ -164,6 +192,8 @@ async function notifySlackPurchase({
    */
   purchaseTitle: string;
   submissionId: number;
+  /** When the survey was finished (`survey_submission.created_date_time`). */
+  submittedAt: string | null;
   utmTracker: string | null;
 }) {
   const planLabel = purchaseTitle;
@@ -189,6 +219,8 @@ async function notifySlackPurchase({
     amount,
     currency,
     plan,
+    submittedAt,
+    giftArm,
   });
 
   const message = buildJourneyMessage(journey, {
@@ -1397,6 +1429,9 @@ async function syncCheckoutSessionPayment({
   const promotionSummary = getStripeCheckoutPromotionSummary(settledSession);
   const requestIp = getMetadataString(settledSession.metadata?.requestIp);
   const requestUserAgent = getMetadataString(settledSession.metadata?.requestUserAgent);
+  // The buyer's survey: who they are and its tracker. Read before the existing-payment check,
+  // not between it and the insert, so it never widens the window two runs can both pass.
+  const recipient = await lookupRecipientForSubmission(context.submissionId);
   const existingPayment = await fetchExistingPayment({
     checkoutSessionId: settledSession.id,
     stripeChargeId: charge?.id ?? null,
@@ -1440,6 +1475,15 @@ async function syncCheckoutSessionPayment({
     // self-describing for CSV/exports; the admin funnel groups via the submission's
     // utm_tracker (source of truth), this is the convenience copy.
     landingVariant: settledSession.metadata?.landingVariant ?? null,
+    // Mark's 50/50 of the EUR 1.99 page, off the survey's own stamp (utm_tracker stays the
+    // record, as for landingVariant), so a payment says which half its buyer met without a
+    // join to the survey: Metabase and exports could not split the test (sync, 23 Nov 2026).
+    // A re-run whose lookup failed keeps the half an earlier run (or the backfill) stored.
+    gateRevealArm:
+      readGateRevealStamp(recipient.utmTracker) ??
+      (typeof existingPayment?.metadata?.gateRevealArm === "string"
+        ? existingPayment.metadata.gateRevealArm
+        : null),
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
     pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,
@@ -1629,7 +1673,6 @@ async function syncCheckoutSessionPayment({
         unlockedArchetype,
       });
 
-      const recipient = await lookupRecipientForSubmission(context.submissionId);
       await notifySlackPurchase({
         amount,
         archetype: unlockedArchetype,
@@ -1640,11 +1683,13 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
+        giftArm: await lookupGiftArm(context.submissionId),
         internal: isInternalPayment,
         paymentId,
         plan,
         purchaseTitle,
         submissionId: context.submissionId,
+        submittedAt: recipient.submittedAt,
         utmTracker: recipient.utmTracker,
       });
       if (isInitialUnlockPlan(plan) && (amount ?? 0) > 0) {

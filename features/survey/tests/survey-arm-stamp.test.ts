@@ -230,10 +230,16 @@ describe("POST /api/survey — the first page on the submission", () => {
     mockCookieGet.mockReturnValue(undefined);
   });
 
-  it("starts a tracker for a visitor who carried nothing else", async () => {
+  // The first page is stamped before the arms (23 Nov 2026), so the tracker it starts carries
+  // them too. Stamped after them, it left every reader who came straight in with no arm at all.
+  it("starts a tracker for a visitor who carried nothing else, and the arms join it", async () => {
     const res = await POST(makeRequest({ ...validBody(), landingPath: "/glossary/demisexuality" }));
     expect(res.status).toBe(200);
-    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/demisexuality" });
+    expect(trackerOnPayload()).toEqual({
+      landing_path: "/glossary/demisexuality",
+      ...C13,
+      ...EMAIL,
+    });
   });
 
   it("joins the campaign tags, and replaces a first page the tracker claims", async () => {
@@ -255,7 +261,7 @@ describe("POST /api/survey — the first page on the submission", () => {
 
   it("keeps a report's token out of the database", async () => {
     await POST(makeRequest({ ...validBody(), landingPath: "/report/rpt_ABCDEFGHIJKLMNOPQRST" }));
-    expect(trackerOnPayload()).toEqual({ landing_path: "/report/<redacted>" });
+    expect(trackerOnPayload()).toEqual({ landing_path: "/report/<redacted>", ...C13, ...EMAIL });
   });
 
   // proxy.ts's filter for a visit: a crawler's user agent, or our own probes' cookie.
@@ -284,7 +290,11 @@ describe("POST /api/survey — the first page on the submission", () => {
         }
       )
     );
-    expect(trackerOnPayload()).toEqual({ landing_path: "/glossary/demisexuality" });
+    expect(trackerOnPayload()).toEqual({
+      landing_path: "/glossary/demisexuality",
+      ...C13,
+      ...EMAIL,
+    });
   });
 
   it.each(["https://evil.example/x", "/glossary?q=1", "glossary", "/a b"])(

@@ -140,6 +140,14 @@ export const PRICE_TEST_START_DAY = "2026-10-09";
  */
 export const PRICE_TEST_START_AT = "2026-10-08T15:23:00Z";
 
+/**
+ * The moment Pricing 3.0 stopped drawing new readers: the EUR 1.99 gate went on for every
+ * new free-survey finisher (27 Oct 2026, 14:38 UTC), and the gate quotes them list A3. A
+ * survey finished from here is on today's price list, not in the test, so the Slack posts
+ * name no "Report pricing" arm for it (journey.ts). The readouts keep their own cut.
+ */
+export const PRICE_TEST_END_AT = "2026-10-27T14:38:00Z";
+
 /** The plans the paygate sells — and so the only ones quoted or checked out. */
 export const OFFERED_REPORT_PURCHASE_PLAN_IDS: ReportPurchasePlanId[] = REPORT_PURCHASE_PLANS.map(
   (entry) => entry.plan

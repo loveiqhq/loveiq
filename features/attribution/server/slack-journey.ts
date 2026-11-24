@@ -17,7 +17,9 @@ import {
   AXIS_TITLES,
   GATE_REVEAL_LABELS,
   GATE_REVEAL_TITLE,
-  type ExperimentAxis,
+  GIFT_EMAIL_LABELS,
+  GIFT_EMAIL_TITLE,
+  NO_LANDING_PAGE,
 } from "@features/attribution/server/labels";
 import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
 import {
@@ -274,33 +276,74 @@ function payToStartPageLabel(journey: SubmissionJourney): string {
     : "Pay to start (/sexual-archetype)";
 }
 
+/**
+ * One experiment a reader was in, rendered twice: `line` for the posts written as lines (the
+ * survey's message, the reactivation post), its arm's NAME bold; `field` for the purchase's
+ * "Experiments they were in" grid, plain, as that grid has always shown arms.
+ */
+interface ExperimentRow {
+  title: string;
+  line: string;
+  field: string;
+}
+
+/**
+ * Every experiment this reader was in, in one order for every post (sync, 23 Nov 2026:
+ * #payments named only the landing page, and the EUR 1.99 page's half reached no other post).
+ *
+ *  - Landing page: always, so a live arm that failed to stamp stays visible. The pay-to-start
+ *    page a buyer paid on stands in for it; a reader whose first page was another one
+ *    (/survey, a glossary term) saw no landing page, which is no missing record.
+ *  - Report pricing: only when set. Pricing 3.0 ended when the EUR 1.99 gate went on (27 Oct
+ *    2026), so the journey sets it only for a reader who finished the survey before that.
+ *  - The EUR 1.99 page's half (Mark, 17 Nov), for a reader whose report waits behind it,
+ *    off the survey's own stamp: none while the switch was off.
+ *  - The E07 gift email's arm, once the cron has drawn it.
+ */
+function experimentRows(journey: SubmissionJourney): ExperimentRow[] {
+  const armRow = (title: string, short: string, retired?: boolean): ExperimentRow => {
+    const mark = retired ? " _(retired arm)_" : "";
+    return { title, line: `${boldArmName(short)}${mark}`, field: `${short}${mark}` };
+  };
+  const rows: ExperimentRow[] = [];
+
+  const firstPage = journey.traffic.landingPath;
+  if (journey.payToStart) {
+    // Paid on the pay-to-start page: in no landing arm, by design (app/api/survey).
+    const page = payToStartPageLabel(journey);
+    rows.push({ title: AXIS_TITLES.landing, line: `*${page}*`, field: page });
+  } else if (!journey.arms.landing && firstPage && firstPage !== "/") {
+    const where = ` (started on ${codeSpan(firstPage)})`;
+    rows.push({
+      title: AXIS_TITLES.landing,
+      line: `*${NO_LANDING_PAGE}*${where}`,
+      field: `${NO_LANDING_PAGE}${where}`,
+    });
+  } else {
+    const landing = armLabel("landing", journey.arms.landing);
+    rows.push(armRow(AXIS_TITLES.landing, landing.short, landing.retired));
+  }
+
+  if (journey.arms.pricing) {
+    const pricing = armLabel("pricing", journey.arms.pricing);
+    rows.push(armRow(AXIS_TITLES.pricing, pricing.short, pricing.retired));
+  }
+  if (journey.gateCohort && journey.gateRevealArm) {
+    rows.push(armRow(GATE_REVEAL_TITLE, GATE_REVEAL_LABELS[journey.gateRevealArm]));
+  }
+  if (journey.giftArm) {
+    rows.push(armRow(GIFT_EMAIL_TITLE, GIFT_EMAIL_LABELS[journey.giftArm]));
+  }
+  return rows;
+}
+
+/** The experiments as `Title: value` lines, for the survey's message and the reactivation post. */
+export function experimentLines(journey: SubmissionJourney): string[] {
+  return experimentRows(journey).map((row) => `${row.title}: ${row.line}`);
+}
+
 function armFields(journey: SubmissionJourney): SlackBlock {
-  // `landing` is live again for its round 3 (V2's question card vs V3's hero video), so
-  // a buyer's message says which version they came through, and keeps the row when it
-  // was not recorded, like the survey message's line. It left this list when round 2
-  // concluded on 2026-09-19 and must leave again when round 3 does. Pricing 3.0 is
-  // live, but its arm is assigned when the report first quotes a price, after the
-  // survey, so a survey-completed message has none yet. That is not a missing record,
-  // and a permanent "Not recorded" row on every one would be noise, so it shows when set.
-  const axes: ExperimentAxis[] = journey.arms.pricing ? ["landing", "pricing"] : ["landing"];
-  return fields(
-    axes.map((axis) => {
-      // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-      const label = armLabel(axis, journey.arms[axis]);
-      // Paid on the pay-to-start page: in no landing arm, by design (app/api/survey).
-      const value =
-        axis === "landing" && journey.payToStart
-          ? payToStartPageLabel(journey)
-          : label.retired
-            ? `${label.short} _(retired arm)_`
-            : label.short;
-      return {
-        // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-        label: AXIS_TITLES[axis],
-        value,
-      };
-    })
-  );
+  return fields(experimentRows(journey).map((row) => ({ label: row.title, value: row.field })));
 }
 
 /**
@@ -488,17 +531,6 @@ export function cameFromValue(journey: SubmissionJourney): string {
 }
 
 /**
- * "*Landing Page V4* (Pain Points)": the landing arm they came through, or the pay-to-start
- * page they paid on. Kept even when unrecorded, which is the rule the fields version
- * followed: a live arm that failed to stamp stays visible rather than quietly missing.
- */
-export function landingValue(journey: SubmissionJourney): string {
-  if (journey.payToStart) return `*${payToStartPageLabel(journey)}*`;
-  const landing = armLabel("landing", journey.arms.landing);
-  return `${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`;
-}
-
-/**
  * The compact incoming-survey layout, as ONE section.
  *
  * Requested by Marcus in #all-loveiq on 2026-09-11 ("a bit more compact like
@@ -576,24 +608,8 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
 
   if (journey.device) lines.push(`Device: ${bold(escapeSlack(journey.device))}`);
 
-  // Kept even when unrecorded (landingValue), shared with the reactivation post.
-  lines.push(`Landing page design: ${landingValue(journey)}`);
-
-  // Pricing 3.0 is live; its arm is stamped when the report first quotes a price, so a
-  // survey-completed message usually has none yet and shows the line only when set.
-  if (journey.arms.pricing) {
-    const pricing = armLabel("pricing", journey.arms.pricing);
-    lines.push(
-      `${AXIS_TITLES.pricing}: ${boldArmName(pricing.short)}${pricing.retired ? " _(retired arm)_" : ""}`
-    );
-  }
-
-  // Mark's 50/50 of the EUR 1.99 page (17 Nov: "whether the Core Archetype was shown or
-  // not"), for a reader whose report waits behind that page. No line when nothing is
-  // stamped: the switch was off, and a "Not recorded" on every message would be noise.
-  if (journey.gateCohort && journey.gateRevealArm) {
-    lines.push(`${GATE_REVEAL_TITLE}: ${boldArmName(GATE_REVEAL_LABELS[journey.gateRevealArm])}`);
-  }
+  // The experiments they were in, as #payments and the reactivation post list them.
+  lines.push(...experimentLines(journey));
 
   // Omitted when unknown rather than falling back to the pricing band — a band
   // is not an answer to "where are they from".

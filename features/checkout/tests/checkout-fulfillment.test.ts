@@ -937,7 +937,21 @@ describe("checkout fulfillment", () => {
     }
 
     function setupHappyPathMocks(
-      opts: { existingPayment?: boolean; primary?: string; utmTracker?: string | null } = {}
+      opts: {
+        existingPayment?: boolean;
+        /** The found row's metadata, when `existingPayment`. */
+        existingMetadata?: Record<string, unknown>;
+        primary?: string;
+        utmTracker?: string | null;
+        /** The report's E07 arm, from its own read (lookupGiftArm). */
+        giftArm?: string | null;
+        /** That read fails (a 500), as when the column is gone. */
+        giftArmFails?: boolean;
+        /** The recipient lookup fails (a 503). */
+        recipientFails?: boolean;
+        /** When the survey was finished. */
+        createdDateTime?: string;
+      } = {}
     ) {
       const slackCalls: Array<{ url: string; body: string }> = [];
 
@@ -959,7 +973,9 @@ describe("checkout fulfillment", () => {
             url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
             url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.cs_test_slack_001")
           ) {
-            return createJsonResponse(opts.existingPayment ? [{ id: 99 }] : []);
+            return createJsonResponse(
+              opts.existingPayment ? [{ id: 99, metadata: opts.existingMetadata ?? null }] : []
+            );
           }
           // The reader's own archetype, which names a single report (getPurchaseTitle).
           if (url.includes("/rest/v1/scoring_result?survey_submission_id=eq.70")) {
@@ -969,14 +985,31 @@ describe("checkout fulfillment", () => {
                 : []
             );
           }
-          // Recipient lookup for the Slack payload
+          // Recipient lookup for the receipt and the Slack payload
           if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
+            if (opts.recipientFails) return { ok: false, status: 503 } as Response;
+            // The failure the receipt must survive: an embed of the report that errors.
+            if (opts.giftArmFails && url.includes("personal_report")) {
+              return { ok: false, status: 400 } as Response;
+            }
             return createJsonResponse([
               {
                 utm_tracker: opts.utmTracker ?? null,
+                ...(opts.createdDateTime ? { created_date_time: opts.createdDateTime } : {}),
                 app_user: { email: "Eman@LoveIQ.org", first_name: "Eman" },
               },
             ]);
+          }
+          // The report's E07 arm, read on its own for the Slack post
+          if (
+            url.includes(
+              "/rest/v1/personal_report?survey_submission_id=eq.70&select=initial_gift_arm"
+            )
+          ) {
+            if (opts.giftArmFails) return { ok: false, status: 500 } as Response;
+            return createJsonResponse(
+              opts.giftArm !== undefined ? [{ initial_gift_arm: opts.giftArm }] : []
+            );
           }
           if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
             return createJsonResponse([{ id: 101 }]);
@@ -1095,6 +1128,152 @@ describe("checkout fulfillment", () => {
       expect(all).not.toContain("Paywall style");
       // every arm is named in plain English, never as a raw code
       expect(all).not.toContain("white_prev");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    /** The payment row as it was written, off the POST to /rest/v1/payment. */
+    function paymentRowMetadata(): Record<string, unknown> {
+      const call = mockFetchWithTimeout.mock.calls.find(
+        ([url, options]) =>
+          String(url).endsWith("/rest/v1/payment") &&
+          (options as { method?: string } | undefined)?.method === "POST"
+      );
+      const body = JSON.parse(String((call?.[1] as { body?: string }).body)) as
+        { metadata: Record<string, unknown> } | Array<{ metadata: Record<string, unknown> }>;
+      return (Array.isArray(body) ? body[0]! : body).metadata;
+    }
+
+    const fullReportEvent = (id: string) =>
+      ({
+        id,
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_slack_001",
+            metadata: {
+              plan: "full_report",
+              archetype: "Relational Nurturer",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+            },
+          },
+        },
+      }) as never;
+
+    // Sync, 23 Nov: #payments never named the EUR 1.99 page's half, not even for a buyer whose
+    // survey stamped it (#2890), and the payment row carried none, so Metabase could not split it.
+    it("names the EUR 1.99 page's half and E07's arm, and stores the half on the payment", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({
+        primary: "Relational Nurturer",
+        utmTracker: JSON.stringify({ landing_variant: "pain_point", gate_reveal_arm: "reveal" }),
+        giftArm: "holdout",
+      });
+
+      await processStripeWebhookEvent({
+        event: fullReportEvent("evt_slack_gate_half"),
+        stripe: buildStripe("full_report", "Relational Nurturer") as never,
+      });
+
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("*Landing page design*\nLanding Page V4 (Pain Points)");
+      expect(all).toContain("*€1.99 page*\nCore Archetype shown (new page)");
+      expect(all).toContain("*Gift email (E07)*\nHeld out (no gift email)");
+      expect(paymentRowMetadata().gateRevealArm).toBe("reveal");
+      // The receipt's lookup reads only the survey and its user; the E07 arm has its own read.
+      expect(
+        mockFetchWithTimeout.mock.calls
+          .map(([url]) => String(url))
+          .find((u) => u.includes("/rest/v1/survey_submission?id=eq.70&select="))
+      ).not.toContain("personal_report");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("sends the receipt when the E07 arm cannot be read, and leaves only that row out", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      process.env.RESEND_API_KEY = "re_test_not_real";
+      mockResendSend.mockResolvedValue({ data: { id: "email_test_gift" }, error: null });
+      const slackCalls = setupHappyPathMocks({
+        primary: "Relational Nurturer",
+        utmTracker: JSON.stringify({ landing_variant: "pain_point", gate_reveal_arm: "reveal" }),
+        giftArmFails: true,
+      });
+
+      await processStripeWebhookEvent({
+        event: fullReportEvent("evt_gift_read_fails"),
+        stripe: buildStripe("full_report", "Relational Nurturer") as never,
+      });
+
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+      expect(mockResendSend.mock.calls[0]![0]).toMatchObject({ to: "eman@loveiq.org" });
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("*€1.99 page*\nCore Archetype shown (new page)");
+      expect(all).not.toContain("Gift email (E07)");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("keeps the half an earlier run stored when this run's lookup fails", async () => {
+      setupHappyPathMocks({
+        primary: "Relational Nurturer",
+        existingPayment: true,
+        existingMetadata: { plan: "full_report", gateRevealArm: "control" },
+        recipientFails: true,
+      });
+
+      await processStripeWebhookEvent({
+        event: fullReportEvent("evt_rerun_lookup_fails"),
+        stripe: buildStripe("full_report", "Relational Nurturer") as never,
+      });
+
+      const patch = mockFetchWithTimeout.mock.calls.find(
+        ([url, options]) =>
+          String(url).includes("/rest/v1/payment?id=eq.") &&
+          (options as { method?: string } | undefined)?.method === "PATCH"
+      );
+      const body = JSON.parse(String((patch?.[1] as { body?: string }).body)) as {
+        metadata: Record<string, unknown>;
+      };
+      expect(body.metadata.gateRevealArm).toBe("control");
+    });
+
+    it("stores no half for a buyer whose survey stamped none", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({ primary: "Relational Nurturer" });
+
+      await processStripeWebhookEvent({
+        event: fullReportEvent("evt_slack_no_half"),
+        stripe: buildStripe("full_report", "Relational Nurturer") as never,
+      });
+
+      expect(rendered(slackCalls[0]!.body)).not.toContain("€1.99 page");
+      expect(paymentRowMetadata().gateRevealArm).toBeNull();
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    // Pricing 3.0 ended when the EUR 1.99 gate went on (27 Oct): the gate quotes list A3.
+    it("names no Pricing 3.0 arm for a survey finished after the test ended", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({
+        primary: "Relational Nurturer",
+        createdDateTime: "2026-11-22T21:44:46.000Z",
+      });
+
+      await processStripeWebhookEvent({
+        event: fullReportEvent("evt_slack_after_price_test"),
+        stripe: buildStripe("full_report", "Relational Nurturer", "pi_test_slack_001", undefined, {
+          metadata: {
+            plan: "full_report",
+            archetype: "Relational Nurturer",
+            experimentGroup: "A3",
+            reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+          },
+        }) as never,
+      });
+
+      expect(rendered(slackCalls[0]!.body)).not.toContain("Report pricing");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });

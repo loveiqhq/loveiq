@@ -6,7 +6,7 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: Parameters<typeof mockSupabaseFetch>) => mockSupabaseFetch(...args),
 }));
 
-import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { buildSubmissionJourney, journeyFromPurchase } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 // The grant's own constant: journey.ts keeps a copy (an import would be circular), and a
@@ -1030,5 +1030,124 @@ describe("buildSubmissionJourney", () => {
       ],
     });
     expect((await buildSubmissionJourney(1296))?.country).toHaveLength(100);
+  });
+});
+
+/**
+ * Which experiments a reader was in, as #incoming-surveys, #payments and #report-reactivations
+ * show them (sync, 23 Nov 2026: "tracking the experiments that run" made the top priority).
+ */
+describe("the experiments a reader was in", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // Pricing 3.0 ended when the EUR 1.99 gate went on (27 Oct 2026, 14:38 UTC): every free
+  // survey finished since is quoted list A3 by the gate, not drawn into the test.
+  it("drops the Pricing 3.0 arm for a survey finished after the test ended", async () => {
+    route({
+      sub: [{ ...SUBMISSION, created_date_time: "2026-11-22T21:44:46.000Z" }],
+      quotes: [{ ...QUOTE_PURCHASED, experiment_group: "A3", base_price_bucket: "A3" }],
+    });
+    expect((await buildSubmissionJourney(1296))?.arms.pricing).toBeNull();
+  });
+
+  it("keeps the Pricing 3.0 arm for a survey finished while it ran", async () => {
+    route({
+      sub: [{ ...SUBMISSION, created_date_time: "2026-10-20T10:00:00.000Z" }],
+      quotes: [{ ...QUOTE_PURCHASED, experiment_group: "B3", base_price_bucket: "B3" }],
+    });
+    expect((await buildSubmissionJourney(1296))?.arms.pricing).toBe("B3");
+  });
+
+  it("reads the E07 gift email's arm off the report", async () => {
+    route({ reports: [{ initial_gate_cohort_at: null, initial_gift_arm: "holdout" }] });
+    const journey = await buildSubmissionJourney(1296);
+    expect(queryFor("/personal_report?")).toContain("initial_gift_arm");
+    expect(journey?.giftArm).toBe("holdout");
+  });
+
+  it("carries no E07 arm before the gift is drawn", async () => {
+    route({ reports: [{ initial_gate_cohort_at: null, initial_gift_arm: null }] });
+    expect(await buildSubmissionJourney(1296)).not.toHaveProperty("giftArm");
+  });
+});
+
+/** The #payments post's journey: off the Stripe session and the survey's tracker, no reads. */
+describe("journeyFromPurchase", () => {
+  const purchase = {
+    submissionId: 2891,
+    firstName: "Sh",
+    email: "reader@example.com",
+    internal: false,
+    utmTracker: JSON.stringify({ landing_path: "/survey", gate_reveal_arm: "reveal" }),
+    experimentGroup: null,
+    basePriceBucket: null,
+    deviceType: null,
+    countryTier: null,
+    amount: 1.99,
+    currency: "eur",
+    plan: "initial",
+  };
+
+  // #2890 paid EUR 1.99 with its half stamped, and #payments still showed only the landing page.
+  it("carries the EUR 1.99 page's half off the survey's stamp", () => {
+    const journey = journeyFromPurchase(purchase);
+    expect(journey.gateCohort).toBe(true);
+    expect(journey.gateRevealArm).toBe("reveal");
+  });
+
+  it("carries no half when the survey stamped none", () => {
+    const journey = journeyFromPurchase({ ...purchase, utmTracker: null });
+    expect(journey.gateCohort).toBeFalsy();
+    expect(journey).not.toHaveProperty("gateRevealArm");
+  });
+
+  it("carries the E07 gift email's arm it is handed", () => {
+    expect(journeyFromPurchase({ ...purchase, giftArm: "gift" }).giftArm).toBe("gift");
+  });
+
+  it("drops the Pricing 3.0 arm for a survey finished after the test ended", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      experimentGroup: "A3",
+      submittedAt: "2026-11-22T21:44:46.000Z",
+    });
+    expect(journey.arms.pricing).toBeNull();
+  });
+
+  it("keeps the Pricing 3.0 arm for a survey finished while it ran", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      experimentGroup: "B3",
+      submittedAt: "2026-10-20T10:00:00.000Z",
+    });
+    expect(journey.arms.pricing).toBe("B3");
+  });
+
+  // After the end only A3 is today's list: a B3 quote (the hashed fallback) is what they saw.
+  it("keeps a B3 arm after the test ended, as the reader was still quoted it", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      experimentGroup: "B3",
+      submittedAt: "2026-11-22T21:44:46.000Z",
+    });
+    expect(journey.arms.pricing).toBe("B3");
+  });
+
+  // As on #incoming-surveys: the page they paid on stands in for the landing page.
+  it("marks a pay-to-start buyer's later purchase as pay to start, with the page they paid on", () => {
+    const journey = journeyFromPurchase({
+      ...purchase,
+      plan: "full_report",
+      utmTracker: JSON.stringify({
+        journey: "pay_to_start",
+        landing_path: "/sexual-archetype/initial",
+      }),
+    });
+    expect(journey.payToStart).toBe(true);
+    expect(journey.payToStartOffer).toBe("pre");
+    expect(journeyFromPurchase(purchase).payToStart).toBeUndefined();
   });
 });

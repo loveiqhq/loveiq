@@ -22,6 +22,7 @@
  */
 
 import type { GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { InitialGiftArm } from "@shared/experiments/initialGiftArm";
 
 /** The four experiment axes we can attribute a person to, server-side. */
 export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
@@ -322,3 +323,22 @@ export const GATE_REVEAL_LABELS: Record<GateRevealArm, string> = {
   reveal: "Core Archetype shown (new page)",
   control: "Core Archetype not shown (today's page)",
 };
+
+/**
+ * The E07 gift email's holdout (shared/experiments/initialGiftArm.ts), named for the Slack
+ * posts. Kept apart from ExperimentAxis like the 50/50 above: no readout reads it through the
+ * axes. `gift` was handed the Core Archetype free a day after the EUR 1.99 page stopped them.
+ */
+export const GIFT_EMAIL_TITLE = "Gift email (E07)";
+
+export const GIFT_EMAIL_LABELS: Record<InitialGiftArm, string> = {
+  gift: "Gifted (Core Archetype free on day 1)",
+  holdout: "Held out (no gift email)",
+};
+
+/**
+ * A reader whose first page was not the landing page (/survey, a glossary term): the landing
+ * test's cookie is set on "/" only, so they were in no arm, and "Not recorded" would read as
+ * a stamp that failed.
+ */
+export const NO_LANDING_PAGE = "No landing page";
