@@ -105,6 +105,12 @@ export interface SubmissionJourney {
      * Absent unless asked for; null means not recorded, as above.
      */
     dwellSinceMs?: number | null;
+    /**
+     * When the reader last read before that moment: the newest minute of reading stamped before
+     * it, active (`report_active_1min`) or, before that existed, on screen
+     * (`report_engagement_1min`). Absent unless asked for; null when none was recorded.
+     */
+    lastReadAt?: string | null;
   };
   milestones: {
     reportViewedAt: string | null;
@@ -440,6 +446,19 @@ export function measureReportDwellMs(
  */
 const RETURN_STAMP_SKEW_MS = 60_000;
 
+/** The minutes of reading a reactivation's "Last read" counts (see `timings.lastReadAt`). */
+const READ_MINUTES = new Set(["report_active_1min", "report_engagement_1min"]);
+
+/** The newest minute of reading stamped before `since`, from events in time order; null if none. */
+function lastReadBefore(since: string, events: AnalyticsRow[]): string | null {
+  const before = Date.parse(since);
+  let last: string | null = null;
+  for (const e of events) {
+    if (READ_MINUTES.has(e.event_type) && Date.parse(e.event_time) < before) last = e.event_time;
+  }
+  return last;
+}
+
 /**
  * Time in the report from a return on: a reactivation's "Report time spent"
  * (#report-reactivations), not the reader's lifetime total.
@@ -761,7 +780,10 @@ export async function buildSubmissionJourney(
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
       reportDwellMs,
       ...(options.dwellSince
-        ? { dwellSinceMs: measureReportDwellSinceMs(options.dwellSince, events, reportSessions) }
+        ? {
+            dwellSinceMs: measureReportDwellSinceMs(options.dwellSince, events, reportSessions),
+            lastReadAt: lastReadBefore(options.dwellSince, events),
+          }
         : {}),
     },
     milestones: {

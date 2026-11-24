@@ -90,6 +90,8 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
       msCheckoutHesitation: null,
       reportDwellMs: 19 * 60_000,
       dwellSinceMs: 4 * 60_000,
+      // Their last minute of reading before this visit: 1d 2h before it.
+      lastReadAt: "2026-11-18T05:12:08.268Z",
     },
     milestones: {
       reportViewedAt: "2026-11-17T05:40:00.000Z",
@@ -135,6 +137,7 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
       // AP › Emails' name for the stage, the row Marcus reads there.
       "Email: *Your gift is still unopened* (clicked)",
       "Time to reactivation: *2d 1h* (since survey submission)",
+      "Last read: *1d 2h* before this visit",
       "Report time spent: *4 min*",
       "",
       "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
@@ -202,6 +205,26 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
       returnedAt: RETURNED_AT,
     });
     expect(lines(built)[2]).toBe("Email: *Why didn’t you unlock?* (answered its question)");
+  });
+
+  it("says none recorded when they never read a minute before this visit", () => {
+    const built = buildReactivationMessage(
+      journey({ timings: { ...journey().timings, lastReadAt: null } }),
+      { submissionId: 2826, source: "email", via: "gift_unopened", returnedAt: RETURNED_AT }
+    );
+    expect(lines(built)).toContain("Last read: *none recorded*");
+  });
+
+  it("calls an untagged email link an older one: only emails sent before 5 Nov carry one", () => {
+    const built = buildReactivationMessage(journey(), {
+      submissionId: 2826,
+      source: "report",
+      via: "email",
+      returnedAt: RETURNED_AT,
+    });
+    expect(lines(built)).toContain(
+      "Email: *older email link* (before 5 Nov 2026; opened the report through it)"
+    );
   });
 
   it("falls back to the survey message's name, then to 'email link'", () => {

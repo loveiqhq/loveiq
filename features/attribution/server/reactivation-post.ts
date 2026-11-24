@@ -35,7 +35,7 @@ import {
   buildSubmissionJourney,
   type SubmissionJourney,
 } from "@features/attribution/server/journey";
-import { VIA, type ReturnSource } from "@features/attribution/server/return-ping";
+import { EMAIL_LINK, VIA, type ReturnSource } from "@features/attribution/server/return-ping";
 import {
   cameFromValue,
   EMAIL_NAMES,
@@ -47,7 +47,7 @@ import {
   experimentLines,
   type JourneyStep,
 } from "@features/attribution/server/slack-journey";
-import { EMAIL_LINKS } from "@shared/emails/email-link";
+import { EMAIL_LINKS, EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
@@ -126,10 +126,24 @@ function sourceLines(r: Reactivation): string[] {
       : r.source === "answer"
         ? "answered its question"
         : "opened the report through it";
-  return [
-    "Reactivation source: *Email*",
-    `Email: *${escapeSlack(via ? emailTitleOf(via) : "email link")}* (${how})`,
-  ];
+  // A link that names no email can only come from one sent before every link was tagged: the
+  // report-ready email of a survey from July carries one, and opens a report months later.
+  const email =
+    via === EMAIL_LINK
+      ? `*older email link* (before ${EMAIL_LINKS_TAGGED_FROM}; ${how})`
+      : `*${escapeSlack(via ? emailTitleOf(via) : "email link")}* (${how})`;
+  return ["Reactivation source: *Email*", `Email: ${email}`];
+}
+
+/**
+ * "Last read: *1d 2h* before this visit", from the reader's last minute of reading before the
+ * return: the time since the survey alone reads 95 days for a reader who read yesterday.
+ */
+function lastReadLine(lastReadAt: string | null | undefined, returnedAt: string): string {
+  const ms = msBetween(lastReadAt ?? null, returnedAt);
+  return ms === null
+    ? "Last read: *none recorded*"
+    : `Last read: *${formatSince(ms)}* before this visit`;
 }
 
 /** A Slack permalink is ours to print inside `<url|text>` only if it cannot close the link. */
@@ -158,6 +172,7 @@ export function buildReactivationMessage(
     title,
     ...sourceLines(r),
     `Time to reactivation: *${since}* (since survey submission)`,
+    lastReadLine(journey.timings.lastReadAt, r.returnedAt),
     `Report time spent: *${formatReportDwell(journey.timings.dwellSinceMs)}*`,
     "",
     funnelLine(journey),
