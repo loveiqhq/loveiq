@@ -33,6 +33,7 @@ describe("Mira knows LoveIQ", () => {
 
   it("helps first on neighbouring topics, and never opens with what she doesn't know", () => {
     expect(MIRA_SYSTEM_PROMPT).toMatch(/2\. Neighbouring topics[^\n]*Help first/);
+    expect(MIRA_SYSTEM_PROMPT).toMatch(/too broad to help with yet, say yes warmly/);
     expect(MIRA_SYSTEM_PROMPT).not.toContain(
       `Say where your knowledge ends ("That's a bit outside what I know most about")`
     );
