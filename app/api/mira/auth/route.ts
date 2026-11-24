@@ -219,6 +219,8 @@ export async function POST(request: Request) {
     try {
       // A browser (or an account) Mira stopped as under 18 keeps none of its chat, as with the code.
       if (await isMinor(account.id)) {
+        // The page forgets the chat; the copy Mira kept of it goes too, as with the code.
+        if (body.anonChat) await deleteAnonChats(await anonId(), body.anonChat);
         return NextResponse.json({ error: ADULTS_ONLY, minor: true }, { status: 403 });
       }
       const profile = await getProfile(account.id);

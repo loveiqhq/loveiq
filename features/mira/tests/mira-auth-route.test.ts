@@ -547,5 +547,16 @@ describe("POST /api/mira/auth", () => {
       expect((await verify({ carry: turns, anonChat: "not-a-chat" })).status).toBe(400);
       expect(adoptAnonChat).not.toHaveBeenCalled();
     });
+
+    // An account stopped as under 18 elsewhere, signing in with Google or a passkey on a browser
+    // that isn't stopped: the page forgets the chat, and the copy Mira kept goes with it.
+    it("is deleted too when a Google or passkey sign-in is refused as under 18", async () => {
+      getMiraAccount.mockResolvedValue({ id: "u1", email: "lea@example.com" });
+      vi.mocked(isMinor).mockResolvedValueOnce(true);
+      const res = await post({ action: "carry", carry: turns, anonChat: KEPT });
+      expect(res.status).toBe(403);
+      expect(deleteAnonChats).toHaveBeenCalledWith("anon_test_123456789", KEPT);
+      expect(adoptAnonChat).not.toHaveBeenCalled();
+    });
   });
 });
