@@ -16,7 +16,6 @@ import type {
 } from "@features/admin/server/ap/payment";
 import type { ExitPageRow } from "@features/admin/server/ap/paygate-exits";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { GATE_CHOOSE_COPY } from "@features/report/ui/gate/gateChoosePriceContent";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
@@ -205,7 +204,8 @@ function PayTable({
   columns: string;
   minWidth: number;
   head: Array<{ label: string; left?: boolean; info?: string }>;
-  rows: Array<{ key: string; cells: Cell[]; dashed?: boolean }>;
+  /** `tint`: the design's pale ground on rows that break down the row above (#faf9fc). */
+  rows: Array<{ key: string; cells: Cell[]; dashed?: boolean; tint?: boolean }>;
   pad?: string;
   group?: ReactNode;
   rowHeaders?: boolean;
@@ -240,7 +240,7 @@ function PayTable({
           <div
             key={r.key}
             role="row"
-            className={`grid border-t border-ap-line ${r.dashed ? "border-dashed" : ""}`}
+            className={`grid border-t border-ap-line ${r.dashed ? "border-dashed" : ""} ${r.tint ? "bg-[#faf9fc]" : ""}`}
             style={{ gridTemplateColumns: columns }}
           >
             {r.cells.map((c, i) => (
@@ -1001,9 +1001,9 @@ const PRICE_TEST_COLUMNS = "minmax(220px, 2fr) repeat(7, minmax(96px, 1fr))";
 /**
  * The pre-unlock price test (Marcus's board "Assessment A · Payment copy", 24 Nov 2026): EUR 1.99
  * against "Choose your price", one row per half, the choosing half's paid picks under it, then
- * those who took it for EUR 0. Green marks the half ahead on the pay rate and on revenue per
- * finisher, the number the board decides it on; the sentence under the table says how far the
- * numbers can be trusted.
+ * those who took it free, on the board's pale ground. Green marks the half ahead on the pay rate
+ * and on revenue per finisher, the number the board decides it on; the sentence under the table
+ * says how far the numbers can be trusted.
  */
 function PriceTest({ d }: { d: PaymentPayload }) {
   const t = d.priceTest;
@@ -1044,7 +1044,7 @@ function PriceTest({ d }: { d: PaymentPayload }) {
   const pickRows = b
     ? t.options.map((o) => ({
         key: `pick-${o.option}`,
-        dashed: true,
+        tint: true,
         cells: [
           { v: o.name, sub: o.sub, left: true, weight: "semibold" as const, indent: true },
           { v: "" },
@@ -1064,10 +1064,11 @@ function PriceTest({ d }: { d: PaymentPayload }) {
     ? [
         {
           key: "pick-free",
-          dashed: true,
+          tint: true,
           cells: [
             {
-              v: `€0 · ${GATE_CHOOSE_COPY.card.notes.free}`,
+              // The board's "Took it free · …", priced as the picks above are: the page's €0 tile.
+              v: `Took it free · ${fmt("eur", 0)}`,
               sub: `${fmt("count", b.free)} ${b.free === 1 ? "reader" : "readers"} · ${fmt("pct", ratio(b.free, b.finishers))} of finishers`,
               left: true,
               weight: "semibold" as const,
@@ -1077,8 +1078,8 @@ function PriceTest({ d }: { d: PaymentPayload }) {
             { v: "" },
             { v: EMPTY },
             { v: EMPTY },
-            { v: fmt("eur", 0) },
-            { v: fmt("eur", 0) },
+            { v: fmt("eur", 0, 2) },
+            { v: fmt("eur", 0, 2) },
             { v: "" },
           ],
         },
@@ -1955,7 +1956,7 @@ function toCsv(d: PaymentPayload, segKey: string): Array<{ name: string; table: 
           col("Avg. price paid", "eur"),
           col("Revenue per finisher", "eur"),
           col("Revenue", "eur"),
-          col("Took it for €0", "count"),
+          col("Took it free", "count"),
           col("Full report", "count"),
         ],
         rows: [

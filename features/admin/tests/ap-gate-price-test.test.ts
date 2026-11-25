@@ -93,25 +93,25 @@ describe("AP Payment · the pre-unlock price test", () => {
       ["support", 1, 1999],
       ["custom", 2, 800],
     ]);
-    // The options' names are the page's tiles'.
-    expect(block.options.map((o) => o.name)).toEqual([
-      "€6.99 · Recommended",
-      "€19.99 · Support our research",
-      "Your own amount",
+    // Named as Marcus's board names the picks, with this page's amounts.
+    expect(block.options.map((o) => [o.name, o.sub])).toEqual([
+      ["Fair price · €6.99", "recommended"],
+      ["Support our research · €19.99", ""],
+      ["Own amount · from €0.50", "avg. of what they typed"],
     ]);
     expect(block.arms.map((x) => [x.name, x.sub])).toEqual([
       ["A · Fixed €1.99", "Control: today’s page"],
-      ["B · Choose your price", "€6.99 recommended"],
+      ["B · Choose your price", "Suggested €6.99"],
     ]);
   });
 
-  it("says too early under 50 finishers, and leads with revenue per finisher", () => {
+  it("says too early under 50 finishers, in the board's words", () => {
     const block = build(
       [finisher(1, { pays: [paid(1.99)] }), finisher(2, { pays: [paid(6.99)] })],
       [row(1, "fixed"), row(2, "choose")]
     );
     expect(block.verdict).toBe(
-      "Choose your price earns €6.99 per free finisher against €1.99 on today’s page; 100.0% paid against 100.0%, and 0 readers took it for €0. Too early to call: the smaller half has 1 free finisher, so treat any gap as noise for now."
+      "Choose your price earns €6.99 per finisher against €1.99, with the same pay rate (100.0% vs 100.0%) and 0 free claims. Too early to call: the smaller half has 1 free finisher, so treat any gap as noise for now. Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls. To call it, each arm needs at least 5 paying readers per price option."
     );
   });
 
@@ -127,10 +127,61 @@ describe("AP Payment · the pre-unlock price test", () => {
     }
     const block = build(subs, rows);
     expect(block.verdict).toMatch(
-      /^Choose your price earns €2\.33 per free finisher against €0\.20/
+      /^Choose your price earns €2\.33 per finisher against €0\.20, with a higher pay rate \(33\.3% vs 10\.0%\) and 0 free claims\. The pay-rate gap is real \(/
     );
-    expect(block.verdict).toMatch(/The pay-rate gap is real \(/);
-    expect(block.verdict).toMatch(/Revenue per finisher decides it/);
+    expect(block.verdict).toMatch(
+      /Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls\. To call it, each arm needs at least 5 paying readers per price option\.$/
+    );
+  });
+
+  it("drops the board's bar once every price has five paying readers in its half", () => {
+    const subs: SubFact[] = [];
+    const rows: PriceTestRow[] = [];
+    const choices = new Map<number, ChoosePriceOption>();
+    // A: 6 of 60 paid EUR 1.99. B: five each paid 6.99, 19.99 and their own 3; 3 took it free.
+    const five = (pick: ChoosePriceOption) => Array.from({ length: 5 }, () => pick);
+    const picks: ChoosePriceOption[] = [
+      ...five("fair"),
+      ...five("support"),
+      ...five("custom"),
+      "free",
+      "free",
+      "free",
+    ];
+    const price: Record<ChoosePriceOption, number> = {
+      fair: 6.99,
+      support: 19.99,
+      custom: 3,
+      free: 0,
+    };
+    for (let i = 1; i <= 120; i += 1) {
+      const choose = i > 60;
+      const pick = choose ? picks[i - 61] : undefined;
+      const amount = pick ? price[pick] : i <= 6 ? 1.99 : 0;
+      subs.push(finisher(i, { pays: amount > 0 ? [paid(amount)] : [] }));
+      rows.push(row(i, choose ? "choose" : "fixed"));
+      if (pick) choices.set(i, pick);
+    }
+    const block = build(subs, rows, choices);
+    expect(block.options.map((o) => o.n)).toEqual([5, 5, 5]);
+    expect(block.verdict).toMatch(/ and 3 free claims\. /);
+    expect(block.verdict).toMatch(/the average price falls\.$/);
+    expect(block.verdict).not.toContain("To call it");
+  });
+
+  it("says a lower pay rate when the choosing half pays less often, and leaves the bar to say why", () => {
+    const subs: SubFact[] = [];
+    const rows: PriceTestRow[] = [];
+    for (let i = 1; i <= 80; i += 1) {
+      const choose = i > 40;
+      // 8 of 40 paid EUR 1.99; 3 of 40 paid 6.99, too few payments to compare the rates.
+      const pays = choose ? (i <= 43 ? [paid(6.99)] : []) : i <= 8 ? [paid(1.99)] : [];
+      subs.push(finisher(i, { pays }));
+      rows.push(row(i, choose ? "choose" : "fixed"));
+    }
+    expect(build(subs, rows).verdict).toBe(
+      "Choose your price earns €0.52 per finisher against €0.40, with a lower pay rate (7.5% vs 20.0%) and 0 free claims. Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls. To call it, each arm needs at least 5 paying readers per price option."
+    );
   });
 
   it("says why it is blank: before the test, a filter it can't follow, or a failed read", () => {

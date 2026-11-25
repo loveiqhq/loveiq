@@ -442,8 +442,9 @@ describe("GET /api/admin/ap/payment: the pre-unlock price test", () => {
       ["support", 0, 0],
       ["custom", 1, 450],
     ]);
-    expect(block.verdict).toMatch(/^Choose your price earns €3\.83 per free finisher against €/);
-    expect(block.verdict).toMatch(/1 reader took it for €0\.$|1 reader took it for €0\. /);
+    expect(block.verdict).toMatch(
+      /^Choose your price earns €3\.83 per finisher against €[\d.]+, with a higher pay rate \(66\.7% vs 50\.0%\) and 1 free claim\. /
+    );
   });
 
   it("doesn't read the halves for a range before the test, and says why", async () => {

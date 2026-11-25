@@ -1583,7 +1583,7 @@ export const fields: FieldRegistry = {
   // ---- the pre-unlock price test (it replaced #11 on the page)
   "payment.gp-arm": gatePrice(
     "Arm · price",
-    'The half of the test: today\'s €1.99 page (A, the control), or the "Choose your price" page (B), €6.99 recommended. Under B, its sales by the pick they were paid with, then the readers who took it for €0.',
+    'The half of the test: today\'s €1.99 page (A, the control), or the "Choose your price" page (B), €6.99 suggested. Under B, its sales by the pick they were paid with, then the readers who took it free (€0).',
     { num: "The half stamped on each free finisher's survey (fixed or choose)" },
     { related: ["payment.gp-finishers", "payment.gp-revenue"] }
   ),
@@ -1640,7 +1640,7 @@ export const fields: FieldRegistry = {
       stat: "Average",
       per: "per free finisher",
       good: "up",
-      caveat: `${GATE_PRICE_RULES} ${E07_RULE} Revenue is the price paid, before Stripe's fees and the VAT it includes; the page reports it and never calls a winner on it. ${LEFT_OUT}`,
+      caveat: `${GATE_PRICE_RULES} ${E07_RULE} Revenue is the price paid, before Stripe's fees and the VAT it includes; the page reports it and never calls a winner on it. Until every price has 5 paying readers in its half (the €1.99, and each pick with a price), the sentence under the table says the test can't be called yet, as Marcus's board does. ${LEFT_OUT}`,
       related: ["payment.gp-rate", "payment.gp-avg"],
     }
   ),

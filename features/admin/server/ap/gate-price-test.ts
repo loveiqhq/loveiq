@@ -6,6 +6,7 @@ import {
 } from "@features/admin/server/statistics";
 import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import {
+  CHOOSE_PRICE_CUSTOM_MIN_CENTS,
   CHOOSE_PRICE_TILES,
   isChoosePriceOption,
   type ChoosePriceOption,
@@ -47,27 +48,39 @@ export const GATE_PRICE_FROM = "2026-11-24";
 /** The section's title, as the board names it. */
 export const PRICE_TEST_NAME = "Pre-unlock price test: €1.99 vs choose your price";
 
-/** Each half as the board names it; today's page is the control. */
-const ARMS: ReadonlyArray<{ arm: GatePriceArm; name: string; sub: string }> = [
-  { arm: "fixed", name: "A · Fixed €1.99", sub: "Control: today’s page" },
-  {
-    arm: "choose",
-    name: "B · Choose your price",
-    sub: `${fmt("eur", centsOf("fair") / 100)} ${GATE_CHOOSE_COPY.card.notes.fair.toLowerCase()}`,
-  },
-];
-
 function centsOf(option: Exclude<ChoosePriceOption, "custom">): number {
   return CHOOSE_PRICE_TILES.find((tile) => tile.option === option)?.cents ?? 0;
 }
 
-/** The choosing half's picks with a price, in the page's order, as its tiles name them. */
-const tileName = (option: "fair" | "support", note: string) =>
-  `${fmt("eur", centsOf(option) / 100)} · ${note}`;
+const euros = (cents: number) => fmt("eur", cents / 100);
+
+/** Each half as the board names it; today's page is the control. */
+const ARMS: ReadonlyArray<{ arm: GatePriceArm; name: string; sub: string }> = [
+  { arm: "fixed", name: "A · Fixed €1.99", sub: "Control: today’s page" },
+  { arm: "choose", name: "B · Choose your price", sub: `Suggested ${euros(centsOf("fair"))}` },
+];
+
+/**
+ * The choosing half's picks with a price, in the page's order, named as the board names them
+ * ("Fair price · €6.99", recommended) with this page's amounts: its EUR 19.99 tile and its
+ * own amount's floor, where the board's sample drew EUR 12.99 and "from €1".
+ */
 const PAID_OPTIONS: ReadonlyArray<{ option: ChoosePriceOption; name: string; sub: string }> = [
-  { option: "fair", name: tileName("fair", GATE_CHOOSE_COPY.card.notes.fair), sub: "" },
-  { option: "support", name: tileName("support", GATE_CHOOSE_COPY.card.notes.support), sub: "" },
-  { option: "custom", name: GATE_CHOOSE_COPY.card.own, sub: "avg. of what they chose" },
+  {
+    option: "fair",
+    name: `Fair price · ${euros(centsOf("fair"))}`,
+    sub: GATE_CHOOSE_COPY.card.notes.fair.toLowerCase(),
+  },
+  {
+    option: "support",
+    name: `${GATE_CHOOSE_COPY.card.notes.support} · ${euros(centsOf("support"))}`,
+    sub: "",
+  },
+  {
+    option: "custom",
+    name: `Own amount · from ${euros(CHOOSE_PRICE_CUSTOM_MIN_CENTS)}`,
+    sub: "avg. of what they typed",
+  },
 ];
 
 /** A survey finished in the range, with its tracker: its half and its pay-to-start label. */
@@ -181,35 +194,45 @@ export async function readPriceTestChoices(
 }
 
 /**
- * The readout in words: the revenue per free finisher of each half, the pay rates by the shared
- * A/B readouts' rules (too few in all, a half under TINY_ARM, too few payments, no clear winner,
- * or a gap the test supports), and the free claims.
+ * The readout in the board's words: each half's revenue per free finisher, the pay rates and the
+ * free claims; whether the pay rates can be compared yet, by the shared A/B readouts' rules (too
+ * few in all, a half under TINY_ARM, too few payments, no clear winner, or a gap the test
+ * supports); what to watch; and, until it is met, the board's bar for calling the test: at least
+ * MIN_CELL_COUNT paying readers on every price in both halves (the EUR 1.99, and each pick).
  */
-function readout(a: PriceTestArm, b: PriceTestArm): string {
+function readout(a: PriceTestArm, b: PriceTestArm, options: readonly PriceTestOption[]): string {
   if (a.finishers === 0 && b.finishers === 0) return "No data yet.";
   if (a.finishers === 0 || b.finishers === 0) {
     const only = a.finishers > 0 ? a : b;
     return `Only ${only.name} has data, so there is nothing to compare against.`;
   }
   const perFinisher = (h: PriceTestArm) => fmt("eur", h.revenue / h.finishers, 2);
-  const payRate = (h: PriceTestArm) => fmt("pct", h.paid / h.finishers);
-  const claims = `${fmt("count", b.free)} ${b.free === 1 ? "reader" : "readers"} took it for €0`;
-  const lead = `Choose your price earns ${perFinisher(b)} per free finisher against ${perFinisher(a)} on today’s page; ${payRate(b)} paid against ${payRate(a)}, and ${claims}.`;
+  const rate = (h: PriceTestArm) => h.paid / h.finishers;
+  const than = rate(b) > rate(a) ? "a higher" : rate(b) < rate(a) ? "a lower" : "the same";
+  const claims = `${fmt("count", b.free)} free ${b.free === 1 ? "claim" : "claims"}`;
+  const lead = `Choose your price earns ${perFinisher(b)} per finisher against ${perFinisher(a)}, with ${than} pay rate (${fmt("pct", rate(b))} vs ${fmt("pct", rate(a))}) and ${claims}.`;
+  const watch =
+    " Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls.";
+  const bar =
+    Math.min(a.paid, ...options.map((o) => o.n)) < MIN_CELL_COUNT
+      ? ` To call it, each arm needs at least ${MIN_CELL_COUNT} paying readers per price option.`
+      : "";
 
   const smallest = Math.min(a.finishers, b.finishers);
   if (a.finishers + b.finishers < 50 || smallest < TINY_ARM) {
-    return `${lead} Too early to call: the smaller half has ${fmt("count", smallest)} free ${smallest === 1 ? "finisher" : "finishers"}, so treat any gap as noise for now.`;
+    return `${lead} Too early to call: the smaller half has ${fmt("count", smallest)} free ${smallest === 1 ? "finisher" : "finishers"}, so treat any gap as noise for now.${watch}${bar}`;
   }
   const signal = twoProportionSignal(a.finishers, a.paid, b.finishers, b.paid);
-  const watch =
-    " Revenue per finisher decides it: watch the free claims and the lowest amounts, which pull the average price down.";
-  if (signal.significance === "insufficient-data") {
-    return `${lead} Too few payments to compare the pay rates yet: each half needs at least ${MIN_CELL_COUNT}.${watch}`;
-  }
-  if (signal.significance === "inconclusive") {
-    return `${lead} The pay rates could still differ by chance.${watch}`;
-  }
-  return `${lead} The pay-rate gap is real (${formatSignalSummary(signal)}).${watch}`;
+  const pays =
+    signal.significance === "inconclusive"
+      ? " The pay rates could still differ by chance."
+      : signal.significance !== "insufficient-data"
+        ? ` The pay-rate gap is real (${formatSignalSummary(signal)}).`
+        : // Under five payers in a half, the bar below says so; this covers five who didn't.
+          bar
+          ? ""
+          : ` The pay rates can't be compared yet: each half needs at least ${MIN_CELL_COUNT} who paid and ${MIN_CELL_COUNT} who didn't.`;
+  return `${lead}${pays}${watch}${bar}`;
 }
 
 export function buildPriceTest(input: {
@@ -291,11 +314,12 @@ export function buildPriceTest(input: {
     };
   });
   const [a, b] = arms as [PriceTestArm, PriceTestArm];
+  const picks = [...options.values()];
   return {
     test: PRICE_TEST_NAME,
     arms,
-    options: [...options.values()],
-    verdict: readout(a, b),
+    options: picks,
+    verdict: readout(a, b, picks),
     why: null,
   };
 }

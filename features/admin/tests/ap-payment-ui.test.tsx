@@ -353,7 +353,7 @@ const payload: PaymentPayload = {
     ],
   },
   // 20 of 200 paid the €1.99; 30 of 200 chose a price (20 the €6.99, 2 the €19.99, 8 their own),
-  // and 12 took it for €0.
+  // and 12 took it free.
   priceTest: {
     test: "Pre-unlock price test: €1.99 vs choose your price",
     arms: [
@@ -372,7 +372,7 @@ const payload: PaymentPayload = {
       {
         arm: "choose",
         name: "B · Choose your price",
-        sub: "€6.99 recommended",
+        sub: "Suggested €6.99",
         control: false,
         finishers: 200,
         reached: 190,
@@ -383,18 +383,18 @@ const payload: PaymentPayload = {
       },
     ],
     options: [
-      { option: "fair", name: "€6.99 · Recommended", sub: "", n: 20, revenue: 139.8 },
-      { option: "support", name: "€19.99 · Support our research", sub: "", n: 2, revenue: 39.98 },
+      { option: "fair", name: "Fair price · €6.99", sub: "recommended", n: 20, revenue: 139.8 },
+      { option: "support", name: "Support our research · €19.99", sub: "", n: 2, revenue: 39.98 },
       {
         option: "custom",
-        name: "Your own amount",
-        sub: "avg. of what they chose",
+        name: "Own amount · from €0.50",
+        sub: "avg. of what they typed",
         n: 8,
         revenue: 29.92,
       },
     ],
     verdict:
-      "Choose your price earns €1.05 per free finisher against €0.20 on today’s page; 15.0% paid against 10.0%, and 12 readers took it for €0. The pay rates could still differ by chance. Revenue per finisher decides it: watch the free claims and the lowest amounts, which pull the average price down.",
+      "Choose your price earns €1.05 per finisher against €0.20, with a higher pay rate (15.0% vs 10.0%) and 12 free claims. The pay rates could still differ by chance. Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls. To call it, each arm needs at least 5 paying readers per price option.",
     why: null,
   },
 };
@@ -735,7 +735,7 @@ describe("the Payment page as drawn", () => {
     expect(within(table).getAllByRole("row")[2]!.className).toContain("border-dashed");
   });
 
-  it("pre-unlock price test: each half, the choosing half's picks under it, the €0 claims, and the verdict", () => {
+  it("pre-unlock price test: each half, the choosing half's picks under it, the free claims, and the verdict", () => {
     render(<ApPayment />);
     const table = screen.getByRole("table", {
       name: "Pre-unlock price test: €1.99 vs choose your price",
@@ -753,7 +753,7 @@ describe("the Payment page as drawn", () => {
         "2",
       ],
       [
-        "B · Choose your price€6.99 recommended",
+        "B · Choose your priceSuggested €6.99",
         "200",
         "190",
         "30",
@@ -762,10 +762,19 @@ describe("the Payment page as drawn", () => {
         "€1.05€209.70 in total",
         "3",
       ],
-      ["€6.99 · Recommended", "", "", "20", "10.0%", "€6.99", "€0.70€139.80 in total", ""],
-      ["€19.99 · Support our research", "", "", "2", "1.0%", "€19.99", "€0.20€39.98 in total", ""],
       [
-        "Your own amountavg. of what they chose",
+        "Fair price · €6.99recommended",
+        "",
+        "",
+        "20",
+        "10.0%",
+        "€6.99",
+        "€0.70€139.80 in total",
+        "",
+      ],
+      ["Support our research · €19.99", "", "", "2", "1.0%", "€19.99", "€0.20€39.98 in total", ""],
+      [
+        "Own amount · from €0.50avg. of what they typed",
         "",
         "",
         "8",
@@ -774,16 +783,7 @@ describe("the Payment page as drawn", () => {
         "€0.15€29.92 in total",
         "",
       ],
-      [
-        "€0 · Paying nothing is fair12 readers · 6.0% of finishers",
-        "",
-        "",
-        "—",
-        "—",
-        "€0",
-        "€0",
-        "",
-      ],
+      ["Took it free · €012 readers · 6.0% of finishers", "", "", "—", "—", "€0.00", "€0.00", ""],
     ]);
     const cell = (row: number, col: number) =>
       within(rows(table)[row]!).getAllByRole("cell")[col]!.className;
@@ -792,11 +792,12 @@ describe("the Payment page as drawn", () => {
     expect(cell(1, 6)).toContain("text-ap-good-ink");
     expect(cell(0, 4)).not.toContain("text-ap-good-ink");
     expect(cell(0, 6)).not.toContain("text-ap-good-ink");
-    // The picks sit in under their half.
+    // The picks sit in under their half, on the board's pale ground; the halves stay white.
     expect(cell(2, 0)).toContain("pl-7");
-    expect(within(rows(table)[2]!.parentElement!).getAllByRole("row")[3]!.className).toContain(
-      "border-dashed"
-    );
+    const rowClass = (row: number) => rows(table)[row]!.className;
+    for (const r of [2, 3, 4, 5]) expect(rowClass(r)).toContain("bg-[#faf9fc]");
+    for (const r of [0, 1]) expect(rowClass(r)).not.toContain("bg-[#faf9fc]");
+    for (const r of [0, 1, 2, 3, 4, 5]) expect(rowClass(r)).not.toContain("border-dashed");
     expect(
       within(region("Pre-unlock price test: €1.99 vs choose your price")).getByText(
         payload.priceTest.verdict
@@ -978,15 +979,15 @@ describe("the Payment page as drawn", () => {
         values: [200, 190, 30, near(0.15), near(6.99), near(1.0485), 209.7, 12, 3],
       },
       {
-        label: "B · €6.99 · Recommended",
+        label: "B · Fair price · €6.99",
         values: [null, null, 20, near(0.1), near(6.99), near(0.699), 139.8, null, null],
       },
       {
-        label: "B · €19.99 · Support our research",
+        label: "B · Support our research · €19.99",
         values: [null, null, 2, near(0.01), near(19.99), near(0.1999), 39.98, null, null],
       },
       {
-        label: "B · Your own amount",
+        label: "B · Own amount · from €0.50",
         values: [null, null, 8, near(0.04), near(3.74), near(0.1496), 29.92, null, null],
       },
     ]);

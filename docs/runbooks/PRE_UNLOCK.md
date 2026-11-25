@@ -149,8 +149,10 @@ readout is "Assessment A · Payment copy" in the AP canvas (`5SkhvkohZMdPfohcbwg
 - **Reading it:** AP-Analytics › Payment › "Pre-unlock price test: €1.99 vs choose your price"
   (`features/admin/server/ap/gate-price-test.ts`), in #11's place: per half, free finishers,
   reached, paid, pay rate, average price, revenue per finisher (the decider) and full reports;
-  under B its paid picks and the EUR 0 claims. #11's readout on the Funnel and paywall page
-  keeps the price test's finishers out of both its halves.
+  under B its paid picks and the EUR 0 claims, named and shaded as Marcus's board draws them. The
+  sentence under the table doesn't call it until every price has 5 paying readers in its half
+  (the board's bar). #11's readout on the Funnel and paywall page keeps the price test's
+  finishers out of both its halves.
 - **Previews:** `/report?preview=1&v4=1&gate=1&price=1` (Choose your price) or `&price=0` (today's
   page), and `&gate=tour&price=1`; the survey with `?price=1&reveal=1&sheets=all` (the choosing
   half, no halfway sheet or map) or `&reveal=0`.
