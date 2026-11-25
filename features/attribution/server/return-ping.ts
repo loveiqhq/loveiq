@@ -127,7 +127,7 @@ export function readerOf(row: {
     startedAt: row.startedAt ?? null,
     internal: isStaffEmail(row.email),
     emailMasked: row.email?.trim() ? maskEmail(row.email) : null,
-    userId: row.userId ?? null,
+    ...(row.userId === undefined ? {} : { userId: row.userId }),
   };
 }
 
@@ -245,7 +245,7 @@ const TABLE = "/rest/v1/reader_return";
  * then no thread reply and no #report-reactivations post, as the email crons and the team export
  * already skip them. Unknown counts as restricted, so a failed read stays quiet.
  */
-async function isRestricted(submissionId: number): Promise<boolean> {
+export async function isRestricted(submissionId: number): Promise<boolean> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?id=eq.${submissionId}` +
       "&select=app_user!fk_survey_submission_user" +
@@ -286,10 +286,26 @@ async function readReader(submissionId: number): Promise<ReturnReader | null> {
  * team's 100% test code), whose returns are tests. A failed read counts nobody as the team's: a
  * missed test costs one wrong post, a dropped reader a real return.
  */
-async function isTeamReader(reader: ReturnReader): Promise<boolean> {
-  if (reader.userId === null || reader.userId === undefined) return false;
+async function isTeamReader(reader: ReturnReader, submissionId: number): Promise<boolean> {
+  // A caller that knows no account (the survey's finished draft) leaves it out: read it here.
+  const userId = reader.userId === undefined ? await readUserId(submissionId) : reader.userId;
+  if (userId === null) return false;
   const team = await teamUserIds().catch(() => new Set<number>());
-  return team.has(reader.userId);
+  return team.has(userId);
+}
+
+/** The submission's account, or null when it can't be read (never the team's then). */
+async function readUserId(submissionId: number): Promise<number | null> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=user_id&limit=1`
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ user_id: number | null }>;
+    return rows[0]?.user_id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -327,7 +343,7 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     const { sentAt, userAgent } = signal;
     if (!reader || !isReturn({ source, at, sentAt, userAgent }, reader)) return;
     if (await isRestricted(submissionId)) return;
-    if (await isTeamReader(reader)) return;
+    if (await isTeamReader(reader, submissionId)) return;
 
     const via = signal.via && VIA.test(signal.via) ? signal.via : null;
     const day = reportingDay(at);

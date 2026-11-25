@@ -216,7 +216,6 @@ describe("readerOf", () => {
       startedAt: null,
       internal: false,
       emailMasked: "j***@gmail.com",
-      userId: null,
     });
     expect(readerOf({ finishedAt: "x", email: "eman@loveiq.org" }).internal).toBe(true);
     expect(readerOf({ finishedAt: "x", email: null }).emailMasked).toBeNull();
@@ -224,7 +223,9 @@ describe("readerOf", () => {
 
   it("carries the reader's user id for the team check", () => {
     expect(readerOf({ finishedAt: "x", email: "r@example.com", userId: 4242 }).userId).toBe(4242);
-    expect(readerOf({ finishedAt: "x", email: "r@example.com" }).userId).toBeNull();
+    // Left out by its caller: the team check reads it then (noteReaderReturn).
+    expect(readerOf({ finishedAt: "x", email: "r@example.com" }).userId).toBeUndefined();
+    expect(readerOf({ finishedAt: "x", email: "r@example.com", userId: null }).userId).toBeNull();
   });
 });
 
@@ -388,6 +389,35 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
       calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2790") && p.includes("user_id"))
     ).toHaveLength(1);
     expect(claims()).toHaveLength(0);
+  });
+
+  it("a finished draft's reader, passed without an account, is looked up for the team check", async () => {
+    // The survey route hands its reader over with no account (it knows none): a team account's
+    // draft is no return, and anyone else's still is.
+    const draftReader = { ...READER, startedAt: "2026-11-13T20:00:00.000Z" };
+    const finished = new Date(draftReader.finishedAt!);
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({ submission: [{ user_id: 4242, app_user: { processing_restricted_at: null } }] });
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "draft",
+      at: finished,
+      reader: draftReader,
+    });
+    expect(
+      calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2790&select=user_id"))
+    ).toHaveLength(1);
+    expect(claims()).toHaveLength(0);
+    vi.clearAllMocks();
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({ submission: [{ user_id: 77, app_user: { processing_restricted_at: null } }] });
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "draft",
+      at: finished,
+      reader: draftReader,
+    });
+    expect(claims()).toHaveLength(1);
   });
 
   it("leaves out a reader who asked us to restrict processing: no claim, no reply, no post", async () => {

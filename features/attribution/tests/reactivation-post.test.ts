@@ -324,9 +324,26 @@ function backend(
     /** The day's active minutes, as their email is looked up: none unless given. */
     minutes?: unknown[];
     minutesOk?: boolean;
+    /** The reader's report sessions that day: one unless given. */
+    sessions?: unknown[];
+    sessionsOk?: boolean;
+    /** The reader asked us to restrict processing (Art. 18). */
+    restricted?: boolean;
+    restrictedOk?: boolean;
   } = {}
 ) {
   mockSupabaseFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
+    if (path.startsWith("/rest/v1/report_session?"))
+      return res(opts.sessions ?? [{ id: "a-session" }], opts.sessionsOk ?? true);
+    if (path.startsWith("/rest/v1/survey_submission?"))
+      return res(
+        [
+          {
+            app_user: { processing_restricted_at: opts.restricted ? "2026-11-19T07:00:00Z" : null },
+          },
+        ],
+        opts.restrictedOk ?? true
+      );
     if (path.startsWith("/rest/v1/slack_journey_message?"))
       return res(opts.journeyRow ?? [JOURNEY_ROW]);
     if (path.startsWith("/rest/v1/analytics_event?")) {
@@ -373,6 +390,43 @@ describe("postReactivationOnRead: a returning reader is posted once they have re
     backend();
   });
 
+  it("posts nothing without a report session that Berlin day: a minute sent for another id", async () => {
+    backend({ sessions: [] });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("asks for a session of this reader's report from the Berlin day's start", async () => {
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    const [session] = calls((p) => p.startsWith("/rest/v1/report_session?"));
+    expect(String(session![0])).toContain("personal_report.survey_submission_id=eq.2826");
+    // 19 Nov in Berlin began at 23:00 UTC on the 18th.
+    expect(String(session![0])).toContain(
+      `started_at=gte.${encodeURIComponent("2026-11-18T23:00:00.000Z")}`
+    );
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts nothing when the sessions can't be read, and claims nothing", async () => {
+    backend({ sessionsOk: false });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("posts nothing for a reader who asked us to restrict processing since the return", async () => {
+    backend({ restricted: true });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+    // Unknown counts as restricted.
+    vi.clearAllMocks();
+    backend({ restrictedOk: false });
+    await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
   it("claims the day's unposted return, posts it top level, and keeps the ts", async () => {
     await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
 
@@ -415,7 +469,9 @@ describe("postReactivationOnRead: a returning reader is posted once they have re
   it("posts nothing without an unposted return that day: none, already posted, a draft, or a forged event", async () => {
     backend({ claimed: [] });
     await postReactivationOnRead({ submissionId: 2826, at: AT, via: "initial_gift" });
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+    // The gates' two reads, then the claim that takes nothing: no other write.
+    expect(claims()).toHaveLength(1);
+    expect(otherPatches()).toHaveLength(0);
     expect(mockBuild).not.toHaveBeenCalled();
     expect(mockPost).not.toHaveBeenCalled();
   });
