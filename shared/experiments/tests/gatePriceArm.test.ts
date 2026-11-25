@@ -1,16 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assignGateRevealArm } from "@shared/experiments/gateRevealArm";
 import {
   assignGatePriceArm,
   GATE_PRICE_EXPERIMENT,
   isGateArmStamp,
   isGatePriceArm,
-  resolveGatePriceOverride,
 } from "@shared/experiments/gatePriceArm";
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
 
 const session = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
 
@@ -46,22 +41,5 @@ describe("its stamp under gate_reveal_arm", () => {
     expect(isGatePriceArm("reveal")).toBe(false);
     for (const v of ["fixed", "choose", "control", "reveal"]) expect(isGateArmStamp(v)).toBe(true);
     for (const v of ["", "Choose", null, undefined, 1]) expect(isGateArmStamp(v)).toBe(false);
-  });
-});
-
-describe("resolveGatePriceOverride", () => {
-  it("lets staging preview either half", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
-    expect(resolveGatePriceOverride("1")).toBe("choose");
-    expect(resolveGatePriceOverride("0")).toBe("fixed");
-    expect(resolveGatePriceOverride("yes")).toBeNull();
-  });
-
-  it("is ignored on production", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
-    vi.stubEnv("VERCEL_ENV", "production");
-    expect(resolveGatePriceOverride("1")).toBeNull();
   });
 });

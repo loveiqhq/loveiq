@@ -18,7 +18,6 @@
  * funnel digest's channel sparklines leave that key out by name (20261124090000).
  */
 
-import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { assignGateRevealArm, isGateRevealArm, type GateRevealArm } from "./gateRevealArm";
 
 export type GatePriceArm = "fixed" | "choose";
@@ -43,15 +42,4 @@ export function isGateArmStamp(value: unknown): value is GateArmStamp {
  */
 export function assignGatePriceArm(sessionId: string | null | undefined): GatePriceArm {
   return assignGateRevealArm(sessionId) === "reveal" ? "choose" : "fixed";
-}
-
-/**
- * Preview override, `price=1` (Choose your price) or `price=0` (today's page), so either half
- * can be walked on dev and staging. Null on production, where it must never move a reader.
- */
-export function resolveGatePriceOverride(param: string | null | undefined): GatePriceArm | null {
-  if (!isNonProdDeploy()) return null;
-  if (param === "1") return "choose";
-  if (param === "0") return "fixed";
-  return null;
 }
