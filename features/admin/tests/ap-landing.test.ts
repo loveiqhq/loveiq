@@ -118,7 +118,7 @@ describe("landing test windows", () => {
       from: LANDING_PAIN_POINT_START_DAY,
       to: LANDING_PAIN_POINT_LAST_DAY,
     });
-    expect(testWindow(test("pain-point"), "2026-11-26", "2026-11-30", "2026-12-01")).toBeNull();
+    expect(testWindow(test("pain-point"), "2026-11-27", "2026-11-30", "2026-12-01")).toBeNull();
     // An ended test keeps its own days: clipped to the range, or none outside it.
     expect(testWindow(test("hero"), "2026-10-01", "2026-11-30", "2026-12-01")).toEqual({
       from: LANDING_HERO_RESTART_DAY,
@@ -163,7 +163,7 @@ describe("landing test windows", () => {
     expect(test("pain-point")).toMatchObject({
       code: "#10",
       from: "2026-11-18",
-      to: "2026-11-25",
+      to: "2026-11-26",
     });
     expect(test("pain-point").winner).toBeUndefined();
     // Registry #6 ran 14 Oct – 11 Nov 2026, and the 10 Nov sync kept the video.
@@ -428,7 +428,7 @@ describe("buildLanding", () => {
       armEngagement: {},
       engagement: null,
     });
-    // B's test has a last day (paused on 25 Nov 2026), so it reads as ended over the days it ran.
+    // B's test has a last day (paused on 26 Nov 2026), so it reads as ended over the days it ran.
     expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
       ["pain-point", "Control · Video page (V3)", "Ended", 80],
       ["pain-point", "Variant · Pain-point page (V4)", "Ended", 90],
@@ -438,21 +438,21 @@ describe("buildLanding", () => {
   it("names version C's test as the page does, the video page its control and C its variant", () => {
     const p = buildLanding({
       facts: factsFixture({
-        from: "2026-11-26",
+        from: "2026-11-27",
         to: "2026-11-30",
         asOf: "2026-12-01",
         visits: [
-          { day: "2026-11-26", arm: "video", src: null, n: 70 },
-          { day: "2026-11-26", arm: "pain_point_c", src: null, n: 75 },
+          { day: "2026-11-27", arm: "video", src: null, n: 70 },
+          { day: "2026-11-27", arm: "pain_point_c", src: null, n: 75 },
           // A browser still holding B's cookie from before the switch: in no row of C's test.
-          { day: "2026-11-26", arm: "pain_point", src: null, n: 4 },
+          { day: "2026-11-27", arm: "pain_point", src: null, n: 4 },
         ],
         starts: [],
         subs: [],
       }),
       previous: null,
       filters: parseFilters(
-        { period: "custom", from: "2026-11-26", to: "2026-11-30" },
+        { period: "custom", from: "2026-11-27", to: "2026-11-30" },
         "2026-12-01"
       ),
       today: "2026-12-01",

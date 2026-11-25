@@ -140,7 +140,7 @@ describe("buildReactivationMessage: Marcus's layout, real values", () => {
       "Funnel: *€1.99 after the survey*  |  *Free* (€1.99 unlock gifted)",
       "Survey time: *19 min*",
       "Original acquisition: *Google Ads* — performance_max (cross-network)",
-      // #2826 came through B, the pain-point page as released, paused on 25 Nov 2026.
+      // #2826 came through B, the pain-point page as released, paused on 26 Nov 2026.
       "Landing page design: *Landing Page V4* (Pain Points) _(retired arm)_",
       "Country (self-reported): *New Zealand*",
       "",

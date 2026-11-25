@@ -65,12 +65,12 @@ describe("landing A/B — the two arms", () => {
 
   it("reads A against B over B's own days, and A against C from C's first whole day", () => {
     // B was released Tue 17 Nov 2026, so its first whole day is Wed 18 Nov. C is set for a
-    // release on Wed 25 Nov: its first whole day is Thu 26 Nov, whose Berlin midnight (CET,
+    // release on Thu 26 Nov: its first whole day is Fri 27 Nov, whose Berlin midnight (CET,
     // UTC+1) is 23:00 UTC the evening before, and B's last day is the day before it.
     expect(LANDING_PAIN_POINT_START_DAY).toBe("2026-11-18");
-    expect(LANDING_PAIN_POINT_LAST_DAY).toBe("2026-11-25");
-    expect(LANDING_TEST_START_DAY).toBe("2026-11-26");
-    expect(LANDING_TEST_START_AT).toBe("2026-11-25T23:00:00Z");
+    expect(LANDING_PAIN_POINT_LAST_DAY).toBe("2026-11-26");
+    expect(LANDING_TEST_START_DAY).toBe("2026-11-27");
+    expect(LANDING_TEST_START_AT).toBe("2026-11-26T23:00:00Z");
     expect(reportingDay(new Date(LANDING_TEST_START_AT))).toBe(LANDING_TEST_START_DAY);
     // No gap and no overlap: C starts the day after B's last.
     const dayAfterB = new Date(`${LANDING_PAIN_POINT_LAST_DAY}T12:00:00Z`);

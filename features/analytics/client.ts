@@ -1812,7 +1812,7 @@ export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", para
  * to PostHog only, by owner decision (DPIA §6, 2026-10-13): question 1 rates the reader's sex
  * life, special-category data, which GA4 is not given. `changed`: a pick was already there
  * (an earlier tap, or a saved draft). `question`: the survey question the card asks, sent
- * with the value to PostHog only, since 25 Nov 2026, when the pain-point page's version C
+ * with the value to PostHog only, since 26 Nov 2026, when the pain-point page's version C
  * began asking Q10003 where every other card asks Q01002: without it, a value would not
  * say which question it answers.
  */

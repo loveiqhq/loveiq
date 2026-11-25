@@ -62,7 +62,7 @@ export type KpiSegment = (typeof KPI_SEGMENTS)[number];
  * The landing pages' segments and the arms that served each (shared/experiments/landingVariant.ts).
  * The video page is one segment across rounds 3 and 4: round 3's white_video and round 4's video
  * are the same page under a new cookie value, so the week round 4 began writes one row for it.
- * The pain-point page's version C (25 Nov 2026) is a segment of its own, as it is a test of its
+ * The pain-point page's version C (26 Nov 2026) is a segment of its own, as it is a test of its
  * own: pooled with B, the week C began would mix two hero questions.
  * A segment writes rows only in weeks it had visits.
  */

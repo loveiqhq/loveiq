@@ -266,28 +266,28 @@ describe("Traffic page builder", () => {
   it("reads version C's test from its first day, the video page its control, C its variant", () => {
     const p = traffic({
       filters: parseFilters(
-        { period: "custom", from: "2026-11-26", to: "2026-11-27" },
-        "2026-11-28"
+        { period: "custom", from: "2026-11-27", to: "2026-11-28" },
+        "2026-11-29"
       ),
       facts: factsFixture({
-        from: "2026-11-26",
-        to: "2026-11-27",
-        asOf: "2026-11-28",
+        from: "2026-11-27",
+        to: "2026-11-28",
+        asOf: "2026-11-29",
         visits: [
-          { day: "2026-11-26", arm: "video", src: null, n: 30 },
-          { day: "2026-11-26", arm: "pain_point_c", src: null, n: 35 },
+          { day: "2026-11-27", arm: "video", src: null, n: 30 },
+          { day: "2026-11-27", arm: "pain_point_c", src: null, n: 35 },
           // A browser that kept B's cookie past the switch: in neither of C's arms.
-          { day: "2026-11-26", arm: "pain_point", src: null, n: 3 },
+          { day: "2026-11-27", arm: "pain_point", src: null, n: 3 },
         ],
         starts: [],
         subs: [],
       }),
-      today: "2026-11-28",
+      today: "2026-11-29",
     });
     const c = p.experiments.arms.filter((a) => a.test === "Pain-point page C vs. video page");
     expect(c.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
-      ["Video page (V3)", true, 30, "Since 26 Nov 2026 · live", false],
-      ["Pain-point page C (V4 C)", false, 35, "Since 26 Nov 2026 · live", false],
+      ["Video page (V3)", true, 30, "Since 27 Nov 2026 · live", false],
+      ["Pain-point page C (V4 C)", false, 35, "Since 27 Nov 2026 · live", false],
     ]);
     // B's test is over these days: nothing to read, and it says why.
     const b = p.experiments.arms.filter((a) => a.test === "Pain-point page vs. video page");
@@ -322,11 +322,11 @@ describe("Traffic page builder", () => {
       }),
       today: "2026-11-20",
     });
-    // B was paused on 25 Nov 2026 for version C: its test reads its own days, as ended.
+    // B was paused on 26 Nov 2026 for version C: its test reads its own days, as ended.
     const t = p.experiments.arms.filter((a) => a.test === "Pain-point page vs. video page");
     expect(t.map((a) => [a.arm, a.control, a.visitors, a.note, a.ended ?? false])).toEqual([
-      ["Video page (V3)", true, 40, "18 Nov – 25 Nov 2026 · ended", true],
-      ["Pain-point page (V4)", false, 50, "18 Nov – 25 Nov 2026 · ended", true],
+      ["Video page (V3)", true, 40, "18 Nov – 26 Nov 2026 · ended", true],
+      ["Pain-point page (V4)", false, 50, "18 Nov – 26 Nov 2026 · ended", true],
     ]);
     const hero = p.experiments.arms.filter((a) => a.test === "Video page vs. question card");
     expect(hero.map((a) => [a.note, a.visitors, a.ended])).toEqual([
@@ -343,30 +343,30 @@ describe("Traffic page builder", () => {
     // Sync 19 Nov 2026: #10, and #12 after it, are decided by finished surveys per visit. Here
     // the video page has more starts and C more finishers: the finishers decide.
     const finisher = (id: number, arm: string) =>
-      sub({ id, day: "2026-11-26", at: "2026-11-26T10:00:00Z", arm });
+      sub({ id, day: "2026-11-27", at: "2026-11-27T10:00:00Z", arm });
     const p = traffic({
       filters: parseFilters(
-        { period: "custom", from: "2026-11-26", to: "2026-11-27" },
-        "2026-11-28"
+        { period: "custom", from: "2026-11-27", to: "2026-11-28" },
+        "2026-11-29"
       ),
       facts: factsFixture({
-        from: "2026-11-26",
-        to: "2026-11-27",
-        asOf: "2026-11-28",
+        from: "2026-11-27",
+        to: "2026-11-28",
+        asOf: "2026-11-29",
         visits: [
-          { day: "2026-11-26", arm: "video", src: null, n: 100 },
-          { day: "2026-11-26", arm: "pain_point_c", src: null, n: 100 },
+          { day: "2026-11-27", arm: "video", src: null, n: 100 },
+          { day: "2026-11-27", arm: "pain_point_c", src: null, n: 100 },
         ],
         starts: [
-          start({ day: "2026-11-26", arm: "video", n: 40 }),
-          start({ day: "2026-11-26", arm: "pain_point_c", n: 30 }),
+          start({ day: "2026-11-27", arm: "video", n: 40 }),
+          start({ day: "2026-11-27", arm: "pain_point_c", n: 30 }),
         ],
         subs: [
           ...Array.from({ length: 10 }, (_, i) => finisher(i + 1, "video")),
           ...Array.from({ length: 20 }, (_, i) => finisher(i + 11, "pain_point_c")),
         ],
       }),
-      today: "2026-11-28",
+      today: "2026-11-29",
     });
     const c = p.experiments.arms.find(
       (a) => a.test === "Pain-point page C vs. video page" && !a.control

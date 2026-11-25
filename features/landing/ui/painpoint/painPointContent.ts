@@ -16,7 +16,7 @@ export interface HeroQuestion {
 }
 
 /**
- * The page as released (round 4's B, `pain_point`, paused on 25 Nov 2026): question 1 of the
+ * The page as released (round 4's B, `pain_point`, paused on 26 Nov 2026): question 1 of the
  * survey (Q01002), beside the film.
  */
 export const QUESTION_1: HeroQuestion = {

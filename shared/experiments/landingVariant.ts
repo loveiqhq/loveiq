@@ -121,7 +121,7 @@ export const LANDING_PAIN_POINT_START_DAY = "2026-11-18";
  * there, so A against B is read from LANDING_PAIN_POINT_START_DAY to this day, and never
  * moves again. Move it with LANDING_TEST_START_DAY if C's release slips.
  */
-export const LANDING_PAIN_POINT_LAST_DAY = "2026-11-25";
+export const LANDING_PAIN_POINT_LAST_DAY = "2026-11-26";
 
 /**
  * The first whole (Berlin) reporting day of the CURRENT landing comparison, where its
@@ -130,18 +130,18 @@ export const LANDING_PAIN_POINT_LAST_DAY = "2026-11-25";
  * LANDING_PAIN_POINT_LAST_DAY); round 3's restart is LANDING_HERO_RESTART_DAY.
  * The axis trend and the conversion digest's landing blocks and verdict start here, and
  * the /admin readout at LANDING_TEST_START_AT. The brain's experiments tool reads a test
- * from its registry entry's own start date. Set for a production deploy on Wed 2026-11-25:
+ * from its registry entry's own start date. Set for a production deploy on Thu 2026-11-26:
  * if the release reaches production later, move this to the first whole day after its
  * deploy, with the moment below and LANDING_PAIN_POINT_LAST_DAY.
  */
-export const LANDING_TEST_START_DAY = "2026-11-26";
+export const LANDING_TEST_START_DAY = "2026-11-27";
 
 /**
  * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin (CET, UTC+1, in
  * November). Not the deploy's own moment, which is not known when this is written: a cut a
  * few hours late loses a few hours of readers, a cut too early would count B's.
  */
-export const LANDING_TEST_START_AT = "2026-11-25T23:00:00Z";
+export const LANDING_TEST_START_AT = "2026-11-26T23:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +
@@ -172,7 +172,7 @@ export function isLandingVariant(value: string | null | undefined): value is Lan
 
 /**
  * The two arms currently in the test, in reading order (A, then C). `pain_point` (B, paused
- * on 2026-11-25), `control`, `white`, `white_prev`, `white_card` and `white_video` are
+ * on 2026-11-26), `control`, `white`, `white_prev`, `white_card` and `white_video` are
  * history: valid on stored rows and for `?variant=`, never assigned.
  */
 export const LANDING_VARIANT_ARMS = [
