@@ -36,9 +36,11 @@ export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 export const SURVEY_TRACKING_FROM = "2026-10-17";
 
 /**
- * ChatGPT sent no visits at all from 7 to 14 Oct 2026: the visit log, PostHog and GA4 all read
- * zero, and the visits came back on 15 Oct with the same releases live, so the gap was on
- * ChatGPT's side. The Traffic page names it, and so does the ChatGPT alert in anomaly-watcher.
+ * ChatGPT's links carried no tag from 7 to 14 Oct 2026 (checked live on 14 Oct: ChatGPT still
+ * named LoveIQ, with no utm_source and no Referer), so the visit log, PostHog and GA4 all read
+ * zero and its visits counted as Direct. The tag came back on 15 Oct with the same releases
+ * live, so the gap was on ChatGPT's side. The Traffic page names it, and so does the ChatGPT
+ * alert in anomaly-watcher.
  */
 export const CHATGPT_GAP = { from: "2026-10-07", to: "2026-10-14" } as const;
 

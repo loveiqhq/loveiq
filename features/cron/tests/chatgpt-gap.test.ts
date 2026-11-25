@@ -200,6 +200,15 @@ describe("chatgptGapText", () => {
     expect(text.body).toContain("7 to 14 Oct 2026");
   });
 
+  it("says only what the visit log can see: tagged visits, the rest count as Direct", () => {
+    const counts = steady("2026-10-25", "2026-11-21");
+    const alert = chatgptGapText(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24")))!;
+    expect(alert.headline).toContain("no tagged visits");
+    expect(alert.body).toContain("counted as Direct");
+    const reminder = chatgptGapText(chatgptGap(counts, "2026-12-01", windowStart("2026-12-01")))!;
+    expect(reminder.headline).toContain("still no tagged visits");
+  });
+
   it("writes quiet days across two months with both months", () => {
     const counts = steady("2026-11-01", "2026-11-29");
     const text = chatgptGapText(chatgptGap(counts, "2026-12-02", windowStart("2026-12-02")))!;

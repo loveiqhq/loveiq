@@ -1755,7 +1755,7 @@ export function buildTraffic(input: {
     r !== null && r.from <= CHATGPT_GAP.to && r.to >= CHATGPT_GAP.from;
   if (coversGap(pageHead.range) || coversGap(pageHead.compare)) {
     pageHead.notes.push(
-      `ChatGPT sent no visits from ${dayRange(CHATGPT_GAP.from, CHATGPT_GAP.to)} ${CHATGPT_GAP.to.slice(0, 4)} (a gap on ChatGPT's side, not a release of ours), so AI assistants read zero on those days.`
+      `ChatGPT's links carried no tag from ${dayRange(CHATGPT_GAP.from, CHATGPT_GAP.to)} ${CHATGPT_GAP.to.slice(0, 4)} (a change on ChatGPT's side, not a release of ours), so any visits it sent counted as Direct / untagged and AI assistants read zero on those days.`
     );
   }
 

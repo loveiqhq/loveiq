@@ -1,8 +1,10 @@
 /**
  * Has ChatGPT gone quiet? It is the one AI assistant that tags its links
  * (`utm_source=chatgpt.com`), so the visit log sees every click it sends that keeps the tag.
- * From 7 to 14 Oct 2026 it sent none for eight days, and we only found out a week later
- * (`CHATGPT_GAP`). anomaly-watcher asks every hour from 07:00 Berlin; each post goes out once.
+ * From 7 to 14 Oct 2026 its links carried no tag for eight days, so none were seen, and we only
+ * found out a week later (`CHATGPT_GAP`). So a post says "no tagged visits": the tag can go
+ * while the visits go on, as Direct. anomaly-watcher asks every hour from 07:00 Berlin; each
+ * post goes out once.
  *
  * When to post scales with the volume: once the quiet days would come by chance less than
  * 1 time in 100 at the usual rate, and never before day 3. That is 3 days at 14 visits a
@@ -184,17 +186,17 @@ export function chatgptGapText(gap: ChatgptGap): { headline: string; body: strin
   if (gap.action === "alert") {
     const october = `${dayRange(CHATGPT_GAP.from, CHATGPT_GAP.to)} ${CHATGPT_GAP.to.slice(0, 4)}`;
     return {
-      headline: `ChatGPT sent no visits for ${run.days} days (${quietDays})`,
+      headline: `ChatGPT sent no tagged visits for ${run.days} days (${quietDays})`,
       body: lines(
         usual,
-        `The ${october} gap was on ChatGPT's side, not ours.`,
+        `From ${october} its links carried no tag, so any visits it sent counted as Direct (a change on ChatGPT's side, not ours).`,
         "Check GA4 (AI Assistant) and PostHog before changing anything."
       ),
     };
   }
   if (gap.action === "reminder") {
     return {
-      headline: `ChatGPT: still no visits, ${run.days} days now (${quietDays})`,
+      headline: `ChatGPT: still no tagged visits, ${run.days} days now (${quietDays})`,
       body: lines(
         usual,
         gap.last ? "This is the last reminder: the next post comes when the visits are back." : ""

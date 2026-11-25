@@ -732,7 +732,7 @@ describe("the ChatGPT gap of 7 to 14 Oct 2026", () => {
       now: new Date("2026-11-25T10:00:00Z"),
     }).notes;
   const namesGap = (notes: string[]) =>
-    notes.some((n) => n.includes("ChatGPT sent no visits from 7 to 14 Oct 2026"));
+    notes.some((n) => n.includes("ChatGPT's links carried no tag from 7 to 14 Oct 2026"));
 
   it("is named on a range that covers any of its days, its first and last included", () => {
     expect(namesGap(notesFor("2026-10-01", "2026-10-07"))).toBe(true);

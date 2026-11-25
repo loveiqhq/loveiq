@@ -8,7 +8,7 @@
  * Watch-severity stays in the daily digest's *Alerts* section — only risk
  * earns a real-time ping.
  *
- * Also, from 07:00 Berlin: a post when ChatGPT has sent no visits for longer than
+ * Also, from 07:00 Berlin: a post when ChatGPT has sent no tagged visits for longer than
  * chance explains at its usual volume (never before day 3), a weekly reminder for up
  * to 8 weeks, and one when the visits come back (`chatgpt-gap.ts`).
  *
@@ -171,8 +171,8 @@ export async function GET(request: Request) {
     }
 
     /**
-     * ChatGPT going quiet, from our own visit log. From 7 to 14 Oct 2026 it sent nothing for
-     * eight days, and we only found out a week later. Secondary, like the watchdogs above.
+     * ChatGPT going quiet, from our own visit log. From 7 to 14 Oct 2026 its links carried no
+     * tag for eight days, and we only found out a week later. Secondary, like the watchdogs above.
      */
     let chatgpt: ChatgptGap | null = null;
     try {
