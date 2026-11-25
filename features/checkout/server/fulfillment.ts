@@ -281,11 +281,14 @@ async function sendPurchaseEmail({
   reportTokenOverride,
   submissionId,
   unlockedArchetype,
+  paidCents = null,
 }: {
   plan: FulfilledPlan;
   reportTokenOverride: string | null;
   submissionId: number;
   unlockedArchetype?: string | null;
+  /** What the session took, for U1's "Paid €X" (the price test's readers choose it). */
+  paidCents?: number | null;
 }): Promise<void> {
   if (
     plan !== "essentials" &&
@@ -387,7 +390,13 @@ async function sendPurchaseEmail({
 
   const tpl =
     redesign === EMAIL_STAGES.u1
-      ? coreUnlockedEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
+      ? coreUnlockedEmail({
+          firstName: recipient.firstName,
+          reportUrl,
+          siteUrl,
+          unsubscribeUrl,
+          paidCents,
+        })
       : redesign === EMAIL_STAGES.c1
         ? fullUnlockedEmail({
             firstName: recipient.firstName,
@@ -1674,6 +1683,7 @@ async function syncCheckoutSessionPayment({
             : null,
         submissionId: context.submissionId,
         unlockedArchetype,
+        paidCents: settledSession.amount_total ?? null,
       });
 
       await notifySlackPurchase({

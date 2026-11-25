@@ -358,6 +358,26 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     }
   });
 
+  // The price test's Choose your price half pays what it picked: U1's "Paid €1.99" was wrong.
+  it("U1 names the price the reader paid, not today's EUR 1.99", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "u1");
+    try {
+      backend();
+      await processStripeWebhookEvent({
+        event: completed(),
+        stripe: stripe({
+          amountTotal: 699,
+          metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+        }) as never,
+      });
+      const sent = mockResendSend.mock.calls[0]?.[0] as { html: string; text: string };
+      expect(sent.html).toContain("Paid €6.99, initial report open");
+      expect(sent.html + sent.text).not.toContain("€1.99");
+    } finally {
+      mockSwitchOn.mockImplementation(async () => false);
+    }
+  });
+
   it("sends nothing a second time when the same purchase arrives again", async () => {
     const seen = backend({ existingPayment: true });
     await processStripeWebhookEvent({
