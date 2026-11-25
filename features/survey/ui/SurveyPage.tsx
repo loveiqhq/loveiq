@@ -36,7 +36,11 @@ import { GUIDE_CARD_COUNT } from "./guide/guideContent";
 import { pingFunnelEvent } from "@features/analytics/client";
 import type { SurveyJourney } from "@features/pay-to-start/logic/journey";
 import type { SurveySheetId } from "@features/survey/surveySheets";
-import { freshQuestionOrderArm, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
+import {
+  freshQuestionOrderArm,
+  SURVEY_2_ARM,
+  type Survey2Visit,
+} from "@shared/experiments/questionOrderArm";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
@@ -1257,8 +1261,10 @@ const ConsentScreen: FC<{
  * are then 2.0's, so a reader never agrees to one version's words and then answers the other's
  * questions (the server files the consent by the questions answered, isSurvey2Run).
  */
-function isSurvey2Visit(survey2: boolean, journey: SurveyJourney | null): boolean {
-  return runOrderArm(freshQuestionOrderArm(survey2 && !journey, getSessionId())) === SURVEY_2_ARM;
+function isSurvey2Visit(survey2: Survey2Visit, journey: SurveyJourney | null): boolean {
+  return (
+    runOrderArm(freshQuestionOrderArm(journey ? "off" : survey2, getSessionId())) === SURVEY_2_ARM
+  );
 }
 
 /**
@@ -1347,10 +1353,10 @@ interface SurveyPageProps {
    */
   sheets?: readonly SurveySheetId[];
   /**
-   * Survey 2.0 (app/survey/page.tsx: its switch, or a staging preview): a fresh run is asked the
-   * 2.0 screens. Off by default.
+   * Survey 2.0 for this visit (app/survey/page.tsx): `test` while its switch is on (a fresh run
+   * draws its half of the Survey 2.0 test), `forced` on a staging preview, `off` by default.
    */
-  survey2?: boolean;
+  survey2?: Survey2Visit;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -1358,7 +1364,7 @@ const NO_SHEETS: readonly SurveySheetId[] = [];
 const SurveyPage: FC<SurveyPageProps> = ({
   journey = null,
   sheets = NO_SHEETS,
-  survey2 = false,
+  survey2 = "off",
 }) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine (Survey 2.0: 0–2 = the short guide)
   const [step, setStep] = useState(0);

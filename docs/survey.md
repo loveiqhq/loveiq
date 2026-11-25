@@ -428,8 +428,10 @@ live before checking in with us", Mark 2026-11-19).
   switch is on, half of the fresh runs get 2.0 and half the new order, dealt by the session id
   (`survey2TestOrder` in
   [`questionOrderArm.ts`](../shared/experiments/questionOrderArm.ts), its own seed, so the halves
-  don't follow C13's; no session id is the control). The survey page (its guide and consent) and
-  the questions read the same `freshQuestionOrderArm`, so they always agree. The version is decided
+  don't follow C13's; no session id is the control). A `?order=survey2` preview (staging, the e2e
+  server) gets 2.0 in either half: `survey2ForVisit` answers `off`, `test` or `forced`. The survey
+  page (its guide and consent) and the questions read the same `freshQuestionOrderArm`, so they
+  always agree. The version is decided
   once per run and kept in the draft (`orderArm: "survey2"` or `"variant"`), as C13's order was: a
   classic draft keeps its order when the switch goes on, and a 2.0 draft keeps 2.0 when it goes
   off. A reader who paid before the survey (pay to start) is in no test and gets the classic

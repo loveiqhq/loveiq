@@ -86,7 +86,7 @@ afterEach(() => {
 
 describe("Survey 2.0's short guide", () => {
   it("opens on its first card under the Short guide header, not on the intro", async () => {
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
 
     expect(await screen.findByRole("heading", { name: CARD_1 })).toBeInTheDocument();
     expect(screen.getByText("Short guide")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("Survey 2.0's short guide", () => {
   });
 
   it("lists the three rules, in order", async () => {
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
 
     const rules = within(screen.getByRole("list")).getAllByRole("listitem");
@@ -112,7 +112,7 @@ describe("Survey 2.0's short guide", () => {
 
   it("goes card by card to the consent", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
 
     await user.click(continueButton());
@@ -143,7 +143,7 @@ describe("Survey 2.0's short guide", () => {
 
   it("has no Back on its first card, and Back on the next ones", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
     expect(screen.queryByRole("button", { name: /go to previous slide/i })).not.toBeInTheDocument();
 
@@ -156,7 +156,7 @@ describe("Survey 2.0's short guide", () => {
 
   it("takes the arrow keys as today's slides do", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
 
     await user.keyboard("{ArrowRight}");
@@ -167,7 +167,7 @@ describe("Survey 2.0's short guide", () => {
 
   it("goes to the consent on Skip Intro", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
 
     await user.click(screen.getByRole("button", { name: /skip intro/i }));
@@ -180,7 +180,7 @@ describe("Survey 2.0's short guide", () => {
     __resetSurveyConsentForTests();
     sessionStorage.setItem(SURVEY_STEP_KEY, "2");
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_3 });
 
     await user.click(continueButton());
@@ -195,7 +195,7 @@ describe("Survey 2.0's short guide", () => {
 
   it("shows the card a reload was on", async () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "1");
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
 
     expect(await screen.findByRole("heading", { name: CARD_2 })).toBeInTheDocument();
   });
@@ -209,7 +209,7 @@ describe("Survey 2.0's consent", () => {
   });
 
   it("asks for the 18+ and the use of the answers in two ticks, the terms under its buttons", async () => {
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: /before we begin/i });
 
     const [age, data] = screen.getAllByRole("checkbox");
@@ -240,7 +240,7 @@ describe("Survey 2.0's consent", () => {
 
   it("opens the questions only once both are ticked, and keeps the consent for the run", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     const agree = await screen.findByRole("button", { name: /i agree/i });
     const [age, data] = screen.getAllByRole("checkbox");
 
@@ -262,7 +262,7 @@ describe("Survey 2.0's consent", () => {
 
   it("still says why I agree is not working, until both are ticked", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     const agree = await screen.findByRole("button", { name: /i agree/i });
     const hint = screen.getByText(/tick both boxes above to continue/i);
     expect(agree).toHaveAttribute("aria-describedby", hint.id);
@@ -277,7 +277,7 @@ describe("Survey 2.0's consent", () => {
     sessionStorage.clear();
     sessionStorage.setItem(SURVEY_SESSION_KEY, VARIANT_SESSION);
     saveLandingPrefill(LANDING_PREFILL_QID, 4);
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
 
     await screen.findByRole("heading", { name: /before we begin/i });
     expect(screen.getByText(AGE_2)).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe("Survey 2.0's consent", () => {
       ANSWERS_STORAGE_KEY,
       JSON.stringify({ answers: { "10003": 4 }, currentIndex: 1, orderArm: "control" })
     );
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
 
     await screen.findByRole("heading", { name: /before we begin/i });
     expect(screen.getByText("I confirm that I am 18 years of age or older.")).toBeInTheDocument();
@@ -318,10 +318,17 @@ describe("who gets the short guide", () => {
   // The Survey 2.0 test (Mark, sync of 25 Nov 2026): its control is today's survey, new order.
   it("not the control half of the Survey 2.0 test: today's intro, switch on", async () => {
     sessionStorage.setItem(SURVEY_SESSION_KEY, CONTROL_SESSION);
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     expect(
       await screen.findByRole("button", { name: /continue to survey introduction/i })
     ).toBeInTheDocument();
+  });
+
+  // `?order=survey2` (staging, the e2e server) previews 2.0 for every run, whatever the half.
+  it("a ?order=survey2 preview, in either half", async () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, CONTROL_SESSION);
+    render(<SurveyPage survey2="forced" />);
+    expect(await screen.findByRole("heading", { name: CARD_1 })).toBeInTheDocument();
   });
 
   it("nobody while the switch is off: today's intro", async () => {
@@ -332,7 +339,7 @@ describe("who gets the short guide", () => {
   });
 
   it("not a buyer who paid before the survey: their survey stays today's", async () => {
-    render(<SurveyPage survey2 journey={PAY_TO_START} />);
+    render(<SurveyPage survey2="test" journey={PAY_TO_START} />);
     expect(
       await screen.findByRole("button", { name: /continue to survey introduction/i })
     ).toBeInTheDocument();
@@ -342,7 +349,7 @@ describe("who gets the short guide", () => {
 describe("the short guide's records", () => {
   it("records each card and the consent as they show", async () => {
     const user = userEvent.setup();
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_1 });
     await waitFor(() => expect(sent()).toContain("guide_card_1"));
     await user.click(continueButton());
@@ -362,7 +369,7 @@ describe("the short guide's records", () => {
   it("records Back and Skip Intro on the card they were pressed on", async () => {
     const user = userEvent.setup();
     sessionStorage.setItem(SURVEY_STEP_KEY, "1");
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: CARD_2 });
     await waitFor(() => expect(sent()).toContain("guide_card_2"));
 
@@ -385,7 +392,7 @@ describe("the short guide's records", () => {
 
   it("records the browser's Back from a card and from the consent", async () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: /before we begin/i });
 
     act(() => {
@@ -427,7 +434,7 @@ describe("the short guide under reduced motion", () => {
   async function loopsOn(step: string, heading: RegExp | string) {
     sessionStorage.setItem(SURVEY_SESSION_KEY, VARIANT_SESSION);
     sessionStorage.setItem(SURVEY_STEP_KEY, step);
-    render(<SurveyPage survey2 />);
+    render(<SurveyPage survey2="test" />);
     await screen.findByRole("heading", { name: heading });
     return document.querySelectorAll<HTMLElement>("[class*='animate-pulse-glow']");
   }

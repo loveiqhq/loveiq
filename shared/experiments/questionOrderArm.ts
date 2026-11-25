@@ -180,16 +180,24 @@ export function survey2TestOrder(sessionId: string | null | undefined): Question
 }
 
 /**
- * The order a fresh run is asked: its half of the Survey 2.0 test while that test runs for it
- * (`survey_2` on, and not a buyer who paid before the survey, who is in no survey test), the new
- * order otherwise. The survey page (its guide and consent) and the questions (useSurveyState)
- * both read it, so they always agree.
+ * What a visit to /survey does with Survey 2.0 (features/survey/server/survey2Switch.ts): `off`
+ * (today's survey), `test` (the `survey_2` switch is on: the Survey 2.0 test deals the run a
+ * half) or `forced` (a `?order=survey2` preview, where previews are allowed: always 2.0).
+ */
+export type Survey2Visit = "off" | "test" | "forced";
+
+/**
+ * The order a fresh run is asked: Survey 2.0 on a preview that asks for it, its half of the
+ * Survey 2.0 test while that test runs, the new order otherwise. A buyer who paid before the
+ * survey is in no survey test: the caller passes `off` for them. The survey page (its guide and
+ * consent) and the questions (useSurveyState) both read it, so they always agree.
  */
 export function freshQuestionOrderArm(
-  survey2TestOn: boolean,
+  visit: Survey2Visit,
   sessionId: string | null | undefined
 ): QuestionOrderArm {
-  return survey2TestOn ? survey2TestOrder(sessionId) : QUESTION_ORDER_WINNER;
+  if (visit === "forced") return SURVEY_2_ARM;
+  return visit === "test" ? survey2TestOrder(sessionId) : QUESTION_ORDER_WINNER;
 }
 
 /**

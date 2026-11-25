@@ -107,16 +107,26 @@ describe("the Survey 2.0 test, while the switch is on", () => {
 
   it("deals nobody a half with the switch off: every fresh run is asked the new order", () => {
     for (const id of ids.slice(0, 200))
-      expect(freshQuestionOrderArm(false, id)).toBe(QUESTION_ORDER_WINNER);
-    expect(freshQuestionOrderArm(true, "00000000-0000-4000-8000-000000000001")).toBe(SURVEY_2_ARM);
-    expect(freshQuestionOrderArm(true, "00000000-0000-4000-8000-000000000000")).toBe(
+      expect(freshQuestionOrderArm("off", id)).toBe(QUESTION_ORDER_WINNER);
+    expect(freshQuestionOrderArm("test", "00000000-0000-4000-8000-000000000001")).toBe(
+      SURVEY_2_ARM
+    );
+    expect(freshQuestionOrderArm("test", "00000000-0000-4000-8000-000000000000")).toBe(
       QUESTION_ORDER_WINNER
     );
   });
 
+  // A `?order=survey2` preview (staging, the e2e server) is always 2.0, whatever the half.
+  it("gives a forced preview Survey 2.0 in both halves", () => {
+    expect(freshQuestionOrderArm("forced", "00000000-0000-4000-8000-000000000000")).toBe(
+      SURVEY_2_ARM
+    );
+    expect(freshQuestionOrderArm("forced", "")).toBe(SURVEY_2_ARM);
+  });
+
   it("decides only a fresh run: a draft keeps the order it began in", () => {
     const started = { currentIndex: 4, answers: { "10003": 3 }, prefilled: [] as string[] };
-    const control = freshQuestionOrderArm(true, "00000000-0000-4000-8000-000000000000");
+    const control = freshQuestionOrderArm("test", "00000000-0000-4000-8000-000000000000");
     expect(resolveDraftQuestionOrderArm({ ...started, orderArm: "survey2" }, control)).toBe(
       "survey2"
     );

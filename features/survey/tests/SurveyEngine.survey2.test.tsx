@@ -101,7 +101,7 @@ describe("the Survey 2.0 test's halves, for a fresh run with the switch on", () 
   it("asks the control half the new order", async () => {
     localStorage.removeItem("loveiq-survey-answers");
     sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     expect(
       await screen.findByRole("heading", { name: firstOf("variant").question })
     ).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe("the Survey 2.0 test's halves, for a fresh run with the switch on", () 
   it("asks the variant half Survey 2.0", async () => {
     localStorage.removeItem("loveiq-survey-answers");
     sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000001");
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     expect(
       await screen.findByRole("heading", { name: firstOf("survey2").question })
     ).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("the Survey 2.0 test's halves, for a fresh run with the switch on", () 
 describe("Survey 2.0's two 16016 screens", () => {
   it("asks the areas, then only the topics inside them", async () => {
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await screen.findByText(
       "Beyond sex, which areas would you most like to understand about yourself?"
     );
@@ -149,7 +149,7 @@ describe("Survey 2.0's two 16016 screens", () => {
         orderArm: "survey2",
       })
     );
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await screen.findByText(
       "Beyond sex, which areas would you most like to understand about yourself?"
     );
@@ -185,7 +185,7 @@ describe("Survey 2.0's details screen", () => {
     run.submit.mockClear();
     onDetails({});
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
 
     await user.type(await screen.findByLabelText("Name or nickname"), "Sam");
     await next(user);
@@ -214,7 +214,7 @@ describe("Survey 2.0's details screen", () => {
     vi.mocked(trackSurveyFormError).mockClear();
     onDetails({ "00001": "Sam" });
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
     expect(screen.queryByRole("combobox", COUNTRY)).toBeNull(); // the country opens through Next only
     await next(user);
@@ -234,7 +234,7 @@ describe("Survey 2.0's details screen", () => {
   it("takes the sheet's Yes as the switch turned on, and opens the country", async () => {
     onDetails({ "00001": "Sam" });
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await user.type(await screen.findByLabelText("Email"), "sam.private@example.com");
     await next(user);
 
@@ -250,7 +250,7 @@ describe("Survey 2.0's details screen", () => {
   it("offers the miss-out sheet once: closed, the next Next opens the country", async () => {
     onDetails({ "00001": "Sam", "00000": "sam.private@example.com" });
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     expect(await screen.findByRole("switch", SWITCH)).toHaveAttribute("aria-checked", "false");
     await next(user);
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -288,7 +288,7 @@ describe("Survey 2.0's expert question", () => {
   it("holds Next on a Yes until the number is in, then goes on to the details page", async () => {
     onExpert();
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await user.click(await yes());
     await user.click(screen.getByRole("button", { name: /^next/i }));
     expect(screen.getByRole("heading", HEADING)).toBeTruthy();
@@ -306,7 +306,7 @@ describe("Survey 2.0's expert question", () => {
     localStorage.setItem("loveiq-survey-autoadvance", "true");
     onExpert();
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     await user.click(await yes());
     await new Promise((r) => setTimeout(r, 500)); // Auto-advance moves on after 350 ms
     expect(screen.getByRole("heading", HEADING)).toBeTruthy();
@@ -336,7 +336,9 @@ describe("Survey 2.0's expert sheet", () => {
 
   it("opens after 03012, and Keep going carries on to 08002", async () => {
     onLastBeforeIt();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["expert"]} />);
+    render(
+      <SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" sheets={["expert"]} />
+    );
     fireEvent.click(await screen.findByRole("button", { name: /^next/i }));
     const keepGoing = await screen.findByRole("button", { name: "Keep going" });
     await settle();
@@ -346,7 +348,9 @@ describe("Survey 2.0's expert sheet", () => {
 
   it("carries on to 08002 when closed with Esc too", async () => {
     onLastBeforeIt();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["expert"]} />);
+    render(
+      <SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" sheets={["expert"]} />
+    );
     fireEvent.click(await screen.findByRole("button", { name: /^next/i }));
     await screen.findByRole("button", { name: "Keep going" });
     fireEvent.keyDown(window, { key: "Escape" });
@@ -367,7 +371,9 @@ describe("Survey 2.0's report map", () => {
       })
     );
     const user = userEvent.setup();
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 sheets={["reportMap"]} />);
+    render(
+      <SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" sheets={["reportMap"]} />
+    );
     await user.click(await screen.findByRole("button", { name: /^next/i }));
     expect(await screen.findByText(/3 questions left/)).toBeTruthy();
   });
@@ -389,7 +395,7 @@ describe("Survey 2.0's time", () => {
         orderArm: "survey2",
       })
     );
-    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
     expect(await screen.findByText("1/62")).toBeTruthy();
     expect(screen.getByText("~9 min")).toBeTruthy();
     expect(screen.queryByText("~15 min")).toBeNull();
@@ -436,7 +442,7 @@ describe("Survey 2.0's details screen after the server refused the email", () =>
     );
     try {
       const user = userEvent.setup();
-      render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+      render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2="test" />);
       await user.click(await screen.findByRole("button", { name: /finish processing/i }));
       await user.click(await screen.findByRole("button", { name: /fix my email/i }));
 

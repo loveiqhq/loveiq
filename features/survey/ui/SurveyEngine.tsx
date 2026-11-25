@@ -37,7 +37,11 @@ import {
 } from "@features/analytics/client";
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { freshQuestionOrderArm, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
+import {
+  freshQuestionOrderArm,
+  SURVEY_2_ARM,
+  type Survey2Visit,
+} from "@shared/experiments/questionOrderArm";
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
 import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
 import { type DetailsField } from "@features/survey/survey2/details";
@@ -133,10 +137,12 @@ interface SurveyEngineProps {
    */
   sheets?: readonly SurveySheetId[];
   /**
-   * Survey 2.0's switch for this visit (app/survey/page.tsx): a FRESH run is asked the 2.0
-   * screens. A draft keeps the order it began in (resolveDraftQuestionOrderArm). Off by default.
+   * Survey 2.0 for this visit (app/survey/page.tsx): `test` while its switch is on, when a FRESH
+   * run draws its half of the Survey 2.0 test (2.0 or the new order), `forced` on a staging
+   * preview (always 2.0). A draft keeps the order it began in (resolveDraftQuestionOrderArm).
+   * `off` by default.
    */
-  survey2?: boolean;
+  survey2?: Survey2Visit;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -190,7 +196,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onStartOver,
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
-  survey2 = false,
+  survey2 = "off",
 }) => {
   // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
   // meets every sheet, and the halfway sheet and the report map tell the EUR 1.99 offer in the
@@ -225,7 +231,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     // by its session id. A buyer who paid before the survey is in no survey test, so stays on
     // today's survey.
   } = useSurveyState({
-    freshArm: freshQuestionOrderArm(survey2 && !payToStart, getSessionId()),
+    freshArm: freshQuestionOrderArm(payToStart ? "off" : survey2, getSessionId()),
   });
   const {
     submit: submitSurvey,

@@ -27,37 +27,40 @@ afterEach(() => {
 
 describe("whether a visit starts Survey 2.0", () => {
   it("not by default", async () => {
-    expect(await survey2ForVisit(undefined)).toBe(false);
+    expect(await survey2ForVisit(undefined)).toBe("off");
   });
 
-  it("when the survey_2 switch is on, in production too", async () => {
+  // The switch runs the Survey 2.0 test: a fresh run draws its half (Mark, sync of 25 Nov 2026).
+  it("runs the Survey 2.0 test when the survey_2 switch is on, in production too", async () => {
     env.on = new Set(["survey_2"]);
-    expect(await survey2ForVisit(undefined)).toBe(true);
+    expect(await survey2ForVisit(undefined)).toBe("test");
   });
 
   it("production ignores ?order=survey2", async () => {
-    expect(await survey2ForVisit("survey2")).toBe(false);
+    expect(await survey2ForVisit("survey2")).toBe("off");
+    env.on = new Set(["survey_2"]);
+    expect(await survey2ForVisit("survey2")).toBe("test");
   });
 
-  it("previews it on dev, previews and staging", async () => {
+  it("forces it for every run on a preview on dev, previews and staging", async () => {
     env.nonProd = true;
-    expect(await survey2ForVisit("survey2")).toBe(true);
+    expect(await survey2ForVisit("survey2")).toBe("forced");
   });
 
-  it("previews it on the e2e server, which sets SURVEY_SHEETS_PREVIEW=1", async () => {
+  it("forces it on the e2e server, which sets SURVEY_SHEETS_PREVIEW=1", async () => {
     vi.stubEnv("SURVEY_SHEETS_PREVIEW", "1");
-    expect(await survey2ForVisit("survey2")).toBe(true);
+    expect(await survey2ForVisit("survey2")).toBe("forced");
   });
 
   it("previews today's survey with ?order=variant while the switch is on", async () => {
     env.nonProd = true;
     env.on = new Set(["survey_2"]);
-    expect(await survey2ForVisit("variant")).toBe(false);
-    expect(await survey2ForVisit("control")).toBe(false);
+    expect(await survey2ForVisit("variant")).toBe("off");
+    expect(await survey2ForVisit("control")).toBe("off");
   });
 
   it("fails closed to classic", async () => {
     env.fail = true;
-    expect(await survey2ForVisit(undefined)).toBe(false);
+    expect(await survey2ForVisit(undefined)).toBe("off");
   });
 });

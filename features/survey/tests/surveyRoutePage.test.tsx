@@ -30,17 +30,17 @@ beforeEach(() => {
 
 describe("/survey and Survey 2.0's switch", () => {
   it("tells the page when the switch gives this visit Survey 2.0", async () => {
-    mockSurvey2.mockResolvedValue(true);
+    mockSurvey2.mockResolvedValue("forced");
     const element = (await Page({
       searchParams: Promise.resolve({ order: "survey2" }),
     })) as PageElement;
     expect(mockSurvey2).toHaveBeenCalledWith("survey2");
-    expect(element.props.survey2).toBe(true);
+    expect(element.props.survey2).toBe("forced");
   });
 
   it("gives today's survey when it doesn't", async () => {
-    mockSurvey2.mockResolvedValue(false);
+    mockSurvey2.mockResolvedValue("off");
     const element = (await Page()) as PageElement;
-    expect(element.props.survey2).toBe(false);
+    expect(element.props.survey2).toBe("off");
   });
 });
