@@ -68,16 +68,17 @@ const seen: SurveySheetsSeen = {
     halfway: fig(40, 3, 5679),
     desire: fig(36, 0, 3405, 1),
     reportMap: fig(49, 2, 4874),
+    missOut: fig(20, 0, 2840, 2),
   },
-  all: fig(311, 7, 4129, 1),
+  all: fig(331, 7, 4129, 3),
 };
 
 /** The old order's runs met fewer sheets, and never the expert's. */
 const byOrder: SurveySheetsByOrder = {
   test: seen,
   survey: {
-    bySheet: { science: fig(41, 0, 5049), halfway: fig(29, 2, 4832) },
-    all: fig(70, 2, 4900),
+    bySheet: { science: fig(41, 0, 5049), halfway: fig(29, 2, 4832), missOut: fig(21, 0, 2088, 3) },
+    all: fig(91, 2, 4900, 3),
   },
 };
 
@@ -167,7 +168,7 @@ describe("the Sheets section (Mark, 17 Nov 2026)", () => {
     const sheets = document.getElementById("sheets")!;
     const demo = document.getElementById("demographics")!;
     expect(sheets.compareDocumentPosition(demo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(7);
+    expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(8);
     const halfway = within(sheetsRow("Halfway · profile filling in")).getAllByRole("cell");
     // Where it sits in the new order (the page opens on it): after 11003, its number in that order.
     expect(halfway[0]!.textContent).toContain(`After #${newOrder.indexOf("11003") + 1}`);
@@ -182,23 +183,31 @@ describe("the Sheets section (Mark, 17 Nov 2026)", () => {
     expect(desire[4]!.textContent).toBe("2.8%1 click");
     const expert = within(sheetsRow("Expert quote")).getAllByRole("cell");
     expect(expert[0]!.textContent).toContain(`Before #${newOrder.indexOf("01005") + 1}`);
+    // Row 7: the opt-in's miss-out sheet, after the last question, with its Yes as conversion.
+    const missOut = within(sheetsRow("Opt-in · Sure you want to miss out?")).getAllByRole("cell");
+    expect(missOut[0]!.textContent).toContain(`After #${newOrder.length}`);
+    expect(missOut[0]!.textContent).toContain("16015");
+    expect(missOut[1]!.textContent).toBe("20");
+    expect(missOut[3]!.textContent).toBe("3 s");
+    expect(missOut[4]!.textContent).toBe("10.0%2 clicks");
   });
 
   it("shows the four tiles: sheets on, and every sheet's bounce, time and conversion", () => {
     render(<ApSurvey />);
     const sheets = within(document.getElementById("sheets")!);
     const tile = (label: string) => sheets.getAllByText(label)[0]!.closest("div")!.textContent!;
-    expect(tile("Sheets in the survey")).toContain("6");
-    expect(tile("Bounce rate")).toContain("2.3%");
+    expect(tile("Sheets in the survey")).toContain("7");
+    expect(tile("Bounce rate")).toContain("2.1%");
     expect(tile("Median time")).toContain("4 s");
-    expect(tile("Conversion")).toContain("2.8%");
-    expect(tile("Conversion")).toContain("1 click");
+    // Both sheets with something to tap: 1 tick of 36 and 2 Yeses of 20.
+    expect(tile("Conversion")).toContain("5.4%");
+    expect(tile("Conversion")).toContain("3 clicks");
   });
 
   it("says when the range is before the sheets, and keeps them off the funnel and charts", () => {
     view.payload = page("2026-11-15");
     render(<ApSurvey />);
-    expect(screen.getByText(/The sheets went live on 17 Nov 2026/)).toBeTruthy();
+    expect(screen.getByText(/The first sheet went live on 16 Nov 2026/)).toBeTruthy();
     expect(funnelRows().some((r) => r.hasAttribute("data-sheet"))).toBe(false);
     expect(document.querySelector("[data-sheet]")).toBeNull();
   });
@@ -224,6 +233,10 @@ describe("the sheets in the question funnel", () => {
     expect(neighbours("halfway").before).toContain("11003");
     expect(neighbours("desire").before).toContain("16005");
     expect(neighbours("reportMap").before).toContain("16017");
+    // The miss-out sheet: after the opt-in, the funnel's last row.
+    expect(neighbours("missOut").before).toContain("16015");
+    expect(neighbours("missOut").after).toBe("");
+    expect(sheetRow("missOut")!.textContent).toContain("Conversion 10.0%");
     // The expert's opens on arriving at 01005: its row comes right before it.
     expect(neighbours("expert").after).toContain("01005");
     const cells = within(sheetRow("halfway")!).getAllByRole("cell");
@@ -260,8 +273,8 @@ describe("the sheets in the question funnel", () => {
       p.getAttribute("data-sheet")
     );
     expect(pins).toEqual([
-      ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
-      ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap"],
+      ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap", "missOut"],
+      ...["science", "trustpilot", "expert", "halfway", "desire", "reportMap", "missOut"],
     ]);
     // Mark's board: the section says where the sheets are, and the key names them as between
     // questions (the expert's opens before its question, so not "after").
@@ -294,7 +307,7 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
       )
     ).toBeTruthy();
     // The Sheets section still has them.
-    expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(7);
+    expect(within(sheetsTable()).getAllByRole("row")).toHaveLength(8);
   });
 
   it("says which order's runs the Sheets section counts, and follows the funnel's pick", () => {
@@ -337,7 +350,10 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
       facts: factsFixture({ from: "2026-11-01", to: "2026-11-21" }),
     });
     render(<ApSurvey />);
+    // Each sheet from its own first day: the miss-out sheet 16 Nov, the expert's 18 Nov.
     expect(within(sheetRow("halfway")!).getByText("Counted from 17 Nov 2026")).toBeTruthy();
+    expect(within(sheetRow("expert")!).getByText("Counted from 18 Nov 2026")).toBeTruthy();
+    expect(within(sheetRow("missOut")!).getByText("Counted from 16 Nov 2026")).toBeTruthy();
   });
 
   it("without the questions, reads the order the range opens on and places nothing", () => {
@@ -571,6 +587,7 @@ describe("the CSV (every table on the page is in it)", () => {
       "4 · Halfway · profile filling in",
       "5 · State of Desire report promo",
       "6 · How to read your report",
+      "7 · Opt-in · Sure you want to miss out?",
       "All sheets",
     ]);
     expect(fresh.rows[3]!.values).toEqual([
@@ -583,14 +600,24 @@ describe("the CSV (every table on the page is in it)", () => {
     ]);
     // Only the State of Desire sheet has something to tap: its conversion and clicks.
     expect(fresh.rows[4]!.values.slice(4)).toEqual([1 / 36, 1]);
+    expect(fresh.rows[6]!.values).toEqual([
+      `After #${newOrder.length} · 16015`,
+      20,
+      0,
+      2840,
+      2 / 20,
+      2,
+    ]);
     // The tiles: every sheet together.
-    expect(fresh.rows[6]).toEqual({
+    expect(fresh.rows[7]).toEqual({
       label: "All sheets",
-      values: [null, 311, 7 / 311, 4129, null, null],
+      // The Conversion tile too: 1 tick of 36 and 2 Yeses of 20.
+      values: [null, 331, 7 / 331, 4129, 3 / 56, 3],
     });
     expect(fresh.rows[2]!.values[0]).toBe(`Before #${newOrder.indexOf("01005") + 1} · 01005`);
 
     const old = csvTable("Sheets · old order")!;
+    expect(old.rows[6]!.values.slice(1)).toEqual([21, 0, 2088, 3 / 21, 3]);
     // The old order asks 01005 too early for the expert's sheet, and its runs never met it.
     expect(old.rows[2]!.values).toEqual(["Not in this order", 0, null, null, null, null]);
     expect(old.rows[3]!.values.slice(0, 4)).toEqual([

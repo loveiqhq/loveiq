@@ -42,7 +42,14 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
-import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
+import {
+  SHEET_NAMES,
+  sheetBounce,
+  sheetConversion,
+  sheetCountedFrom,
+  sheetSpots,
+  type SheetSpot,
+} from "./sheets";
 import SheetsSection, { clicks, SheetBadge, sheetsCsvTable } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
@@ -1030,7 +1037,7 @@ function FunnelSection({
   // each after the question it follows.
   const asked0 = rows.filter((r) => r.n > 0);
   const sheetsAfter = new Map<string, SheetSpot[]>();
-  // Only for a range that reaches the sheets (they went live on 17 Nov 2026).
+  // Only for a range that reaches the sheets (the first went live on 16 Nov 2026).
   // Not under a source or device filter either: the sheets are read from PostHog, which those
   // filters (on the database's runs) don't narrow, and an all-traffic row between filtered
   // questions would read as theirs.
@@ -1396,7 +1403,7 @@ function FunnelSection({
                     spot={spot}
                     figures={sheetsSeen?.bySheet[spot.id]}
                     known={sheetsKnown}
-                    from={data.sheets.from}
+                    from={data.sheets.from && sheetCountedFrom(spot.id, data.range.from)}
                   />
                 ))}
               </Fragment>

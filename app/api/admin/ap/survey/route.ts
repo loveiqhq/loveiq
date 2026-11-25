@@ -60,7 +60,7 @@ export async function GET(request: Request) {
         cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
           ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
           : Promise.resolve(null),
-        // The sheets between the questions, from their first day (17 Nov 2026).
+        // The sheets between the questions, from the first one's first day (16 Nov 2026).
         filters.to >= SHEETS_FROM
           ? fetchSurveySheets(filters.from, filters.to).catch(postHogFailed)
           : Promise.resolve(null),

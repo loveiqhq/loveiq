@@ -2,9 +2,9 @@
 
 import type { Table } from "@features/admin/server/ap/common";
 import { fmt } from "@features/admin/server/ap/format";
+import { AP_SHEET_IDS } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
-import { SURVEY_SHEET_IDS } from "@features/survey/surveySheets";
 
 import { Info } from "./field-info";
 import { AllTraffic, Card, SectionHead, StatBox, TileGrid } from "./kit";
@@ -15,6 +15,7 @@ import {
   sheetConversion,
   sheetNumber,
   sheetSpots,
+  tapConversion,
 } from "./sheets";
 import { overFive } from "./SurveyTimeDrop";
 
@@ -45,7 +46,7 @@ export default function SheetsSection({
   // Without the questions (their read failed) there is nothing to place a sheet against.
   const placed = asked.length > 0;
   const all = figures?.all;
-  const tapped = figures?.bySheet.desire;
+  const taps = tapConversion(figures?.bySheet);
   return (
     <Card id="sheets" labelledBy="h-sheets">
       <SectionHead
@@ -69,7 +70,7 @@ export default function SheetsSection({
       />
       {seen === null ? (
         <p className="m-0 text-sm text-ap-muted">
-          The sheets went live on 17 Nov 2026: pick a range that reaches that day.
+          The first sheet went live on 16 Nov 2026: pick a range that reaches that day.
         </p>
       ) : !seen.ok ? (
         <p className="m-0 text-sm text-ap-bad-ink">{seen.error}</p>
@@ -104,15 +105,15 @@ export default function SheetsSection({
               stat={{
                 label: "Conversion",
                 unit: "pct",
-                value: sheetConversion(tapped),
+                value: taps.rate,
                 info: "survey.sheetConversion",
-                note: tapped ? clicks(tapped.ticked) : undefined,
+                note: figures ? clicks(taps.taps) : undefined,
               }}
             />
           </TileGrid>
           {from && (
             <p className="m-0 text-xs text-ap-muted">
-              Read from {from}, when the first sheets went live.
+              Read from {from}, when the first sheet went live.
             </p>
           )}
           <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -125,7 +126,7 @@ export default function SheetsSection({
                 <Head label="Median time" info="survey.sheetTime" right />
                 <Head label="Conversion" info="survey.sheetConversion" right />
               </div>
-              {SURVEY_SHEET_IDS.map((id) => {
+              {AP_SHEET_IDS.map((id) => {
                 const meta = SHEET_NAMES[id];
                 const f = figures?.bySheet[id];
                 const spot = spots.get(id);
@@ -215,6 +216,7 @@ export function sheetsCsvTable(
   const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
   const on = data.sheets.on;
   const all = figures?.all;
+  const taps = tapConversion(figures?.bySheet);
   return {
     columns: [
       { label: "Sheet", unit: "text" },
@@ -226,7 +228,7 @@ export function sheetsCsvTable(
       { label: "Clicks", unit: "count" },
     ],
     rows: [
-      ...SURVEY_SHEET_IDS.map((id) => {
+      ...AP_SHEET_IDS.map((id) => {
         const f = figures?.bySheet[id];
         const spot = spots.get(id);
         const tap = SHEET_NAMES[id].tap === true;
@@ -247,10 +249,17 @@ export function sheetsCsvTable(
           ],
         };
       }),
-      // The section's tiles: every sheet together (its conversion is the State of Desire row's).
+      // The section's tiles: every sheet together, and the Conversion tile (both sheets to tap).
       {
         label: "All sheets",
-        values: [null, all?.saw ?? 0, sheetBounce(all), all?.medianMs ?? null, null, null],
+        values: [
+          null,
+          all?.saw ?? 0,
+          sheetBounce(all),
+          all?.medianMs ?? null,
+          taps.rate,
+          figures ? taps.taps : null,
+        ],
       },
     ],
   };

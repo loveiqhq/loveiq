@@ -892,27 +892,28 @@ const FUNNEL_CAVEAT =
   "Counts survey runs (one browser's go at the survey) begun in the range, not people: someone who restarts in another browser counts twice. A run begun earlier and carried on in the range (a saved draft picked up again, or a survey that ran past midnight into it) belongs to the period it began in, as Survey starts counts it, so it is left out. Since 6 Oct 2026 half of the new runs are asked the opening questions in a different order (the C13 test); each order has its own funnel (the toggle). A run counts as reaching every question up to the furthest it got to, in its order (a step lost while the tab was in the background, an answer given on the landing page's card, steps recorded only from part-way before 18 Sep 2026), so no question has more runs than the one before it. The email question asked first (by a run begun before 17 Aug 2026) is not how far a run got. A run that leaves by walking back through the questions with the browser's Back (a fraction of a second on each) left where that walk began, and its Backs aren't Went back. The drop-out rate and Skipped are shares of the runs a question was put to. A question first asked during the range (marked) was put only to the runs begun after; one first asked after the range isn't listed. The team's runs are left out. Under a device filter the survey's steps class Android tablets as phones and iPads as computers.";
 
 /**
- * The sheets between the questions (Mark's Sheets section, 17 Nov 2026), as fetchSurveySheets
- * reads them: per sheet the people it opened for, those who left with it open, those who closed
- * it, the median time it was open and the State of Desire box's ticks; the last row is every
- * sheet together.
+ * The sheets between the questions (Mark's Sheets section, 17 Nov 2026, and the opt-in's
+ * miss-out sheet), as fetchSurveySheets reads them: per sheet the people it opened for, those who
+ * left with it open, those who closed it, the median time it was open and its taps; the last
+ * rows are every sheet together.
  */
 const SHEETS = `-- The sheets between the survey's questions, for the runs begun in the range, in each question
 -- order (run_order: 'test' is the new order, C13's and everyone's since the test ended; 'survey'
 -- the old one): per sheet, the people it opened for, those who left the survey with it open
--- (never closed it, answered nothing after it opened, 30 minutes since), those who closed it,
--- how long it was open
--- (median, ms) and the ticks of the State of Desire sheet's box. A run's order: it answered
--- 03011 before 01005 (new) or 01005 first (old). The rows with an empty sheet are every sheet
--- together. The team's people are left out.
+-- (never closed it, answered or finished nothing after it opened, 30 minutes since), those who
+-- closed it, how long it was open (median, ms) and its taps (the State of Desire sheet's box
+-- ticked, the miss-out sheet's Yes). The opt-in's miss-out sheet is 'missOut': its own events;
+-- its time open is its ms_open from 25 Nov 2026, before then the time between its two events. A run's order: it answered 03011 before 01005 (new) or 01005 first
+-- (old). The rows with an empty sheet are every sheet together. The team's people are left out.
 WITH runs AS (
   SELECT person_id,
          minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
          minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
          minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
-         maxIf(timestamp, event = 'survey_answer') AS last_answer
+         maxIf(timestamp, event = 'survey_answer') AS last_answer,
+         maxIf(timestamp, event = 'survey_completed') AS completed
   FROM events
-  WHERE event IN ('survey_started', 'survey_answer')
+  WHERE event IN ('survey_started', 'survey_answer', 'survey_completed')
     AND properties.$host = 'www.loveiq.org'
     AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin') - INTERVAL 30 DAY
     AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
@@ -924,14 +925,16 @@ WITH runs AS (
 ),
 per AS (
   SELECT person_id,
-         toString(properties.sheet) AS sheet,
-         countIf(event = 'survey_sheet_shown') AS shows,
-         minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
-         countIf(event = 'survey_sheet_closed') AS closes,
-         maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
-         maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
+         if(startsWith(event, 'survey_optin_sheet'), 'missOut', toString(properties.sheet)) AS sheet,
+         countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows,
+         minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at,
+         countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes,
+         maxIf(toFloat(properties.ms_open), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ms_open,
+         minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at,
+         maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0),
+               event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked
   FROM events
-  WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
+  WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed', 'survey_optin_sheet_shown', 'survey_optin_sheet_closed')
     AND properties.$host = 'www.loveiq.org'
     AND timestamp >= toDateTime(':from 00:00:00', 'Europe/Berlin')
     AND timestamp < toDateTime(':to 00:00:00', 'Europe/Berlin') + INTERVAL 2 DAY
@@ -940,8 +943,10 @@ per AS (
   GROUP BY person_id, sheet
 ),
 seen AS (
-  SELECT per.*,
-         runs.last_answer > per.shown_at AS went_on,
+  SELECT per.person_id AS person_id, per.sheet AS sheet, per.shown_at AS shown_at, per.closes AS closes,
+         per.ticked AS ticked,
+         if(per.sheet = 'missOut' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
+         runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on,
          multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                  toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
   FROM per INNER JOIN runs ON per.person_id = runs.person_id
@@ -971,16 +976,16 @@ const SHEET_EVENTS: FieldDef["tables"] = [
     source: "posthog",
     table: "events",
     columns:
-      "event (survey_sheet_shown, survey_sheet_closed, survey_started, survey_answer), properties.sheet, properties.ms_open, properties.ticked, properties.question_id, person_id, timestamp, properties.$host",
+      "event (survey_sheet_shown, survey_sheet_closed, survey_optin_sheet_shown, survey_optin_sheet_closed, survey_started, survey_answer, survey_completed), properties.sheet, properties.ms_open, properties.ticked, properties.outcome, properties.question_id, person_id, timestamp, properties.$host",
     filters:
       "Period, by when the run began (Berlin days), as the question funnel counts; the order picked above, from whether the run answered 03011 or 01005 first. Nothing else: the sheets are read from PostHog, while the page's other filters narrow the survey runs in our database.",
     watch:
-      "PostHog is not consent-gated on the site, so it sees nearly every survey run; a browser that blocks it is missing. The sheets went live on 17 Nov 2026 (the expert's and State of Desire's on 18 Nov).",
+      "PostHog is not consent-gated on the site, so it sees nearly every survey run; a browser that blocks it is missing. The miss-out sheet went live on 16 Nov 2026, Mark's six on 17 Nov (the expert's and State of Desire's on 18 Nov).",
   },
 ];
 
 const SHEET_PEOPLE =
-  "The runs begun in the range, in the order picked above, close to how the question funnel counts them: PostHog's person, once per sheet, by when they first began a survey (up to 30 days back), so someone who began again in the range after an earlier try counts with the earlier one. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The team's people are left out; all traffic whatever the filters.";
+  "The runs begun in the range, in the order picked above, close to how the question funnel counts them: PostHog's person, once per sheet, by when they first began a survey (up to 30 days back), so someone who began again in the range after an earlier try counts with the earlier one. A run meets a sheet only from its switch-on (17 Nov 2026; the expert's and State of Desire's 18 Nov; the miss-out sheet, which has no switch, from 16 Nov), and never a sheet with a price after paying before the survey, so fewer may see a sheet than reached its question. The miss-out sheet opens only for a No on the opt-in, the last question. The team's people are left out; all traffic whatever the filters.";
 
 export const fields: FieldRegistry = {
   "survey.starts": {
@@ -1276,13 +1281,13 @@ export const fields: FieldRegistry = {
 
   "survey.sheets": {
     label: "Sheets",
-    what: "The short cards that open between the survey's questions: a research note, a Trustpilot review, an expert's quote, the halfway card, the State of Desire promo and the report map. Each opens once per run and has its own switch.",
+    what: "The short cards that open between the survey's questions: a research note, a Trustpilot review, an expert's quote, the halfway card, the State of Desire promo, the report map and, after a No to the hints emails on the last question, the miss-out sheet. Each opens once per run; all but the miss-out sheet have their own switch.",
     stat: "Count",
     per: "per person a sheet opened for",
     formula: {
       num: "People each sheet opened for, those who left with it open, its median time open, and its taps",
     },
-    caveat: `${SHEET_PEOPLE} On the charts and in the question funnel each sheet sits between the questions where it opens, in the order picked: after its question, before the question it opens over (the expert's, from the 11th question on, so never in the old order), or with three questions left (the report map).`,
+    caveat: `${SHEET_PEOPLE} On the charts and in the question funnel each sheet sits between the questions where it opens, in the order picked: after its question, before the question it opens over (the expert's, from the 11th question on, so never in the old order), with three questions left (the report map), or after the last question (the miss-out sheet).`,
     tables: SHEET_EVENTS,
     query: { lang: "HogQL", text: SHEETS },
     related: [
@@ -1295,11 +1300,11 @@ export const fields: FieldRegistry = {
   },
   "survey.sheetsOn": {
     label: "Sheets in the survey",
-    what: "How many of the six sheets are switched on now, so a survey run meets them.",
+    what: "How many of the seven sheets are on now, so a survey run meets them: Mark's six by their switches, and the miss-out sheet, which has no switch and is always on.",
     stat: "Count",
     per: "per sheet, now",
     formula: {
-      num: "Sheets whose switch is on; the halfway sheet and the report map only while the €1.99 page test's switch is on too",
+      num: "Sheets whose switch is on, plus the miss-out sheet; the halfway sheet and the report map only while the €1.99 page test's switch is on too",
     },
     caveat:
       "Now, whatever the range. A sheet with a price (halfway, State of Desire, report map) never opens for someone who paid before the survey. A switch can also be forced on in a deployment's settings (SYSTEM_FLAG_…), which the table doesn't show.",
@@ -1330,7 +1335,9 @@ SELECT key, enabled, updated_at
     good: "up",
     stat: "Count",
     per: "per person",
-    formula: { num: "People with a survey_sheet_shown for the sheet, in the range" },
+    formula: {
+      num: "People with a survey_sheet_shown for the sheet (survey_optin_sheet_shown for the miss-out sheet), in the range",
+    },
     caveat: SHEET_PEOPLE,
     tables: SHEET_EVENTS,
     query: { lang: "HogQL", text: SHEETS },
@@ -1338,12 +1345,12 @@ SELECT key, enabled, updated_at
   },
   "survey.sheetBounce": {
     label: "Bounce rate",
-    what: "Of the people a sheet opened for, the share who left the survey while it was open: they never closed it and answered nothing after. Shown above 5.0% it is red, as a question's drop-out is.",
+    what: "Of the people a sheet opened for, the share who left the survey while it was open: they never closed it and answered or finished nothing after. Shown above 5.0% it is red, as a question's drop-out is.",
     good: "down",
     stat: "Share",
     per: "per person the sheet opened for",
     formula: {
-      num: "Opened it, never closed it, answered nothing after, 30 minutes since",
+      num: "Opened it, never closed it, answered or finished nothing after, 30 minutes since",
       den: "Opened it 30 minutes ago or more, closed it, or answered on",
       mult: "× 100",
     },
@@ -1357,7 +1364,9 @@ SELECT key, enabled, updated_at
     what: "How long a sheet stays open before it is closed: half close it quicker, half slower.",
     stat: "Median",
     per: "per person who closed the sheet",
-    formula: { num: "Time from the sheet opening to its close (ms_open), the middle one" },
+    formula: {
+      num: "Time from the sheet opening to its close (ms_open; for the miss-out sheet before 25 Nov 2026, the time between its two events), the middle one",
+    },
     caveat: `Over the people who closed it: someone who left with it open has no time. All sheets together: the middle of every close. The time a sheet is open also counts as time on the question it opens over, in that question's median time. ${SHEET_PEOPLE}`,
     tables: SHEET_EVENTS,
     query: { lang: "HogQL", text: SHEETS },
@@ -1365,16 +1374,16 @@ SELECT key, enabled, updated_at
   },
   "survey.sheetConversion": {
     label: "Conversion",
-    what: "For a sheet with something to tap, the share of the people it opened for who tapped it, with how many did. Only the State of Desire sheet has one: its “Email me a 5€ off code” box.",
+    what: "For a sheet with something to tap, the share of the people it opened for who tapped it, with how many did. Two have one: the State of Desire sheet's “Email me a 5€ off code” box and the miss-out sheet's “Yes, I want to keep learning”. The tile is both together.",
     good: "up",
     stat: "Share",
     per: "per person the sheet opened for",
     formula: {
-      num: "Closed it with its box ticked",
-      den: "People it opened for",
+      num: "Closed it with its box ticked, or tapped Yes on the miss-out sheet",
+      den: "People it opened for (the tile: both sheets' people)",
       mult: "× 100",
     },
-    caveat: `The tick is read when the sheet closes; someone who ticked it and left with it open isn't counted. ${SHEET_PEOPLE}`,
+    caveat: `The tick is read when the sheet closes; someone who ticked it and left with it open isn't counted. A Yes given on the opt-in after closing the miss-out sheet another way is filed under the sheet's consent version in our database, but isn't a tap on the sheet. ${SHEET_PEOPLE}`,
     tables: SHEET_EVENTS,
     query: { lang: "HogQL", text: SHEETS },
     related: ["survey.sheetSaw", "survey.sheets"],

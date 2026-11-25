@@ -13,6 +13,7 @@ import {
   SHEET_NAMES,
   sheetBounce,
   sheetConversion,
+  sheetCountedFrom,
   sheetSpots,
   type SheetSpot,
 } from "./sheets";
@@ -161,7 +162,12 @@ export default function TimeDropSection({
           rows: [
             ...tip.rows,
             ...c.sheets.flatMap((s) =>
-              sheetTipRows(s, seen?.bySheet[s.id], known, data.sheets.from)
+              sheetTipRows(
+                s,
+                seen?.bySheet[s.id],
+                known,
+                data.sheets.from && sheetCountedFrom(s.id, data.range.from)
+              )
             ),
           ],
         };

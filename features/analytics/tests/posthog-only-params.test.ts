@@ -9,7 +9,11 @@ vi.mock("@shared/env/is-non-prod-deploy", async (orig) => ({
   isProductionSite: () => true,
 }));
 
-import { trackLandingCardAnswer } from "@features/analytics/client";
+import {
+  trackLandingCardAnswer,
+  trackOptInSheetClosed,
+  trackOptInSheetShown,
+} from "@features/analytics/client";
 
 beforeEach(() => {
   ph.capture.mockClear();
@@ -33,5 +37,36 @@ describe("an answer given to PostHog alone", () => {
       (e) => e.event === "landing_card_answer"
     );
     expect(pushed).toEqual([{ event: "landing_card_answer", location: "hero", changed: false }]);
+  });
+});
+
+describe("the opt-in's miss-out sheet closing", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("tells PostHog alone its outcome and how long it was open", () => {
+    vi.useFakeTimers();
+    trackOptInSheetShown();
+    vi.advanceTimersByTime(2500);
+    trackOptInSheetClosed({ outcome: "dismissed", via: "swipe" });
+    expect(ph.capture).toHaveBeenLastCalledWith("survey_optin_sheet_closed", {
+      question_id: "16015",
+      outcome: "dismissed",
+      via: "swipe",
+      ms_open: 2500,
+    });
+    const pushed = (window.dataLayer as Record<string, unknown>[]).filter(
+      (e) => e.event === "survey_optin_sheet_closed"
+    );
+    expect(pushed).toEqual([{ event: "survey_optin_sheet_closed", question_id: "16015" }]);
+  });
+
+  it("sends no time for a close with no opening on this page", () => {
+    trackOptInSheetShown();
+    trackOptInSheetClosed({ outcome: "not_now" });
+    trackOptInSheetClosed({ outcome: "yes" });
+    expect(ph.capture).toHaveBeenLastCalledWith("survey_optin_sheet_closed", {
+      question_id: "16015",
+      outcome: "yes",
+    });
   });
 });

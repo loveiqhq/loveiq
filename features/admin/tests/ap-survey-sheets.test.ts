@@ -22,7 +22,13 @@ vi.mock("@features/admin/server/ap/team", () => ({
 import { fetchSurveySheets } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import { askedQuestions } from "@features/admin/server/dropoff-weekly";
-import { sheetBounce, sheetConversion, sheetSpots } from "@features/admin/ui/ap/sheets";
+import {
+  sheetBounce,
+  sheetConversion,
+  sheetSpots,
+  tapConversion,
+} from "@features/admin/ui/ap/sheets";
+import { shouldOfferOptInSheet } from "@features/survey/optInSheet";
 import {
   sheetAfterQuestion,
   sheetBeforeQuestion,
@@ -72,6 +78,8 @@ describe("what PostHog saw of the sheets", () => {
         ["test", "halfway", 34, 34, 0, 34, 6327, 0],
         ["survey", "halfway", 29, 29, 2, 27, 4832, 0],
         ["test", "desire", 18, 18, 0, 18, 3495, 1],
+        // The opt-in's miss-out sheet, read from its own events.
+        ["test", "missOut", 12, 12, 0, 12, 2840, 2],
         // Nobody closed it yet: no time, not a NaN.
         ["test", "reportMap", 2, 0, 0, 0, Number.NaN, 0],
         // Not a sheet of ours, or a run whose order is unknown: ignored.
@@ -94,7 +102,20 @@ describe("what PostHog saw of the sheets", () => {
     });
     expect(r.value.survey.bySheet.halfway?.leftOpen).toBe(2);
     expect(r.value.test.bySheet.reportMap?.medianMs).toBeNull();
-    expect(Object.keys(r.value.test.bySheet).sort()).toEqual(["desire", "halfway", "reportMap"]);
+    expect(Object.keys(r.value.test.bySheet).sort()).toEqual([
+      "desire",
+      "halfway",
+      "missOut",
+      "reportMap",
+    ]);
+    expect(r.value.test.bySheet.missOut).toEqual({
+      saw: 12,
+      settled: 12,
+      leftOpen: 0,
+      closed: 12,
+      medianMs: 2840,
+      ticked: 2,
+    });
     expect(Object.keys(r.value.survey.bySheet)).toEqual(["halfway"]);
     expect(r.value.test.all.saw).toBe(54);
     expect(r.value.survey.all.saw).toBe(29);
@@ -114,7 +135,26 @@ describe("what PostHog saw of the sheets", () => {
     expect(cap).toBe(30);
     // Someone who answered on after the sheet opened (a reload drops the open sheet, no close is
     // sent) never counts as left with it open; the tick is read however PostHog types it.
-    expect(query).toContain("runs.last_answer > per.shown_at AS went_on");
+    // Finishing goes on too: the miss-out sheet opens on the last question.
+    expect(query).toContain(
+      "runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on"
+    );
+    expect(query).toContain("event IN ('survey_started', 'survey_answer', 'survey_completed')");
+    // The miss-out sheet, line by line: its own events counted as the six's are, its Yes as its
+    // tap, its time open its ms_open (sent from 25 Nov 2026), else the time between its events.
+    const line = (text: string) => expect(query.replace(/\s+/g, " ")).toContain(text);
+    line(
+      "if(startsWith(event, 'survey_optin_sheet'), 'missOut', toString(properties.sheet)) AS sheet,"
+    );
+    line(
+      "countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows, minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at, countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes, maxIf(toFloat(properties.ms_open), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ms_open, minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at, maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked"
+    );
+    line(
+      "WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed', 'survey_optin_sheet_shown', 'survey_optin_sheet_closed')"
+    );
+    line(
+      "if(per.sheet = 'missOut' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,"
+    );
     expect(query).toContain(
       "countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open"
     );
@@ -144,6 +184,24 @@ describe("what PostHog saw of the sheets", () => {
     expect(sheetBounce(undefined)).toBeNull();
     expect(sheetConversion(undefined)).toBeNull();
   });
+
+  it("reads the Conversion tile over both sheets with something to tap", () => {
+    const fig = (saw: number, ticked: number) => ({
+      saw,
+      settled: saw,
+      leftOpen: 0,
+      closed: saw,
+      medianMs: 3000,
+      ticked,
+    });
+    // The halfway sheet has nothing to tap: its people don't count.
+    expect(tapConversion({ desire: fig(36, 1), missOut: fig(20, 2), halfway: fig(40, 0) })).toEqual(
+      { rate: 3 / 56, taps: 3 }
+    );
+    expect(tapConversion({ desire: fig(36, 1) })).toEqual({ rate: 1 / 36, taps: 1 });
+    expect(tapConversion({})).toEqual({ rate: null, taps: 0 });
+    expect(tapConversion(undefined)).toEqual({ rate: null, taps: 0 });
+  });
 });
 
 describe("where the sheets sit", () => {
@@ -168,12 +226,26 @@ describe("where the sheets sit", () => {
     // Three questions left: after the fourth from the end (16017 in today's survey).
     expect(spots.get("reportMap")).toMatchObject({ n: 6, after: newOrder.length - 4 });
     expect(newOrder[newOrder.length - 4]).toBe("16017");
+    // The miss-out sheet: after the opt-in, the last question.
+    expect(spots.get("missOut")).toMatchObject({
+      n: 7,
+      after: newOrder.length - 1,
+      where: `After #${newOrder.length}`,
+    });
+  });
+
+  it("places the miss-out sheet only while the opt-in is the last question", () => {
+    // The survey opens it only on its last question (SurveyEngine), where both orders ask 16015.
+    expect(newOrder.at(-1)).toBe("16015");
+    expect(oldOrder.at(-1)).toBe("16015");
+    const notLast = [...newOrder.slice(0, -2), "16015", newOrder.at(-2)!];
+    expect(sheetSpots(rowsOf(notLast)).some((s) => s.id === "missOut")).toBe(false);
   });
 
   it("gives the expert's no place in the old order, which asks its question third", () => {
     const ids = sheetSpots(rowsOf(oldOrder)).map((s) => s.id);
     expect(oldOrder.indexOf("01005")).toBeLessThan(10);
-    expect(ids).toEqual(["science", "trustpilot", "halfway", "desire", "reportMap"]);
+    expect(ids).toEqual(["science", "trustpilot", "halfway", "desire", "reportMap", "missOut"]);
   });
 
   it("counts only the questions asked now", () => {
@@ -191,7 +263,7 @@ describe("where the sheets sit, against the survey's own runtime", () => {
       const ctx = { enabled: SURVEY_SHEET_IDS, shown: new Set<SurveySheetId>(), payToStart: false };
       // What the survey opens: moving on from question i (after), or arriving at it (before),
       // each sheet once, as SurveyEngine asks it.
-      const opened: Array<[SurveySheetId, number]> = [];
+      const opened: Array<[SurveySheetId | "missOut", number]> = [];
       const shown = new Set<SurveySheetId>();
       for (let i = 0; i < order.length; i++) {
         const before = sheetBeforeQuestion(order[i], i, { ...ctx, shown });
@@ -204,6 +276,9 @@ describe("where the sheets sit, against the survey's own runtime", () => {
           shown.add(after);
           opened.push([after, i]);
         }
+        // The miss-out sheet: a No on the last question, as SurveyEngine's last-question move asks.
+        if (i === order.length - 1 && shouldOfferOptInSheet(order[i], "No", false))
+          opened.push(["missOut", i]);
       }
       const spots = sheetSpots(rowsOf(order)).map((s) => [s.id, s.after]);
       expect(spots.sort()).toEqual(opened.sort());
@@ -224,6 +299,7 @@ describe("the pins on the charts", () => {
       ["11003", "halfway"],
       ["16005", "desire"],
       ["16017", "reportMap"],
+      ["16015", "missOut"],
     ]);
   });
 
@@ -240,6 +316,15 @@ describe("the pins on the charts", () => {
     expect(sheetTipRows(halfway, undefined).map((r) => r.label)).not.toContain("Conversion");
     expect(sheetTipRows(spot, f, false)).toEqual([
       expect.objectContaining({ value: "—", muted: true }),
+    ]);
+    // The miss-out sheet has its Yes to tap: its conversion shows too.
+    const missOut = sheetSpots(rowsOf(newOrder)).find((s) => s.id === "missOut")!;
+    const m = { saw: 20, settled: 20, leftOpen: 0, closed: 20, medianMs: 2840, ticked: 2 };
+    expect(sheetTipRows(missOut, m).map((r) => [r.label, r.value])).toEqual([
+      ["Then sheet 7 · Opt-in · Sure you want to miss out?", "20 saw it"],
+      ["Bounce rate", "0.0%"],
+      ["Median time open", "3 s"],
+      ["Conversion", "10.0% · 2 clicks"],
     ]);
   });
 });
