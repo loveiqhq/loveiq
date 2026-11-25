@@ -253,6 +253,9 @@ email sheet on Next") adds a second ask after a No:
   16015 answer split is on AP-Analytics' Survey page; the Yes rows from readers who were shown
   the sheet are those whose `marketing_opt_in_terms_version` contains `+sheet-`, and PostHog's
   `survey_optin_sheet_closed` with `outcome` `yes` counts the Yes given in the sheet itself.
+  Since 2026-11-25 AP-Analytics shows it as the seventh sheet in Survey › Sheets, in the question
+  funnel after the opt-in and as pin 7 on the charts: who saw it, who left with it open, its
+  median time open (between its two events) and its conversion (that Yes).
 - **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
   most 480 px wide.
 

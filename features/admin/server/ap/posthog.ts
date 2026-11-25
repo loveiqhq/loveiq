@@ -10,7 +10,7 @@
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { countryCodesByTier } from "@features/pricing/logic/reportPricing";
-import { isSurveySheetId, type SurveySheetId } from "@features/survey/surveySheets";
+import { SURVEY_SHEET_IDS, type SurveySheetId } from "@features/survey/surveySheets";
 import { hogqlTable } from "@features/ux-review/server/review";
 import logger from "@shared/observability/logger";
 
@@ -421,8 +421,25 @@ export async function fetchSurveyIntroClicks(
   };
 }
 
-/** The first day a sheet between the survey's questions opened on the live site (17 Nov 2026). */
-export const SHEETS_FROM = "2026-11-17";
+/**
+ * The first day a sheet between the survey's questions opened on the live site: the opt-in's
+ * miss-out sheet on 16 Nov 2026 (Mark's six followed on 17 Nov, the expert's and State of
+ * Desire's on 18 Nov).
+ */
+export const SHEETS_FROM = "2026-11-16";
+
+/**
+ * The opt-in's "Sure you want to miss out?" sheet (features/survey/optInSheet.ts): AP's seventh
+ * sheet. It has no switch (always on) and its own events, survey_optin_sheet_shown and
+ * survey_optin_sheet_closed, whose `outcome` "yes" is its tap.
+ */
+export const MISS_OUT_SHEET = "missOut";
+
+/** The sheets AP reads: Mark's six (features/survey/surveySheets.ts) and the miss-out sheet. */
+export type ApSheetId = SurveySheetId | typeof MISS_OUT_SHEET;
+export const AP_SHEET_IDS: readonly ApSheetId[] = [...SURVEY_SHEET_IDS, MISS_OUT_SHEET];
+const isApSheetId = (value: unknown): value is ApSheetId =>
+  typeof value === "string" && (AP_SHEET_IDS as readonly string[]).includes(value);
 
 /** What PostHog saw of the sheets between the survey's questions, one sheet or all of them. */
 export interface SheetFigures {
@@ -436,13 +453,16 @@ export interface SheetFigures {
   closed: number;
   /** How long it stayed open before it was closed, the median over those who closed it. */
   medianMs: number | null;
-  /** Closed it with its box ticked: the State of Desire sheet's "Email me a 5€ off code". */
+  /**
+   * Tapped what the sheet offers: the State of Desire sheet's "Email me a 5€ off code" ticked, or
+   * the miss-out sheet's "Yes, I want to keep learning".
+   */
   ticked: number;
 }
 
 export interface SurveySheetsSeen {
   /** Each sheet PostHog saw open for these runs; a sheet nobody met is missing. */
-  bySheet: Partial<Record<SurveySheetId, SheetFigures>>;
+  bySheet: Partial<Record<ApSheetId, SheetFigures>>;
   /** Every sheet together: the same figures over all of them. */
   all: SheetFigures;
 }
@@ -462,15 +482,18 @@ const NO_SHEET: SheetFigures = {
 /**
  * The sheets between the survey's questions (features/survey/surveySheets.ts), from their own
  * events: survey_sheet_shown when one opens (once per run), survey_sheet_closed when it goes,
- * with how long it was open and, for the State of Desire sheet, whether its box was ticked.
+ * with how long it was open and, for the State of Desire sheet, whether its box was ticked. The
+ * opt-in's miss-out sheet sends survey_optin_sheet_shown and survey_optin_sheet_closed (with its
+ * outcome, "yes" its tap, and no ms_open: its time open is read from the two events' times).
  * PostHog is not consent-gated on the site, so it sees nearly every survey run (not blockers').
  *
  * Counted as the question funnel counts: the runs begun in the range (a person's first survey
  * event, looked for up to 30 days back), split by the order their questions came in. A run in
  * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
  * old order, 01005 first; every run answers one of them third, before any sheet. A person counts
- * once per sheet. Left with it open: never closed it and answered nothing after it opened (a
- * reload while it was open never reopens it and sends no close, yet the run carries on). A sheet
+ * once per sheet. Left with it open: never closed it, answered nothing and finished nothing
+ * after it opened (a reload while it was open never reopens it and sends no close, yet the run
+ * carries on; the miss-out sheet opens on the last question, so finishing is going on). A sheet
  * opened in the last 30 minutes and not closed yet is still being read, neither left nor settled. Mark's measures (17 Nov 2026), signed off with the sheets' Test
  * Repository row at the 19 Nov sync.
  */
@@ -481,8 +504,9 @@ export async function fetchSurveySheets(
   const { since, until } = windowOf({ from, to });
   const staff = await notStaff();
   const settledAt = "now() - INTERVAL 30 MINUTE";
-  // Left with it open: never closed it, answered nothing after it opened (a reload while it was
-  // open never reopens it and sends no close, but the run carries on), and 30 minutes have passed.
+  // Left with it open: never closed it, answered or finished nothing after it opened (a reload
+  // while it was open never reopens it and sends no close, but the run carries on), and 30
+  // minutes have passed.
   const figures = `count() AS saw,
            countIf(closes > 0 OR went_on OR shown_at < ${settledAt}) AS settled,
            countIf(closes = 0 AND NOT went_on AND shown_at < ${settledAt}) AS left_open,
@@ -495,9 +519,10 @@ export async function fetchSurveySheets(
              minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
-             maxIf(timestamp, event = 'survey_answer') AS last_answer
+             maxIf(timestamp, event = 'survey_answer') AS last_answer,
+             maxIf(timestamp, event = 'survey_completed') AS completed
       FROM events
-      WHERE event IN ('survey_started', 'survey_answer')
+      WHERE event IN ('survey_started', 'survey_answer', 'survey_completed')
         AND properties.$host = '${HOST}'
         AND timestamp >= ${at(since)} - INTERVAL 30 DAY AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
       GROUP BY person_id
@@ -505,21 +530,25 @@ export async function fetchSurveySheets(
     ),
     per AS (
       SELECT person_id,
-             toString(properties.sheet) AS sheet,
-             countIf(event = 'survey_sheet_shown') AS shows,
-             minIf(timestamp, event = 'survey_sheet_shown') AS shown_at,
-             countIf(event = 'survey_sheet_closed') AS closes,
-             maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms,
-             maxIf(if(toString(properties.ticked) = 'true', 1, 0), event = 'survey_sheet_closed') AS ticked
+             if(startsWith(event, 'survey_optin_sheet'), '${MISS_OUT_SHEET}', toString(properties.sheet)) AS sheet,
+             countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows,
+             minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at,
+             countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes,
+             maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms_open,
+             minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at,
+             maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0),
+                   event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked
       FROM events
-      WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed')
+      WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed', 'survey_optin_sheet_shown', 'survey_optin_sheet_closed')
         AND properties.$host = '${HOST}'
         AND timestamp >= ${at(since)} AND timestamp < ${at(until)} + INTERVAL 1 DAY${staff}
       GROUP BY person_id, sheet
     ),
     seen AS (
-      SELECT per.*,
-             runs.last_answer > per.shown_at AS went_on,
+      SELECT per.person_id AS person_id, per.sheet AS sheet, per.shown_at AS shown_at,
+             per.closes AS closes, per.ticked AS ticked,
+             if(per.sheet = '${MISS_OUT_SHEET}', toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
+             runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on,
              multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                      toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
       FROM per INNER JOIN runs ON per.person_id = runs.person_id
@@ -533,7 +562,7 @@ export async function fetchSurveySheets(
     LIMIT 30`;
   const r = await rows(q, 30);
   if (!r.ok) return r;
-  const empty = (): { bySheet: Array<[SurveySheetId, SheetFigures]>; all: SheetFigures } => ({
+  const empty = (): { bySheet: Array<[ApSheetId, SheetFigures]>; all: SheetFigures } => ({
     bySheet: [],
     all: NO_SHEET,
   });
@@ -552,7 +581,7 @@ export async function fetchSurveySheets(
     };
     const into = order === "test" ? orders.test : orders.survey;
     if (sheet === "") into.all = figures;
-    else if (isSurveySheetId(sheet)) into.bySheet.push([sheet, figures]);
+    else if (isApSheetId(sheet)) into.bySheet.push([sheet, figures]);
   }
   const done = (o: ReturnType<typeof empty>): SurveySheetsSeen => ({
     bySheet: Object.fromEntries(o.bySheet),

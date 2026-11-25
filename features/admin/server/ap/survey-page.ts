@@ -30,8 +30,10 @@ import {
 } from "./metrics";
 import { head, type PageHead, type Tile } from "./common";
 import {
+  MISS_OUT_SHEET,
   POSTHOG_FROM,
   SHEETS_FROM,
+  type ApSheetId,
   type PostHogResult,
   type SurveyIntroClicks,
   type SurveySheetsByOrder,
@@ -113,8 +115,11 @@ export interface SurveyPayload extends PageHead {
    * switched on now, and what PostHog saw of each in the range.
    */
   sheets: {
-    /** The sheets whose switch is on now, in Mark's order; null when the switches can't be read. */
-    on: SurveySheetId[] | null;
+    /**
+     * The sheets on now, in Mark's order, then the miss-out sheet, which has no switch; null when
+     * the switches can't be read.
+     */
+    on: ApSheetId[] | null;
     /** Null for a range that ends before the first sheet opened (SHEETS_FROM). */
     seen: PostHogResult<SurveySheetsByOrder> | null;
     /** The day the sheets began, when the range starts earlier: its figures are from then. */
@@ -501,7 +506,7 @@ export function buildSurveyPage(input: {
     questions: input.questions,
     questionsError: input.questionsError,
     sheets: {
-      on: input.sheetsOn ?? null,
+      on: input.sheetsOn ? [...input.sheetsOn, MISS_OUT_SHEET] : null,
       seen: f.to < SHEETS_FROM ? null : (input.sheetsSeen ?? null),
       from:
         f.to >= SHEETS_FROM && f.from < SHEETS_FROM ? rangeLabel(SHEETS_FROM, SHEETS_FROM) : null,

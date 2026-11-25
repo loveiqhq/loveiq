@@ -1030,7 +1030,7 @@ function FunnelSection({
   // each after the question it follows.
   const asked0 = rows.filter((r) => r.n > 0);
   const sheetsAfter = new Map<string, SheetSpot[]>();
-  // Only for a range that reaches the sheets (they went live on 17 Nov 2026).
+  // Only for a range that reaches the sheets (the first went live on 16 Nov 2026).
   // Not under a source or device filter either: the sheets are read from PostHog, which those
   // filters (on the database's runs) don't narrow, and an all-traffic row between filtered
   // questions would read as theirs.

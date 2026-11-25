@@ -4,22 +4,34 @@
  * rates. Where a sheet opens comes from the survey's own placements
  * (features/survey/surveySheets.ts), so the page follows the live survey when they move.
  */
-import type { SheetFigures } from "@features/admin/server/ap/posthog";
+import {
+  AP_SHEET_IDS,
+  MISS_OUT_SHEET,
+  type ApSheetId,
+  type SheetFigures,
+} from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
-import { SURVEY_SHEETS, type SurveySheetId } from "@features/survey/surveySheets";
+import { SURVEY_SHEETS } from "@features/survey/surveySheets";
+import { OPT_IN_QID } from "@features/survey/ui/questionOrder";
 
 /**
  * Mark's names for the six sheets, numbered in his order (his boxes 1 to 6, the survey's own
- * order). Only the State of Desire sheet has something to tap (its "Email me a 5€ off code"
- * box), so only it has a conversion.
+ * order), then the opt-in's miss-out sheet as 7 (Eman, 25 Nov 2026). Two have something to tap,
+ * so a conversion: the State of Desire sheet's "Email me a 5€ off code" box and the miss-out
+ * sheet's "Yes, I want to keep learning".
  */
-export const SHEET_NAMES: Record<SurveySheetId, { name: string; kind: string; tap?: true }> = {
+export const SHEET_NAMES: Record<ApSheetId, { name: string; kind: string; tap?: true }> = {
   science: { name: "Science · responsive desire", kind: "Research note in a bottom sheet" },
   trustpilot: { name: "Trustpilot testimonial", kind: "One real review in a bottom sheet" },
   expert: { name: "Expert quote", kind: "A researcher’s view in a bottom sheet" },
   halfway: { name: "Halfway · profile filling in", kind: "Halfway reward" },
   desire: { name: "State of Desire report promo", kind: "Stats + promo", tap: true },
   reportMap: { name: "How to read your report", kind: "Report map" },
+  [MISS_OUT_SHEET]: {
+    name: "Opt-in · Sure you want to miss out?",
+    kind: "Asks again after a No to the hints emails",
+    tap: true,
+  },
 };
 
 /**
@@ -28,11 +40,11 @@ export const SHEET_NAMES: Record<SurveySheetId, { name: string; kind: string; ta
  */
 export const SHEET_BADGE_BG = "bg-[linear-gradient(135deg,#c2410c_0%,#8e3fa8_50%,#5b52d6_100%)]";
 
-/** A sheet's number, 1 to 6, as the page writes it. */
-export const sheetNumber = (id: SurveySheetId) => SURVEY_SHEETS.findIndex((s) => s.id === id) + 1;
+/** A sheet's number, 1 to 7, as the page writes it. */
+export const sheetNumber = (id: ApSheetId) => AP_SHEET_IDS.indexOf(id) + 1;
 
 export interface SheetSpot {
-  id: SurveySheetId;
+  id: ApSheetId;
   n: number;
   /** The question it comes after, as its index among the order's questions asked now. */
   after: number;
@@ -46,7 +58,9 @@ export interface SheetSpot {
  * Where each sheet sits in one order's funnel, between two of the questions asked now: after
  * its question, before its question (only from the survey's `minIndex` on, so the expert's
  * sheet has no place in the old order, which asks its question third), or after the question
- * that leaves three to go. A sheet whose question is not asked in the order has none.
+ * that leaves three to go. A sheet whose question is not asked in the order has none. The
+ * miss-out sheet opens on leaving the opt-in (16015) with a No, which the survey asks last: after
+ * it, while it is the order's last question.
  */
 export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
   const asked = rows.filter((r) => r.n > 0);
@@ -68,6 +82,15 @@ export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
         spots.push({ id: def.id, n: k + 1, after: i, q: i, where: `After #${asked[i]!.n}` });
     }
   });
+  const last = asked.length - 1;
+  if (last >= 0 && asked[last]!.id === OPT_IN_QID)
+    spots.push({
+      id: MISS_OUT_SHEET,
+      n: sheetNumber(MISS_OUT_SHEET),
+      after: last,
+      q: last,
+      where: `After #${asked[last]!.n}`,
+    });
   return spots;
 }
 
@@ -75,6 +98,20 @@ export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
 export const sheetBounce = (f: SheetFigures | undefined) =>
   f && f.settled > 0 ? f.leftOpen / f.settled : null;
 
-/** Ticked its box, of everyone it opened for: only for a sheet with something to tap. */
+/** Tapped what it offers, of everyone it opened for: only for a sheet with something to tap. */
 export const sheetConversion = (f: SheetFigures | undefined) =>
   f && f.saw > 0 ? f.ticked / f.saw : null;
+
+/**
+ * The Conversion tile: every tap over everyone the sheets with something to tap opened for (the
+ * State of Desire and miss-out sheets), with the taps.
+ */
+export function tapConversion(bySheet: Partial<Record<ApSheetId, SheetFigures>> | undefined): {
+  rate: number | null;
+  taps: number;
+} {
+  const tapped = AP_SHEET_IDS.filter((id) => SHEET_NAMES[id].tap).map((id) => bySheet?.[id]);
+  const saw = tapped.reduce((n, f) => n + (f?.saw ?? 0), 0);
+  const taps = tapped.reduce((n, f) => n + (f?.ticked ?? 0), 0);
+  return { rate: saw > 0 ? taps / saw : null, taps };
+}

@@ -63,7 +63,9 @@ Survey shows Mark's sheets between the questions (his Survey copy board, 17–18
 Sheets section above the demographics, each sheet's row in the question funnel (in survey order),
 and numbered pins on the time and drop-out charts. Their figures come from the sheets' own PostHog
 events (`survey_sheet_shown`, `survey_sheet_closed`), sent by every browser that doesn't block
-PostHog. The page's CSV carries the Sheets table too, one per question order in the range. The
+PostHog. The opt-in's "Sure you want to miss out?" sheet is the seventh (since 25 Nov 2026), from
+its own events (`survey_optin_sheet_shown`, `survey_optin_sheet_closed`, whose `outcome` `yes` is
+its tap). The page's CSV carries the Sheets table too, one per question order in the range. The
 question funnel sorts by two columns, and Question detail has a question dropdown.
 Landing's pay-to-start table counts "Started survey" from `prepaid_report_access.survey_started_at`,
 recorded from 28 Oct 2026. Traffic shows each search ad as searchers see it, with its
