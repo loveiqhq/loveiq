@@ -720,6 +720,22 @@ describe("the price test's Choose your price half", () => {
     expect(cta().textContent).toContain("Enter your amount");
   });
 
+  // A keyboard or screen-reader user arrowing through the four prices stays in the group: the
+  // own amount's field takes the focus only when its words are clicked or tapped.
+  it("keeps the arrows in the radio group when they reach the own amount", () => {
+    renderChoose();
+    const own = screen.getByRole("radio", { name: "Your own amount" });
+    fireEvent.keyDown(screen.getByRole("radio", { name: /€19\.99/ }), { key: "ArrowRight" });
+    fireEvent.click(own);
+    expect(own).toBeChecked();
+    expect(document.activeElement).not.toBe(amount());
+    fireEvent.pointerDown(own);
+    pick(/€0/);
+    fireEvent.pointerDown(own);
+    fireEvent.click(own);
+    expect(document.activeElement).toBe(amount());
+  });
+
   it("sends the pick, and the amount for an own amount; EUR 6.99 begins a checkout of 6.99", async () => {
     fetchMock.mockImplementation(() =>
       reply({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_1" })

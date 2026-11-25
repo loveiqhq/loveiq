@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useId, type FC, type RefObject } from "react";
+import { useId, useRef, type FC, type RefObject } from "react";
 import {
   CHOOSE_PRICE_CUSTOM_MAX_CENTS,
   CHOOSE_PRICE_CUSTOM_MIN_CENTS,
@@ -91,6 +91,9 @@ export const GateChoosePriceCard: FC<GateChoosePriceCardProps> = ({
   const outOfRange = custom && typed && choiceCents(choice) === null;
   const copy = GATE_CHOOSE_COPY.card;
   const pick = (option: ChoosePriceOption) => onChoice({ ...choice, option });
+  // Arrows through the group (a keyboard, a screen reader) stay in it: only a click or a tap on
+  // the own amount's words moves the focus into its field.
+  const viaKeys = useRef(false);
 
   return (
     <article className="rpg-card rpg-card--hero iug-card iug-card--choose">
@@ -106,7 +109,11 @@ export const GateChoosePriceCard: FC<GateChoosePriceCardProps> = ({
         </h2>
       </div>
 
-      <fieldset className="iug-choose__grid">
+      <fieldset
+        className="iug-choose__grid"
+        onKeyDown={() => (viaKeys.current = true)}
+        onPointerDown={() => (viaKeys.current = false)}
+      >
         <legend className="iug-sr-only">{copy.group}</legend>
         {CHOOSE_PRICE_TILES.map((tile) => {
           const checked = choice.option === tile.option;
@@ -144,7 +151,7 @@ export const GateChoosePriceCard: FC<GateChoosePriceCardProps> = ({
               checked={custom}
               onChange={() => {
                 pick("custom");
-                amountRef.current?.focus();
+                if (!viaKeys.current) amountRef.current?.focus();
               }}
             />
             {copy.own}
