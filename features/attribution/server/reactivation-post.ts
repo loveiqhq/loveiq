@@ -272,10 +272,9 @@ async function readEmailOfRead(
   return typeof via === "string" && VIA.test(via) ? via : null;
 }
 
-/** Give a claimed day back, so a later minute that day can post it. Never throws. */
 /**
- * Whether the reader opened their report on `day` (Berlin): a report_session from that day,
- * which only /api/report starts, for the report's token.
+ * Whether the reader opened their report on `day` (Berlin): a report_session from that day, which
+ * a load of their report writes (/api/report).
  */
 async function openedReportOn(submissionId: number, day: string): Promise<boolean> {
   const res = await supabaseFetch(
@@ -287,6 +286,7 @@ async function openedReportOn(submissionId: number, day: string): Promise<boolea
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+/** Give a claimed day back, so a later minute that day can post it. Never throws. */
 async function releaseClaim(rowFilter: string): Promise<void> {
   try {
     await supabaseFetch(`${rowFilter}&reactivation_ts=is.null`, {
@@ -302,10 +302,11 @@ async function releaseClaim(rowFilter: string): Promise<void> {
 /**
  * Post a returning reader once they have read for a minute: `/api/analytics-event` hands each
  * stored `report_active_1min` over. The day's return row is the gate, and so is a report session
- * opened that day: only the report page, with the report's token, opens one, so a minute sent
- * for someone else's submission id (the event carries no token) finds nothing to post. A reader
- * who asked us to restrict processing (Art. 18) since their return is not posted either. The
- * row is claimed for the post with a
+ * opened that day: a reader who only clicked an email or answered its question that day is not
+ * posted on a minute sent in their name. The event names its reader by the submission id the
+ * browser sends, so a minute faked for a reader who did open their report that day can still post
+ * them (into our own channel). A reader who asked us to restrict processing (Art. 18) since their
+ * return is not posted either. The row is claimed for the post with a
  * conditional update on `reactivation_channel`, so two tabs' minutes post once; a post that
  * does not go out gives the claim back. Times are measured from the day's return, as the
  * redraws measure them. A minute that crosses Berlin midnight looks for the new day's row only.

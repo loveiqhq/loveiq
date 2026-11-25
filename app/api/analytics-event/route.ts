@@ -385,8 +385,8 @@ export async function POST(request: Request) {
   }
 
   // A returning reader who read for a minute: the #report-reactivations post waits for this.
-  // It posts only a day the server already holds as a return, with a report session opened that
-  // day (which takes the report's token): a minute sent for another submission id posts nothing.
+  // It posts only a day the server already holds as a return, for a reader who opened their
+  // report that day (a report_session): a minute faked for anyone else posts nothing.
   if (event_type === "report_active_1min") {
     const via = typeof metadata?.via === "string" ? metadata.via : null;
     scheduleAfterResponse("reactivation-read", () =>

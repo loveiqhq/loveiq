@@ -400,7 +400,12 @@ describe("postReactivationOnRead: a returning reader is posted once they have re
   it("asks for a session of this reader's report from the Berlin day's start", async () => {
     await postReactivationOnRead({ submissionId: 2826, at: AT, via: null });
     const [session] = calls((p) => p.startsWith("/rest/v1/report_session?"));
-    expect(String(session![0])).toContain("personal_report.survey_submission_id=eq.2826");
+    // An inner join: without it the filter matches nobody's report and every session passes.
+    expect(String(session![0])).toContain(
+      "select=id,personal_report!inner(survey_submission_id)&personal_report.survey_submission_id=eq.2826"
+    );
+    // The restriction is this reader's own.
+    expect(calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2826&"))).toHaveLength(1);
     // 19 Nov in Berlin began at 23:00 UTC on the 18th.
     expect(String(session![0])).toContain(
       `started_at=gte.${encodeURIComponent("2026-11-18T23:00:00.000Z")}`
