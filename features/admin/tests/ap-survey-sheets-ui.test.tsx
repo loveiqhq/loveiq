@@ -7,6 +7,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Table } from "@features/admin/server/ap/common";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import type { SurveySheetsByOrder, SurveySheetsSeen } from "@features/admin/server/ap/posthog";
 import { buildSurveyQuestions, type QuestionRow } from "@features/admin/server/ap/survey";
@@ -124,7 +125,13 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 }));
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
-vi.mock("@features/admin/ui/ap/csv", () => ({ exportTables: () => {} }));
+// The CSV's tables as the page hands them over, without a download.
+const exported = vi.hoisted(() => ({ sections: [] as Array<{ name: string; table: Table }> }));
+vi.mock("@features/admin/ui/ap/csv", () => ({
+  exportTables: (_file: string, sections: Array<{ name: string; table: Table }>) => {
+    exported.sections = sections;
+  },
+}));
 
 import type { AnswerSplit } from "@features/admin/server/ap/answers";
 import ApSurvey, { FUNNEL_SORT, sortFunnel } from "@features/admin/ui/ap/ApSurvey";
@@ -528,5 +535,66 @@ describe("the Question dropdown in Question detail (Mark, 16–17 Nov 2026)", ()
     expect(
       (screen.getByRole("combobox", { name: /Compare answers by/ }) as HTMLSelectElement).value
     ).toBe("none");
+  });
+});
+
+describe("the CSV (every table on the page is in it)", () => {
+  const exportCsv = () => {
+    render(<ApSurvey />);
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+  };
+  const csvTable = (name: string) => exported.sections.find((s) => s.name === name)?.table;
+
+  it("carries the Sheets table for each order, with the section's figures", () => {
+    exportCsv();
+    const fresh = csvTable("Sheets · new order (C13)")!;
+    expect(fresh.columns.map((c) => c.label)).toEqual([
+      "Sheet",
+      "Where it sits",
+      "Saw it",
+      "Bounce rate",
+      "Median time",
+      "Conversion",
+      "Clicks",
+    ]);
+    expect(fresh.rows.map((r) => r.label)).toEqual([
+      "1 · Science · responsive desire",
+      "2 · Trustpilot testimonial",
+      "3 · Expert quote",
+      "4 · Halfway · profile filling in",
+      "5 · State of Desire report promo",
+      "6 · How to read your report",
+    ]);
+    expect(fresh.rows[3]!.values).toEqual([
+      `After #${newOrder.indexOf("11003") + 1} · 11003`,
+      40,
+      3 / 40,
+      5679,
+      null,
+      null,
+    ]);
+    // Only the State of Desire sheet has something to tap: its conversion and clicks.
+    expect(fresh.rows[4]!.values.slice(4)).toEqual([1 / 36, 1]);
+    expect(fresh.rows[2]!.values[0]).toBe(`Before #${newOrder.indexOf("01005") + 1} · 01005`);
+
+    const old = csvTable("Sheets · old order")!;
+    // The old order asks 01005 too early for the expert's sheet, and its runs never met it.
+    expect(old.rows[2]!.values).toEqual(["Not in this order", 0, null, null, null, null]);
+    expect(old.rows[3]!.values.slice(0, 4)).toEqual([
+      `After #${oldOrder.indexOf("11003") + 1} · 11003`,
+      29,
+      2 / 29,
+      4832,
+    ]);
+  });
+
+  it("leaves the sheets out when there are none to give", () => {
+    view.payload = page("2026-11-15");
+    exportCsv();
+    expect(exported.sections.some((s) => s.name.startsWith("Sheets"))).toBe(false);
+    cleanup();
+    view.payload = page("2026-11-21", { ok: false, error: "PostHog could not be read." });
+    exportCsv();
+    expect(exported.sections.some((s) => s.name.startsWith("Sheets"))).toBe(false);
   });
 });

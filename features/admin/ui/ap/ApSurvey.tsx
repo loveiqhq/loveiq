@@ -43,7 +43,7 @@ import {
   useHashScroll,
 } from "./kit";
 import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
-import SheetsSection, { clicks, SheetBadge } from "./SurveySheets";
+import SheetsSection, { clicks, SheetBadge, sheetsCsvTable } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
 
@@ -224,6 +224,27 @@ export default function ApSurvey() {
                       })),
                     },
                   },
+                  // The Sheets section, in each order the range has runs in, as the funnel splits
+                  // them; nothing when the range ends before the sheets or PostHog failed.
+                  ...(!data.sheets.seen?.ok
+                    ? []
+                    : questions?.test
+                      ? [
+                          {
+                            name: "Sheets · old order",
+                            table: sheetsCsvTable(data, questions.rows, "survey"),
+                          },
+                          {
+                            name: "Sheets · new order (C13)",
+                            table: sheetsCsvTable(data, questions.test.rows, "test"),
+                          },
+                        ]
+                      : [
+                          {
+                            name: "Sheets",
+                            table: sheetsCsvTable(data, rows, questions ? "survey" : order),
+                          },
+                        ]),
                 ],
                 data.tiles
               )
