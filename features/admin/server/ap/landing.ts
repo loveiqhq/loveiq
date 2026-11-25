@@ -62,31 +62,30 @@ export interface LandingTest {
   winner?: string;
   outcome: string;
   note?: string;
-  /** A, then B. */
+  /** The control, then the variant. */
   arms: [string, string];
-  /** The two versions' letters, when not A and B: version C's test reads A and C. */
-  letters?: [string, string];
 }
 
 /**
  * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), each
- * named by the pages it compares, new page first. The rebuild test (V1 vs V2, Aug–Sep 2026) was
- * taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new page against the
- * video page, under the number the registry gives it at its release. "#10 · C" is its version
- * C (sync 24 Nov 2026: Q10003, the privacy line under the film, v2's sections) against the
- * same video page, in B's place, so B's days stay #10's and C is read from its own first day.
+ * named by the pages it compares, new page first, under the number the registry gives it at
+ * its release. The rebuild test (V1 vs V2, Aug–Sep 2026) was taken off the page on the 21 Oct
+ * 2026 call. #10 is round 4, Marcus's new page against the video page. #12 is its version C
+ * (sync 24 Nov 2026: Q10003, the privacy line under the film, v2's sections) against the same
+ * video page, in B's place: a new test stacked on #10, with the same control (sync 25 Nov 2026:
+ * a follow-up test gets a name of its own, its control and its variant), so B's days stay
+ * #10's and C is read from its own first day.
  */
 export const LANDING_TESTS: LandingTest[] = [
   {
     key: "pain-point-c",
     name: "Pain-point page C vs. video page",
-    code: "#10 · C",
+    code: "#12",
     from: LANDING_TEST_START_DAY,
     to: null,
     outcome: "Running, read over up to 28 days.",
     note: "Version C asks “I'm comfortable expressing what turns me on.” where B asked about satisfaction, moves the privacy line under the film, and has v2's sections: a pain-point carousel, four tiles, stat cards and animations.",
     arms: ["video", "pain_point_c"],
-    letters: ["A", "C"],
   },
   {
     key: "pain-point",
@@ -106,7 +105,7 @@ export const LANDING_TESTS: LandingTest[] = [
     to: LANDING_HERO_LAST_DAY,
     winner: "white_video",
     outcome:
-      "Ended: the 10 Nov 2026 sync kept the video page, now version A of the pain-point page test.",
+      "Ended: the 10 Nov 2026 sync kept the video page, now the control of the pain-point page tests.",
     arms: ["white_card", "white_video"],
   },
   {
@@ -189,7 +188,7 @@ export type ArmStatus = "Running" | "Winner" | "Ended";
 export interface ArmRow {
   testKey: string;
   test: string;
-  /** "A · Question card". */
+  /** "Control · Question card (V2)": the arm's part in its test, then its page. */
   label: string;
   arm: string;
   status: ArmStatus;
@@ -344,7 +343,7 @@ function armRow(
   test: LandingTest,
   w: { from: string; to: string },
   arm: string,
-  letter: string,
+  role: "Control" | "Variant",
   today: string,
   ph: LandingArmEngagement | undefined,
   /** "Free survey": pay to start's finishers and their starts are out, as on every page. */
@@ -382,7 +381,7 @@ function armRow(
   return {
     testKey: test.key,
     test: test.name,
-    label: `${letter} · ${LANDING_ARM_NAMES.get(arm) ?? arm}`,
+    label: `${role} · ${LANDING_ARM_NAMES.get(arm) ?? arm}`,
     arm,
     status: test.to === null ? "Running" : test.winner === arm ? "Winner" : "Ended",
     from: w.from,
@@ -543,14 +542,13 @@ export function buildLanding(input: {
     if (!w) continue;
     const ph = input.armEngagement[test.key];
     const byArm = new Map(ph && ph.ok ? ph.value.map((e) => [e.arm, e]) : []);
-    const [first, second] = test.letters ?? ["A", "B"];
     const [a, b] = test.arms.map((arm, i) =>
       armRow(
         facts,
         test,
         w,
         arm,
-        i === 0 ? first : second,
+        i === 0 ? "Control" : "Variant",
         today,
         byArm.get(arm),
         f.funnel === "free",

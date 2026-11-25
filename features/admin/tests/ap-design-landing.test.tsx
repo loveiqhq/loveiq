@@ -154,7 +154,7 @@ describe("the landing tests, as the design names them", () => {
     expect(LANDING_TESTS.flatMap((t) => t.arms)).not.toContain("white_prev");
   });
 
-  it("names A the question card (V2) and B the video page (V3), with no dates on the line", () => {
+  it("marks the question card (V2) the control and the video page (V3) the variant, no dates", () => {
     screenData.payload = heroWeek();
     render(createElement(ApLanding));
     const table = screen.getByRole("table", { name: "Landing tests and variants" });
@@ -166,8 +166,8 @@ describe("the landing tests, as the design names them", () => {
         return [first.children[0]!.textContent, first.children[1]!.textContent];
       });
     expect(lines).toEqual([
-      ["Video page vs. question card", "A · Question card (V2)"],
-      ["Video page vs. question card", "B · Video page (V3)"],
+      ["Video page vs. question card", "Control · Question card (V2)"],
+      ["Video page vs. question card", "Variant · Video page (V3)"],
     ]);
   });
 

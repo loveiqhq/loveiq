@@ -339,15 +339,15 @@ describe("the Traffic builder, as the design reads", () => {
       },
     }).breakdowns.landing.rows.map((r) => [r.key, r.name, r.sub]);
     // One name per page, as the Landing page's table has it; the line under it says which test
-    // and which version, so round 3's video page and round 4's can't be taken for each other.
-    // The video page is version A of the running test, C's.
+    // and whether the page is its control or its variant, so round 3's video page and round 4's
+    // can't be taken for each other. The video page is the control of the running test, #12.
     expect(names).toEqual(
       expect.arrayContaining([
-        ["video", "Video page (V3)", "Pain-point page C vs. video page · A"],
-        ["pain_point_c", "Pain-point page C (V4 C)", "Pain-point page C vs. video page · C"],
-        ["pain_point", "Pain-point page (V4)", "Pain-point page vs. video page · B"],
-        ["white_card", "Question card (V2)", "Video page vs. question card · A"],
-        ["white_video", "Video page (V3)", "Video page vs. question card · B"],
+        ["video", "Video page (V3)", "Pain-point page C vs. video page · Control"],
+        ["pain_point_c", "Pain-point page C (V4 C)", "Pain-point page C vs. video page · Variant"],
+        ["pain_point", "Pain-point page (V4)", "Pain-point page vs. video page · Variant"],
+        ["white_card", "Question card (V2)", "Video page vs. question card · Control"],
+        ["white_video", "Video page (V3)", "Video page vs. question card · Variant"],
       ])
     );
   });

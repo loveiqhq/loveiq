@@ -153,11 +153,11 @@ describe("landing test windows", () => {
       ],
     ]);
     // Sync 24 Nov 2026: C takes B's half from its first whole day, B keeps the days it ran.
+    // Sync 25 Nov 2026: a follow-up test gets its own number, stacked on #10, same control.
     expect(test("pain-point-c")).toMatchObject({
-      code: "#10 · C",
+      code: "#12",
       from: LANDING_TEST_START_DAY,
       to: null,
-      letters: ["A", "C"],
     });
     expect(test("pain-point")).toMatchObject({
       code: "#10",
@@ -415,12 +415,12 @@ describe("buildLanding", () => {
     });
     // B's test has a last day (paused on 25 Nov 2026), so it reads as ended over the days it ran.
     expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
-      ["pain-point", "A · Video page (V3)", "Ended", 80],
-      ["pain-point", "B · Pain-point page (V4)", "Ended", 90],
+      ["pain-point", "Control · Video page (V3)", "Ended", 80],
+      ["pain-point", "Variant · Pain-point page (V4)", "Ended", 90],
     ]);
   });
 
-  it("names version C's test as the page does, A the video page and C the pain-point page C", () => {
+  it("names version C's test as the page does, the video page its control and C its variant", () => {
     const p = buildLanding({
       facts: factsFixture({
         from: "2026-11-26",
@@ -446,8 +446,8 @@ describe("buildLanding", () => {
       engagement: null,
     });
     expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
-      ["pain-point-c", "A · Video page (V3)", "Running", 70],
-      ["pain-point-c", "C · Pain-point page C (V4 C)", "Running", 75],
+      ["pain-point-c", "Control · Video page (V3)", "Running", 70],
+      ["pain-point-c", "Variant · Pain-point page C (V4 C)", "Running", 75],
     ]);
   });
 

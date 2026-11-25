@@ -258,7 +258,7 @@ describe("Traffic page builder", () => {
     expect(hero[1]!.why).toBe("Visits don't record the device.");
   });
 
-  it("reads version C's test from its first day, A the video page, and C the pain-point page C", () => {
+  it("reads version C's test from its first day, the video page its control, C its variant", () => {
     const p = traffic({
       filters: parseFilters(
         { period: "custom", from: "2026-11-26", to: "2026-11-27" },
@@ -293,7 +293,7 @@ describe("Traffic page builder", () => {
     expect(b[1]!.why).toBe("Paused on 25 Nov 2026: version C of the pain-point page took its half");
   });
 
-  it("reads round 4's test from its first day, A the video page, and says #6 has ended", () => {
+  it("reads round 4's test from its first day, the video page its control, and says #6 ended", () => {
     const p = traffic({
       filters: parseFilters(
         { period: "custom", from: "2026-11-18", to: "2026-11-19" },
@@ -327,8 +327,93 @@ describe("Traffic page builder", () => {
     ]);
     expect(hero.map((a) => a.arm)).toEqual(["Question card (V2)", "Video page (V3)"]);
     expect(hero[1]!.why).toBe(
-      "Ended on 11 Nov 2026: the video page stays, as version A of the pain-point page test"
+      "Ended on 11 Nov 2026: the video page stays, as the control of the pain-point page tests"
     );
+  });
+
+  it("decides the pain-point page tests by finished surveys per visit, as the registry does", () => {
+    // Sync 19 Nov 2026: #10, and #12 after it, are decided by finished surveys per visit. Here
+    // the video page has more starts and C more finishers: the finishers decide.
+    const finisher = (id: number, arm: string) =>
+      sub({ id, day: "2026-11-26", at: "2026-11-26T10:00:00Z", arm });
+    const p = traffic({
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-26", to: "2026-11-27" },
+        "2026-11-28"
+      ),
+      facts: factsFixture({
+        from: "2026-11-26",
+        to: "2026-11-27",
+        asOf: "2026-11-28",
+        visits: [
+          { day: "2026-11-26", arm: "video", src: null, n: 100 },
+          { day: "2026-11-26", arm: "pain_point_c", src: null, n: 100 },
+        ],
+        starts: [
+          start({ day: "2026-11-26", arm: "video", n: 40 }),
+          start({ day: "2026-11-26", arm: "pain_point_c", n: 30 }),
+        ],
+        subs: [
+          ...Array.from({ length: 10 }, (_, i) => finisher(i + 1, "video")),
+          ...Array.from({ length: 20 }, (_, i) => finisher(i + 11, "pain_point_c")),
+        ],
+      }),
+      today: "2026-11-28",
+    });
+    const c = p.experiments.arms.find(
+      (a) => a.test === "Pain-point page C vs. video page" && !a.control
+    )!;
+    expect(c.metric).toBe("Finished surveys per visit (20 of 100)");
+    // 20% against 10%, where starts per visit would have read 30% against 40%.
+    expect(c.lift).toBeCloseTo(1);
+  });
+
+  it("still decides #6 by survey starts per visit, its own metric", () => {
+    const p = traffic({
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-20", to: "2026-10-21" },
+        "2026-10-23"
+      ),
+      facts: factsFixture({
+        from: "2026-10-20",
+        to: "2026-10-21",
+        asOf: "2026-10-23",
+        visits: [
+          { day: "2026-10-20", arm: "white_card", src: null, n: 100 },
+          { day: "2026-10-20", arm: "white_video", src: null, n: 100 },
+        ],
+        starts: [
+          start({ day: "2026-10-20", arm: "white_card", n: 30 }),
+          start({ day: "2026-10-20", arm: "white_video", n: 40 }),
+        ],
+        subs: [],
+      }),
+      today: "2026-10-23",
+    });
+    const video = p.experiments.arms.find(
+      (a) => a.test === "Video page vs. question card" && !a.control
+    )!;
+    expect(video.metric).toBe("Start CVR");
+    expect(video.lift).toBeCloseTo(1 / 3); // 40% against 30%
+  });
+
+  it("reads every landing test by its version in its query, and decides each as the page does", () => {
+    // Version C's name was missing from these lists, so the query read its test as a price test.
+    const flat = (key: string) => fields[key]!.query.text.replace(/\s+/g, " ");
+    const landing =
+      "'Pain-point page C vs. video page', 'Pain-point page vs. video page', 'Video page vs. question card'";
+    for (const key of ["traffic.expVisitors", "traffic.lift"]) {
+      expect(flat(key)).toContain(
+        `WHEN w.test IN (${landing}) THEN f.j->>'landing_variant' = w.arm`
+      );
+      expect(flat(key)).toContain(
+        `WHERE w.test IN (${landing}) AND fe.event_type = 'unique_visitor'`
+      );
+    }
+    expect(flat("traffic.lift")).toContain(
+      "CASE WHEN test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page') THEN submissions WHEN test = 'Video page vs. question card' THEN starts"
+    );
+    expect(flat("traffic.lift")).toContain(`CASE WHEN test IN (${landing}) THEN visitors`);
   });
 
   it("reads the price test without readers who paid before the survey (pay to start)", () => {

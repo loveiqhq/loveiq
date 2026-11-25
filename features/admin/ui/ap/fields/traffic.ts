@@ -357,7 +357,7 @@ const WEEK = "date_trunc(:grain, DAY)::date";
  * video page vs. question card test, #6, on 11 Nov 2026, the registry's last day; the
  * pain-point page's B on 25 Nov 2026, when its version C took its half). The landing tests
  * carry the Landing page's names (server/ap/landing.ts, LANDING_TESTS) and are read by their
- * visits and starts.
+ * visits, starts and finishers.
  */
 const EXP = `tests (test, arm, control, first_day, last_day) AS (VALUES
   ('Pain-point page C vs. video page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date),
@@ -396,7 +396,8 @@ arm_finishers AS (
     JOIN finishers f ON (f.created_date_time AT TIME ZONE 'Europe/Berlin')::date BETWEEN w.from_day AND w.to_day
     LEFT JOIN price_arm pa ON pa.sid = f.id
    WHERE CASE
-           WHEN w.test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN f.j->>'landing_variant' = w.arm
+           WHEN w.test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page',
+                           'Video page vs. question card') THEN f.j->>'landing_variant' = w.arm
            WHEN w.test = 'Email question' THEN f.j->>'contact_question_arm' = w.arm
            ELSE pa.arm = w.arm AND f.created_date_time >= timestamptz '2026-10-08 15:23:00+00' END
      -- A survey bought before it was taken (pay to start): no arm decided its sale.
@@ -408,7 +409,8 @@ arms AS (
   SELECT w.test, w.arm, w.control,
          -- The landing versions' visits (the visit log records the version).
          (SELECT count(*) FROM funnel_event fe
-           WHERE w.test IN ('Pain-point page vs. video page', 'Video page vs. question card') AND fe.event_type = 'unique_visitor'
+           WHERE w.test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page',
+                            'Video page vs. question card') AND fe.event_type = 'unique_visitor'
              AND fe.landing_variant = w.arm
              AND fe.day BETWEEN w.from_day AND w.to_day
              AND lower(trim(coalesce(fe.utm_source, ''))) NOT IN ${TEST_SOURCES}) AS visitors,
@@ -441,7 +443,8 @@ const EXP_TABLE = sql(
 );
 
 /**
- * Each test's arm B against its control on the test's primary metric: start CVR (landing),
+ * Each test's variant against its control on the test's primary metric: finished surveys per
+ * visit (the pain-point page tests, #10 and #12, as the 19 Nov 2026 sync set), start CVR (#6),
  * payment CVR (pricing), finishing after the email question (email). Pooled two-proportion z;
  * the normal curve by Abramowitz and Stegun's formula, as the page works it out.
  */
@@ -449,9 +452,11 @@ const EXP_STATS = sql(
   [FINISHERS, SALES, STARTS, EXP],
   `, rates AS (
   SELECT test, control,
-         CASE WHEN test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN starts
+         CASE WHEN test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page') THEN submissions
+              WHEN test = 'Video page vs. question card' THEN starts
               WHEN test = 'Pricing 3.0' THEN payers ELSE finished_after_email END AS k,
-         CASE WHEN test IN ('Pain-point page vs. video page', 'Video page vs. question card') THEN visitors
+         CASE WHEN test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page',
+                            'Video page vs. question card') THEN visitors
               WHEN test = 'Pricing 3.0' THEN submissions ELSE reached_email END AS n
     FROM arms
 ), ab AS (
@@ -1538,7 +1543,7 @@ SELECT count(*) AS people_91_days_on,
   },
   "traffic.expStartCvr": {
     label: "Start CVR",
-    what: "Of an arm's visitors, the share who began the survey: the landing test's primary metric.",
+    what: "Of an arm's visitors, the share who began the survey. It decided #6 (video page vs. question card); the pain-point page tests are decided by finished surveys per visit.",
     good: "up",
     stat: "Share",
     per: "per visitor",
@@ -1613,7 +1618,7 @@ SELECT count(*) AS people_91_days_on,
     per: "per arm, on the test's primary metric",
     formula: ratio("The arm's rate", "The control's rate", "− 1, × 100"),
     caveat:
-      "Primary metrics: start CVR (landing), payment CVR (pricing), finishing after the email question (email, of the runs that reached it). A lift with low confidence can be chance.",
+      "Primary metrics: finished surveys per visit (the pain-point page tests, #10 and #12, as the 19 Nov 2026 sync set), start CVR (#6, video page vs. question card), payment CVR (pricing), finishing after the email question (email, of the runs that reached it). A lift with low confidence can be chance.",
     tables: [T.starts(), T.subs(), T.visits()],
     query: EXP_STATS,
     related: ["traffic.chance", "traffic.confidence"],
