@@ -146,6 +146,23 @@ export const SURVEY_SHEET_IDS: readonly SurveySheetId[] = SURVEY_SHEETS.map((s) 
  */
 export const GATE_TEST_SHEETS: ReadonlySet<SurveySheetId> = new Set(["halfway", "reportMap"]);
 
+/**
+ * Sheets taken out of the survey: no reader meets one, whatever its switch says
+ * (server/sheetSwitches.ts). A staging preview that names one (`?sheets=halfway`) still shows it,
+ * so it can be redesigned; `?sheets=all` leaves it out, as production does.
+ *
+ * Sheet 4, the halfway sheet ("Preliminary Results"), since 25 Nov 2026: Mark (#all-loveiq, that
+ * day, agreed at the sync) found it quadruples the drop where it opens and that naming the price
+ * halfway through doesn't lift payments, so it goes, and the other sheets are read without it.
+ * It also names EUR 1.99, which the price test's page no longer asks of everyone. He redesigns
+ * it later.
+ */
+export const RETIRED_SHEETS: ReadonlySet<SurveySheetId> = new Set(["halfway"]);
+
+/** Whether a sheet is taken out of the survey (RETIRED_SHEETS); any sheet id AP reads. */
+export const isRetiredSheet = (id: string): boolean =>
+  (RETIRED_SHEETS as ReadonlySet<string>).has(id);
+
 export function isSurveySheetId(value: unknown): value is SurveySheetId {
   return typeof value === "string" && (SURVEY_SHEET_IDS as readonly string[]).includes(value);
 }
@@ -217,8 +234,11 @@ export function parseSheetsPreview(param: string | string[] | null | undefined):
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.includes("all")) return [...SURVEY_SHEET_IDS];
-  return SURVEY_SHEET_IDS.filter((id) => parts.includes(id));
+  const named = SURVEY_SHEET_IDS.filter((id) => parts.includes(id));
+  // "all" is what production can show: a sheet taken out only when named too (`all,halfway`).
+  if (parts.includes("all"))
+    return SURVEY_SHEET_IDS.filter((id) => !RETIRED_SHEETS.has(id) || named.includes(id));
+  return named;
 }
 
 /** How the reader closed a sheet. */

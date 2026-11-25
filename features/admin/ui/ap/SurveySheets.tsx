@@ -5,6 +5,7 @@ import { fmt } from "@features/admin/server/ap/format";
 import { AP_SHEET_IDS } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
+import { isRetiredSheet } from "@features/survey/surveySheets";
 
 import { Info } from "./field-info";
 import { AllTraffic, Card, SectionHead, StatBox, TileGrid } from "./kit";
@@ -133,7 +134,8 @@ export default function SheetsSection({
                 const spot = spots.get(id);
                 const q = spot ? asked[spot.q] : undefined;
                 const bounce = sheetBounce(f);
-                const off = on !== null && !on.includes(id);
+                const retired = isRetiredSheet(id);
+                const off = !retired && on !== null && !on.includes(id);
                 return (
                   <div
                     key={id}
@@ -151,6 +153,9 @@ export default function SheetsSection({
                         <span className="text-[13px] font-bold leading-snug text-ap-ink">
                           {meta.name}
                         </span>
+                        {retired && (
+                          <span className="text-[11px] text-ap-muted">Taken out on 25 Nov</span>
+                        )}
                         {off && <span className="text-[11px] text-ap-muted">Switched off now</span>}
                       </span>
                     </span>
@@ -233,9 +238,10 @@ export function sheetsCsvTable(
         const f = figures?.bySheet[id];
         const spot = spots.get(id);
         const tap = SHEET_NAMES[id].tap === true;
-        const off = on !== null && !on.includes(id);
+        const retired = isRetiredSheet(id);
+        const off = !retired && on !== null && !on.includes(id);
         return {
-          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${off ? " (switched off now)" : ""}`,
+          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${retired ? " (taken out on 25 Nov)" : off ? " (switched off now)" : ""}`,
           values: [
             spot
               ? `${spot.where} · ${asked[spot.q]!.id}`

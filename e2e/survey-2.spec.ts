@@ -179,10 +179,10 @@ test.describe("Survey 2.0", () => {
       answered = q.qId;
     }
     // Mark's spots. The Trustpilot sheet opens only where the site's Trustpilot numbers are set.
+    // Sheet 4 (halfway, after 14021) is out of the survey since 25 Nov 2026.
     expect(opened.filter(([, id]) => id !== "trustpilot")).toEqual([
       ["02004", "science"],
       ["03012", "expert"],
-      ["14021", "halfway"],
       ["16005", "desire"],
       ["17002", "reportMap"],
     ]);

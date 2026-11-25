@@ -9,6 +9,7 @@ import {
   parseSheetsPreview,
   rememberDesireTick,
   rememberSheetShown,
+  RETIRED_SHEETS,
   sheetAfterQuestion,
   sheetBeforeQuestion,
   sheetsShownFor,
@@ -129,11 +130,20 @@ describe("the State of Desire tick, kept for its run", () => {
 
 describe("the staging preview, ?sheets=", () => {
   it("reads all, a list, or nothing", () => {
-    expect(parseSheetsPreview("all")).toEqual([...SURVEY_SHEET_IDS]);
+    expect(parseSheetsPreview("all")).toEqual(SURVEY_SHEET_IDS.filter((id) => id !== "halfway"));
     expect(parseSheetsPreview("halfway, science")).toEqual(["science", "halfway"]);
     expect(parseSheetsPreview(["desire", "nonsense"])).toEqual(["desire"]);
     expect(parseSheetsPreview("nonsense")).toEqual([]);
     expect(parseSheetsPreview(undefined)).toEqual([]);
+  });
+
+  // Sheet 4 is out of the survey since 25 Nov 2026 (Mark): "all" is what production can show,
+  // and naming it still previews it, for its redesign.
+  it("leaves the halfway sheet out of all, unless it is named too", () => {
+    expect([...RETIRED_SHEETS]).toEqual(["halfway"]);
+    expect(parseSheetsPreview("all")).not.toContain("halfway");
+    expect(parseSheetsPreview("all,halfway")).toEqual([...SURVEY_SHEET_IDS]);
+    expect(parseSheetsPreview("halfway")).toEqual(["halfway"]);
   });
 });
 

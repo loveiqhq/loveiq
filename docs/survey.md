@@ -302,6 +302,12 @@ with a "Keep going" that carries on. The rules are in
   switch; production ignores it. A reader who paid before the survey never sees a sheet with a
   price (Halfway, State of Desire, the map). The Trustpilot sheet needs the site's Trustpilot
   switch and numbers, or it is skipped.
+- **Sheet 4 is out (Mark, 2026-11-25).** The halfway sheet ("Preliminary Results") opens for no
+  reader, in the classic survey and in Survey 2.0, whatever its switch says (`RETIRED_SHEETS`):
+  Mark found it quadruples the drop where it opens, naming the price halfway doesn't lift
+  payments, and the price test's page no longer asks everyone €1.99. The other sheets stay and
+  are read without it. `?sheets=all` leaves it out as production does; `?sheets=all,halfway`
+  still previews it for its redesign. AP › Survey keeps its figures, marked "Taken out on 25 Nov".
 - **Going live (Fatih, 2026-11-14).** Science, Trustpilot and State of Desire go on first: both
   C13 orders meet them alike. The expert's sheet waited for the C13 check-in (2026-11-20): C13's
   control order asks 01005 too early for it, so only one C13 half saw it. Fatih and Mark called
