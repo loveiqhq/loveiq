@@ -2081,7 +2081,7 @@ export const TOOLS = [
       "complete carry it from that release), and hero_video_error with properties.reason for " +
       "a start that failed ('abandoned': the visitor left while it was starting). " +
       "Added 2026-10-13: landing_card_answer (a tap on question 1's card, properties.location " +
-      "'hero' or 'footer', properties.value the point picked, 1 to 7, and from 2026-11-25 " +
+      `'hero' or 'footer', properties.value the point picked, 1 to 7, and from ${LANDING_PAIN_POINT_LAST_DAY} ` +
       "properties.question the survey question it answers: '10003' on 'pain_point_c', '01002' " +
       "everywhere else and on every earlier event), cta_click with properties.element " +
       "'question_card' (that card's Continue; without it, the button beside it), " +

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AdsResult } from "@features/admin/server/ap/ads";
 import type { StartFact } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
-import { addDays } from "@features/admin/server/ap/days";
+import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { buildTraffic, EMAIL_TEST_LAST_DAY } from "@features/admin/server/ap/traffic";
 import { fields } from "@features/admin/ui/ap/fields/traffic";
 import { EMAIL_QUESTION_TEST_END } from "@shared/experiments/emailQuestionArm";
@@ -295,7 +295,10 @@ describe("Traffic page builder", () => {
       [null, true],
       [null, true],
     ]);
-    expect(b[1]!.why).toBe("Paused on 25 Nov 2026: version C of the pain-point page took its half");
+    // The day B was paused follows the constant, so a release on another day moves it too.
+    expect(b[1]!.why).toBe(
+      `Paused on ${shortDate(LANDING_PAIN_POINT_LAST_DAY)} 2026: version C of the pain-point page took its half`
+    );
   });
 
   it("reads round 4's test from its first day, the video page its control, and says #6 ended", () => {

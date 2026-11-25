@@ -5,7 +5,7 @@
  * engagement from PostHog, the presenter video's step by step. For Assessment A the landing
  * page is its assessment page.
  */
-import { addDays } from "./days";
+import { addDays, shortDate } from "./days";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
@@ -93,8 +93,7 @@ export const LANDING_TESTS: LandingTest[] = [
     code: "#10",
     from: LANDING_PAIN_POINT_START_DAY,
     to: LANDING_PAIN_POINT_LAST_DAY,
-    outcome:
-      "Paused on 25 Nov 2026, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question, the privacy line under the film and v2's sections.",
+    outcome: `Paused on ${shortDate(LANDING_PAIN_POINT_LAST_DAY)} ${LANDING_PAIN_POINT_LAST_DAY.slice(0, 4)}, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question, the privacy line under the film and v2's sections.`,
     arms: ["video", "pain_point"],
   },
   {
