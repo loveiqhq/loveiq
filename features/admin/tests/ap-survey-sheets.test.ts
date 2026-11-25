@@ -387,6 +387,8 @@ describe("the sheets in Survey 2.0's runs", () => {
       ["14021", "halfway"],
       ["16005", "desire"],
       ["17002", "reportMap"],
+      // The opt-in's miss-out sheet opens on the details page, 2.0's last screen.
+      ["00010", "missOut"],
     ]);
   });
 });
