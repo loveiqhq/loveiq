@@ -12,10 +12,11 @@
  * to 22 Nov 2026, resampled, it raises about 0.3 false alarms a year at 10 visits a week, 1.6
  * at 7 and 1.9 at 5, each with its "back" post (1 in 100 raised 1.7, 3.3 and 3.9).
  *
- * A day with visits ends a quiet run too short to post about. Once it is long enough, only its
- * second day with visits ends it: one day can be a stray link (a bookmark, a team test), and
- * ending the run there would post "back", stop the reminders and measure the next run's usual
- * rate over the gap itself. The run keeps its start, its keys and the usual rate from before it.
+ * A day with visits ends a quiet run too short to post about. Once it is long enough, only two
+ * days with visits less than a week apart end it: a lone day can be a stray link (a bookmark, a
+ * team test), and ending the run there would post "back", stop the reminders and measure the
+ * next run's usual rate over the gap itself. Strays a week or more apart never end it. The run
+ * keeps its start, its keys and the usual rate from before it.
  *
  * Judged on whole Berlin days, the days `funnel_event.day` is written in. Untagged clicks
  * (no utm and, from ChatGPT, almost never a Referer) are invisible here, as they are to every
@@ -40,11 +41,18 @@ const REMIND_EVERY = 7;
 const USUAL_DAYS = 28;
 /** ...and needs at least this many of them inside the read. */
 const MIN_USUAL_DAYS = 7;
-/** The comeback is still posted for up to this many days after the day that ended the run. */
+/** Two days with visits less than this many days apart end a quiet run; lone days are strays. */
+const BACK_PAIR_DAYS = 7;
+/**
+ * The comeback can still be posted while the day judged is less than this many days after the
+ * one that ended the run: a first try and six catch-ups.
+ */
 const BACK_WITHIN = 7;
 /**
- * How far back a check reads: far enough that the usual days of every quiet run still being
- * reminded about lie inside it.
+ * How far back a check reads. It holds the usual days of every quiet run still being reminded
+ * about while 6 quiet days or fewer are needed (about 7 visits a week or more). Below that, the
+ * late reminders' usual rate reads fewer than 28 days (never under a week), so a reminder can
+ * come a week early or late; none is sent twice, as each step has its own key.
  */
 export const CHATGPT_LOOKBACK_DAYS = 90;
 
@@ -55,7 +63,10 @@ export interface QuietRun {
   days: number;
   /** It reaches the first day read, so it may have begun earlier. */
   capped: boolean;
-  /** Its days with visits once it was long enough to post about: one is a stray, two end it. */
+  /**
+   * Its days with visits once it was long enough to post about: lone ones are strays, and two
+   * less than a week apart end it (the last two, on a comeback).
+   */
   visitDays: string[];
 }
 
@@ -140,8 +151,13 @@ export function chatgptGap(
       };
     }
     if (!visits) continue;
-    if (daysFrom(run.from, d) < run.needed) run = null;
-    else if (run.visitDays.push(d) === 2) {
+    if (daysFrom(run.from, d) < run.needed) {
+      run = null;
+      continue;
+    }
+    const prev = run.visitDays.at(-1);
+    run.visitDays.push(d);
+    if (prev && daysFrom(prev, d) < BACK_PAIR_DAYS) {
       ended = { run, on: d };
       run = null;
     }
@@ -183,7 +199,7 @@ export function chatgptGap(
           };
   }
   if (ended && daysFrom(ended.on, day) < BACK_WITHIN) {
-    const [first, second] = ended.run.visitDays as [string, string];
+    const [first, second] = ended.run.visitDays.slice(-2) as [string, string];
     return {
       ...about(ended.run, daysFrom(ended.run.from, first)),
       action: "back",
@@ -205,22 +221,27 @@ export function chatgptGapText(gap: ChatgptGap): { headline: string; body: strin
   const run = gap.run;
   if (!gap.action || !run) return null;
 
+  /** "one day only (6 Nov)", or "2 days only (6 Nov, 20 Nov)". */
+  const onlyOn = (days: string[]) =>
+    `${days.length === 1 ? "one day" : `${days.length} days`} only (${days.map(shortDate).join(", ")})`;
+
   if (gap.action === "back") {
     const [first, second] = gap.back!.days;
-    const after = run.capped
-      ? `the first in more than ${Math.floor(CHATGPT_LOOKBACK_DAYS / 7)} weeks`
-      : `the first since ${shortDate(addDays(run.from, -1))}`;
+    const between = run.visitDays.slice(0, -2);
+    const since = run.capped
+      ? `in more than ${Math.floor(CHATGPT_LOOKBACK_DAYS / 7)} weeks`
+      : `since ${shortDate(addDays(run.from, -1))}`;
     return {
-      headline: `ChatGPT visits are back: ${gap.back!.visits} on ${shortDate(first)} and ${shortDate(second)}, ${after}`,
-      body: "",
+      headline: `ChatGPT visits are back: ${gap.back!.visits} on ${shortDate(first)} and ${shortDate(second)}, ${between.length ? "after almost none" : "the first"} ${since}`,
+      body: between.length ? `In between, tagged visits on ${onlyOn(between)}.` : "",
     };
   }
 
   const quietDays = dayRange(run.from, addDays(run.from, run.days - 1));
-  const stray = run.visitDays[0];
-  const none = stray ? "almost no" : "no";
+  const strays = run.visitDays;
+  const none = strays.length ? "almost no" : "no";
   const usual = gap.usualPerWeek === null ? "" : `Usually about ${gap.usualPerWeek} a week.`;
-  const strayDay = stray ? `Tagged visits on one day only (${shortDate(stray)}).` : "";
+  const strayDay = strays.length ? `Tagged visits on ${onlyOn(strays)}.` : "";
   const lines = (...parts: string[]) => parts.filter(Boolean).join(" ");
 
   if (gap.action === "alert") {

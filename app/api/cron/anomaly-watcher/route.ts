@@ -210,7 +210,8 @@ const CHATGPT_FROM_HOUR = 7;
 /**
  * Judges yesterday (Berlin), the last whole day. Each step of a quiet run (the first post,
  * each weekly reminder, the comeback) is claimed once by its own key, so a post a run missed
- * (a failed read, a run that never got this far) goes out on a later run instead.
+ * (a failed read, a run that never got this far) goes out on a later run instead. A Slack post
+ * that fails is kept for a manual replay (notifySlack) and not retried.
  */
 async function alertOnChatgptGap(now: Date): Promise<ChatgptGap | null> {
   if (reportingHour(now) < CHATGPT_FROM_HOUR) return null;

@@ -181,7 +181,7 @@ describe("chatgptGap", () => {
     expect(chatgptGap(counts, "2026-12-03", windowStart("2026-12-03")).action).toBeNull();
   });
 
-  it("does not let one stray day end a quiet run it posted about: same key, same usual rate", () => {
+  it("does not let lone stray days end a quiet run it posted about: same key, same usual rate", () => {
     const counts = steady("2026-10-01", "2026-10-31");
     counts.set("2026-11-06", 1); // a bookmarked link, say
     // Quiet from 1 Nov at 14 a week, posted on 3 Nov. 6 Nov's visit is not a comeback.
@@ -197,15 +197,39 @@ describe("chatgptGap", () => {
       needed: 3,
       run: { from: "2026-11-01", days: 10 },
     });
-    // A second day with visits ends it, still against the rate from before the quiet days.
+    // A second stray two weeks later is a stray too: the reminders go on.
     counts.set("2026-11-20", 2);
     expect(chatgptGap(counts, "2026-11-20", windowStart("2026-11-20"))).toMatchObject({
+      action: "reminder",
+      key: "2026-11-01:week2",
+      run: { from: "2026-11-01", days: 20, visitDays: ["2026-11-06", "2026-11-20"] },
+    });
+    // Visits again less than a week later end it, still against the rate from before the quiet.
+    counts.set("2026-11-24", 1);
+    expect(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24"))).toMatchObject({
       action: "back",
-      key: "2026-11-20:back",
+      key: "2026-11-24:back",
       usualPerWeek: 14,
       run: { from: "2026-11-01" },
-      back: { days: ["2026-11-06", "2026-11-20"], visits: 3 },
+      back: { days: ["2026-11-20", "2026-11-24"], visits: 3 },
     });
+  });
+
+  it("keeps reminding for 8 weeks through stray days that come a week or more apart", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    for (const day of ["2026-11-06", "2026-11-16", "2026-11-26", "2026-12-06", "2026-12-16"])
+      counts.set(day, 1);
+    expect(posts(counts, "2026-11-01", "2027-01-10")).toEqual([
+      ["2026-11-03", "alert"],
+      ["2026-11-10", "reminder"],
+      ["2026-11-17", "reminder"],
+      ["2026-11-24", "reminder"],
+      ["2026-12-01", "reminder"],
+      ["2026-12-08", "reminder"],
+      ["2026-12-15", "reminder"],
+      ["2026-12-22", "reminder"],
+      ["2026-12-29", "reminder"],
+    ]);
   });
 
   it("still ends a quiet run too short to post about on its first day with visits", () => {
@@ -312,6 +336,35 @@ describe("chatgptGapText", () => {
     const text = chatgptGapText(chatgptGap(counts, "2026-11-10", windowStart("2026-11-10")))!;
     expect(text.headline).toBe("ChatGPT: still almost no tagged visits, 10 days now (1 to 10 Nov)");
     expect(text.body).toContain("Tagged visits on one day only (6 Nov).");
+  });
+
+  it("counts the quiet days in an alert that already has a stray day", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-05", 1);
+    const text = chatgptGapText(chatgptGap(counts, "2026-11-06", windowStart("2026-11-06")))!;
+    expect(text.headline).toBe("ChatGPT sent almost no tagged visits for 6 days (1 to 6 Nov)");
+    expect(text.body).toContain("Tagged visits on one day only (5 Nov).");
+  });
+
+  it("names every stray day of a quiet run", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-06", 1);
+    counts.set("2026-11-20", 2);
+    const text = chatgptGapText(chatgptGap(counts, "2026-11-22", windowStart("2026-11-22")))!;
+    expect(text.headline).toBe("ChatGPT: still almost no tagged visits, 22 days now (1 to 22 Nov)");
+    expect(text.body).toContain("Tagged visits on 2 days only (6 Nov, 20 Nov).");
+  });
+
+  it("says a comeback came after almost none when the quiet had a stray day", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-06", 1);
+    counts.set("2026-11-20", 2);
+    counts.set("2026-11-24", 1);
+    const text = chatgptGapText(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24")))!;
+    expect(text.headline).toBe(
+      "ChatGPT visits are back: 3 on 20 Nov and 24 Nov, after almost none since 31 Oct"
+    );
+    expect(text.body).toBe("In between, tagged visits on one day only (6 Nov).");
   });
 
   it("says how many came back on the two days that ended the quiet, and since when it was quiet", () => {
