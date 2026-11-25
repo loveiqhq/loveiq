@@ -161,7 +161,35 @@ describe("chatgptGap", () => {
       action: "back",
       key: "2026-11-25:back",
     });
+    // 1 Dec is the 7th day with visits, the last one caught up; 2 Dec the 8th.
+    expect(chatgptGap(counts, "2026-12-01", windowStart("2026-12-01"))).toMatchObject({
+      action: "back",
+      key: "2026-11-25:back",
+    });
     expect(chatgptGap(counts, "2026-12-02", windowStart("2026-12-02")).action).toBeNull();
+  });
+
+  it("posts the comeback for a quiet run just long enough to have been posted about", () => {
+    const counts = steady("2026-10-01", "2026-11-21");
+    counts.set("2026-11-25", 2);
+    // 22 to 24 Nov quiet: 3 days, exactly the 3 needed at 14 a week.
+    expect(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24")).action).toBe("alert");
+    expect(chatgptGap(counts, "2026-11-25", windowStart("2026-11-25"))).toMatchObject({
+      action: "back",
+      run: { from: "2026-11-22", days: 3 },
+    });
+  });
+
+  it("takes the usual rate from the 28 days before the first quiet day, not counting it", () => {
+    // 43 visits from 25 Oct to 21 Nov: 1.54 a day, so 3 quiet days are enough. Counting the
+    // first quiet day as well would make it 1.48 a day, and 4.
+    const counts = steady("2026-10-25", "2026-11-08");
+    for (const [day, n] of steady("2026-11-09", "2026-11-21", 1)) counts.set(day, n);
+    expect(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24"))).toMatchObject({
+      usualPerWeek: 11,
+      needed: 3,
+      action: "alert",
+    });
   });
 
   it("does not call quiet days a comeback when they were too few to post about", () => {
