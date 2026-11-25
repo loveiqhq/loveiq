@@ -217,13 +217,10 @@ export const GuideScreen: FC<{
         />
       </div>
 
-      <div
-        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col pb-24 pt-6 sm:px-10 sm:py-10"
-        style={{
-          paddingLeft: "env(safe-area-inset-left, 0px)",
-          paddingRight: "env(safe-area-inset-right, 0px)",
-        }}
-      >
+      {/* The gutters in classes, not an inline style: inline, the safe-area padding (0 off a notch)
+          overrode sm:px-10, and from 640px to the 1120px column (tablets, small windows) the
+          cards touched both edges of the screen. Phones keep 0 here: their rows carry their own. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col pb-24 pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] pt-6 sm:py-10 sm:pl-[max(2.5rem,env(safe-area-inset-left,0px))] sm:pr-[max(2.5rem,env(safe-area-inset-right,0px))]">
         {/* Header: "Short guide / before you start", Skip Intro */}
         <div
           className="survey-animate flex items-center gap-4 px-[26px] sm:px-0"
