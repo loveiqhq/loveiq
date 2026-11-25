@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addDays, shortDate } from "@features/admin/server/ap/days";
+import { addDays, dayRange, shortDate } from "@features/admin/server/ap/days";
 import { classifySource, deviceClass, parseFacts } from "@features/admin/server/ap/facts";
 import {
   activeNarrowing,
@@ -44,6 +44,12 @@ describe("AP days", () => {
     expect(addDays("2026-10-01", -1)).toBe("2026-09-30");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
     expect(shortDate("2026-09-21")).toBe("21 Sep");
+  });
+
+  it("writes a run of days as people say it, naming the month once when it is the same", () => {
+    expect(dayRange("2026-11-22", "2026-11-24")).toBe("22 to 24 Nov");
+    expect(dayRange("2026-11-30", "2026-12-02")).toBe("30 Nov to 2 Dec");
+    expect(dayRange("2026-11-24", "2026-11-24")).toBe("24 Nov");
   });
 });
 

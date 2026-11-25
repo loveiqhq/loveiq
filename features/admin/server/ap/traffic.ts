@@ -23,7 +23,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 import { COUNTRIES, COUNTRY_CODE_MAP } from "@/data/countries";
 
 import type { AdPreview, AdsResult, AdsLine } from "./ads";
-import { addDays, shortDate } from "./days";
+import { addDays, dayRange, shortDate } from "./days";
 import { fmt } from "./format";
 import {
   classifySource,
@@ -37,6 +37,7 @@ import {
   visitSource,
 } from "./facts";
 import {
+  CHATGPT_GAP,
   FUNNELS,
   grainOf,
   rangeLabel,
@@ -1747,8 +1748,19 @@ export function buildTraffic(input: {
     }
   }
 
+  // ChatGPT's own gap reads like a drop in AI visits: say so wherever the range or its
+  // comparison covers one of its days.
+  const pageHead = head(f, today, now, true, facts);
+  const coversGap = (r: { from: string; to: string } | null) =>
+    r !== null && r.from <= CHATGPT_GAP.to && r.to >= CHATGPT_GAP.from;
+  if (coversGap(pageHead.range) || coversGap(pageHead.compare)) {
+    pageHead.notes.push(
+      `ChatGPT sent no visits from ${dayRange(CHATGPT_GAP.from, CHATGPT_GAP.to)} ${CHATGPT_GAP.to.slice(0, 4)} (a gap on ChatGPT's side, not a release of ours), so AI assistants read zero on those days.`
+    );
+  }
+
   return {
-    ...head(f, today, now, true, facts),
+    ...pageHead,
     launched: on,
     attribution,
     tiles,

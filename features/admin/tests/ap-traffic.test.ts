@@ -722,3 +722,34 @@ describe("Traffic page builder", () => {
     expect(rev("free")).toEqual([9.99, 9.99, 9.99, 9.99]);
   });
 });
+
+describe("the ChatGPT gap of 7 to 14 Oct 2026", () => {
+  const LATER = "2026-11-25";
+  const notesFor = (from: string, to: string) =>
+    traffic({
+      filters: parseFilters({ period: "custom", from, to }, LATER),
+      today: LATER,
+      now: new Date("2026-11-25T10:00:00Z"),
+    }).notes;
+  const namesGap = (notes: string[]) =>
+    notes.some((n) => n.includes("ChatGPT sent no visits from 7 to 14 Oct 2026"));
+
+  it("is named on a range that covers any of its days, its first and last included", () => {
+    expect(namesGap(notesFor("2026-10-01", "2026-10-07"))).toBe(true);
+    expect(namesGap(notesFor("2026-10-14", "2026-10-20"))).toBe(true);
+  });
+
+  it("is named on a range from its last day up to today, which has no comparison", () => {
+    expect(namesGap(notesFor("2026-10-14", LATER))).toBe(true);
+  });
+
+  it("is named when only the comparison period covers it", () => {
+    // 15 to 21 Oct is compared with the 7 days before: 8 to 14 Oct.
+    expect(namesGap(notesFor("2026-10-15", "2026-10-21"))).toBe(true);
+  });
+
+  it("is not named when neither the range nor its comparison touches it", () => {
+    // 22 to 28 Oct is compared with 15 to 21 Oct, which starts the day after the gap.
+    expect(namesGap(notesFor("2026-10-22", "2026-10-28"))).toBe(false);
+  });
+});

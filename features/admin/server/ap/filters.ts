@@ -36,6 +36,13 @@ export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 export const SURVEY_TRACKING_FROM = "2026-10-17";
 
 /**
+ * ChatGPT sent no visits at all from 7 to 14 Oct 2026: the visit log, PostHog and GA4 all read
+ * zero, and the visits came back on 15 Oct with the same releases live, so the gap was on
+ * ChatGPT's side. The Traffic page names it, and so does the ChatGPT alert in anomaly-watcher.
+ */
+export const CHATGPT_GAP = { from: "2026-10-07", to: "2026-10-14" } as const;
+
+/**
  * Where a person came from, read off the survey's tracker (the first page they landed on).
  * Google Ads is a click id or google/cpc, Meta Ads a Meta source with a paid medium, organic
  * search a search engine tagged organic or, untagged, the referrer (from SURVEY_TRACKING_FROM);
