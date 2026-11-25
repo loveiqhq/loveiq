@@ -1534,14 +1534,24 @@ export const trackSurveyFormError = (params: {
  * No on the last question (16015) and moved on (features/survey/optInSheet.ts). Once per
  * run. PostHog and GA4; before the submit there is no submission to persist it against.
  */
-export const trackOptInSheetShown = () =>
+export const trackOptInSheetShown = () => {
+  optInSheetOpenedAt = Date.now();
   track("survey_optin_sheet_shown", { question_id: "16015" });
+};
+
+/**
+ * When the miss-out sheet opened on this page, for how long it stayed open (`ms_open`, as the
+ * sheets between questions send). The sheet never stays open across a reload, so a close always
+ * follows its own opening here (AP-Analytics, 25 Nov 2026: timing from the two events' times
+ * could pair a person's show in one run with a close in another).
+ */
+let optInSheetOpenedAt: number | null = null;
 
 /**
  * How the sheet closed: "yes" (the reader opted in after all), "not_now" (the No stands)
- * or "dismissed" (closed without a choice: `via` says how). The outcome is the reader's
- * marketing choice, so it goes to PostHog only, like an answer (trackLandingCardAnswer);
- * GA4 sees only that the sheet closed.
+ * or "dismissed" (closed without a choice: `via` says how), and how long it was open. The
+ * outcome is the reader's marketing choice, so it goes to PostHog only, like an answer
+ * (trackLandingCardAnswer); GA4 sees only that the sheet closed.
  */
 export const trackOptInSheetClosed = ({
   outcome,
@@ -1549,12 +1559,15 @@ export const trackOptInSheetClosed = ({
 }: {
   outcome: OptInSheetOutcome;
   via?: OptInSheetDismissVia | "back";
-}) =>
+}) => {
+  const msOpen = optInSheetOpenedAt === null ? null : Date.now() - optInSheetOpenedAt;
+  optInSheetOpenedAt = null;
   track(
     "survey_optin_sheet_closed",
     { question_id: "16015" },
-    { outcome, ...(via ? { via } : {}) }
+    { outcome, ...(via ? { via } : {}), ...(msOpen === null ? {} : { ms_open: msOpen }) }
   );
+};
 
 /**
  * A sheet between questions opened (features/survey/surveySheets.ts): which one, over which

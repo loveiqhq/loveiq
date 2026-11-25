@@ -140,13 +140,21 @@ describe("what PostHog saw of the sheets", () => {
       "runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on"
     );
     expect(query).toContain("event IN ('survey_started', 'survey_answer', 'survey_completed')");
-    // The miss-out sheet: its own events, its Yes as its tap, its time open from its two events.
-    expect(query).toContain("if(startsWith(event, 'survey_optin_sheet'), 'missOut'");
-    expect(query).toContain(
-      "event IN ('survey_sheet_shown', 'survey_sheet_closed', 'survey_optin_sheet_shown', 'survey_optin_sheet_closed')"
+    // The miss-out sheet, line by line: its own events counted as the six's are, its Yes as its
+    // tap, its time open its ms_open (sent from 25 Nov 2026), else the time between its events.
+    const line = (text: string) => expect(query.replace(/\s+/g, " ")).toContain(text);
+    line(
+      "if(startsWith(event, 'survey_optin_sheet'), 'missOut', toString(properties.sheet)) AS sheet,"
     );
-    expect(query).toContain("toString(properties.outcome) = 'yes'");
-    expect(query).toContain("dateDiff('millisecond', per.shown_at, per.optin_closed_at)");
+    line(
+      "countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows, minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at, countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes, maxIf(toFloat(properties.ms_open), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ms_open, minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at, maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked"
+    );
+    line(
+      "WHERE event IN ('survey_sheet_shown', 'survey_sheet_closed', 'survey_optin_sheet_shown', 'survey_optin_sheet_closed')"
+    );
+    line(
+      "if(per.sheet = 'missOut' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,"
+    );
     expect(query).toContain(
       "countIf(closes = 0 AND NOT went_on AND shown_at < now() - INTERVAL 30 MINUTE) AS left_open"
     );

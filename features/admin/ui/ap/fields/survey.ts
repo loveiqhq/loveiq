@@ -902,8 +902,8 @@ const SHEETS = `-- The sheets between the survey's questions, for the runs begun
 -- the old one): per sheet, the people it opened for, those who left the survey with it open
 -- (never closed it, answered or finished nothing after it opened, 30 minutes since), those who
 -- closed it, how long it was open (median, ms) and its taps (the State of Desire sheet's box
--- ticked, the miss-out sheet's Yes). The opt-in's miss-out sheet is 'missOut': its own events,
--- its time open from them. A run's order: it answered 03011 before 01005 (new) or 01005 first
+-- ticked, the miss-out sheet's Yes). The opt-in's miss-out sheet is 'missOut': its own events;
+-- its time open is its ms_open from 25 Nov 2026, before then the time between its two events. A run's order: it answered 03011 before 01005 (new) or 01005 first
 -- (old). The rows with an empty sheet are every sheet together. The team's people are left out.
 WITH runs AS (
   SELECT person_id,
@@ -929,7 +929,7 @@ per AS (
          countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows,
          minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at,
          countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes,
-         maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms_open,
+         maxIf(toFloat(properties.ms_open), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ms_open,
          minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at,
          maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0),
                event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked
@@ -945,7 +945,7 @@ per AS (
 seen AS (
   SELECT per.person_id AS person_id, per.sheet AS sheet, per.shown_at AS shown_at, per.closes AS closes,
          per.ticked AS ticked,
-         if(per.sheet = 'missOut', toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
+         if(per.sheet = 'missOut' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
          runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on,
          multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                  toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
@@ -1365,7 +1365,7 @@ SELECT key, enabled, updated_at
     stat: "Median",
     per: "per person who closed the sheet",
     formula: {
-      num: "Time from the sheet opening to its close (ms_open; for the miss-out sheet, between its two events), the middle one",
+      num: "Time from the sheet opening to its close (ms_open; for the miss-out sheet before 25 Nov 2026, the time between its two events), the middle one",
     },
     caveat: `Over the people who closed it: someone who left with it open has no time. All sheets together: the middle of every close. The time a sheet is open also counts as time on the question it opens over, in that question's median time. ${SHEET_PEOPLE}`,
     tables: SHEET_EVENTS,

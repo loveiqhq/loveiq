@@ -438,6 +438,20 @@ export const MISS_OUT_SHEET = "missOut";
 /** The sheets AP reads: Mark's six (features/survey/surveySheets.ts) and the miss-out sheet. */
 export type ApSheetId = SurveySheetId | typeof MISS_OUT_SHEET;
 export const AP_SHEET_IDS: readonly ApSheetId[] = [...SURVEY_SHEET_IDS, MISS_OUT_SHEET];
+
+/**
+ * Each sheet's first day on the live site (Berlin), from its switch's switch-on in system_flags
+ * (the miss-out sheet has no switch: its release). A range that starts earlier counts it from then.
+ */
+export const SHEET_FIRST_DAYS: Readonly<Record<ApSheetId, string>> = {
+  science: "2026-11-17",
+  trustpilot: "2026-11-17",
+  expert: "2026-11-18",
+  halfway: "2026-11-17",
+  desire: "2026-11-18",
+  reportMap: "2026-11-17",
+  [MISS_OUT_SHEET]: SHEETS_FROM,
+};
 const isApSheetId = (value: unknown): value is ApSheetId =>
   typeof value === "string" && (AP_SHEET_IDS as readonly string[]).includes(value);
 
@@ -484,7 +498,8 @@ const NO_SHEET: SheetFigures = {
  * events: survey_sheet_shown when one opens (once per run), survey_sheet_closed when it goes,
  * with how long it was open and, for the State of Desire sheet, whether its box was ticked. The
  * opt-in's miss-out sheet sends survey_optin_sheet_shown and survey_optin_sheet_closed (with its
- * outcome, "yes" its tap, and no ms_open: its time open is read from the two events' times).
+ * outcome, "yes" its tap, and its ms_open from 25 Nov 2026; before then its time open is read
+ * from the two events' times).
  * PostHog is not consent-gated on the site, so it sees nearly every survey run (not blockers').
  *
  * Counted as the question funnel counts: the runs begun in the range (a person's first survey
@@ -534,7 +549,7 @@ export async function fetchSurveySheets(
              countIf(event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shows,
              minIf(timestamp, event IN ('survey_sheet_shown', 'survey_optin_sheet_shown')) AS shown_at,
              countIf(event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS closes,
-             maxIf(toFloat(properties.ms_open), event = 'survey_sheet_closed') AS ms_open,
+             maxIf(toFloat(properties.ms_open), event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ms_open,
              minIf(timestamp, event = 'survey_optin_sheet_closed') AS optin_closed_at,
              maxIf(if(toString(properties.ticked) = 'true' OR toString(properties.outcome) = 'yes', 1, 0),
                    event IN ('survey_sheet_closed', 'survey_optin_sheet_closed')) AS ticked
@@ -547,7 +562,7 @@ export async function fetchSurveySheets(
     seen AS (
       SELECT per.person_id AS person_id, per.sheet AS sheet, per.shown_at AS shown_at,
              per.closes AS closes, per.ticked AS ticked,
-             if(per.sheet = '${MISS_OUT_SHEET}', toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
+             if(per.sheet = '${MISS_OUT_SHEET}' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
              runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on,
              multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                      toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order

@@ -350,7 +350,10 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
       facts: factsFixture({ from: "2026-11-01", to: "2026-11-21" }),
     });
     render(<ApSurvey />);
-    expect(within(sheetRow("halfway")!).getByText("Counted from 16 Nov 2026")).toBeTruthy();
+    // Each sheet from its own first day: the miss-out sheet 16 Nov, the expert's 18 Nov.
+    expect(within(sheetRow("halfway")!).getByText("Counted from 17 Nov 2026")).toBeTruthy();
+    expect(within(sheetRow("expert")!).getByText("Counted from 18 Nov 2026")).toBeTruthy();
+    expect(within(sheetRow("missOut")!).getByText("Counted from 16 Nov 2026")).toBeTruthy();
   });
 
   it("without the questions, reads the order the range opens on and places nothing", () => {
@@ -608,7 +611,8 @@ describe("the CSV (every table on the page is in it)", () => {
     // The tiles: every sheet together.
     expect(fresh.rows[7]).toEqual({
       label: "All sheets",
-      values: [null, 331, 7 / 331, 4129, null, null],
+      // The Conversion tile too: 1 tick of 36 and 2 Yeses of 20.
+      values: [null, 331, 7 / 331, 4129, 3 / 56, 3],
     });
     expect(fresh.rows[2]!.values[0]).toBe(`Before #${newOrder.indexOf("01005") + 1} · 01005`);
 

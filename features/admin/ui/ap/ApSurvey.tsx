@@ -42,7 +42,14 @@ import {
   TileGrid,
   useHashScroll,
 } from "./kit";
-import { SHEET_NAMES, sheetBounce, sheetConversion, sheetSpots, type SheetSpot } from "./sheets";
+import {
+  SHEET_NAMES,
+  sheetBounce,
+  sheetConversion,
+  sheetCountedFrom,
+  sheetSpots,
+  type SheetSpot,
+} from "./sheets";
 import SheetsSection, { clicks, SheetBadge, sheetsCsvTable } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
 import { useApFilters } from "./useApFilters";
@@ -1396,7 +1403,7 @@ function FunnelSection({
                     spot={spot}
                     figures={sheetsSeen?.bySheet[spot.id]}
                     known={sheetsKnown}
-                    from={data.sheets.from}
+                    from={data.sheets.from && sheetCountedFrom(spot.id, data.range.from)}
                   />
                 ))}
               </Fragment>

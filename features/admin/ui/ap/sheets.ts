@@ -4,9 +4,11 @@
  * rates. Where a sheet opens comes from the survey's own placements
  * (features/survey/surveySheets.ts), so the page follows the live survey when they move.
  */
+import { rangeLabel } from "@features/admin/server/ap/filters";
 import {
   AP_SHEET_IDS,
   MISS_OUT_SHEET,
+  SHEET_FIRST_DAYS,
   type ApSheetId,
   type SheetFigures,
 } from "@features/admin/server/ap/posthog";
@@ -114,4 +116,10 @@ export function tapConversion(bySheet: Partial<Record<ApSheetId, SheetFigures>> 
   const saw = tapped.reduce((n, f) => n + (f?.saw ?? 0), 0);
   const taps = tapped.reduce((n, f) => n + (f?.ticked ?? 0), 0);
   return { rate: saw > 0 ? taps / saw : null, taps };
+}
+
+/** "17 Nov 2026" when the range starts before the sheet's first day: its figures are from then. */
+export function sheetCountedFrom(id: ApSheetId, rangeFrom: string): string | null {
+  const first = SHEET_FIRST_DAYS[id];
+  return rangeFrom < first ? rangeLabel(first, first) : null;
 }

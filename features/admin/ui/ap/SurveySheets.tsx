@@ -216,6 +216,7 @@ export function sheetsCsvTable(
   const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
   const on = data.sheets.on;
   const all = figures?.all;
+  const taps = tapConversion(figures?.bySheet);
   return {
     columns: [
       { label: "Sheet", unit: "text" },
@@ -248,10 +249,17 @@ export function sheetsCsvTable(
           ],
         };
       }),
-      // The section's tiles: every sheet together (its conversion is the State of Desire row's).
+      // The section's tiles: every sheet together, and the Conversion tile (both sheets to tap).
       {
         label: "All sheets",
-        values: [null, all?.saw ?? 0, sheetBounce(all), all?.medianMs ?? null, null, null],
+        values: [
+          null,
+          all?.saw ?? 0,
+          sheetBounce(all),
+          all?.medianMs ?? null,
+          taps.rate,
+          figures ? taps.taps : null,
+        ],
       },
     ],
   };

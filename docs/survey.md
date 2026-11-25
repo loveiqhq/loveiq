@@ -241,7 +241,8 @@ email sheet on Next") adds a second ask after a No:
   question's words and the sheet's. A Yes from a reader who never saw the sheet keeps
   `2026-10-14`. PostHog and GA4
   get `survey_optin_sheet_shown`, then `survey_optin_sheet_closed`, whose `outcome` (`yes`,
-  `not_now`, `dismissed`) and `via` go to PostHog only.
+  `not_now`, `dismissed`), `via` and `ms_open` (how long it was open, from 2026-11-25) go to
+  PostHog only.
 - **The copy** lives in [`optInSheet.ts`](../features/survey/optInSheet.ts). A change there is a
   change to consent text: bump `OPT_IN_SHEET_COPY_VERSION` in the same commit.
 - **The fine print's figure** is measured, not the design's 97%. On 2026-11-10, 2,551 addresses
@@ -255,7 +256,8 @@ email sheet on Next") adds a second ask after a No:
   `survey_optin_sheet_closed` with `outcome` `yes` counts the Yes given in the sheet itself.
   Since 2026-11-25 AP-Analytics shows it as the seventh sheet in Survey › Sheets, in the question
   funnel after the opt-in and as pin 7 on the charts: who saw it, who left with it open, its
-  median time open (between its two events) and its conversion (that Yes).
+  median time open (its `ms_open`; before 2026-11-25, the time between its two events) and its
+  conversion (that Yes).
 - **Phones and wider.** Mark drew it for phones (390 px). From 640 px it stays a bottom sheet, at
   most 480 px wide.
 
