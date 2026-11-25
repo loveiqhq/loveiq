@@ -67,11 +67,14 @@ interface Seen {
 function backend({
   existingPayment = false,
   gifted = false,
+  chosenFree = false,
   giftLookupFails = false,
   tracker = null,
 }: {
   existingPayment?: boolean;
   gifted?: boolean;
+  /** The report already holds a EUR 0 chosen on Choose your price (`priceOption: "free"`). */
+  chosenFree?: boolean;
   giftLookupFails?: boolean;
   /** The survey's utm_tracker, as the recipient lookup reads it. */
   tracker?: string | null;
@@ -86,9 +89,11 @@ function backend({
         return { ok: true, status: 200, text: async () => "" } as Response;
       }
       if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) return json([]);
-      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&metadata->>gifted=eq.e07")) {
+      // The free unlocks a sale can come after: E07's gift, or a EUR 0 chosen on the gate.
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&") && url.includes("gifted")) {
         if (giftLookupFails) return { ok: false, status: 500, json: async () => ({}) } as Response;
-        return json(gifted ? [{ id: 77 }] : []);
+        const asksChosen = url.includes("metadata->>priceOption.eq.free");
+        return json(gifted || (chosenFree && asksChosen) ? [{ id: 77 }] : []);
       }
       if (
         url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
@@ -402,12 +407,33 @@ describe("a EUR 1.99 paid after E07 had gifted the same unlock", () => {
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
     expect(ops).toHaveLength(1);
-    expect(String(ops[0]!.body?.text)).toMatch(/paid on report 5 after E07 had already gifted it/);
+    expect(String(ops[0]!.body?.text)).toMatch(
+      /€1\.99 Core Archetype paid on report 5 after it was already open for free/
+    );
     // The payment intent leads: Slack's dedupe reads the first 100 characters.
     expect(String(ops[0]!.body?.text).slice(0, 40)).toContain("pi_initial_1");
     expect(String(ops[0]!.body?.text)).toContain("pi_initial_1");
     // The sale itself is still recorded as it came.
     expect(seen.some((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))).toBe(true);
+  });
+
+  // Choose your price: a checkout opened at EUR 6.99, then EUR 0 taken in another tab, then
+  // the open checkout paid. The reader paid for an unlock they already held.
+  it("tells #ops to refund a price paid after the reader had taken it for EUR 0", async () => {
+    const seen = backend({ chosenFree: true });
+    await processStripeWebhookEvent({
+      event: completed(),
+      stripe: stripe({
+        amountTotal: 699,
+        metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+      }) as never,
+    });
+    const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
+    expect(ops).toHaveLength(1);
+    expect(String(ops[0]!.body?.text)).toContain("€6.99");
+    expect(String(ops[0]!.body?.text)).toMatch(
+      /paid on report 5 after it was already open for free/
+    );
   });
 
   it("says nothing when there was no gift, or on Stripe's re-delivery", async () => {
