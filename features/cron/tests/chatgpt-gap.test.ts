@@ -79,41 +79,51 @@ function posts(
 }
 
 describe("chatgptGap", () => {
-  it("on the real numbers since 1 Sep posts twice: after 7 to 10 Oct, and when ChatGPT came back on 15 Oct", () => {
+  it("on the real numbers since 1 Sep posts twice: after 7 to 11 Oct, and once ChatGPT was back on 15 and 16 Oct", () => {
     // The fixture starts on 1 Sep, so the window never reaches back into August.
     expect(posts(REAL, "2026-09-01", "2026-11-24", "2026-09-01")).toEqual([
-      ["2026-10-10", "alert"],
-      ["2026-10-15", "back"],
+      ["2026-10-11", "alert"],
+      ["2026-10-16", "back"],
     ]);
   });
 
-  it("needs the quiet days that would come by chance less than 1 time in 100", () => {
-    // 9 Sep to 6 Oct held 36 visits (9 a week): 3 quiet days happen by chance 2 times in
-    // 100 at that rate, 4 quiet days under 1 time in 100.
-    expect(chatgptGap(REAL, "2026-10-09", "2026-09-01")).toMatchObject({
-      streak: 3,
-      usualPerWeek: 9,
-      needed: 4,
-      action: null,
-    });
+  it("needs the quiet days that would come by chance less than 3 times in 1,000", () => {
+    // 9 Sep to 6 Oct held 36 visits (9 a week): 4 quiet days happen by chance 6 times in
+    // 1,000 at that rate, 5 quiet days under 2 in 1,000.
     expect(chatgptGap(REAL, "2026-10-10", "2026-09-01")).toMatchObject({
       streak: 4,
-      needed: 4,
+      usualPerWeek: 9,
+      needed: 5,
+      action: null,
+    });
+    expect(chatgptGap(REAL, "2026-10-11", "2026-09-01")).toMatchObject({
+      streak: 5,
+      needed: 5,
       action: "alert",
       key: "2026-10-07:alert",
     });
+    // 31 visits in the 4 weeks before (8 a week): 5 quiet days come by chance 4 times in
+    // 1,000, so it takes 6.
+    const counts = steady("2026-10-25", "2026-11-21", 1);
+    for (const day of ["2026-11-01", "2026-11-08", "2026-11-15"]) counts.set(day, 2);
+    expect(chatgptGap(counts, "2026-11-26", windowStart("2026-11-26"))).toMatchObject({
+      usualPerWeek: 8,
+      needed: 6,
+      action: null,
+    });
+    expect(chatgptGap(counts, "2026-11-27", windowStart("2026-11-27")).action).toBe("alert");
   });
 
   it("waits for more quiet days when ChatGPT usually sends fewer visits, never fewer than 3", () => {
     const firstPost = (counts: Map<string, number>) => posts(counts, "2026-10-25", "2026-11-30")[0];
-    // 28 a week: chance alone would allow 2 days, the floor keeps 3. 14 a week: 3. 7 a week: 5.
+    // 28 a week: chance alone would allow 2 days, the floor keeps 3. 14 a week: 3. 7 a week: 6.
     expect(firstPost(steady("2026-09-27", "2026-10-24", 4))).toEqual(["2026-10-27", "alert"]);
     expect(firstPost(steady("2026-09-27", "2026-10-24", 2))).toEqual(["2026-10-27", "alert"]);
-    expect(firstPost(steady("2026-09-27", "2026-10-24", 1))).toEqual(["2026-10-29", "alert"]);
-    // One visit every other day (3 or 4 a week): 10 days.
+    expect(firstPost(steady("2026-09-27", "2026-10-24", 1))).toEqual(["2026-10-30", "alert"]);
+    // One visit every other day (3 or 4 a week): 12 days.
     const everyOther = new Map<string, number>();
     for (let day = "2026-09-28"; day <= "2026-10-24"; day = addDays(day, 2)) everyOther.set(day, 1);
-    expect(firstPost(everyOther)).toEqual(["2026-11-03", "alert"]);
+    expect(firstPost(everyOther)).toEqual(["2026-11-05", "alert"]);
   });
 
   it("posts a missed alert the next morning: the quiet run keeps its key", () => {
@@ -147,46 +157,86 @@ describe("chatgptGap", () => {
     });
   });
 
-  it("posts a comeback after enough quiet days, and catches it up while the visits go on, for a week", () => {
+  it("posts a comeback once tagged visits came on two days, and catches it up for a week", () => {
     const counts = steady("2026-10-01", "2026-11-19");
     for (const [day, n] of steady("2026-11-25", "2026-12-10")) counts.set(day, n);
-    // 20 to 24 Nov quiet at 14 a week (3 needed), visits again from 25 Nov.
+    // 20 to 24 Nov quiet at 14 a week (3 needed). 25 Nov alone is not back yet (the alert's
+    // own key, posted already); 26 Nov, the second day with visits, is.
     expect(chatgptGap(counts, "2026-11-25", windowStart("2026-11-25"))).toMatchObject({
       visits: 2,
-      action: "back",
-      key: "2026-11-25:back",
-      run: { from: "2026-11-20", days: 5, capped: false },
+      action: "alert",
+      key: "2026-11-20:alert",
     });
     expect(chatgptGap(counts, "2026-11-26", windowStart("2026-11-26"))).toMatchObject({
       action: "back",
-      key: "2026-11-25:back",
+      key: "2026-11-26:back",
+      run: { from: "2026-11-20", days: 5, capped: false },
+      back: { days: ["2026-11-25", "2026-11-26"], visits: 4 },
     });
-    // 1 Dec is the 7th day with visits, the last one caught up; 2 Dec the 8th.
-    expect(chatgptGap(counts, "2026-12-01", windowStart("2026-12-01"))).toMatchObject({
+    // Caught up for 7 days from the day that ended the run: to 2 Dec, not 3 Dec.
+    expect(chatgptGap(counts, "2026-12-02", windowStart("2026-12-02"))).toMatchObject({
       action: "back",
-      key: "2026-11-25:back",
+      key: "2026-11-26:back",
     });
-    expect(chatgptGap(counts, "2026-12-02", windowStart("2026-12-02")).action).toBeNull();
+    expect(chatgptGap(counts, "2026-12-03", windowStart("2026-12-03")).action).toBeNull();
+  });
+
+  it("does not let one stray day end a quiet run it posted about: same key, same usual rate", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-06", 1); // a bookmarked link, say
+    // Quiet from 1 Nov at 14 a week, posted on 3 Nov. 6 Nov's visit is not a comeback.
+    expect(chatgptGap(counts, "2026-11-06", windowStart("2026-11-06"))).toMatchObject({
+      action: "alert",
+      key: "2026-11-01:alert",
+      run: { from: "2026-11-01", visitDays: ["2026-11-06"] },
+    });
+    expect(chatgptGap(counts, "2026-11-10", windowStart("2026-11-10"))).toMatchObject({
+      action: "reminder",
+      key: "2026-11-01:week1",
+      usualPerWeek: 14,
+      needed: 3,
+      run: { from: "2026-11-01", days: 10 },
+    });
+    // A second day with visits ends it, still against the rate from before the quiet days.
+    counts.set("2026-11-20", 2);
+    expect(chatgptGap(counts, "2026-11-20", windowStart("2026-11-20"))).toMatchObject({
+      action: "back",
+      key: "2026-11-20:back",
+      usualPerWeek: 14,
+      run: { from: "2026-11-01" },
+      back: { days: ["2026-11-06", "2026-11-20"], visits: 3 },
+    });
+  });
+
+  it("still ends a quiet run too short to post about on its first day with visits", () => {
+    const counts = steady("2026-10-01", "2026-11-20");
+    counts.set("2026-11-23", 1);
+    // 21 and 22 Nov quiet (3 needed), a visit, 24 and 25 Nov quiet: two short runs, no post.
+    expect(chatgptGap(counts, "2026-11-25", windowStart("2026-11-25"))).toMatchObject({
+      streak: 2,
+      action: null,
+      run: { from: "2026-11-24", days: 2 },
+    });
   });
 
   it("posts the comeback for a quiet run just long enough to have been posted about", () => {
     const counts = steady("2026-10-01", "2026-11-21");
     counts.set("2026-11-25", 2);
+    counts.set("2026-11-26", 1);
     // 22 to 24 Nov quiet: 3 days, exactly the 3 needed at 14 a week.
     expect(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24")).action).toBe("alert");
-    expect(chatgptGap(counts, "2026-11-25", windowStart("2026-11-25"))).toMatchObject({
+    expect(chatgptGap(counts, "2026-11-26", windowStart("2026-11-26"))).toMatchObject({
       action: "back",
       run: { from: "2026-11-22", days: 3 },
     });
   });
 
   it("takes the usual rate from the 28 days before the first quiet day, not counting it", () => {
-    // 43 visits from 25 Oct to 21 Nov: 1.54 a day, so 3 quiet days are enough. Counting the
-    // first quiet day as well would make it 1.48 a day, and 4.
-    const counts = steady("2026-10-25", "2026-11-08");
-    for (const [day, n] of steady("2026-11-09", "2026-11-21", 1)) counts.set(day, n);
+    // 56 visits from 25 Oct to 21 Nov: 2 a day, so 3 quiet days are enough. Counting the first
+    // quiet day as well would make it 1.93 a day, and 4.
+    const counts = steady("2026-10-25", "2026-11-21");
     expect(chatgptGap(counts, "2026-11-24", windowStart("2026-11-24"))).toMatchObject({
-      usualPerWeek: 11,
+      usualPerWeek: 14,
       needed: 3,
       action: "alert",
     });
@@ -256,27 +306,34 @@ describe("chatgptGapText", () => {
     expect(text.body).toContain("last reminder");
   });
 
-  it("says how many came back, from which day, and after how many quiet days", () => {
-    const counts = steady("2026-10-01", "2026-11-19");
-    counts.set("2026-11-25", 2);
-    const text = chatgptGapText(chatgptGap(counts, "2026-11-25", windowStart("2026-11-25")))!;
-    expect(text.headline).toContain("2 on 25 Nov");
-    expect(text.headline).toContain("5 days");
+  it("says when one day of a quiet run had tagged visits", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-06", 1);
+    const text = chatgptGapText(chatgptGap(counts, "2026-11-10", windowStart("2026-11-10")))!;
+    expect(text.headline).toBe("ChatGPT: still almost no tagged visits, 10 days now (1 to 10 Nov)");
+    expect(text.body).toContain("Tagged visits on one day only (6 Nov).");
   });
 
-  it("counts every visit since the first day back when it catches up", () => {
+  it("says how many came back on the two days that ended the quiet, and since when it was quiet", () => {
     const counts = steady("2026-10-01", "2026-11-19");
     counts.set("2026-11-25", 2);
     counts.set("2026-11-26", 3);
-    const text = chatgptGapText(chatgptGap(counts, "2026-11-26", windowStart("2026-11-26")))!;
-    expect(text.headline).toContain("5 since 25 Nov");
+    const back = (day: string) => chatgptGapText(chatgptGap(counts, day, windowStart(day)))!;
+    expect(back("2026-11-26").headline).toBe(
+      "ChatGPT visits are back: 5 on 25 Nov and 26 Nov, the first since 19 Nov"
+    );
+    // Caught up two days later, it says the same.
+    expect(back("2026-11-28").headline).toBe(back("2026-11-26").headline);
   });
 
   it("says more than 12 weeks when the quiet began before the days it reads", () => {
     const counts = steady("2026-07-01", "2026-08-31");
     counts.set("2026-12-01", 1);
-    const text = chatgptGapText(chatgptGap(counts, "2026-12-01", windowStart("2026-12-01")))!;
-    expect(text.headline).toContain("more than 12 weeks");
+    counts.set("2026-12-02", 1);
+    const text = chatgptGapText(chatgptGap(counts, "2026-12-02", windowStart("2026-12-02")))!;
+    expect(text.headline).toContain("the first in more than 12 weeks");
+    // Its first day moves with the days read, so the post is claimed by the day that ended it.
+    expect(posts(counts, "2026-12-02", "2026-12-10")).toEqual([["2026-12-02", "back"]]);
   });
 
   it("has nothing to say on an ordinary day", () => {

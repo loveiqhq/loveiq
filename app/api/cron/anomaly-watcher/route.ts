@@ -10,7 +10,8 @@
  *
  * Also, from 07:00 Berlin: a post when ChatGPT has sent no tagged visits for longer than
  * chance explains at its usual volume (never before day 3), a weekly reminder for up
- * to 8 weeks, and one when the visits come back (`chatgpt-gap.ts`).
+ * to 8 weeks, and one when they are back on two days, as one can be a stray link
+ * (`chatgpt-gap.ts`).
  *
  * Protected by `Authorization: Bearer ${CRON_SECRET}`. Skipped on staging
  * (shares prod DB; `isProdCronHost()` gate).
