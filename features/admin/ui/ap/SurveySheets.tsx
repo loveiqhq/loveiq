@@ -203,7 +203,7 @@ export default function SheetsSection({
 
 /**
  * The section's table for the page's CSV, one order's runs: a row per sheet in Mark's order, with
- * where it sits and the figures the table shows, as numbers.
+ * where it sits and the figures the table shows, as numbers, then every sheet together (the tiles).
  */
 export function sheetsCsvTable(
   data: SurveyPayload,
@@ -213,6 +213,8 @@ export function sheetsCsvTable(
   const figures = data.sheets.seen?.ok ? data.sheets.seen.value[order] : null;
   const asked = rows.filter((r) => r.n > 0);
   const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
+  const on = data.sheets.on;
+  const all = figures?.all;
   return {
     columns: [
       { label: "Sheet", unit: "text" },
@@ -223,22 +225,34 @@ export function sheetsCsvTable(
       { label: "Conversion", unit: "pct" },
       { label: "Clicks", unit: "count" },
     ],
-    rows: SURVEY_SHEET_IDS.map((id) => {
-      const f = figures?.bySheet[id];
-      const spot = spots.get(id);
-      const tap = SHEET_NAMES[id].tap === true;
-      return {
-        label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}`,
-        values: [
-          spot ? `${spot.where} · ${asked[spot.q]!.id}` : asked.length ? "Not in this order" : null,
-          f ? f.saw : 0,
-          sheetBounce(f),
-          f?.medianMs ?? null,
-          tap ? sheetConversion(f) : null,
-          tap ? (f?.ticked ?? 0) : null,
-        ],
-      };
-    }),
+    rows: [
+      ...SURVEY_SHEET_IDS.map((id) => {
+        const f = figures?.bySheet[id];
+        const spot = spots.get(id);
+        const tap = SHEET_NAMES[id].tap === true;
+        const off = on !== null && !on.includes(id);
+        return {
+          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${off ? " (switched off now)" : ""}`,
+          values: [
+            spot
+              ? `${spot.where} · ${asked[spot.q]!.id}`
+              : asked.length
+                ? "Not in this order"
+                : null,
+            f ? f.saw : 0,
+            sheetBounce(f),
+            f?.medianMs ?? null,
+            tap ? sheetConversion(f) : null,
+            tap ? (f?.ticked ?? 0) : null,
+          ],
+        };
+      }),
+      // The section's tiles: every sheet together (its conversion is the State of Desire row's).
+      {
+        label: "All sheets",
+        values: [null, all?.saw ?? 0, sheetBounce(all), all?.medianMs ?? null, null, null],
+      },
+    ],
   };
 }
 

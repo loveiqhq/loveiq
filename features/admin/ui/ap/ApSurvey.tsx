@@ -147,6 +147,9 @@ export default function ApSurvey() {
   const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
   // The funnel in the order picked: the test's only while the range has runs in it.
   const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
+  // The Sheets section's runs: the funnel's order; without the questions, the order the range
+  // opens on. The CSV's single Sheets table follows it too.
+  const sheetOrder: Order = questions?.test ? order : questions ? "survey" : order;
   // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
   const shownBoth = new Map<string, number>();
   for (const r of [...(questions?.rows ?? []), ...(questions?.test?.rows ?? [])])
@@ -241,8 +244,8 @@ export default function ApSurvey() {
                         ]
                       : [
                           {
-                            name: "Sheets",
-                            table: sheetsCsvTable(data, rows, questions ? "survey" : order),
+                            name: `Sheets · ${sheetOrder === "test" ? "new order (C13)" : "old order"}`,
+                            table: sheetsCsvTable(data, rows, sheetOrder),
                           },
                         ]),
                 ],
@@ -311,12 +314,7 @@ export default function ApSurvey() {
           )}
 
           {/* Mark's Sheets section (Survey copy board, 17 Nov 2026): above the demographics. */}
-          <SheetsSection
-            data={data}
-            rows={rows}
-            // The funnel's order; without the questions, the order the range opens on.
-            order={questions?.test ? order : questions ? "survey" : order}
-          />
+          <SheetsSection data={data} rows={rows} order={sheetOrder} />
 
           <Card id="demographics" labelledBy="h-demo">
             <SectionHead

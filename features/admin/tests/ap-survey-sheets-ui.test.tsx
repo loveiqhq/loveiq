@@ -139,6 +139,7 @@ import ApSurvey, { FUNNEL_SORT, sortFunnel } from "@features/admin/ui/ap/ApSurve
 Element.prototype.scrollIntoView = vi.fn();
 afterEach(() => {
   cleanup();
+  exported.sections = [];
   view.payload = payload;
   view.answers = null;
   view.answersLoading = false;
@@ -354,6 +355,12 @@ describe("the sheets where the figures around them can't follow (review, 21 Nov 
     const said = document.getElementById("sheets")!.textContent!;
     expect(said).toContain("Runs in the new order (C13).");
     expect(said).not.toContain("as picked in the Question funnel");
+    // The CSV's one Sheets table is the same order's, with nowhere to place a sheet.
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const names = exported.sections.map((s) => s.name).filter((n) => n.startsWith("Sheets"));
+    expect(names).toEqual(["Sheets · new order (C13)"]);
+    const csvHalfway = exported.sections.find((s) => s.name === names[0])!.table.rows[3]!;
+    expect(csvHalfway.values.slice(0, 2)).toEqual([null, 40]);
   });
 });
 
@@ -564,6 +571,7 @@ describe("the CSV (every table on the page is in it)", () => {
       "4 · Halfway · profile filling in",
       "5 · State of Desire report promo",
       "6 · How to read your report",
+      "All sheets",
     ]);
     expect(fresh.rows[3]!.values).toEqual([
       `After #${newOrder.indexOf("11003") + 1} · 11003`,
@@ -575,6 +583,11 @@ describe("the CSV (every table on the page is in it)", () => {
     ]);
     // Only the State of Desire sheet has something to tap: its conversion and clicks.
     expect(fresh.rows[4]!.values.slice(4)).toEqual([1 / 36, 1]);
+    // The tiles: every sheet together.
+    expect(fresh.rows[6]).toEqual({
+      label: "All sheets",
+      values: [null, 311, 7 / 311, 4129, null, null],
+    });
     expect(fresh.rows[2]!.values[0]).toBe(`Before #${newOrder.indexOf("01005") + 1} · 01005`);
 
     const old = csvTable("Sheets · old order")!;
@@ -589,12 +602,26 @@ describe("the CSV (every table on the page is in it)", () => {
   });
 
   it("leaves the sheets out when there are none to give", () => {
+    const exportedTables = () => exported.sections.map((s) => s.name);
     view.payload = page("2026-11-15");
     exportCsv();
-    expect(exported.sections.some((s) => s.name.startsWith("Sheets"))).toBe(false);
+    expect(exportedTables()).toContain("Intro wizard");
+    expect(exportedTables().some((n) => n.startsWith("Sheets"))).toBe(false);
     cleanup();
+    exported.sections = [];
     view.payload = page("2026-11-21", { ok: false, error: "PostHog could not be read." });
     exportCsv();
-    expect(exported.sections.some((s) => s.name.startsWith("Sheets"))).toBe(false);
+    expect(exportedTables()).toContain("Intro wizard");
+    expect(exportedTables().some((n) => n.startsWith("Sheets"))).toBe(false);
+  });
+
+  it("marks a sheet whose switch is off now, as the section does", () => {
+    view.payload = page("2026-11-21", undefined, {
+      sheetsOn: ["science", "trustpilot", "expert", "halfway", "reportMap"],
+    });
+    exportCsv();
+    const labels = csvTable("Sheets · new order (C13)")!.rows.map((r) => r.label);
+    expect(labels[4]).toBe("5 · State of Desire report promo (switched off now)");
+    expect(labels[0]).toBe("1 · Science · responsive desire");
   });
 });
