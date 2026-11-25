@@ -254,7 +254,7 @@ describe("the sheets in the question funnel", () => {
     render(<ApSurvey />);
     fireEvent.click(
       within(screen.getByRole("group", { name: "Question order" })).getByRole("button", {
-        name: /^Old order/,
+        name: /^Control · Old order/,
       })
     );
     expect(sheetRow("expert")).toBeUndefined();

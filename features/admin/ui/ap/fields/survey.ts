@@ -1105,8 +1105,8 @@ export const fields: FieldRegistry = {
     related: ["survey.reached", "survey.exits", "survey.ofPrev", "survey.order"],
   },
   "survey.order": {
-    label: "Old order and new order (C13)",
-    what: `From 6 Oct 2026 half of the new survey runs were asked five later questions first (the opening-order test, C13). The new order won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. Survey 2.0 (Mark's survey review, behind its switch) asks its own screens, in its own order and words. Each order has its own funnel; the number beside it is how many runs were asked that way.`,
+    label: "The question order test and the Survey 2.0 test",
+    what: `Two tests, one stacked on the other (Mark, 25 Nov 2026). The question order test (C13): from 6 Oct 2026 half of the new survey runs were asked five later questions first. Its Variant, the new order, won, and every run begun since ${ORDER_TEST_END_DAY} is asked it. The Survey 2.0 test: while its switch is on, half of the new runs are asked Survey 2.0 (its Variant: Mark's survey review, its own screens, order and words) and half the new order, the first test's winner and this test's Control. Each order has its own funnel; the number beside it is how many runs were asked that way, and the new order's pill is the same funnel in both tests. Read the Survey 2.0 test from the day its switch went on: before it, new-order runs were in no test.`,
     stat: "Count",
     per: "per survey run",
     formula: { num: "Survey runs begun in the range, by the order they were asked in" },

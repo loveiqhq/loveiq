@@ -34,7 +34,6 @@ import {
   Loading,
   NotTracked,
   PageHeader,
-  Pills,
   RangeLine,
   SectionHead,
   SortIcon,
@@ -52,13 +51,8 @@ import {
 } from "./sheets";
 import SheetsSection, { clicks, SheetBadge, sheetsCsvTable } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
-import {
-  hasOrderChoice,
-  orderFunnel,
-  orderOptions,
-  ORDER_NAMES,
-  type SurveyOrder,
-} from "./surveyOrders";
+import { OrderTests } from "./OrderTests";
+import { hasOrderChoice, orderFunnel, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -1247,12 +1241,7 @@ function FunnelSection({
       {/* No note under it (Marcus, 10 Nov 2026): its info card explains the two orders. */}
       {order && q && hasOrderChoice(q) && (
         <div className="flex flex-wrap items-center gap-2">
-          <Pills
-            label="Question order"
-            value={order}
-            onChange={onOrder}
-            options={orderOptions(q)}
-          />
+          <OrderTests label="Question order" q={q} value={order} onChange={onOrder} />
           <Info k="survey.order" />
         </div>
       )}

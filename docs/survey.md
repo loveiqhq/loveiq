@@ -483,10 +483,14 @@ live before checking in with us", Mark 2026-11-19).
   and a newsletter Yes under `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (2026-11-24, the switch)
   ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A2 and A6).
 - **AP-Analytics.** A run is Survey 2.0's when its first questions follow 2.0's screens (it opens on
-  10003 and asks the name last, so no classic run fits it). The Survey page gives it its own funnel
-  (a "Survey 2.0" pill beside the classic orders; the page still opens on the classic order), its
-  own time and drop-out charts and its sheets at 2.0's spots, and shows the short guide as a table of
-  its own, read by `ap_guide_facts`; the intro's consent row leaves the guide's visitors out. Jarvis's
+  10003 and asks the name last, so no classic run fits it). The Survey page stacks the two tests, as
+  Mark set them out (sync, 2026-11-25): the question order test (Control the old order, Variant the
+  new order; ended 21 Nov) and, once the range has 2.0 runs, the Survey 2.0 test (Control the new
+  order, Variant Survey 2.0), a Control and a Variant pill each
+  ([`OrderTests.tsx`](../features/admin/ui/ap/OrderTests.tsx)). The page still opens on the classic
+  order. 2.0 gets its own funnel, time and drop-out charts and its sheets at 2.0's spots, and the
+  short guide as a table of its own, read by `ap_guide_facts`; the intro's consent row leaves the
+  guide's visitors out. Jarvis's
   `intro_completed` counts the guide's last card as the intro's last slide. The weekly drop-off
   digests and the old daily rollup still count the classic survey: split them before 2.0 becomes
   everyone's survey.

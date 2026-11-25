@@ -7,8 +7,9 @@ import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
 
 import { Info } from "./field-info";
 import { IndexHover, type Tip } from "./hover";
-import { AllTraffic, Card, Pills, SectionHead } from "./kit";
-import { hasOrderChoice, orderOptions, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
+import { AllTraffic, Card, SectionHead } from "./kit";
+import { OrderTests } from "./OrderTests";
+import { hasOrderChoice, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import {
   SHEET_BADGE_BG,
   SHEET_NAMES,
@@ -195,11 +196,11 @@ export default function TimeDropSection({
       />
       {order && q && hasOrderChoice(q) && (
         <div className="flex flex-wrap items-center gap-2">
-          <Pills
+          <OrderTests
             label="Question order for these charts"
+            q={q}
             value={order}
             onChange={onOrder}
-            options={orderOptions(q)}
           />
           <Info k="survey.order" />
         </div>

@@ -121,8 +121,8 @@ describe("the Survey page, Marcus's design", () => {
 
   it("gives each question order its own funnel, the old one first for a range before the end", () => {
     render(<ApSurvey />);
-    const survey3 = funnelOrder().getByRole("button", { name: "Old order · 3 runs" });
-    const test2 = funnelOrder().getByRole("button", { name: "New order (C13) · 2 runs" });
+    const survey3 = funnelOrder().getByRole("button", { name: "Control · Old order · 3 runs" });
+    const test2 = funnelOrder().getByRole("button", { name: "Variant · New order · 2 runs" });
     // 7 – 13 Oct: the test still ran, so the page opens on the old order.
     expect(survey3).toHaveAttribute("aria-pressed", "true");
     // Marcus, 10 Nov 2026: "delete this interpretation" (the toggle's info card says it).
@@ -154,7 +154,7 @@ describe("the Survey page, Marcus's design", () => {
     expect(rowOf("16019").textContent).toContain("added during the range");
     expect(cells("16020")[4]!.textContent).toBe("100.0%");
     // No question has more runs than the one before it, in either order.
-    for (const name of [/^Old order/, /^New order/]) {
+    for (const name of [/^Control · Old order/, /^Variant · New order/]) {
       fireEvent.click(funnelOrder().getByRole("button", { name }));
       const counts = funnelRows()
         .filter((r) => !r.textContent!.includes("not asked now"))

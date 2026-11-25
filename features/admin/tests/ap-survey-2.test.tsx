@@ -209,8 +209,8 @@ const funnelRows = () =>
 describe("the Survey page with Survey 2.0 runs", () => {
   it("opens on the classic order and shows Survey 2.0's funnel on its pill", () => {
     render(<ApSurvey />);
-    const classic = funnelOrder().getByRole("button", { name: "New order (C13) · 1 runs" });
-    const s2 = funnelOrder().getByRole("button", { name: "Survey 2.0 · 2 runs" });
+    const classic = funnelOrder().getByRole("button", { name: "Variant · New order · 1 runs" });
+    const s2 = funnelOrder().getByRole("button", { name: "Variant · Survey 2.0 · 2 runs" });
     expect(classic).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(s2);
@@ -221,9 +221,36 @@ describe("the Survey page with Survey 2.0 runs", () => {
     expect(
       within(screen.getByRole("group", { name: "Question order for these charts" })).getByRole(
         "button",
-        { name: "Survey 2.0 · 2 runs" }
+        { name: "Variant · Survey 2.0 · 2 runs" }
       )
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  // Mark, sync of 25 Nov 2026: a new test stacked on the old one, its Control that test's Variant.
+  it("stacks the two tests: the new order is the first's Variant and the second's Control", () => {
+    render(<ApSurvey />);
+    const order = funnelOrder();
+    const c13 = within(order.getByRole("group", { name: "Question order test" }));
+    const s2Test = within(order.getByRole("group", { name: "Survey 2.0 test" }));
+    expect(c13.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      expect.stringMatching(/^Control · Old order · \d+ runs$/),
+      "Variant · New order · 1 runs",
+    ]);
+    expect(s2Test.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Control · New order · 1 runs",
+      "Variant · Survey 2.0 · 2 runs",
+    ]);
+    const text = screen.getByRole("group", { name: "Question order" }).textContent;
+    expect(text).toContain("Question order test · ended 21 Nov");
+    expect(text).toContain("Survey 2.0 test · while its switch is on");
+    // One funnel, two pills: picking the new order in either test lights both.
+    fireEvent.click(s2Test.getByRole("button", { name: "Variant · Survey 2.0 · 2 runs" }));
+    fireEvent.click(s2Test.getByRole("button", { name: "Control · New order · 1 runs" }));
+    expect(c13.getByRole("button", { name: "Variant · New order · 1 runs" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(funnelRows()[0]!.textContent).not.toContain("10003");
   });
 
   it("exports Survey 2.0's funnel as its own table", () => {
@@ -266,10 +293,9 @@ describe("the Survey page with only Survey 2.0 runs", () => {
       introClicks: null,
     });
     render(<ApSurvey />);
-    expect(funnelOrder().getByRole("button", { name: "Survey 2.0 · 2 runs" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(
+      funnelOrder().getByRole("button", { name: "Variant · Survey 2.0 · 2 runs" })
+    ).toHaveAttribute("aria-pressed", "true");
     expect(funnelRows()[0]!.textContent).toContain("10003");
   });
 });
