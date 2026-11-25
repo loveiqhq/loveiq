@@ -37,7 +37,7 @@ import {
 } from "@features/analytics/client";
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
+import { freshQuestionOrderArm, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
 import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
 import { type DetailsField } from "@features/survey/survey2/details";
@@ -221,9 +221,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     getAnswer,
     getLatestAnswers,
     setCurrentIndex,
-    // A buyer who paid before the survey is in no survey test, so stays on today's survey.
+    // While 2.0's switch is on, a fresh run's half of the Survey 2.0 test: 2.0 or the new order,
+    // by its session id. A buyer who paid before the survey is in no survey test, so stays on
+    // today's survey.
   } = useSurveyState({
-    freshArm: survey2 && !payToStart ? SURVEY_2_ARM : QUESTION_ORDER_WINNER,
+    freshArm: freshQuestionOrderArm(survey2 && !payToStart, getSessionId()),
   });
   const {
     submit: submitSurvey,

@@ -423,11 +423,19 @@ live before checking in with us", Mark 2026-11-19).
   previews and staging (and the e2e server, `SURVEY_SHEETS_PREVIEW=1`) `?order=survey2` shows it
   without the switch, and `?order=control` or `?order=variant` show the classic survey while it is
   on. Production ignores `?order=`.
-- **Who gets it.** A fresh run while the switch is on. The version is decided once per run and kept
-  in the draft (`orderArm: "survey2"`), as C13's order was: a classic draft keeps its order when the
-  switch goes on, and a 2.0 draft keeps 2.0 when it goes off. A reader who paid before the survey
-  (pay to start) gets the classic survey. The server stamps `question_order_arm = 'survey2'` on a
-  submission that answered one of its own questions, 17001 to 17004 (`isSurvey2Run`).
+- **Who gets it: the Survey 2.0 test.** Mark (sync, 2026-11-25): a new test stacked on the question
+  order test, its control that test's winner (the new order) and its variant Survey 2.0. While the
+  switch is on, half of the fresh runs get 2.0 and half the new order, dealt by the session id
+  (`survey2TestOrder` in
+  [`questionOrderArm.ts`](../shared/experiments/questionOrderArm.ts), its own seed, so the halves
+  don't follow C13's; no session id is the control). The survey page (its guide and consent) and
+  the questions read the same `freshQuestionOrderArm`, so they always agree. The version is decided
+  once per run and kept in the draft (`orderArm: "survey2"` or `"variant"`), as C13's order was: a
+  classic draft keeps its order when the switch goes on, and a 2.0 draft keeps 2.0 when it goes
+  off. A reader who paid before the survey (pay to start) is in no test and gets the classic
+  survey. The server stamps `question_order_arm = 'survey2'` on a submission that answered one of
+  its own questions, 17001 to 17004 (`isSurvey2Run`), and `'variant'` on the control's. Read the
+  test from the day the switch went on: before it, every new-order run was in no test.
 - **The short guide.** In place of the intro and its four slides: three cards under a "Short guide /
   before you start" header (three rules, the perspective of today, privacy) on steps 0 to 2
   ([`features/survey/ui/guide/`](../features/survey/ui/guide/)), then the consent on step 5 in 2.0's
@@ -466,9 +474,11 @@ live before checking in with us", Mark 2026-11-19).
   (00001, 00000, 16015, 15001, 15002), so emails, Slack, pricing and exports read them as before. An
   email the server refuses brings the reader back to this page with the email field open. `00010` is
   never submitted.
-- **Sheets.** The same six, at Mark's spots: Science after 02004, Trustpilot after 03013, the expert
-  after 03012, Halfway after 14021, State of Desire after 16005 and the report map after 17002
-  (`survey2Placement` in [`surveySheets.ts`](../features/survey/surveySheets.ts)).
+- **Sheets.** The same, at Mark's spots: Science after 02004, Trustpilot after 03013, the expert
+  after 03012, State of Desire after 16005 and the report map after 17002 (`survey2Placement` in
+  [`surveySheets.ts`](../features/survey/surveySheets.ts)). Halfway's spot was after 14021; it is
+  out of the survey since 2026-11-25 (see the sheets above). The miss-out sheet opens on the details
+  page.
 - **Consent records.** A 2.0 submission is filed under `CONSENT_TERMS_VERSION_SURVEY_2` (2026-11-23)
   and a newsletter Yes under `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (2026-11-24, the switch)
   ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A2 and A6).

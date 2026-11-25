@@ -93,6 +93,31 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
+// The Survey 2.0 test (Mark, sync of 25 Nov 2026): with the switch on, a fresh run's session id
+// deals it 2.0 (the variant) or the new order (the control, the question order test's winner).
+describe("the Survey 2.0 test's halves, for a fresh run with the switch on", () => {
+  const firstOf = (arm: "variant" | "survey2") => orderAskedQuestions(surveyQuestions, arm)[0]!;
+
+  it("asks the control half the new order", async () => {
+    localStorage.removeItem("loveiq-survey-answers");
+    sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    expect(
+      await screen.findByRole("heading", { name: firstOf("variant").question })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: firstOf("survey2").question })).toBeNull();
+  });
+
+  it("asks the variant half Survey 2.0", async () => {
+    localStorage.removeItem("loveiq-survey-answers");
+    sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000001");
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} survey2 />);
+    expect(
+      await screen.findByRole("heading", { name: firstOf("survey2").question })
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Survey 2.0's two 16016 screens", () => {
   it("asks the areas, then only the topics inside them", async () => {
     const user = userEvent.setup();

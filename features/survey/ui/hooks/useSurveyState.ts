@@ -54,8 +54,9 @@ function readDraftExtras(): Pick<Draft, "prefilled" | "orderArm"> {
 
 /**
  * The order arm for a run: `?order=` where previews are allowed (never production), else
- * what the draft says, and `freshArm` for a fresh run: Survey 2.0 while its switch is on
- * (the page reads it: features/survey/server/survey2Switch.ts), the C13 winner otherwise.
+ * what the draft says, and `freshArm` for a fresh run: its half of the Survey 2.0 test while
+ * 2.0's switch is on (freshQuestionOrderArm; the page reads the switch:
+ * features/survey/server/survey2Switch.ts), the C13 winner otherwise.
  * Without a window (server render) there is no draft, so a fresh run's order.
  */
 function orderArmFor(draft: Draft, freshArm: QuestionOrderArm): QuestionOrderArm {

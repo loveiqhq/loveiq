@@ -27,6 +27,7 @@ import {
   completedReportToken,
   copySurveySessionToReportSession,
   forgetCompletedReport,
+  getSessionId,
 } from "./hooks/surveySession";
 import { useIntroCardNav } from "./hooks/useIntroCardNav";
 import { runOrderArm } from "./hooks/useSurveyState";
@@ -35,7 +36,7 @@ import { GUIDE_CARD_COUNT } from "./guide/guideContent";
 import { pingFunnelEvent } from "@features/analytics/client";
 import type { SurveyJourney } from "@features/pay-to-start/logic/journey";
 import type { SurveySheetId } from "@features/survey/surveySheets";
-import { QUESTION_ORDER_WINNER, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
+import { freshQuestionOrderArm, SURVEY_2_ARM } from "@shared/experiments/questionOrderArm";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
@@ -1250,13 +1251,14 @@ const ConsentScreen: FC<{
 /* ------------------------------------------------------------------ */
 /**
  * Whether this visit's run is a Survey 2.0 run, decided as the questions decide their order
- * (runOrderArm): a fresh run while 2.0's switch is on, unless it is a pay-to-start buyer's, and a
- * run already on 2.0 whatever the switch says now. Its guide and consent are then 2.0's, so a
- * reader never agrees to one version's words and then answers the other's questions (the server
- * files the consent by the questions answered, isSurvey2Run).
+ * (runOrderArm): a fresh run in the Survey 2.0 test's variant half while 2.0's switch is on,
+ * unless it is a pay-to-start buyer's (freshQuestionOrderArm, from the same session id the
+ * questions read), and a run already on 2.0 whatever the switch says now. Its guide and consent
+ * are then 2.0's, so a reader never agrees to one version's words and then answers the other's
+ * questions (the server files the consent by the questions answered, isSurvey2Run).
  */
 function isSurvey2Visit(survey2: boolean, journey: SurveyJourney | null): boolean {
-  return runOrderArm(survey2 && !journey ? SURVEY_2_ARM : QUESTION_ORDER_WINNER) === SURVEY_2_ARM;
+  return runOrderArm(freshQuestionOrderArm(survey2 && !journey, getSessionId())) === SURVEY_2_ARM;
 }
 
 /**

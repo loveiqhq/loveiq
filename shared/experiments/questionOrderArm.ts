@@ -54,8 +54,9 @@ import { sessionArmHash } from "@shared/experiments/sessionHash";
 /**
  * The order a run is asked. `control` and `variant` are C13's two (the old order, and the test's,
  * everyone's since it ended). `survey2` is Mark's Survey 2.0 (Survey Review, 19 Nov 2026): its own
- * screens, wording, closing questions and details page (features/survey/survey2/). A run gets it
- * only when it starts while the `survey_2` switch is on, and keeps whichever order it began in.
+ * screens, wording, closing questions and details page (features/survey/survey2/). Half of the
+ * runs that start while the `survey_2` switch is on get it (the Survey 2.0 test,
+ * survey2TestOrder), and a run keeps whichever order it began in.
  */
 export type QuestionOrderArm = "control" | "variant" | "survey2";
 
@@ -158,6 +159,40 @@ export function isSurvey2Run(answeredQIds: readonly string[]): boolean {
 }
 
 /**
+ * The Survey 2.0 test (Mark, sync of 25 Nov 2026): a new test stacked on the question order test.
+ * Its control is that test's winner, the new order (QUESTION_ORDER_WINNER), and its variant is
+ * Survey 2.0. While the `survey_2` switch is on, a fresh run is dealt a half by its session id,
+ * so a reload keeps it; the seed carries the test's own name, so its halves don't line up with
+ * C13's. No session id (storage blocked) is the control, as it was in C13. With the switch off
+ * nobody is dealt a half: every fresh run is asked the new order.
+ */
+export type Survey2TestArm = "control" | "variant";
+
+/** The half of the Survey 2.0 test this session draws. Pure and deterministic, like C13's. */
+export function assignSurvey2TestArm(sessionId: string | null | undefined): Survey2TestArm {
+  if (!sessionId?.trim()) return "control";
+  return sessionArmHash(`survey-2-test:${sessionId}`) % 2 === 0 ? "control" : "variant";
+}
+
+/** The order the Survey 2.0 test asks a fresh run: Survey 2.0 for its variant, the new order else. */
+export function survey2TestOrder(sessionId: string | null | undefined): QuestionOrderArm {
+  return assignSurvey2TestArm(sessionId) === "variant" ? SURVEY_2_ARM : QUESTION_ORDER_WINNER;
+}
+
+/**
+ * The order a fresh run is asked: its half of the Survey 2.0 test while that test runs for it
+ * (`survey_2` on, and not a buyer who paid before the survey, who is in no survey test), the new
+ * order otherwise. The survey page (its guide and consent) and the questions (useSurveyState)
+ * both read it, so they always agree.
+ */
+export function freshQuestionOrderArm(
+  survey2TestOn: boolean,
+  sessionId: string | null | undefined
+): QuestionOrderArm {
+  return survey2TestOn ? survey2TestOrder(sessionId) : QUESTION_ORDER_WINNER;
+}
+
+/**
  * The arm for a survey opened over what this device already holds.
  *
  * A DRAFT FROM BEFORE C13 KEEPS THE CONTROL ORDER. `assignQuestionOrderArm` hands an arm
@@ -177,8 +212,9 @@ export function isSurvey2Run(answeredQIds: readonly string[]): boolean {
  * new run gets the new order, whatever its id. A draft that recorded an arm during the test
  * keeps it, even with nothing answered, for the same reason a draft from before C13 does.
  *
- * `freshArm` is what a fresh run gets: Survey 2.0 while the `survey_2` switch is on
- * (features/survey/server/survey2Switch.ts), the winner otherwise. Only a fresh run reads it: a
+ * `freshArm` is what a fresh run gets: its half of the Survey 2.0 test while the `survey_2`
+ * switch is on (freshQuestionOrderArm; features/survey/server/survey2Switch.ts), the winner
+ * otherwise. Only a fresh run reads it: a
  * draft in a classic order keeps that order when the switch comes on, and a 2.0 draft keeps 2.0
  * when it goes off.
  */

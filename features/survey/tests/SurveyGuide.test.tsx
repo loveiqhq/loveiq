@@ -12,7 +12,9 @@ import {
   __resetSurveyConsentForTests,
   saveLandingPrefill,
 } from "@features/survey/ui/hooks/surveyStorage";
+import { SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
 import { __resetFunnelPingsForTests } from "@features/analytics/client";
+import { assignSurvey2TestArm } from "@shared/experiments/questionOrderArm";
 
 /**
  * Survey 2.0's short guide (Mark's Pre Survey Wizard, row "Suggestion · 3 cards excl. future/past
@@ -46,6 +48,13 @@ const DATA_2 =
   /^I agree that LoveIQ uses my answers, including about my sex life, to create my report\.\s*I can withdraw anytime\.\s*$/;
 const PAY_TO_START = { kind: "pay_to_start" as const, paid: true, returnPath: "/sexual-archetype" };
 
+/**
+ * With the switch on, half of the fresh runs get Survey 2.0 (the Survey 2.0 test, by session id):
+ * these tests run as a session in that half unless one is about the other.
+ */
+const VARIANT_SESSION = "00000000-0000-4000-8000-000000000001";
+const CONTROL_SESSION = "00000000-0000-4000-8000-000000000000";
+
 const continueButton = () => screen.getAllByRole("button", { name: /continue to next slide/i })[0]!;
 
 let fetchSpy: ReturnType<typeof vi.spyOn>;
@@ -60,6 +69,7 @@ beforeEach(() => {
   __resetSurveyConsentForTests();
   __resetFunnelPingsForTests();
   window.history.replaceState(null, "", "/survey");
+  sessionStorage.setItem(SURVEY_SESSION_KEY, VARIANT_SESSION);
   // A reader who agreed for this run already, unless a test is about the consent gate.
   localStorage.setItem(SURVEY_CONSENT_KEY, "2026-11-23T09:00:00.000Z");
   document.cookie = "__liq_vid=11111111-1111-4111-8111-111111111111; path=/";
@@ -265,6 +275,7 @@ describe("Survey 2.0's consent", () => {
 
   it("is what a homepage-card starter sees first", async () => {
     sessionStorage.clear();
+    sessionStorage.setItem(SURVEY_SESSION_KEY, VARIANT_SESSION);
     saveLandingPrefill(LANDING_PREFILL_QID, 4);
     render(<SurveyPage survey2 />);
 
@@ -299,6 +310,20 @@ describe("Survey 2.0's consent", () => {
 });
 
 describe("who gets the short guide", () => {
+  it("draws each half from the session id: these tests' sessions are one of each", () => {
+    expect(assignSurvey2TestArm(VARIANT_SESSION)).toBe("variant");
+    expect(assignSurvey2TestArm(CONTROL_SESSION)).toBe("control");
+  });
+
+  // The Survey 2.0 test (Mark, sync of 25 Nov 2026): its control is today's survey, new order.
+  it("not the control half of the Survey 2.0 test: today's intro, switch on", async () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, CONTROL_SESSION);
+    render(<SurveyPage survey2 />);
+    expect(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    ).toBeInTheDocument();
+  });
+
   it("nobody while the switch is off: today's intro", async () => {
     render(<SurveyPage />);
     expect(
@@ -400,6 +425,7 @@ describe("the short guide under reduced motion", () => {
   const css = readFileSync("app/globals.css", "utf8");
 
   async function loopsOn(step: string, heading: RegExp | string) {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, VARIANT_SESSION);
     sessionStorage.setItem(SURVEY_STEP_KEY, step);
     render(<SurveyPage survey2 />);
     await screen.findByRole("heading", { name: heading });
