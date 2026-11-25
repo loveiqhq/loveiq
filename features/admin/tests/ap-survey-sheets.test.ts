@@ -355,7 +355,9 @@ describe("the sheets in Survey 2.0's runs", () => {
     expect(r.value.test.bySheet.halfway?.saw).toBe(34);
     expect(r.value.survey.all.saw).toBe(0);
     const [query] = mockHogql.mock.calls[0]!;
-    expect(query).toContain("properties.question_id = '10003'");
+    // 2.0's first answer: 10003, or 11003 when the landing page's version C (#783) answered
+    // 10003 and the survey skipped it. A classic run answers the name (00001) before either.
+    expect(query).toContain("properties.question_id IN ('10003', '11003')");
     expect(query).toContain("properties.question_id = '00001'");
     // Tested before the classic orders: a 2.0 run also answers 03011 before 01005.
     expect(query.indexOf("'survey2'")).toBeLessThan(query.indexOf("'test'"));

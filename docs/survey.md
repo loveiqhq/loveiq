@@ -447,8 +447,9 @@ live before checking in with us", Mark 2026-11-19).
   `consent_view`, `consent_back` and `survey_engine_mount` are recorded as before.
 - **The screens.** 62, in Mark's order (`SURVEY_2_ORDER` in
   [`features/survey/survey2/order.ts`](../features/survey/survey2/order.ts)): his 61 entries with
-  16016 split in two. The landing card's question (01002) is dropped when it was answered there, as in
-  the classic survey. 16009 is not asked. Three closing questions are new: 17001 (how much the reader
+  16016 split in two. A question a landing card answered is dropped, as in the classic survey: 01002,
+  or 10003 on the pain-point page's version C, which is 2.0's first screen, so that run opens on 11003
+  with 61 screens (AP tells it apart by that opening). 16009 is not asked. Three closing questions are new: 17001 (how much the reader
   enjoyed the survey, 1 to 7), 17002 (how much it helped them reflect, 1 to 7) and 17003 (a fair price
   for the full report, seven bands).
 - **The expert question.** 17004, right after the price question (Mark, 24 Nov 2026), offers a free

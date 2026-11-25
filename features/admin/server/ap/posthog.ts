@@ -506,8 +506,9 @@ const NO_SHEET: SheetFigures = {
  * event, looked for up to 30 days back), split by the order their questions came in. A run in
  * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
  * old order, 01005 first; every run answers one of them third, before any sheet. A Survey 2.0 run
- * (behind the `survey_2` switch) answers 10003 first and never the name question (00001), which
- * every classic run answers first (2.0 asks the name on its details page, sent as 00010); it is
+ * (behind the `survey_2` switch) answers 10003 first (11003, its second screen, when the landing
+ * page's version C answered 10003 and the survey skipped it) and never the name question (00001),
+ * which every classic run answers first (2.0 asks the name on its details page, sent as 00010); it is
  * told apart before the classic orders, since it too answers 03011 before 01005. A person counts
  * once per sheet. Left with it open: never closed it, answered nothing and finished nothing
  * after it opened (a reload while it was open never reopens it and sends no close, yet the run
@@ -537,7 +538,7 @@ export async function fetchSurveySheets(
              minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
-             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '10003') AS at_s2,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id IN ('10003', '11003')) AS at_s2,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '00001') AS at_name,
              maxIf(timestamp, event = 'survey_answer') AS last_answer,
              maxIf(timestamp, event = 'survey_completed') AS completed

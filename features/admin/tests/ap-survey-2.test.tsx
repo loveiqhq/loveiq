@@ -37,6 +37,8 @@ describe("a run's order, with Survey 2.0", () => {
     const first = new Map([
       ["s2", orders.survey2.slice(0, 6)],
       ["s2-left-early", ["10003"]],
+      // Landing version C (#783) answers 10003 on the landing page: the run opens on 11003.
+      ["s2-landing-c", orders.survey2.slice(1, 4)],
       ["v", ["00001", "01002", "03011", "10005"]],
       ["c", ["00001", "01002", "01005", "01006"]],
     ]);
@@ -44,6 +46,7 @@ describe("a run's order, with Survey 2.0", () => {
     expect(orders.survey2.slice(0, 2)).toEqual(["10003", "11003"]);
     expect(runOrder("s2", first, orders, after)).toBe("survey2");
     expect(runOrder("s2-left-early", first, orders, after)).toBe("survey2");
+    expect(runOrder("s2-landing-c", first, orders, after)).toBe("survey2");
     // Classic runs open on the name question, which 2.0 asks on its details page: never 2.0.
     expect(runOrder("v", first, orders, after)).toBe("variant");
     expect(runOrder("c", first, orders, after)).toBe("control");
