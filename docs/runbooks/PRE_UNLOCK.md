@@ -194,6 +194,8 @@ charging the difference is a person's call.
 A EUR 1.99 paid on a report E07 had already gifted (a Stripe page opened before the gift,
 paid after it, or a payment landing as the cron gifts) posts `initial_paid_after_gift` to the
 ops channel, from the webhook or from the cron, whichever sees it: refund that EUR 1.99. The
+webhook posts the same for any price paid after the reader took the unlock for EUR 0 on Choose
+your price (a checkout opened at EUR 6.99, EUR 0 taken in another tab): refund it too. The
 gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses nothing, and a
 `credited_payment_refunded` that follows it needs no charge: the gift covers that credit.
 
