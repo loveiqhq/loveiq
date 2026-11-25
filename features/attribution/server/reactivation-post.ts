@@ -6,12 +6,16 @@
  * again days later: the "Came back" replies (return-ping.ts) sit in each reader's thread,
  * which the channel never shows.
  *
- * Fed by the return ping's own claim: `noteReaderReturn` calls `postReactivation` once it has
- * claimed the reader's Berlin day in `reader_return`, so this post has the same rules (a report
- * visit on a later day and SAME_SITTING_MS after the survey, a click in our email, the
- * unlock-feedback answer), the same once-per-reader-per-day and the same exclusions (the team,
- * crawlers, our probes, share views). Every source but `draft`: a survey finished on a later
- * day is a submission, and it gets its own #incoming-surveys message.
+ * Gated twice. The return ping (return-ping.ts, `noteReaderReturn`) claims the reader's Berlin
+ * day in `reader_return` with its own rules (a report visit on a later day and SAME_SITTING_MS
+ * after the survey, a click in our email, the unlock-feedback answer), once per reader per day
+ * and without the team, crawlers, our probes or share views. That claim alone posts nothing:
+ * a browser reopening its tabs loads the report too, with nobody reading (24 Nov 2026: none of
+ * the channel's first eleven customer posts had a minute on screen). The post waits for the
+ * page's `report_active_1min`, a minute on screen with a touch, click, wheel or key in the
+ * last 30 seconds (useReportEngagementTimers), and `postReactivationOnRead` then posts the
+ * day's row. Every source but `draft`: a survey finished on a later day is a submission, and
+ * it gets its own #incoming-surveys message.
  *
  * Kept current for REDRAW_WINDOW_MS: the post's channel and ts go on the claimed row, and
  * `refreshJourneyDetail` / `refreshJourneyMessage` (journey-message.ts) redraw it, so "Report
@@ -31,7 +35,12 @@ import {
   buildSubmissionJourney,
   type SubmissionJourney,
 } from "@features/attribution/server/journey";
-import type { ReturnSource } from "@features/attribution/server/return-ping";
+import {
+  EMAIL_LINK,
+  isRestricted,
+  VIA,
+  type ReturnSource,
+} from "@features/attribution/server/return-ping";
 import {
   cameFromValue,
   EMAIL_NAMES,
@@ -43,7 +52,7 @@ import {
   experimentLines,
   type JourneyStep,
 } from "@features/attribution/server/slack-journey";
-import { EMAIL_LINKS } from "@shared/emails/email-link";
+import { EMAIL_LINKS, EMAIL_LINKS_TAGGED_FROM } from "@shared/emails/email-link";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
@@ -54,6 +63,7 @@ import {
   postJourneyMessage,
   updateJourneyMessage,
 } from "@shared/observability/slack-bot";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 /** A return that gets a post: every source but a finished draft. */
 export type ReactivationSource = Exclude<ReturnSource, "draft">;
@@ -121,10 +131,24 @@ function sourceLines(r: Reactivation): string[] {
       : r.source === "answer"
         ? "answered its question"
         : "opened the report through it";
-  return [
-    "Reactivation source: *Email*",
-    `Email: *${escapeSlack(via ? emailTitleOf(via) : "email link")}* (${how})`,
-  ];
+  // A link that names no email can only come from one sent before every link was tagged: the
+  // report-ready email of a survey from July carries one, and opens a report months later.
+  const email =
+    via === EMAIL_LINK
+      ? `*older email link* (before ${EMAIL_LINKS_TAGGED_FROM}; ${how})`
+      : `*${escapeSlack(via ? emailTitleOf(via) : "email link")}* (${how})`;
+  return ["Reactivation source: *Email*", `Email: ${email}`];
+}
+
+/**
+ * "Last read: *1d 2h* before this visit", from the reader's last minute of reading before the
+ * return: the time since the survey alone reads 95 days for a reader who read yesterday.
+ */
+function lastReadLine(lastReadAt: string | null | undefined, returnedAt: string): string {
+  const ms = msBetween(lastReadAt ?? null, returnedAt);
+  return ms === null
+    ? "Last read: *none recorded*"
+    : `Last read: *${formatSince(ms)}* before this visit`;
 }
 
 /** A Slack permalink is ours to print inside `<url|text>` only if it cannot close the link. */
@@ -153,6 +177,7 @@ export function buildReactivationMessage(
     title,
     ...sourceLines(r),
     `Time to reactivation: *${since}* (since survey submission)`,
+    lastReadLine(journey.timings.lastReadAt, r.returnedAt),
     `Report time spent: *${formatReportDwell(journey.timings.dwellSinceMs)}*`,
     "",
     funnelLine(journey),
@@ -219,43 +244,142 @@ async function linkOf(message: JourneyRow | null): Promise<string | null> {
   return link;
 }
 
-/**
- * Post a reactivation, once `noteReaderReturn` has claimed the reader's day, and keep its
- * channel and ts on that row for the redraws. Never throws.
- */
-export async function postReactivation(input: {
-  submissionId: number;
-  source: ReturnSource;
+/** The day's return row, as the post's claim hands it back. */
+interface ClaimedRow {
+  returned_at: string;
+  source: string;
   via: string | null;
+}
+
+/**
+ * The email the day's first minute of reading came through (`report_active_1min`'s `via`), for
+ * a return whose row names none. The post and its redraws both read it here, so they agree, and
+ * it is never written onto the row: AP-Analytics names a reader's way back by the row's own.
+ * Undefined when it cannot be read.
+ */
+async function readEmailOfRead(
+  submissionId: number,
+  returnedAt: string
+): Promise<string | null | undefined> {
+  const res = await supabaseFetch(
+    `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
+      `&event_type=eq.report_active_1min&event_time=gte.${encodeURIComponent(returnedAt)}` +
+      `&select=metadata&order=event_time.asc&limit=1`
+  );
+  if (!res.ok) return undefined;
+  const rows = (await res.json()) as Array<{ metadata?: { via?: unknown } | null }>;
+  const via = rows[0]?.metadata?.via;
+  return typeof via === "string" && VIA.test(via) ? via : null;
+}
+
+/**
+ * Whether the reader opened their report on `day` (Berlin): a report_session from that day, which
+ * a load of their report writes (/api/report).
+ */
+async function openedReportOn(submissionId: number, day: string): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/report_session?select=id,personal_report!inner(survey_submission_id)` +
+      `&personal_report.survey_submission_id=eq.${submissionId}` +
+      `&started_at=gte.${encodeURIComponent(reportingDayStart(day).toISOString())}&limit=1`
+  );
+  if (!res.ok) return false;
+  return ((await res.json()) as unknown[]).length > 0;
+}
+
+/** Give a claimed day back, so a later minute that day can post it. Never throws. */
+async function releaseClaim(rowFilter: string): Promise<void> {
+  try {
+    await supabaseFetch(`${rowFilter}&reactivation_ts=is.null`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ reactivation_channel: null }),
+    });
+  } catch (err) {
+    logger.warn({ err }, "reactivation post: could not release its claim");
+  }
+}
+
+/**
+ * Post a returning reader once they have read for a minute: `/api/analytics-event` hands each
+ * stored `report_active_1min` over. The day's return row is the gate, and so is a report session
+ * opened that day: a reader who only clicked an email or answered its question that day is not
+ * posted on a minute sent in their name. The event names its reader by the submission id the
+ * browser sends, so a minute faked for a reader who did open their report that day can still post
+ * them (into our own channel). A reader who asked us to restrict processing (Art. 18) since their
+ * return is not posted either. The row is claimed for the post with a
+ * conditional update on `reactivation_channel`, so two tabs' minutes post once; a post that
+ * does not go out gives the claim back. Times are measured from the day's return, as the
+ * redraws measure them. A minute that crosses Berlin midnight looks for the new day's row only.
+ * Never throws.
+ */
+export async function postReactivationOnRead(input: {
+  submissionId: number;
+  /** When the minute arrived: its Berlin day picks the return row. */
   at: Date;
-  /** The claimed row's Berlin day (reader_return.day). */
-  day: string;
+  /** The page's email (`pageEmailVia`): the link's campaign, "email", or null. */
+  via: string | null;
 }): Promise<void> {
   const channel = reactivationsChannel();
-  const { submissionId, source, via, day } = input;
-  if (!channel || !isReactivationSource(source)) return;
+  if (!channel) return;
+  const { submissionId } = input;
+  const day = reportingDay(input.at);
+  const rowFilter = `${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`;
+  let claimed = false;
   try {
-    const returnedAt = input.at.toISOString();
-    const [journey, message] = await Promise.all([
-      buildSubmissionJourney(submissionId, { dwellSince: returnedAt }),
+    // Before any claim: a report session that day (the page's own, which takes the token), and
+    // no restriction. A failed read posts nothing; a later minute can try again.
+    if (!(await openedReportOn(submissionId, day))) return;
+    if (await isRestricted(submissionId)) return;
+    const claim = await supabaseFetch(
+      `${rowFilter}&source=neq.draft&reactivation_channel=is.null&select=returned_at,source,via`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ reactivation_channel: channel }),
+      }
+    );
+    if (!claim.ok) return;
+    const row = ((await claim.json()) as ClaimedRow[])[0];
+    if (!row) return;
+    claimed = true;
+    if (!isReactivationSource(row.source)) return;
+
+    // The day's own email first (the click, the email link the return came through); else the
+    // one its first minute of reading came through, as every redraw reads it; else, if that
+    // cannot be read, this minute's own.
+    const [journey, message, readEmail] = await Promise.all([
+      buildSubmissionJourney(submissionId, { dwellSince: row.returned_at }),
       readJourneyMessage(submissionId),
+      row.via ? null : readEmailOfRead(submissionId, row.returned_at),
     ]);
+    const via =
+      row.via ??
+      (readEmail === undefined ? (input.via && VIA.test(input.via) ? input.via : null) : readEmail);
     if (!journey) return;
     const post = buildReactivationMessage(
       journey,
-      { submissionId, source, via, returnedAt },
+      { submissionId, source: row.source, via, returnedAt: row.returned_at },
       { floor: furthest(message?.state), journeyLink: await linkOf(message) }
     );
     const posted = await postJourneyMessage({ ...post, channel });
     if (!posted) return;
-    await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
+    // Out: never give the claim back now, or a later minute would post it again.
+    claimed = false;
+    await supabaseFetch(rowFilter, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ reactivation_channel: posted.channel, reactivation_ts: posted.ts }),
+      // Never `via`: AP-Analytics names a reader's way back by the row's own (report-page.ts).
+      body: JSON.stringify({
+        // Slack's own id for the channel, which the redraws' chat.update needs.
+        reactivation_channel: posted.channel,
+        reactivation_ts: posted.ts,
+      }),
     });
-    logger.info({ submissionId, source }, "reactivation post: posted");
+    logger.info({ submissionId, source: row.source }, "reactivation post: posted");
   } catch (err) {
-    logger.warn({ err, submissionId, source }, "reactivation post failed");
+    logger.warn({ err, submissionId }, "reactivation post failed");
+  } finally {
+    if (claimed) await releaseClaim(rowFilter);
   }
 }
 
@@ -312,14 +436,21 @@ export async function refreshReactivationPost(
       if (!slot.allowed) return;
     }
 
-    const [journey, message] = await Promise.all([
+    // The email as the post named it: the row's own, else its first minute's (postReactivationOnRead).
+    const [journey, message, readEmail] = await Promise.all([
       buildSubmissionJourney(submissionId, { dwellSince: row.returned_at }),
       readJourneyMessage(submissionId),
+      row.via ? null : readEmailOfRead(submissionId, row.returned_at),
     ]);
     if (!journey) return;
     const post = buildReactivationMessage(
       journey,
-      { submissionId, source: row.source, via: row.via, returnedAt: row.returned_at },
+      {
+        submissionId,
+        source: row.source,
+        via: row.via ?? readEmail ?? null,
+        returnedAt: row.returned_at,
+      },
       { floor: furthest(message?.state, witnessed), journeyLink: await linkOf(message) }
     );
     await updateJourneyMessage({

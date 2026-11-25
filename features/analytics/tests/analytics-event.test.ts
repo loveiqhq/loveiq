@@ -25,6 +25,12 @@ vi.mock("@features/attribution/server/journey-message", () => ({
   refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
 }));
 
+// The post itself has its own tests (features/attribution/tests/reactivation-post.test.ts).
+const mockOnRead = vi.fn().mockResolvedValue(undefined);
+vi.mock("@features/attribution/server/reactivation-post", () => ({
+  postReactivationOnRead: (...args: unknown[]) => mockOnRead(...args),
+}));
+
 // Run the scheduled work inline so the test observes it, which is what
 // `scheduleAfterResponse` does anyway when there is no request scope.
 vi.mock("@shared/http/after-response", () => ({
@@ -529,6 +535,103 @@ describe("POST /api/analytics-event — email returns", () => {
       expect.objectContaining({ bucket: "journey-dwell-refresh", limit: 1 })
     );
     expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(42);
+  });
+});
+
+describe("POST /api/analytics-event — the active minute (report_active_1min)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(4242);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return insert ? JSON.parse(String(insert[1]?.body)) : null;
+  };
+
+  it("persists report_active_1min against the report", async () => {
+    const metadata = { active_seconds: 60, report_type: "full_report", via: "initial_gift" };
+    const res = await POST(
+      makeRequest({ event_type: "report_active_1min", submission_id: 4242, metadata })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "report_active_1min",
+      entity_type: "report",
+      survey_submission_id: 4242,
+      metadata,
+    });
+  });
+
+  it("asks for the reactivation post after a stored active minute, with the page's email", async () => {
+    await POST(
+      makeRequest({
+        event_type: "report_active_1min",
+        submission_id: 4242,
+        metadata: { active_seconds: 60, report_type: "full_report", via: "initial_gift" },
+      })
+    );
+    expect(mockOnRead).toHaveBeenCalledTimes(1);
+    expect(mockOnRead).toHaveBeenCalledWith(
+      expect.objectContaining({ submissionId: 4242, via: "initial_gift" })
+    );
+    expect((mockOnRead.mock.calls[0]![0] as { at: unknown }).at).toBeInstanceOf(Date);
+  });
+
+  it("asks with no email when the page came through none", async () => {
+    await POST(
+      makeRequest({
+        event_type: "report_active_1min",
+        submission_id: 4242,
+        metadata: { active_seconds: 60, report_type: "locked", via: null },
+      })
+    );
+    expect(mockOnRead).toHaveBeenCalledWith(expect.objectContaining({ via: null }));
+  });
+
+  it.each([
+    ["markup", "<b>x</b>"],
+    ["a sentence", "come back now"],
+    ["a number", 42],
+  ])("refuses an active minute whose via is %s", async (_label, via) => {
+    const res = await POST(
+      makeRequest({
+        event_type: "report_active_1min",
+        submission_id: 4242,
+        metadata: { active_seconds: 60, report_type: "full_report", via },
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(inserted()).toBeNull();
+    expect(mockOnRead).not.toHaveBeenCalled();
+  });
+
+  it("asks for nothing when the event was never stored", async () => {
+    mockSupabaseFetch.mockImplementation((url: string) => {
+      if (url.includes("/rest/v1/survey_submission?id=eq.4242")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: 4242 }]) });
+      }
+      return Promise.resolve({ ok: false, status: 500 });
+    });
+    await POST(
+      makeRequest({
+        event_type: "report_active_1min",
+        submission_id: 4242,
+        metadata: { active_seconds: 60, report_type: "full_report", via: null },
+      })
+    );
+    expect(mockOnRead).not.toHaveBeenCalled();
+  });
+
+  it("asks for nothing for any other event, the 1-minute mark included", async () => {
+    await POST(
+      makeRequest({
+        event_type: "report_engagement_1min",
+        submission_id: 4242,
+        metadata: { engagement_seconds: 60, report_type: "full_report", scroll_depth_pct: 9 },
+      })
+    );
+    expect(mockOnRead).not.toHaveBeenCalled();
   });
 });
 

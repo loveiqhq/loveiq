@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook, act } from "@testing-library/react";
 
 const mockTrackReportEngagement = vi.fn();
+const mockActive = vi.fn();
 vi.mock("@features/analytics/client", () => ({
   trackReportEngagement: (...args: unknown[]) => mockTrackReportEngagement(...args),
+  trackReportActiveMinute: (...args: unknown[]) => mockActive(...args),
+  pageEmailVia: () => "initial_gift",
 }));
 
 vi.mock("@shared/http/csrf-client", () => ({
@@ -42,6 +45,7 @@ describe("useReportEngagementTimers", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockTrackReportEngagement.mockReset();
+    mockActive.mockReset();
     setVisibility("visible");
     setScrollGeometry({ scrollY: 0, innerHeight: 800, scrollHeight: 1600 });
   });
@@ -49,6 +53,94 @@ describe("useReportEngagementTimers", () => {
   afterEach(() => {
     vi.useRealTimers();
     __resetGuidedTourForTests();
+  });
+
+  describe("the active minute: on screen, with a touch, click, wheel or key in the last 30 s", () => {
+    const render = () =>
+      renderHook(() => useReportEngagementTimers({ reportType: "full_report", archetype: null }));
+    const press = (type: string) =>
+      act(() => {
+        window.dispatchEvent(new Event(type));
+      });
+    const advance = (ms: number) =>
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+
+    it("sends report_active_1min once a minute of visible seconds had input in the last 30 s", () => {
+      render();
+      press("keydown");
+      advance(25_000);
+      press("keydown");
+      advance(25_000);
+      press("keydown");
+      advance(9_000);
+      expect(mockActive).not.toHaveBeenCalled();
+
+      advance(1_000);
+      expect(mockActive).toHaveBeenCalledTimes(1);
+      expect(mockActive).toHaveBeenCalledWith("full_report", "initial_gift");
+    });
+
+    it("a tab left open in front never sends it, while the 1/5/10-minute marks fire as before", () => {
+      render();
+      advance(600_000);
+      expect(mockActive).not.toHaveBeenCalled();
+      expect(mockTrackReportEngagement).toHaveBeenCalledTimes(3);
+    });
+
+    it("one input counts for 30 seconds, no more", () => {
+      render();
+      press("pointerdown");
+      advance(120_000);
+      expect(mockActive).not.toHaveBeenCalled();
+
+      press("pointerdown");
+      advance(29_000);
+      expect(mockActive).not.toHaveBeenCalled();
+      advance(1_000);
+      expect(mockActive).toHaveBeenCalledTimes(1);
+    });
+
+    it("plain scroll events never count: a reload can restore the scroll position by itself", () => {
+      render();
+      for (let s = 0; s < 120; s += 10) {
+        press("scroll");
+        advance(10_000);
+      }
+      expect(mockActive).not.toHaveBeenCalled();
+    });
+
+    it("hidden seconds never count, even with key presses", () => {
+      render();
+      setVisibility("hidden");
+      for (let s = 0; s < 120; s += 10) {
+        press("keydown");
+        advance(10_000);
+      }
+      expect(mockActive).not.toHaveBeenCalled();
+    });
+
+    it("keeps counting past the ten-minute mark until the active minute is sent", () => {
+      render();
+      advance(600_000);
+      expect(mockTrackReportEngagement).toHaveBeenCalledTimes(3);
+
+      for (let s = 0; s < 60; s += 20) {
+        press("wheel");
+        advance(20_000);
+      }
+      expect(mockActive).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends it once per page load", () => {
+      render();
+      for (let s = 0; s < 360; s += 20) {
+        press("touchstart");
+        advance(20_000);
+      }
+      expect(mockActive).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("does not start until reportType is non-null", () => {

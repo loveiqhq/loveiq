@@ -1,14 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn, mockReactivation } = vi.hoisted(
-  () => ({
-    mockSupabaseFetch: vi.fn(),
-    mockPost: vi.fn(),
-    mockConfigured: vi.fn(),
-    mockWarn: vi.fn(),
-    mockReactivation: vi.fn(),
-  })
-);
+const { mockSupabaseFetch, mockPost, mockConfigured, mockWarn, mockTeam } = vi.hoisted(() => ({
+  mockSupabaseFetch: vi.fn(),
+  mockPost: vi.fn(),
+  mockConfigured: vi.fn(),
+  mockWarn: vi.fn(),
+  mockTeam: vi.fn(),
+}));
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -16,15 +14,17 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
-// Never Slack from a test: the bot's two calls this module makes, mocked.
+// Never Slack from a test: every call of the bot's, mocked, so that any post at all (a thread
+// reply, or a top-level one in #report-reactivations) shows up in `mockPost`.
 vi.mock("@shared/observability/slack-bot", () => ({
   isSlackBotConfigured: () => mockConfigured(),
   postJourneyMessage: (...args: unknown[]) => mockPost(...args),
+  updateJourneyMessage: vi.fn(),
+  getMessagePermalink: async () => null,
 }));
-// The #report-reactivations post has its own tests (reactivation-post.test.ts); here, only
-// that every claimed day is handed to it.
-vi.mock("@features/attribution/server/reactivation-post", () => ({
-  postReactivation: (...args: unknown[]) => mockReactivation(...args),
+// The team's accounts (ap_team_user): its own read, cached, in features/admin/server/ap/team.ts.
+vi.mock("@features/admin/server/ap/team", () => ({
+  teamUserIds: () => mockTeam(),
 }));
 
 import {
@@ -220,6 +220,13 @@ describe("readerOf", () => {
     expect(readerOf({ finishedAt: "x", email: "eman@loveiq.org" }).internal).toBe(true);
     expect(readerOf({ finishedAt: "x", email: null }).emailMasked).toBeNull();
   });
+
+  it("carries the reader's user id for the team check", () => {
+    expect(readerOf({ finishedAt: "x", email: "r@example.com", userId: 4242 }).userId).toBe(4242);
+    // Left out by its caller: the team check reads it then (noteReaderReturn).
+    expect(readerOf({ finishedAt: "x", email: "r@example.com" }).userId).toBeUndefined();
+    expect(readerOf({ finishedAt: "x", email: "r@example.com", userId: null }).userId).toBeNull();
+  });
 });
 
 describe("emailLinkOf: the email a report link came through", () => {
@@ -338,7 +345,79 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     vi.clearAllMocks();
     mockConfigured.mockReturnValue(true);
     mockPost.mockResolvedValue({ channel: MESSAGE.channel, ts: "1731650000.000200" });
+    mockTeam.mockResolvedValue(new Set());
     backend();
+  });
+
+  it("a reader on the team list never counts, whatever their address: no claim, no reply", async () => {
+    mockTeam.mockResolvedValue(new Set([4242]));
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      reader: { ...READER, userId: 4242 },
+    });
+    expect(claims()).toHaveLength(0);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("a failed read of the team list counts nobody as team", async () => {
+    mockTeam.mockRejectedValue(new Error("ap_team_user failed (500)"));
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "report",
+      at: NEXT_DAY,
+      reader: { ...READER, userId: 4242 },
+    });
+    expect(claims()).toHaveLength(1);
+  });
+
+  it("reads the user id with the reader when the caller has none", async () => {
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({
+      submission: [
+        {
+          created_date_time: READER.finishedAt,
+          start_date_time: READER.startedAt,
+          user_id: 4242,
+          app_user: { email: "r@example.com" },
+        },
+      ],
+    });
+    await noteReaderReturn({ submissionId: 2790, source: "email", at: NEXT_DAY });
+    expect(
+      calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2790") && p.includes("user_id"))
+    ).toHaveLength(1);
+    expect(claims()).toHaveLength(0);
+  });
+
+  it("a finished draft's reader, passed without an account, is looked up for the team check", async () => {
+    // The survey route hands its reader over with no account (it knows none): a team account's
+    // draft is no return, and anyone else's still is.
+    const draftReader = { ...READER, startedAt: "2026-11-13T20:00:00.000Z" };
+    const finished = new Date(draftReader.finishedAt!);
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({ submission: [{ user_id: 4242, app_user: { processing_restricted_at: null } }] });
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "draft",
+      at: finished,
+      reader: draftReader,
+    });
+    expect(
+      calls((p) => p.startsWith("/rest/v1/survey_submission?id=eq.2790&select=user_id"))
+    ).toHaveLength(1);
+    expect(claims()).toHaveLength(0);
+    vi.clearAllMocks();
+    mockTeam.mockResolvedValue(new Set([4242]));
+    backend({ submission: [{ user_id: 77, app_user: { processing_restricted_at: null } }] });
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "draft",
+      at: finished,
+      reader: draftReader,
+    });
+    expect(claims()).toHaveLength(1);
   });
 
   it("leaves out a reader who asked us to restrict processing: no claim, no reply, no post", async () => {
@@ -348,7 +427,6 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
     expect(claims()).toHaveLength(0);
     expect(mockPost).not.toHaveBeenCalled();
-    expect(mockReactivation).not.toHaveBeenCalled();
   });
 
   it("stays quiet when it cannot read whether the reader restricted processing", async () => {
@@ -358,7 +436,7 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
     });
     await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
     expect(claims()).toHaveLength(0);
-    expect(mockReactivation).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
   it("claims the reader's Berlin day, replies in their thread and keeps the reply's ts", async () => {
@@ -537,72 +615,42 @@ describe("noteReaderReturn: claim the day, then reply in the thread", () => {
   });
 });
 
-describe("noteReaderReturn: every claimed day goes to #report-reactivations too", () => {
+describe("noteReaderReturn: a claimed day waits for a minute of reading before #report-reactivations", () => {
   const NEXT_DAY = new Date("2026-11-15T07:00:00.000Z");
+  const ORIGINAL = process.env.SLACK_REACTIVATIONS_CHANNEL_ID;
 
-  function backend(claimed: unknown[] = [{ survey_submission_id: 2790 }], message: unknown[] = []) {
+  /**
+   * Every read a #report-reactivations post would make gets an answer, so a post made at the
+   * claim would reach `mockPost`: the survey row (the restriction check's and the journey's
+   * alike), and a thread when `message` has one.
+   */
+  function backend(message: unknown[] = []) {
     mockSupabaseFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
-      if (path === "/rest/v1/reader_return" && init?.method === "POST") return res(claimed);
+      if (path === "/rest/v1/reader_return" && init?.method === "POST") {
+        return res([{ survey_submission_id: 2790 }]);
+      }
       if (path.startsWith("/rest/v1/reader_return?") && init?.method === "PATCH") return res(null);
       if (path.startsWith("/rest/v1/slack_journey_message?")) return res(message);
-      // The restriction check (GDPR Art. 18): a reader who did not restrict processing.
       if (path.startsWith("/rest/v1/survey_submission?")) return res([{ app_user: null }]);
-      throw new Error(`unexpected ${path}`);
+      return res([]);
     });
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.SLACK_REACTIVATIONS_CHANNEL_ID = "C0REACTIVATIONS";
     mockConfigured.mockReturnValue(true);
     mockPost.mockResolvedValue({ channel: "C0JOURNEY", ts: "1731650000.000200" });
-    mockReactivation.mockResolvedValue(undefined);
-    backend();
+    mockTeam.mockResolvedValue(new Set());
   });
 
-  it("hands the claim over with its day, whether or not a thread exists", async () => {
-    await noteReaderReturn({
-      submissionId: 2790,
-      source: "email",
-      at: NEXT_DAY,
-      via: "gift_unopened",
-      reader: READER,
-    });
-    expect(mockReactivation).toHaveBeenCalledTimes(1);
-    expect(mockReactivation).toHaveBeenCalledWith({
-      submissionId: 2790,
-      source: "email",
-      via: "gift_unopened",
-      at: NEXT_DAY,
-      day: "2026-11-15",
-    });
-    // No thread for this reader: the reply is skipped, the reactivation post is not.
-    expect(mockPost).not.toHaveBeenCalled();
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.SLACK_REACTIVATIONS_CHANNEL_ID;
+    else process.env.SLACK_REACTIVATIONS_CHANNEL_ID = ORIGINAL;
   });
 
-  it("hands over drafts too: the post leaves them out itself", async () => {
-    await noteReaderReturn({
-      submissionId: 2844,
-      source: "draft",
-      at: NEXT_DAY,
-      reader: READER,
-    });
-    expect(mockReactivation).toHaveBeenCalledWith(expect.objectContaining({ source: "draft" }));
-  });
-
-  it("hands nothing over for a day already claimed, or for no return at all", async () => {
-    backend([]);
-    await noteReaderReturn({ submissionId: 2790, source: "report", at: NEXT_DAY, reader: READER });
-    await noteReaderReturn({
-      submissionId: 2790,
-      source: "report",
-      at: NEXT_DAY,
-      reader: { ...READER, internal: true },
-    });
-    expect(mockReactivation).not.toHaveBeenCalled();
-  });
-
-  it("replies in the thread as well", async () => {
-    backend(undefined, [{ channel: "C0JOURNEY", message_ts: "1731570000.000100" }]);
+  it("claims the day and replies in the thread, and posts nothing top level", async () => {
+    backend([{ channel: "C0JOURNEY", message_ts: "1731570000.000100" }]);
     await noteReaderReturn({
       submissionId: 2790,
       source: "report",
@@ -610,8 +658,27 @@ describe("noteReaderReturn: every claimed day goes to #report-reactivations too"
       via: "initial_gift",
       reader: READER,
     });
-    expect(mockReactivation).toHaveBeenCalledTimes(1);
+    const claimed = mockSupabaseFetch.mock.calls.filter(
+      ([p, init]) =>
+        p === "/rest/v1/reader_return" &&
+        (init as { method?: string } | undefined)?.method === "POST"
+    );
+    expect(claimed).toHaveLength(1);
     expect(mockPost).toHaveBeenCalledTimes(1);
-    expect((mockPost.mock.calls[0]![0] as { threadTs: string }).threadTs).toBe("1731570000.000100");
+    expect((mockPost.mock.calls[0]![0] as { threadTs?: string }).threadTs).toBe(
+      "1731570000.000100"
+    );
+  });
+
+  it("without a thread to reply in, nothing goes to Slack at all", async () => {
+    backend([]);
+    await noteReaderReturn({
+      submissionId: 2790,
+      source: "email",
+      at: NEXT_DAY,
+      via: "gift_unopened",
+      reader: READER,
+    });
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });
