@@ -1604,7 +1604,10 @@ const SurveyPage: FC<SurveyPageProps> = ({
         onStartOver={handleStartOver}
         payToStart={journey !== null}
         sheets={sheets}
-        survey2={survey2}
+        // The version this visit's guide and consent showed, never a second draw: "Start a new
+        // one" (or I agree, or Forward) after a finished run drops the session id in between, and
+        // the new id's half could give the other version's questions after this one's consent.
+        survey2={guide ? "forced" : "off"}
       />
     );
   }

@@ -137,9 +137,9 @@ interface SurveyEngineProps {
    */
   sheets?: readonly SurveySheetId[];
   /**
-   * Survey 2.0 for this visit (app/survey/page.tsx): `test` while its switch is on, when a FRESH
-   * run draws its half of the Survey 2.0 test (2.0 or the new order), `forced` on a staging
-   * preview (always 2.0). A draft keeps the order it began in (resolveDraftQuestionOrderArm).
+   * Survey 2.0 for a FRESH run: `forced` (2.0) or `off` (the new order), as SurveyPage's guide and
+   * consent showed it, so the questions always follow the words agreed to; `test` draws the half
+   * here from the session id. A draft keeps the order it began in (resolveDraftQuestionOrderArm).
    * `off` by default.
    */
   survey2?: Survey2Visit;

@@ -12,9 +12,9 @@ import {
   __resetSurveyConsentForTests,
   saveLandingPrefill,
 } from "@features/survey/ui/hooks/surveyStorage";
-import { SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
+import { COMPLETED_REPORT_KEY, SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
 import { __resetFunnelPingsForTests } from "@features/analytics/client";
-import { assignSurvey2TestArm } from "@shared/experiments/questionOrderArm";
+import { assignSurvey2TestArm, type Survey2Visit } from "@shared/experiments/questionOrderArm";
 
 /**
  * Survey 2.0's short guide (Mark's Pre Survey Wizard, row "Suggestion · 3 cards excl. future/past
@@ -36,9 +36,26 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@features/survey/ui/SurveyEngine", () => ({
-  default: () => <div data-testid="survey-engine" />,
-}));
+// The engine draws a fresh run's order as SurveyEngine does on mounting (its `survey2` prop and the
+// tab's session id), so a test can read which questions follow the guide and consent it saw.
+vi.mock("@features/survey/ui/SurveyEngine", async () => {
+  const { freshQuestionOrderArm } = await import("@shared/experiments/questionOrderArm");
+  const { getSessionId } = await import("@features/survey/ui/hooks/surveySession");
+  return {
+    default: ({
+      survey2 = "off",
+      payToStart = false,
+    }: {
+      survey2?: Survey2Visit;
+      payToStart?: boolean;
+    }) => (
+      <div
+        data-testid="survey-engine"
+        data-fresh-arm={freshQuestionOrderArm(payToStart ? "off" : survey2, getSessionId())}
+      />
+    ),
+  };
+});
 
 const CARD_1 = "Three rules to increase your report quality:";
 const CARD_2 = "Answer from the perspective of today";
@@ -423,6 +440,60 @@ describe("the short guide's records", () => {
       ])
     );
     expect(sent().some((e) => e.startsWith("intro_"))).toBe(false);
+  });
+});
+
+/**
+ * A tab that finished a survey and starts another ("Start a new one"): that drops the finished
+ * run's session id (#375), so the questions open under a new one. They must still be the version
+ * whose guide and consent the reader just saw, whichever half the new id would draw.
+ */
+describe("a new run in the tab that finished one, switch on", () => {
+  async function startANewOne(finishedSession: string, nextSession: string) {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, finishedSession);
+    sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_finished");
+    localStorage.removeItem(SURVEY_CONSENT_KEY);
+    __resetSurveyConsentForTests();
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(
+      nextSession as `${string}-${string}-${string}-${string}-${string}`
+    );
+    const user = userEvent.setup();
+    render(<SurveyPage survey2="test" />);
+    await user.click(await screen.findByRole("button", { name: /start a new one/i }));
+    return user;
+  }
+
+  async function agree(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByRole("heading", { name: /before we begin/i });
+    const [age, data] = screen.getAllByRole("checkbox");
+    await user.click(age!);
+    await user.click(data!);
+    await user.click(screen.getByRole("button", { name: /i agree/i }));
+    return (await screen.findByTestId("survey-engine")).getAttribute("data-fresh-arm");
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("asks Survey 2.0's questions after 2.0's guide and consent, though the new id draws today's", async () => {
+    const user = await startANewOne(VARIANT_SESSION, CONTROL_SESSION);
+    expect(await screen.findByRole("heading", { name: CARD_1 })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(await screen.findByText(AGE_2)).toBeInTheDocument();
+
+    expect(await agree(user)).toBe("survey2");
+  });
+
+  it("asks today's questions after today's intro and consent, though the new id draws 2.0", async () => {
+    const user = await startANewOne(CONTROL_SESSION, VARIANT_SESSION);
+    await user.click(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    );
+    await user.click(await screen.findByRole("button", { name: /skip intro/i }, { timeout: 3000 }));
+    expect(
+      await screen.findByText("I confirm that I am 18 years of age or older.")
+    ).toBeInTheDocument();
+
+    expect(await agree(user)).toBe("variant");
   });
 });
 
