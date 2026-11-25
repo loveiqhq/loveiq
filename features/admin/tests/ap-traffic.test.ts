@@ -7,6 +7,11 @@ import { addDays } from "@features/admin/server/ap/days";
 import { buildTraffic, EMAIL_TEST_LAST_DAY } from "@features/admin/server/ap/traffic";
 import { fields } from "@features/admin/ui/ap/fields/traffic";
 import { EMAIL_QUESTION_TEST_END } from "@shared/experiments/emailQuestionArm";
+import {
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
+  LANDING_TEST_START_DAY,
+} from "@shared/experiments/landingVariant";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import { factsFixture, sub } from "./ap-fixtures";
@@ -414,6 +419,13 @@ describe("Traffic page builder", () => {
       "CASE WHEN test IN ('Pain-point page C vs. video page', 'Pain-point page vs. video page') THEN submissions WHEN test = 'Video page vs. question card' THEN starts"
     );
     expect(flat("traffic.lift")).toContain(`CASE WHEN test IN (${landing}) THEN visitors`);
+    // And each test's rows name its own versions: C's variant is pain_point_c, not B's value.
+    expect(flat("traffic.lift")).toContain(
+      `('Pain-point page C vs. video page', 'video', true, DATE '${LANDING_TEST_START_DAY}', NULL::date), ('Pain-point page C vs. video page', 'pain_point_c', false,`
+    );
+    expect(flat("traffic.lift")).toContain(
+      `('Pain-point page vs. video page', 'pain_point', false, DATE '${LANDING_PAIN_POINT_START_DAY}', DATE '${LANDING_PAIN_POINT_LAST_DAY}')`
+    );
   });
 
   it("reads the price test without readers who paid before the survey (pay to start)", () => {

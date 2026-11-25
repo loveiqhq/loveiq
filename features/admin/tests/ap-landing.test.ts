@@ -49,6 +49,7 @@ import {
   type PostHogResult,
 } from "@features/admin/server/ap/posthog";
 import ApLanding from "@features/admin/ui/ap/ApLanding";
+import { fields as LANDING_FIELDS } from "@features/admin/ui/ap/fields/landing";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
@@ -172,6 +173,20 @@ describe("landing test windows", () => {
       winner: "white_video",
     });
     expect(test("hero-first-run").to).toBe("2026-10-13");
+  });
+
+  it("shows queries that read #12 and #10 by their own versions, as the page does", () => {
+    const sql = Object.values(LANDING_FIELDS).map((f) => f.query.text.replace(/\s+/g, " "));
+    const tests = sql.filter((q) => q.includes("test_runs AS"));
+    const posthog = sql.filter((q) => q.includes("arrayJoin([if((run ="));
+    expect(tests.length).toBeGreaterThan(0);
+    expect(posthog.length).toBeGreaterThan(0);
+    for (const t of [test("pain-point-c"), test("pain-point")]) {
+      for (const q of tests)
+        for (const arm of t.arms) expect(q).toContain(`('${t.code}', '${arm}', DATE '${t.from}'`);
+      for (const q of posthog)
+        expect(q).toContain(`run = '${t.code}' AND arm IN ('${t.arms[0]}', '${t.arms[1]}')`);
+    }
   });
 
   it("reads the hero video from the first whole day PostHog recorded who saw it", () => {
