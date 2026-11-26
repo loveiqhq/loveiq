@@ -2,7 +2,7 @@
 
 import type { FC } from "react";
 import type { LightMapOffer } from "@features/report/logic/lightReportMap";
-import { surveySheetDef, type SurveySheetId } from "@features/survey/surveySheets";
+import type { SurveySheetId } from "@features/survey/surveySheets";
 import {
   DesireSheet,
   ExpertSheet,
@@ -33,11 +33,6 @@ interface SurveySheetHostProps {
   /** The map's Previous (and its Esc): back to the question on screen. */
   onMapPrevious: () => void;
 }
-
-const reportMapLeft = (() => {
-  const p = surveySheetDef("reportMap").placement;
-  return p.kind === "remaining" ? p.left : 3;
-})();
 
 /**
  * Every sheet this visit may show, each drawn only while open (and while it slides away), so
@@ -84,7 +79,9 @@ const SurveySheetHost: FC<SurveySheetHostProps> = ({
                 key={id}
                 open={isOpen}
                 offer={offer}
-                left={reportMapLeft}
+                // The screens after the one it opens over: 3 in the classic survey, where it opens
+                // when three are left; 3 in Survey 2.0, after 17002 (17003, 17004, the details page).
+                left={Math.max(1, total - 1 - progressIndex)}
                 progressIndex={progressIndex}
                 total={total}
                 onNext={() => onKeepGoing()}

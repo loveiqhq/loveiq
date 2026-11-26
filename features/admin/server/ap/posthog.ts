@@ -482,7 +482,7 @@ export interface SurveySheetsSeen {
 }
 
 /** The sheets in each question order's runs, as the page's question funnel splits them. */
-export type SurveySheetsByOrder = Record<"survey" | "test", SurveySheetsSeen>;
+export type SurveySheetsByOrder = Record<"survey" | "test" | "survey2", SurveySheetsSeen>;
 
 const NO_SHEET: SheetFigures = {
   saw: 0,
@@ -505,7 +505,11 @@ const NO_SHEET: SheetFigures = {
  * Counted as the question funnel counts: the runs begun in the range (a person's first survey
  * event, looked for up to 30 days back), split by the order their questions came in. A run in
  * the new order (C13's, everyone's since the test ended) answers 03011 before 01005; one in the
- * old order, 01005 first; every run answers one of them third, before any sheet. A person counts
+ * old order, 01005 first; every run answers one of them third, before any sheet. A Survey 2.0 run
+ * (behind the `survey_2` switch) answers 10003 first (11003, its second screen, when the landing
+ * page's version C answered 10003 and the survey skipped it) and never the name question (00001),
+ * which every classic run answers first (2.0 asks the name on its details page, sent as 00010); it is
+ * told apart before the classic orders, since it too answers 03011 before 01005. A person counts
  * once per sheet. Left with it open: never closed it, answered nothing and finished nothing
  * after it opened (a reload while it was open never reopens it and sends no close, yet the run
  * carries on; the miss-out sheet opens on the last question, so finishing is going on). A sheet
@@ -534,6 +538,8 @@ export async function fetchSurveySheets(
              minIf(timestamp, event IN ('survey_started', 'survey_answer')) AS began,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '03011') AS at_new,
              minIf(timestamp, event = 'survey_answer' AND properties.question_id = '01005') AS at_old,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id IN ('10003', '11003')) AS at_s2,
+             minIf(timestamp, event = 'survey_answer' AND properties.question_id = '00001') AS at_name,
              maxIf(timestamp, event = 'survey_answer') AS last_answer,
              maxIf(timestamp, event = 'survey_completed') AS completed
       FROM events
@@ -564,7 +570,8 @@ export async function fetchSurveySheets(
              per.closes AS closes, per.ticked AS ticked,
              if(per.sheet = '${MISS_OUT_SHEET}' AND per.ms_open IS NULL, toFloat(dateDiff('millisecond', per.shown_at, per.optin_closed_at)), per.ms_open) AS ms,
              runs.last_answer > per.shown_at OR runs.completed > per.shown_at AS went_on,
-             multiIf(toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
+             multiIf(toUnixTimestamp(runs.at_s2) > 0 AND (toUnixTimestamp(runs.at_name) = 0 OR runs.at_s2 < runs.at_name), 'survey2',
+                     toUnixTimestamp(runs.at_new) > 0 AND (toUnixTimestamp(runs.at_old) = 0 OR runs.at_new < runs.at_old), 'test',
                      toUnixTimestamp(runs.at_old) > 0, 'survey', '') AS run_order
       FROM per INNER JOIN runs ON per.person_id = runs.person_id
       WHERE per.shows > 0
@@ -581,10 +588,10 @@ export async function fetchSurveySheets(
     bySheet: [],
     all: NO_SHEET,
   });
-  const orders = { survey: empty(), test: empty() };
+  const orders = { survey: empty(), test: empty(), survey2: empty() };
   for (const row of r.value) {
     const [order, sheet, saw, settled, leftOpen, closed, medianMs, ticked] = row;
-    if (order !== "survey" && order !== "test") continue;
+    if (order !== "survey" && order !== "test" && order !== "survey2") continue;
     const figures: SheetFigures = {
       saw: Number(saw) || 0,
       settled: Number(settled) || 0,
@@ -594,7 +601,8 @@ export async function fetchSurveySheets(
       medianMs: Number(closed) > 0 && Number.isFinite(Number(medianMs)) ? Number(medianMs) : null,
       ticked: Number(ticked) || 0,
     };
-    const into = order === "test" ? orders.test : orders.survey;
+    const into =
+      order === "test" ? orders.test : order === "survey2" ? orders.survey2 : orders.survey;
     if (sheet === "") into.all = figures;
     else if (isApSheetId(sheet)) into.bySheet.push([sheet, figures]);
   }
@@ -602,7 +610,14 @@ export async function fetchSurveySheets(
     bySheet: Object.fromEntries(o.bySheet),
     all: o.all,
   });
-  return { ok: true, value: { survey: done(orders.survey), test: done(orders.test) } };
+  return {
+    ok: true,
+    value: {
+      survey: done(orders.survey),
+      test: done(orders.test),
+      survey2: done(orders.survey2),
+    },
+  };
 }
 
 export interface ReportReturns {

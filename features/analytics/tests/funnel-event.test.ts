@@ -216,6 +216,47 @@ describe("POST /api/funnel-event", () => {
     mockCookieValue.mockReturnValue(undefined);
   });
 
+  it("accepts Survey 2.0's short guide steps (20261123130000), on the intro's bucket", async () => {
+    // The CHECK must allow every step the route accepts, or the rows are lost silently, and
+    // it is rewritten in full: every value the route took before stays in it.
+    const check = readFileSync(
+      "supabase/migrations/20261123130000_funnel_event_guide_steps.sql",
+      "utf8"
+    ).split("ADD CONSTRAINT")[1]!;
+    const before = readFileSync(
+      "supabase/migrations/20261014120200_funnel_event_intro_steps.sql",
+      "utf8"
+    ).split("ADD CONSTRAINT")[1]!;
+    for (const [, value] of before.matchAll(/'([a-z0-9_]+)'/g)) {
+      expect(check).toContain(`'${value}'`);
+    }
+    mockSupabaseFetch.mockResolvedValue({ ok: true });
+    for (const event of [
+      "guide_card_1",
+      "guide_card_2",
+      "guide_card_3",
+      "guide_back_2",
+      "guide_back_3",
+      "guide_skip_1",
+      "guide_skip_2",
+      "guide_skip_3",
+    ]) {
+      expect(check).toContain(`'${event}'`);
+      mockSupabaseFetch.mockClear();
+      vi.mocked(ratelimit.checkRateLimit).mockClear();
+      expect((await POST(makeRequest({ event, visitor_id: VALID_UUID }))).status).toBe(204);
+      const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
+      expect(body.event_type).toBe(event);
+      expect(
+        (vi.mocked(ratelimit.checkRateLimit).mock.calls[0]?.[1] as { bucket: string }).bucket
+      ).toBe("funnel-event-intro");
+    }
+    // Card 1 has no Back (the browser's leaves the page); there are three cards.
+    for (const event of ["guide_back_1", "guide_card_4", "guide_skip_4", "guide_card_0"]) {
+      expect((await POST(makeRequest({ event, visitor_id: VALID_UUID }))).status).toBe(400);
+    }
+  });
+
   it("returns 204 even when the insert fails (best-effort)", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500 });
     const res = await POST(makeRequest({ event: "unique_visitor", visitor_id: VALID_UUID }));

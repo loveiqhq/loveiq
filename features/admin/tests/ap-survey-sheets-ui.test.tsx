@@ -179,6 +179,9 @@ describe("the Sheets section (Mark, 17 Nov 2026)", () => {
     expect(halfway[2]!.className).toContain("text-ap-bad");
     expect(halfway[3]!.textContent).toBe("6 s");
     expect(halfway[4]!.textContent).toBe("—");
+    // Sheet 4 is out of the survey since 25 Nov 2026 (Mark): its figures stay, marked as such.
+    expect(sheetsRow("Halfway · profile filling in").textContent).toContain("Taken out on 25 Nov");
+    expect(sheetsRow("Science · responsive desire").textContent).not.toContain("Taken out");
     const desire = within(sheetsRow("State of Desire report promo")).getAllByRole("cell");
     expect(desire[4]!.textContent).toBe("2.8%1 click");
     const expert = within(sheetsRow("Expert quote")).getAllByRole("cell");
@@ -251,7 +254,7 @@ describe("the sheets in the question funnel", () => {
     render(<ApSurvey />);
     fireEvent.click(
       within(screen.getByRole("group", { name: "Question order" })).getByRole("button", {
-        name: /^Old order/,
+        name: /^Control · Old order/,
       })
     );
     expect(sheetRow("expert")).toBeUndefined();
@@ -584,7 +587,7 @@ describe("the CSV (every table on the page is in it)", () => {
       "1 · Science · responsive desire",
       "2 · Trustpilot testimonial",
       "3 · Expert quote",
-      "4 · Halfway · profile filling in",
+      "4 · Halfway · profile filling in (taken out on 25 Nov)",
       "5 · State of Desire report promo",
       "6 · How to read your report",
       "7 · Opt-in · Sure you want to miss out?",

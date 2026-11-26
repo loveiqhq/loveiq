@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
-import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyControls from "./SurveyControls";
 import SurveyJumpMenu from "./SurveyJumpMenu";
@@ -38,7 +37,27 @@ import {
 } from "@features/analytics/client";
 import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { EMAIL_QID, OPT_IN_QID, orderAskedQuestions } from "./questionOrder";
+import {
+  freshQuestionOrderArm,
+  SURVEY_2_ARM,
+  type Survey2Visit,
+} from "@shared/experiments/questionOrderArm";
+import { pruneTopics, withPickedAreas } from "@features/survey/survey2/areas";
+import { SURVEY_2_AREAS_QID, SURVEY_2_MINUTES } from "@features/survey/survey2/order";
+import { type DetailsField } from "@features/survey/survey2/details";
+import { EXPERT_QID, expertPhoneValid, isExpertYes } from "@features/survey/survey2/expert";
+import DetailsStep, { type DetailsStepHandle } from "./questions/DetailsStep";
+
+/** 16016, whose topics Survey 2.0 asks inside the areas picked on `16016a`. */
+const TOPICS_QID = "16016";
+
+/**
+ * The newsletter question and the country question, which Survey 2.0's details screen asks.
+ * Looked up when used, never at import: the survey data is read at render (a test swaps it).
+ */
+const optInQuestion = () => surveyQuestions.find((q) => q.qId === OPT_IN_QID);
+const countryQuestion = () => surveyQuestions.find((q) => q.qId === "15001");
+import { askedScreens, EMAIL_QID, OPT_IN_QID } from "./questionOrder";
 import {
   forgetOptInSheetShown,
   isOptInYes,
@@ -56,6 +75,7 @@ import {
   sheetBeforeQuestion,
   desireTickedFor,
   rememberDesireTick,
+  placementFor,
   sheetsShownFor,
   surveySheetDef,
   type SheetContext,
@@ -124,6 +144,13 @@ interface SurveyEngineProps {
    * in their EUR 1.99 words, as before.
    */
   gatePrice?: boolean;
+  /**
+   * Survey 2.0 for a FRESH run: `forced` (2.0) or `off` (the new order), as SurveyPage's guide and
+   * consent showed it, so the questions always follow the words agreed to; `test` draws the half
+   * here from the session id. A draft keeps the order it began in (resolveDraftQuestionOrderArm).
+   * `off` by default.
+   */
+  survey2?: Survey2Visit;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -178,6 +205,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
   gatePrice = false,
+  survey2 = "off",
 }) => {
   // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
   // meets every sheet, and the halfway sheet and the report map tell the EUR 1.99 offer in the
@@ -215,7 +243,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     getAnswer,
     getLatestAnswers,
     setCurrentIndex,
-  } = useSurveyState();
+    // While 2.0's switch is on, a fresh run's half of the Survey 2.0 test: 2.0 or the new order,
+    // by its session id. A buyer who paid before the survey is in no survey test, so stays on
+    // today's survey.
+  } = useSurveyState({
+    freshArm: freshQuestionOrderArm(payToStart ? "off" : survey2, getSessionId()),
+  });
   const {
     submit: submitSurvey,
     retryPending,
@@ -264,6 +297,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const optInSheetOpenRef = useRef(false);
   const optInSheetShown = useRef(false);
   const optInSheetYes = useRef<string | null>(null);
+  /** Survey 2.0's details screen, which Next asks to move through its fields. */
+  const detailsRef = useRef<DetailsStepHandle>(null);
+  /** The details field to open: the email, once the server refused it. */
+  const [detailsFocus, setDetailsFocus] = useState<DetailsField | undefined>(undefined);
   /** The sheet goes; the caller then handles the reader's choice, if any. */
   const closeOptInSheet = useCallback(() => {
     optInSheetOpenRef.current = false;
@@ -330,16 +367,23 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // screen-reader line and the jump menu all read the same words.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
+  // Survey 2.0 asks 16016's topics only inside the areas picked on the screen before it
+  // (features/survey/survey2/areas.ts). Keyed by the areas, so only a change to them redraws.
+  const areasKey = JSON.stringify(answers[SURVEY_2_AREAS_QID] ?? null);
   const orderedQuestions = useMemo(
     () =>
-      orderAskedQuestions(surveyQuestions, orderArm)
-        .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId))
-        .map((q) => applyEmailQuestionArm(q, emailArm)),
-    [prefilledKey, orderArm, emailArm]
+      withPickedAreas(
+        askedScreens(surveyQuestions, orderArm, prefilledKey.split(",")).map((q) =>
+          applyEmailQuestionArm(q, emailArm)
+        ),
+        { [SURVEY_2_AREAS_QID]: JSON.parse(areasKey) as unknown }
+      ),
+    [prefilledKey, orderArm, emailArm, areasKey]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
+  /** Survey 2.0 tells its own time (its guide's), the classic survey the progress's default. */
+  const totalMinutes = orderArm === SURVEY_2_ARM ? SURVEY_2_MINUTES : undefined;
 
   // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
   // "white" for everyone. The `?survey=dark` preview went with the 2026-10-04
@@ -480,12 +524,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   );
 
   const hasAnswer = useMemo(() => {
+    // Survey 2.0's details screen: Next always does something there (opens the next field or
+    // says what is missing, DetailsStep), so it is drawn ready.
+    if (question?.answerType === "details") return true;
     if (currentAnswer === null || currentAnswer === undefined) return false;
     if (typeof currentAnswer === "string") return currentAnswer.trim().length > 0;
     if (Array.isArray(currentAnswer)) return currentAnswer.length > 0;
     if (typeof currentAnswer === "number") return true;
     return false;
-  }, [currentAnswer]);
+  }, [question, currentAnswer]);
 
   const isEmailValid = useMemo(() => {
     if (question?.inputType !== "email") return true;
@@ -508,6 +555,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     if (typeof question.maxSelections !== "number") return true;
     return currentAnswer.length <= question.maxSelections;
   }, [question, currentAnswer]);
+
+  // Survey 2.0's expert question: a Yes needs the number our expert calls (Mark's board turns
+  // Next solid at six digits); the field under the Yes says what is missing.
+  const isExpertPhoneValid = useMemo(() => {
+    if (question?.qId !== EXPERT_QID || !isExpertYes(currentAnswer)) return true;
+    return expertPhoneValid(otherText);
+  }, [question, currentAnswer, otherText]);
 
   /**
    * Why the last move on was refused. "missing": the footer says what is needed. "invalid":
@@ -541,8 +595,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   }, [startedAt]);
 
   const sheetContext = useCallback(
-    (): SheetContext => ({ enabled: sheets, shown: shownSheets(), payToStart }),
-    [sheets, shownSheets, payToStart]
+    (): SheetContext => ({ enabled: sheets, shown: shownSheets(), payToStart, arm: orderArm }),
+    [sheets, shownSheets, payToStart, orderArm]
   );
 
   /** Opens a sheet over the question `qId`: once per run, and an answer's pending move goes. */
@@ -649,7 +703,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     // A tap on the blocked Next lands here now (it used to be a disabled button), so an
     // unanswered required question must stop here too, not only at the keyboard's gate.
     const missingAnswer = !!question?.required && !hasAnswer;
-    if (missingAnswer || !isEmailValid || !isSelectionCountValid) {
+    if (missingAnswer || !isEmailValid || !isSelectionCountValid || !isExpertPhoneValid) {
       /**
        * A blocked Next is the only "form error" this survey can produce, and
        * until now nothing recorded it: `trackSurveyFormError` was defined in
@@ -670,11 +724,26 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       if (question?.qId) {
         trackSurveyFormError({
           question_id: question.qId,
-          error_kind: missingAnswer ? "required" : !isEmailValid ? "invalid_email" : "out_of_range",
+          error_kind: missingAnswer
+            ? "required"
+            : !isEmailValid
+              ? "invalid_email"
+              : !isExpertPhoneValid
+                ? "invalid_phone"
+                : "out_of_range",
         });
       }
       setBlocked(missingAnswer ? "missing" : "invalid");
       return;
+    }
+    // Survey 2.0's details screen moves through its own steps first (DetailsStep), holds while
+    // the miss-out sheet is up, and only goes on, to the submit below, once every one is done.
+    if (question?.answerType === "details") {
+      const step = detailsRef.current?.advance(getLatestAnswers());
+      if (step?.kind === "blocked") {
+        trackSurveyFormError({ question_id: question.qId, error_kind: "required" });
+      }
+      if (step?.kind !== "done") return;
     }
     // A sheet after this question (Mark's placements, features/survey/surveySheets.ts) holds
     // the move, once per run. Every way on lands here (Next, Auto-advance, Enter, ArrowRight,
@@ -794,6 +863,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     hasAnswer,
     isEmailValid,
     isSelectionCountValid,
+    isExpertPhoneValid,
     utmTracker,
     savePartial,
     markBase,
@@ -865,7 +935,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
    */
   const navigateFromHistory = useRef<(index: number) => void>(() => {});
   // What a Next press would accept here: the button's rule and goNext's own checks.
-  const mayMoveOn = (hasAnswer || !question?.required) && isEmailValid && isSelectionCountValid;
+  const mayMoveOn =
+    (hasAnswer || !question?.required) &&
+    isEmailValid &&
+    isSelectionCountValid &&
+    isExpertPhoneValid;
   const answerMissing = !!question?.required && !hasAnswer;
   useEffect(() => {
     navigateFromHistory.current = (index: number) => {
@@ -961,20 +1035,48 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // "Yes, I want to keep learning": the answer becomes the opt-in's own Yes, word for word
   // (submit_survey matches the option text), through setAnswer so the submit reads it at
   // once, and the run is submitted as Next would. Then filed with the sheet's version.
+  /**
+   * Survey 2.0's details screen: Next leaving the email with the newsletter switch off offers
+   * "Sure you want to miss out?" (Mark's sheet of 10 Nov), once per run like the classic last
+   * step. Says whether it opened (or was open), so the page holds for it.
+   */
+  const offerOptInSheet = useCallback((): boolean => {
+    if (optInSheetOpenRef.current) return true;
+    if (optInSheetShown.current || optInSheetShownFor(startedAt)) return false;
+    const optInYes = optInYesOption(optInQuestion()?.options);
+    if (!optInYes) return false;
+    optInSheetShown.current = true;
+    rememberOptInSheetShown(startedAt);
+    optInSheetYes.current = optInYes;
+    optInSheetOpenRef.current = true;
+    cancelAutoAdvance();
+    setOptInSheetOpen(true);
+    trackOptInSheetShown();
+    return true;
+  }, [startedAt, cancelAutoAdvance]);
+
+  /**
+   * On from the miss-out sheet, as Next would: the submit on the classic last question; on
+   * Survey 2.0's details screen, where the sheet opens on leaving the email, the country.
+   */
+  const carryOnFromOptInSheet = useCallback(() => {
+    goNextRef.current();
+  }, []);
+
   const handleOptInSheetYes = useCallback(() => {
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "yes" });
     const yes = optInSheetYes.current;
     if (yes) setAnswer(OPT_IN_QID, yes);
-    goNextRef.current();
-  }, [closeOptInSheet, setAnswer]);
+    carryOnFromOptInSheet();
+  }, [closeOptInSheet, setAnswer, carryOnFromOptInSheet]);
 
   // "Not now": the No stands and the run is submitted, one tap, as Next would.
   const handleOptInSheetNotNow = useCallback(() => {
     closeOptInSheet();
     trackOptInSheetClosed({ outcome: "not_now" });
-    goNextRef.current();
-  }, [closeOptInSheet]);
+    carryOnFromOptInSheet();
+  }, [closeOptInSheet, carryOnFromOptInSheet]);
 
   // Closed without a choice (outside, Esc, a swipe down): back on the question, the No
   // still picked. It has been shown, so the next Next submits.
@@ -988,12 +1090,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
 
   // A sheet between questions: Keep going (and the map's Next) closes it and the survey
   // carries on. One shown before a question leaves the reader on that question to answer it.
+  // Which it was is this run's order's: classic shows the expert's before 01005, Survey 2.0
+  // after 03012 (placementFor).
+  const sheetWasBefore = useCallback(
+    (id: SurveySheetId) => placementFor(surveySheetDef(id), orderArm).kind === "before",
+    [orderArm]
+  );
   const handleSheetKeepGoing = useCallback(
     (extra?: { ticked?: boolean }) => {
       const id = closeSheet("keep_going", extra);
-      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+      if (id && !sheetWasBefore(id)) goNextRef.current();
     },
-    [closeSheet]
+    [closeSheet, sheetWasBefore]
   );
 
   // Closed without the button (the scrim, Esc, a swipe down). These sheets ask nothing, so it
@@ -1001,9 +1109,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   const handleSheetDismiss = useCallback(
     (via: SheetDismissVia, extra?: { ticked?: boolean }) => {
       const id = closeSheet(via, extra);
-      if (id && surveySheetDef(id).placement.kind !== "before") goNextRef.current();
+      if (id && !sheetWasBefore(id)) goNextRef.current();
     },
-    [closeSheet]
+    [closeSheet, sheetWasBefore]
   );
 
   // The map's Previous (and its Esc): back to the question on screen, which can still change.
@@ -1018,6 +1126,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
     (value: AnswerValue) => {
       if (!question) return;
       setAnswer(question.qId, value);
+      // New areas on Survey 2.0's first 16016 screen: topics outside them are dropped, so the
+      // topics answer only ever holds what its screen can show.
+      if (question.qId === SURVEY_2_AREAS_QID) {
+        const topics = getLatestAnswers()[TOPICS_QID];
+        if (Array.isArray(topics)) {
+          const areas = Array.isArray(value) ? value.map(String) : [];
+          const kept = pruneTopics(topics.map(String), areas);
+          if (kept.length !== topics.length) setAnswer(TOPICS_QID, kept);
+        }
+      }
 
       cancelAutoAdvance();
       if (
@@ -1029,7 +1147,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         return;
       }
       // "Other" waits for its text; a cleared country is no answer.
-      if (value === "" || (question.answerType === "single" && /^other\b/i.test(String(value)))) {
+      // No auto-advance onto a text box still to fill: "Other", or the number under a Yes on
+      // Survey 2.0's expert question.
+      if (
+        value === "" ||
+        (question.answerType === "single" &&
+          (/^other\b/i.test(String(value)) || (question.qId === EXPERT_QID && isExpertYes(value))))
+      ) {
         return;
       }
       autoAdvanceTimer.current = setTimeout(() => {
@@ -1037,7 +1161,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         goNextRef.current();
       }, 350);
     },
-    [question, setAnswer, autoAdvance, cancelAutoAdvance]
+    [question, setAnswer, getLatestAnswers, autoAdvance, cancelAutoAdvance]
   );
 
   // Once the last question is answered there is nothing to navigate: the processing
@@ -1213,8 +1337,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   // The server refused the email (an old page, or a rule that changed): back to that
   // question with every other answer kept, where only Start Over was on offer.
   const handleFixEmail = useCallback(() => {
-    const emailIndex = orderedQuestions.findIndex((q) => q.inputType === "email");
+    // Survey 2.0 asks the email on its details screen, which then opens on it.
+    const emailIndex = orderedQuestions.findIndex(
+      (q) => q.inputType === "email" || q.answerType === "details"
+    );
     if (emailIndex < 0) return;
+    if (orderedQuestions[emailIndex]!.answerType === "details") setDetailsFocus("email");
     clearPendingCompletion();
     hasCompleted.current = false;
     setCompletionPhase("processing");
@@ -1267,7 +1395,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
       />
     );
   }
-  const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
+  const canGoNext =
+    (hasAnswer && isEmailValid && isSelectionCountValid && isExpertPhoneValid) ||
+    !question.required;
   // Only for an answer that is missing: a wrong one (an email, too many picks) is already
   // explained at the field.
   const blockedHint =
@@ -1371,6 +1501,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                   onChange={handleChange}
                   otherText={otherText}
                   onOtherTextChange={handleOtherTextChange}
+                  forceValidation={blocked === "invalid"}
                 />
               )}
               {question.answerType === "multiple" && (
@@ -1388,6 +1519,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                   question={question}
                   value={currentAnswer as string | null}
                   onChange={handleChange}
+                />
+              )}
+              {question.answerType === "details" && (
+                <DetailsStep
+                  ref={detailsRef}
+                  answers={answers}
+                  onAnswer={setAnswer}
+                  onOptInOff={offerOptInSheet}
+                  optInOptions={optInQuestion()?.options ?? []}
+                  countryQuestion={countryQuestion() ?? question}
+                  focusField={detailsFocus}
                 />
               )}
 
@@ -1436,7 +1578,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
                 onPrevious={goPrev}
                 onNext={goNext}
                 nextHintId={NEXT_HINT_ID}
-                progress={<SurveyProgress index={currentIndex} total={totalQuestions} />}
+                progress={
+                  <SurveyProgress
+                    index={currentIndex}
+                    total={totalQuestions}
+                    totalMinutes={totalMinutes}
+                  />
+                }
               />
             </div>
             <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
@@ -1460,7 +1608,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
             enabled={sheets}
             open={openSheet}
             offer={sheetOffer}
-            minutesLeft={minutesLeft(currentIndex + 1, totalQuestions)}
+            minutesLeft={minutesLeft(currentIndex + 1, totalQuestions, totalMinutes)}
             progressIndex={currentIndex}
             total={totalQuestions}
             onKeepGoing={handleSheetKeepGoing}

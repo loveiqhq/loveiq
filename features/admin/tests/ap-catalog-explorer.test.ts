@@ -24,6 +24,7 @@ import {
   checkQuery,
   effectiveOrder,
   checkUnlock,
+  clearExplorerCaches,
   maskForExplorer,
   posthogRows,
   productionRows,
@@ -634,7 +635,11 @@ describe("explorer masking", () => {
       // survey_question: the email, name and postcode questions
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [{ id: 900 }, { id: 901 }, { id: 902 }],
+        json: async () => [
+          { id: 900, frontend_qid: "00000" },
+          { id: 901, frontend_qid: "00001" },
+          { id: 902, frontend_qid: "15002" },
+        ],
       });
     const r = await productionRows(
       table("survey_submission_answer"),
@@ -653,6 +658,73 @@ describe("explorer masking", () => {
       { id: 2, answer_text: "Sometimes" },
     ]);
     expect(r).toMatchObject({ total: 2, masked: true, columns: ["id", "answer_text"] });
+  });
+
+  /** An answers page, then the personal questions the database has. */
+  const answersThenQuestions = (
+    answers: Array<Record<string, unknown>>,
+    questions: Array<Record<string, unknown>>
+  ) =>
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-range": `0-${answers.length - 1}/${answers.length}` }),
+        json: async () => answers,
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => questions });
+  const REQUIRED = [
+    { id: 900, frontend_qid: "00000" },
+    { id: 901, frontend_qid: "00001" },
+    { id: 902, frontend_qid: "15002" },
+  ];
+
+  it("masks the phone number a Yes to Survey 2.0's expert question carries, where that question exists", async () => {
+    clearExplorerCaches();
+    answersThenQuestions(
+      [
+        { id: 1, answer_text: "+49 151 2345678", survey_question_id: 903 },
+        { id: 2, answer_text: "Sometimes", survey_question_id: 15 },
+      ],
+      [...REQUIRED, { id: 903, frontend_qid: "17004" }]
+    );
+    const r = await productionRows(
+      table("survey_submission_answer"),
+      q({ columns: ["id", "answer_text"] }),
+      true,
+      new Date("2026-11-24T12:00:00Z")
+    );
+    expect(mockSupabaseFetch.mock.calls[1]![0]).toContain('"17004"');
+    expect(r.rows).toEqual([
+      { id: 1, answer_text: MASKED },
+      { id: 2, answer_text: "Sometimes" },
+    ]);
+  });
+
+  it("opens on a database without the expert question, never without the email, name or postcode one", async () => {
+    clearExplorerCaches();
+    answersThenQuestions([{ id: 2, answer_text: "Sometimes", survey_question_id: 15 }], REQUIRED);
+    const r = await productionRows(
+      table("survey_submission_answer"),
+      q({ columns: ["id", "answer_text"] }),
+      true,
+      new Date("2026-11-24T12:00:00Z")
+    );
+    expect(r.rows).toEqual([{ id: 2, answer_text: "Sometimes" }]);
+
+    clearExplorerCaches();
+    answersThenQuestions(
+      [{ id: 2, answer_text: "Sometimes", survey_question_id: 15 }],
+      [...REQUIRED.slice(0, 2), { id: 903, frontend_qid: "17004" }]
+    );
+    await expect(
+      productionRows(
+        table("survey_submission_answer"),
+        q({ columns: ["id", "answer_text"] }),
+        true,
+        new Date("2026-11-24T12:00:00Z")
+      )
+    ).rejects.toThrow();
   });
 
   it("answers a page past the end with no rows, and a refused filter with its reason", async () => {

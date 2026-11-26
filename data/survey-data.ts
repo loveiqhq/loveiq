@@ -1,7 +1,11 @@
 // Auto-generated from data/survey-source.csv — do not edit manually
 // Run: node scripts/update-survey.js
 
-export type AnswerType = "open" | "scale" | "single" | "multiple" | "country";
+/**
+ * "details" is Survey 2.0's one-page details screen (features/survey/survey2/steps.ts): it is never
+ * a row in the CSV, and writes five answers of its own (name, email, opt-in, country, postal code).
+ */
+export type AnswerType = "open" | "scale" | "single" | "multiple" | "country" | "details";
 
 export interface AnswerOptionExplained {
   option: string;
@@ -27,6 +31,16 @@ export interface SurveyQuestion {
   hoverStates?: Record<number, string>;
   formatGuidance?: string;
   maxSelections?: number;
+  /**
+   * Survey 2.0's wording for an option, keyed by the option itself (features/survey/survey2/copy.ts).
+   * The option stays what is stored and scored; only what the reader sees changes.
+   */
+  optionLabels?: Record<string, string>;
+  /**
+   * Survey 2.0's compact layouts for 16016's two screens (Mark's boards): "grid", the areas as
+   * tiles in two columns; "sections", the topics under small headings, all open.
+   */
+  optionLayout?: "grid" | "sections";
 }
 
 export const surveyQuestions: SurveyQuestion[] = [
@@ -1631,5 +1645,85 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
     formatGuidance: "Optional. Share as much or as little as you like.",
+  },
+  {
+    qId: "17001",
+    cId: 17,
+    chapter: "Feedback",
+    question: "How much did you enjoy taking this survey?",
+    answerType: "scale",
+    options: [],
+    required: true,
+    guide: "Go with your overall feeling, not just the last few questions.",
+    supportAndGuidance: "Go with your overall feeling, not just the last few questions.",
+    scaleLabels: { low: "Not at all", high: "Extremely" },
+    comment: "Tells us how the survey felt to take, so we can keep making it better.",
+    howAnswerIsUsed: "Tells us how the survey felt to take, so we can keep making it better.",
+    formatGuidance: "Select one point on the scale.",
+  },
+  {
+    qId: "17002",
+    cId: 17,
+    chapter: "Feedback",
+    question: "How much did the questions help you reflect and learn about your sexuality?",
+    answerType: "scale",
+    options: [],
+    required: true,
+    guide: "Think of any question that made you pause or notice something new about yourself.",
+    supportAndGuidance:
+      "Think of any question that made you pause or notice something new about yourself.",
+    scaleLabels: { low: "Not at all", high: "Extremely" },
+    comment: "Tells us whether the questions themselves helped you, apart from the report.",
+    howAnswerIsUsed: "Tells us whether the questions themselves helped you, apart from the report.",
+    formatGuidance: "Select one point on the scale.",
+  },
+  {
+    qId: "17003",
+    cId: 17,
+    chapter: "Feedback",
+    question:
+      "What feels like a fair price for your full report to become a more intelligent lover?",
+    answerType: "single",
+    options: [
+      "Fair would be to have it for free",
+      "€1.99–€3.99",
+      "€4.00–€9.99",
+      "€10.00–€19.99",
+      "€20.00–€29.99",
+      "€30.00–€49.99",
+      "€50.00 or more",
+    ],
+    required: true,
+    guide:
+      "60 pages (~2 hours of insights), built from the leading research around sexuality. Consider it is a one-off payment and your answers don't influence the price of the report.",
+    supportAndGuidance:
+      "60 pages (~2 hours of insights), built from the leading research around sexuality. Consider it is a one-off payment and your answers don't influence the price of the report.",
+    comment:
+      "Helps us set a fair price for the full report. Your answer doesn't change what you pay.",
+    howAnswerIsUsed:
+      "Helps us set a fair price for the full report. Your answer doesn't change what you pay.",
+    formatGuidance: "Select one option.",
+  },
+  {
+    qId: "17004",
+    cId: 17,
+    chapter: "Next steps",
+    question: "Would you like a free talk with one of our experts about improving your sex life?",
+    answerType: "single",
+    options: [
+      "Yes, I'd like a free talk with an expert",
+      "Maybe later, after I've read my report",
+      "No, thanks",
+    ],
+    required: true,
+    guide:
+      "It's free. Our trained coaches and therapists can help you understand your results and find next steps that fit you. We only get in touch if you say yes.",
+    supportAndGuidance:
+      "It's free. Our trained coaches and therapists can help you understand your results and find next steps that fit you. We only get in touch if you say yes.",
+    comment:
+      "So one of our experts can offer you a free talk about your results. We only ask for your phone number if you say yes.",
+    howAnswerIsUsed:
+      "So one of our experts can offer you a free talk about your results. We only ask for your phone number if you say yes.",
+    formatGuidance: "Select one option.",
   },
 ];

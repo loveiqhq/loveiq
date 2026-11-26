@@ -82,7 +82,8 @@ async function onQuestion(
     },
     { index, qId: q.qId, value: answer ?? answerFor(q), arm: ARM }
   );
-  await page.goto("/survey?sheets=all");
+  // Sheet 4 (halfway) is out of the survey since 25 Nov 2026; named, the preview still shows it.
+  await page.goto("/survey?sheets=all,halfway");
   await expect(page.getByRole("heading", { name: q.question, exact: true })).toBeVisible({
     timeout: 20_000,
   });

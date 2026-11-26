@@ -61,6 +61,19 @@ export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VERSION}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
 
 /**
+ * T-11 for Survey 2.0, which asks for the newsletter on its details screen in its own words: a
+ * switch under the email, off until the reader turns it on (DETAILS_COPY in
+ * features/survey/survey2/details.ts: "Keep learning after your report" · New research on desire
+ * and intimacy · Small practices to try the same day · First access to new tests · "Free emails.
+ * We track opens and clicks to improve them. Unsubscribe any time."). Dated when those words were
+ * written (Mark's board 2b, 24 Nov 2026; the Yes/No question before it was 2026-11-23); bump it
+ * with them. A Yes once the miss-out sheet has been shown names both texts, as
+ * MARKETING_OPT_IN_SHEET_TERMS_VERSION does.
+ */
+export const MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2 = "2026-11-24";
+export const MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2 = `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-${OPT_IN_SHEET_COPY_VERSION}`;
+
+/**
  * Audit M2: GDPR Art. 5(2)/9(2)(a) accountability. Version of the consent terms
  * shown on the survey ConsentScreen (age confirmation + terms acceptance).
  * Stored on `survey_submission.terms_version` alongside `consent_at` so a
@@ -69,6 +82,16 @@ export const MARKETING_OPT_IN_SHEET_TERMS_VERSION = `${MARKETING_OPT_IN_TERMS_VE
  * terms change.
  */
 export const CONSENT_TERMS_VERSION = "2026-06-04";
+
+/**
+ * The same record for Survey 2.0's consent (features/survey/ui/SurveyPage.tsx, ConsentScreen with
+ * `survey2`): "I'm 18 years of age or older." and "I agree that LoveIQ uses my answers, including
+ * about my sex life, to create my report. I can withdraw anytime." as two ticks, and the terms in
+ * the line under its buttons ("By continuing, you accept our Terms & Conditions, Terms of Use,
+ * Digital Content & Subscription Terms and Medical & Psychological Disclaimer."). Mark's Pre
+ * Survey Wizard, built 23 Nov 2026. A 2.0 run (isSurvey2Run) is filed under it.
+ */
+export const CONSENT_TERMS_VERSION_SURVEY_2 = "2026-11-23";
 
 export interface SurveySubmissionPayload {
   email: string;
@@ -104,6 +127,11 @@ export interface SurveySubmissionPayload {
    * answer is Yes.
    */
   marketingOptInVia?: MarketingOptInVia | null;
+  /**
+   * A Survey 2.0 run (its closing questions answered, isSurvey2Run): its consent texts are 2.0's,
+   * so its versions are too.
+   */
+  survey2?: boolean | null;
   /**
    * The State of Desire sheet's box was ticked ("Email me a 5€ off code"). Stamps
    * `state_of_desire_opt_in_at` and `state_of_desire_opt_in_version` (the box's words,
@@ -278,14 +306,19 @@ export async function submitSurveyOnce(
   // terms version is added only when the user opted in. Best-effort: a failure
   // is logged and swallowed — the submission itself already succeeded and the
   // audit-trail gap can be backfilled if needed.
+  const termsVersion = payload.survey2 ? CONSENT_TERMS_VERSION_SURVEY_2 : CONSENT_TERMS_VERSION;
   try {
     const consentPatch: Record<string, string | Record<string, string[]>> = {
       consent_at: new Date().toISOString(),
-      terms_version: CONSENT_TERMS_VERSION,
+      terms_version: termsVersion,
     };
     if (payload.marketingOptIn === true) {
-      consentPatch.marketing_opt_in_terms_version =
-        payload.marketingOptInVia === "sheet"
+      const viaSheet = payload.marketingOptInVia === "sheet";
+      consentPatch.marketing_opt_in_terms_version = payload.survey2
+        ? viaSheet
+          ? MARKETING_OPT_IN_SHEET_TERMS_VERSION_SURVEY_2
+          : MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2
+        : viaSheet
           ? MARKETING_OPT_IN_SHEET_TERMS_VERSION
           : MARKETING_OPT_IN_TERMS_VERSION;
     }
@@ -359,7 +392,7 @@ export async function submitSurveyOnce(
     }
   } catch (err) {
     logger.warn(
-      { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
+      { err, submissionId, termsVersion },
       "Audit M2 / T-11: failed to stamp consent fields"
     );
   }

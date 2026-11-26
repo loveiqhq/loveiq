@@ -53,7 +53,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       survey_question_id:
         "The question, in survey_question (its frontend_qid, such as 15003, is the id the survey uses).",
       answer_text:
-        "The answer as text: free text, a number or the option's words. The email, name and postcode answers are masked.",
+        "The answer as text: free text, a number or the option's words. The email, name and postcode answers, and the phone number on the expert question (17004), are masked.",
       answer_option_id:
         "The chosen option of a single-choice question (multiple choice: survey_submission_answer_options).",
       normalized_value: "The answer on the scoring scale.",
@@ -72,7 +72,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       id: "Draft id.",
       session_id: "The survey session (the submission's session_id once finished).",
       answers:
-        "The answers so far, by question id. The email, name and postcode answers are masked.",
+        "The answers so far, by question id. The email, name and postcode answers, and the expert question's phone number (17004_other), are masked.",
       current_index: "The step reached, counted from 0.",
       started_at: "When the survey was started.",
       utm_tracker:
@@ -103,7 +103,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       visitor_id:
         "A browser's id for one day: a new one every day, so a returning person counts once per day.",
       day: "The day, in Berlin time.",
-      event_type: `unique_visitor, survey_page_view, survey_engine_mount (the survey opened), intro_slide_1 to intro_slide_4, prepaid_gate_viewed, prepaid_checkout_started; from ${TRACKING_DAY} also intro_view and consent_view (the intro and the consent shown), intro_back_1 to intro_back_4 and consent_back (went back from it) and intro_skip_1 to intro_skip_4 (Skip Intro on that slide).`,
+      event_type: `unique_visitor, survey_page_view, survey_engine_mount (the survey opened), intro_slide_1 to intro_slide_4, prepaid_gate_viewed, prepaid_checkout_started; from ${TRACKING_DAY} also intro_view and consent_view (the intro and the consent shown), intro_back_1 to intro_back_4 and consent_back (went back from it) and intro_skip_1 to intro_skip_4 (Skip Intro on that slide); Survey 2.0's short guide, in the intro's place: guide_card_1 to guide_card_3 (shown), guide_back_2 and guide_back_3, and guide_skip_1 to guide_skip_3.`,
       first_seen: "First time that day.",
       utm_source:
         "The visit's utm_source tag: most ad clicks carry none, so it undercounts Google.",

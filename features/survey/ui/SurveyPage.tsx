@@ -27,16 +27,30 @@ import {
   completedReportToken,
   copySurveySessionToReportSession,
   forgetCompletedReport,
+  getSessionId,
 } from "./hooks/surveySession";
+import { useIntroCardNav } from "./hooks/useIntroCardNav";
+import { runOrderArm } from "./hooks/useSurveyState";
+import { GuideScreen } from "./guide/SurveyGuide";
+import { GUIDE_CARD_COUNT } from "./guide/guideContent";
 import { pingFunnelEvent } from "@features/analytics/client";
 import type { SurveyJourney } from "@features/pay-to-start/logic/journey";
 import type { SurveySheetId } from "@features/survey/surveySheets";
+import {
+  freshQuestionOrderArm,
+  SURVEY_2_ARM,
+  type Survey2Visit,
+} from "@shared/experiments/questionOrderArm";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
  * (every visitor; see pingFunnelEvent): intro_view, intro_slide_1..4 and
  * consent_view when shown, intro_back_N / consent_back on going back, intro_skip_N on Skip
  * Intro. Leaving is not sent: AP-Analytics takes each visitor's furthest card that day.
+ *
+ * A Survey 2.0 run shows Mark's short guide in the intro's place (./guide): three cards on steps
+ * 0 to 2, recording guide_card_N, guide_back_N and guide_skip_N, then the same consent (in 2.0's
+ * words) on step 5 and the questions on step 6.
  */
 
 /* ------------------------------------------------------------------ */
@@ -711,86 +725,19 @@ const SlideScreen: FC<{
   onBack: () => void;
   onSkip: () => void;
 }> = ({ slideIndex, onContinue, onBack, onSkip }) => {
-  const [isLeaving, setIsLeaving] = useState(false);
-  const [isLeavingForward, setIsLeavingForward] = useState(false);
   // slides is non-empty by construction; the fallback ensures `slide` is defined.
   const slide = (slides[slideIndex] ?? slides[0])!;
   const Icon = slideIcons[slide.icon] ?? SparkleIcon;
-
-  // The Continue or Back under way. Cleared when the slides go (Skip Intro jumps to the
-  // consent): its 200ms timer would otherwise still move a step on from there, onto the
-  // questions with the consent never agreed.
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (pending.current) clearTimeout(pending.current);
-    },
-    []
-  );
-
-  const handleNext = useCallback(() => {
-    if (isLeaving) return;
-    setIsLeaving(true);
-    setIsLeavingForward(true);
-    pending.current = setTimeout(() => {
-      setIsLeaving(false);
-      setIsLeavingForward(false);
-      onContinue();
-    }, 200);
-  }, [onContinue, isLeaving]);
-
-  const handlePrev = useCallback(() => {
-    if (isLeaving) return;
-    // The Back button, the left arrow or a swipe. Slide 1 has none (only the browser's Back).
-    if (slideIndex > 0) pingFunnelEvent(`intro_back_${slideIndex + 1}`);
-    setIsLeaving(true);
-    pending.current = setTimeout(() => {
-      setIsLeaving(false);
-      onBack();
-    }, 200);
-  }, [onBack, isLeaving, slideIndex]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isLeaving) return;
-      // A focused button or link acts on Enter itself (Skip Intro, Back): moving on here too
-      // would take a second step.
-      if (
-        e.key === "Enter" &&
-        e.target instanceof Element &&
-        e.target.closest("button, a, input, textarea, select")
-      )
-        return;
-      if (e.key === "ArrowRight" || e.key === "Enter") handleNext();
-      if (e.key === "ArrowLeft" && slideIndex > 0) handlePrev();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleNext, handlePrev, slideIndex, isLeaving]);
-
-  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
-  useEffect(() => {
-    pingFunnelEvent(`intro_slide_${slideIndex + 1}`);
-  }, [slideIndex]);
-
-  // Swipe gesture support for mobile
-  const touchStartX = useRef<number | null>(null);
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    // TouchEvent always fires with at least one touch point.
-    touchStartX.current = e.touches[0]!.clientX;
-  }, []);
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (touchStartX.current === null) return;
-      const delta = touchStartX.current - e.changedTouches[0]!.clientX;
-      touchStartX.current = null;
-      if (Math.abs(delta) < 50) return;
-      if (delta > 0)
-        handleNext(); // swipe left → next
-      else if (slideIndex > 0) handlePrev(); // swipe right → prev
-    },
-    [handleNext, handlePrev, slideIndex]
-  );
+  const { isLeaving, isLeavingForward, handleNext, handlePrev, handleTouchStart, handleTouchEnd } =
+    useIntroCardNav({
+      index: slideIndex,
+      // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
+      viewEvent: `intro_slide_${slideIndex + 1}`,
+      // Slide 1 has no Back (only the browser's Back).
+      backEvent: slideIndex > 0 ? `intro_back_${slideIndex + 1}` : null,
+      onContinue,
+      onBack,
+    });
 
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[#140a1a]">
@@ -983,10 +930,32 @@ const SlideScreen: FC<{
 /* ------------------------------------------------------------------ */
 /*  Consent screen — "Before we begin"                                 */
 /* ------------------------------------------------------------------ */
+/** A link in the consent's words (Survey 2.0's), opening in a new tab as today's do. */
+const ConsentLink: FC<{ href: string; children: ReactNode; nowrap?: boolean }> = ({
+  href,
+  children,
+  nowrap = false,
+}) => (
+  <Link
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={`text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline ${nowrap ? "whitespace-nowrap" : ""}`}
+  >
+    {children}
+  </Link>
+);
+
 const ConsentScreen: FC<{
   onAgree: () => void;
   onReturn: () => void;
-}> = ({ onAgree, onReturn }) => {
+  /**
+   * Survey 2.0's words (Mark's Pre Survey Wizard, "18+ and data consent as separate ticks"): the
+   * 18+ and the use of the answers, sex life included, as two ticks, and the terms in a line
+   * under the buttons. Filed under CONSENT_TERMS_VERSION_SURVEY_2 (features/survey/server).
+   */
+  survey2?: boolean;
+}> = ({ onAgree, onReturn, survey2 = false }) => {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -1024,10 +993,11 @@ const ConsentScreen: FC<{
           "linear-gradient(145deg, #d4a88a 0%, #c89888 25%, #b8909a 45%, #a890b0 65%, #9a8cb8 85%, #9088b0 100%)",
       }}
     >
-      {/* Background gradient blobs */}
+      {/* Background gradient blobs. Survey 2.0's breathe in opacity only, and not at all under
+          reduced motion (globals.css, .survey-calm-glow). */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="animate-pulse-glow absolute h-[140%] w-[110%] rounded-full"
+          className={`${survey2 ? "animate-pulse-glow-opacity survey-calm-glow" : "animate-pulse-glow"} absolute h-[140%] w-[110%] rounded-full`}
           style={{
             bottom: "-40%",
             left: "-35%",
@@ -1036,7 +1006,7 @@ const ConsentScreen: FC<{
           }}
         />
         <div
-          className="animate-pulse-glow absolute h-[130%] w-[100%] rounded-full"
+          className={`${survey2 ? "animate-pulse-glow-opacity survey-calm-glow" : "animate-pulse-glow"} absolute h-[130%] w-[100%] rounded-full`}
           style={{
             top: "-35%",
             right: "-25%",
@@ -1067,14 +1037,16 @@ const ConsentScreen: FC<{
           Before we begin
         </h2>
 
-        {/* Subtext */}
-        <p className="mt-3 text-[15px] font-light leading-[26px] text-white/70 sm:text-[16px]">
-          We need your explicit consent before proceeding to the survey. Please confirm the
-          following:
-        </p>
+        {/* Subtext (Survey 2.0 has none: its ticks say what they are for) */}
+        {!survey2 && (
+          <p className="mt-3 text-[15px] font-light leading-[26px] text-white/70 sm:text-[16px]">
+            We need your explicit consent before proceeding to the survey. Please confirm the
+            following:
+          </p>
+        )}
 
         {/* Checkboxes */}
-        <div className="mt-6 sm:mt-8 space-y-4">
+        <div className={survey2 ? "mt-[18px] space-y-3 sm:mt-6" : "mt-6 sm:mt-8 space-y-4"}>
           <div
             role="checkbox"
             aria-checked={ageConfirmed}
@@ -1102,7 +1074,9 @@ const ConsentScreen: FC<{
               </svg>
             </div>
             <span className="text-[15px] font-medium leading-[24px] text-white/90 sm:text-[16px]">
-              I confirm that I am 18 years of age or older.
+              {survey2
+                ? "I’m 18 years of age or older."
+                : "I confirm that I am 18 years of age or older."}
             </span>
           </div>
 
@@ -1138,53 +1112,64 @@ const ConsentScreen: FC<{
                 />
               </svg>
             </div>
-            <span className="text-[15px] font-medium leading-[24px] text-white/90 sm:text-[16px]">
-              I have read the{" "}
-              <Link
-                href="/privacy-policy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
-              >
-                Privacy Policy
-              </Link>{" "}
-              and agree to the{" "}
-              <Link
-                href="/terms-and-conditions"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
-              >
-                Terms &amp; Conditions
-              </Link>
-              ,{" "}
-              <Link
-                href="/terms-of-use"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
-              >
-                Terms of Use
-              </Link>
-              ,{" "}
-              <Link
-                href="/digital-content-terms"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
-              >
-                Digital Content &amp; Subscription Terms
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/medical-disclaimer"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
-              >
-                Medical &amp; Psychological Disclaimer
-              </Link>
-            </span>
+            {survey2 ? (
+              <span className="text-[15px] font-medium leading-[24px] text-white/90 sm:text-[16px]">
+                I agree that LoveIQ uses my answers, including about my sex life, to create my
+                report.
+                <br />I can withdraw anytime.{" "}
+                <ConsentLink href="/privacy-policy" nowrap>
+                  Privacy Policy
+                </ConsentLink>
+              </span>
+            ) : (
+              <span className="text-[15px] font-medium leading-[24px] text-white/90 sm:text-[16px]">
+                I have read the{" "}
+                <Link
+                  href="/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                >
+                  Privacy Policy
+                </Link>{" "}
+                and agree to the{" "}
+                <Link
+                  href="/terms-and-conditions"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                >
+                  Terms &amp; Conditions
+                </Link>
+                ,{" "}
+                <Link
+                  href="/terms-of-use"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                >
+                  Terms of Use
+                </Link>
+                ,{" "}
+                <Link
+                  href="/digital-content-terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                >
+                  Digital Content &amp; Subscription Terms
+                </Link>{" "}
+                and{" "}
+                <Link
+                  href="/medical-disclaimer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                >
+                  Medical &amp; Psychological Disclaimer
+                </Link>
+              </span>
+            )}
           </div>
         </div>
 
@@ -1243,6 +1228,23 @@ const ConsentScreen: FC<{
             Tick both boxes above to continue.
           </p>
         )}
+
+        {/* Survey 2.0: the terms, accepted by continuing, under the buttons */}
+        {survey2 && (
+          <p className="mt-4 text-[12px] font-light leading-[18px] text-white/55">
+            By continuing, you accept our{" "}
+            <ConsentLink href="/terms-and-conditions">Terms &amp; Conditions</ConsentLink>,{" "}
+            <ConsentLink href="/terms-of-use">Terms of Use</ConsentLink>,{" "}
+            <ConsentLink href="/digital-content-terms">
+              Digital Content &amp; Subscription Terms
+            </ConsentLink>{" "}
+            and{" "}
+            <ConsentLink href="/medical-disclaimer">
+              Medical &amp; Psychological Disclaimer
+            </ConsentLink>
+            .
+          </p>
+        )}
       </div>
     </main>
   );
@@ -1251,6 +1253,28 @@ const ConsentScreen: FC<{
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+/**
+ * Whether this visit's run is a Survey 2.0 run, decided as the questions decide their order
+ * (runOrderArm): a fresh run in the Survey 2.0 test's variant half while 2.0's switch is on,
+ * unless it is a pay-to-start buyer's (freshQuestionOrderArm, from the same session id the
+ * questions read), and a run already on 2.0 whatever the switch says now. Its guide and consent
+ * are then 2.0's, so a reader never agrees to one version's words and then answers the other's
+ * questions (the server files the consent by the questions answered, isSurvey2Run).
+ */
+function isSurvey2Visit(survey2: Survey2Visit, journey: SurveyJourney | null): boolean {
+  return (
+    runOrderArm(freshQuestionOrderArm(journey ? "off" : survey2, getSessionId())) === SURVEY_2_ARM
+  );
+}
+
+/**
+ * The short guide's card for a step: steps 0 to 2 are its three cards. Steps 3 and 4 (today's
+ * last two slides, restored from this tab after the switch went on) show its last card.
+ */
+function guideCardAt(step: number): number {
+  return Math.min(Math.max(step, 0), GUIDE_CARD_COUNT - 1);
+}
+
 /**
  * Where a visit opens. Whatever would open the questions (a draft, a pending completion, a
  * refresh on them) opens the consent screen instead until the reader has agreed for this
@@ -1330,6 +1354,11 @@ interface SurveyPageProps {
   sheets?: readonly SurveySheetId[];
   /** The EUR 1.99 page's price test runs (app/survey/page.tsx): see SurveyEngine's `gatePrice`. */
   gatePrice?: boolean;
+  /**
+   * Survey 2.0 for this visit (app/survey/page.tsx): `test` while its switch is on (a fresh run
+   * draws its half of the Survey 2.0 test), `forced` on a staging preview, `off` by default.
+   */
+  survey2?: Survey2Visit;
 }
 
 const NO_SHEETS: readonly SurveySheetId[] = [];
@@ -1338,13 +1367,18 @@ const SurveyPage: FC<SurveyPageProps> = ({
   journey = null,
   sheets = NO_SHEETS,
   gatePrice = false,
+  survey2 = "off",
 }) => {
-  // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
+  // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine (Survey 2.0: 0–2 = the short guide)
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   /** Set only when THIS TAB already finished the survey. See AlreadyFinishedScreen. */
   const [finishedToken, setFinishedToken] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState(false);
+  /** A Survey 2.0 run: Mark's short guide and 2.0's consent words (isSurvey2Visit). */
+  const [guide, setGuide] = useState(false);
+  /** The same, for the popstate handler, which is bound once. */
+  const guideRef = useRef(false);
   const isPopStateNav = useRef(false);
   /** The step on screen, for the popstate handler, which is bound once. */
   const stepRef = useRef(step);
@@ -1368,9 +1402,11 @@ const SurveyPage: FC<SurveyPageProps> = ({
     // this tab did before, and Start a new one is the only right answer. Start it.
     if (journey && completedReportToken()) retireFinishedRun();
     if (restored !== 0) setStep(restored);
+    guideRef.current = isSurvey2Visit(survey2, journey);
+    setGuide(guideRef.current);
     setFinishedToken(completedReportToken());
     setHydrated(true);
-  }, [journey]);
+  }, [journey, survey2]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Persist step to sessionStorage on every change
@@ -1409,7 +1445,13 @@ const SurveyPage: FC<SurveyPageProps> = ({
       // The browser's Back from a slide or the consent (the only Back slide 1 and it have).
       const from = stepRef.current;
       if (next < from && from >= 1 && from <= TOTAL_STEPS + 1) {
-        pingFunnelEvent(from > TOTAL_STEPS ? "consent_back" : `intro_back_${from}`);
+        pingFunnelEvent(
+          from > TOTAL_STEPS
+            ? "consent_back"
+            : guideRef.current
+              ? `guide_back_${guideCardAt(from) + 1}`
+              : `intro_back_${from}`
+        );
       }
       // Only a real entry: a second history entry for the survey, which a reload on it
       // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
@@ -1442,8 +1484,22 @@ const SurveyPage: FC<SurveyPageProps> = ({
   }, []);
 
   const handleSkip = useCallback(() => {
-    pingFunnelEvent(`intro_skip_${stepRef.current}`); // the slide (1 to 4) it was pressed on
+    // The slide (1 to 4) or the short guide's card (1 to 3) it was pressed on.
+    pingFunnelEvent(
+      guideRef.current
+        ? `guide_skip_${guideCardAt(stepRef.current) + 1}`
+        : `intro_skip_${stepRef.current}`
+    );
     setStep(TOTAL_STEPS + 1); // jump to consent
+  }, []);
+
+  // The short guide: on to the next card, from the last to the consent; back one card.
+  const handleGuideContinue = useCallback(() => {
+    setStep((s) => (s >= GUIDE_CARD_COUNT - 1 ? TOTAL_STEPS + 1 : s + 1));
+  }, []);
+
+  const handleGuideBack = useCallback(() => {
+    setStep((s) => Math.max(0, guideCardAt(s) - 1));
   }, []);
 
   const handleReturn = useCallback(
@@ -1517,6 +1573,16 @@ const SurveyPage: FC<SurveyPageProps> = ({
         }}
       />
     );
+  } else if (guide && step <= TOTAL_STEPS) {
+    // Survey 2.0's short guide, in place of the intro and its slides
+    content = (
+      <GuideScreen
+        cardIndex={guideCardAt(step)}
+        onContinue={handleGuideContinue}
+        onBack={handleGuideBack}
+        onSkip={handleSkip}
+      />
+    );
   } else if (step === 0) {
     content = <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
   } else if (step - 1 < TOTAL_STEPS) {
@@ -1531,7 +1597,7 @@ const SurveyPage: FC<SurveyPageProps> = ({
     );
   } else if (step === TOTAL_STEPS + 1) {
     // Consent screen
-    content = <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} />;
+    content = <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} survey2={guide} />;
   } else {
     // Survey engine — identical for both landing arms.
     content = (
@@ -1542,6 +1608,10 @@ const SurveyPage: FC<SurveyPageProps> = ({
         payToStart={journey !== null}
         sheets={sheets}
         gatePrice={gatePrice}
+        // The version this visit's guide and consent showed, never a second draw: "Start a new
+        // one" (or I agree, or Forward) after a finished run drops the session id in between, and
+        // the new id's half could give the other version's questions after this one's consent.
+        survey2={guide ? "forced" : "off"}
       />
     );
   }

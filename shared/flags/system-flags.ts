@@ -23,6 +23,8 @@
  *                              (20261108230000; read default OFF: features/email-journeys)
  *   survey_sheet_*             — the sheets between survey questions, one per sheet (read
  *                              default OFF, no row needed: features/survey/server/sheetSwitches.ts)
+ *   survey_2                   — Survey 2.0 for fresh runs (read default OFF, no row needed:
+ *                              features/survey/server/survey2Switch.ts)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -68,7 +70,10 @@ export type SystemFlagKey =
   // Mark's redesigned EUR 1.99 page (12 Nov 2026): the Core Archetype shown on the gate. Off.
   | "report_gate_archetype_reveal"
   // The EUR 1.99 page's price test (24 Nov 2026): half the readers choose their price. Off.
-  | "report_gate_choose_price";
+  | "report_gate_choose_price"
+  // Survey 2.0 (Mark's Survey Review, 19 Nov 2026): fresh runs get the new guide and the 2.0
+  // screens. Off until Mark and Marcus check in.
+  | "survey_2";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

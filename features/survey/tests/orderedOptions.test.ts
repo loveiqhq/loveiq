@@ -4,7 +4,11 @@ import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 import { surveyQuestions } from "@/data/survey-data";
 import { optionGroupsFor } from "@features/survey/optionGroups";
 import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
-import { orderedOptionGroups, orderedOptions } from "@features/survey/ui/questionOrder";
+import {
+  orderAskedQuestions,
+  orderedOptionGroups,
+  orderedOptions,
+} from "@features/survey/ui/questionOrder";
 
 const SESSION = "3f2b1c7a-9d4e-4f10-8b52-1a2c3d4e5f60";
 const TEN = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
@@ -18,7 +22,10 @@ describe("orderedOptions", () => {
   it("every randomised qId actually exists in the survey", () => {
     // Guards the flag list against drift: a typo'd or deleted qId would silently
     // randomise nothing, and nothing else would fail.
-    const known = new Set(surveyQuestions.map((q) => q.qId));
+    // Survey 2.0's own screens count: its areas screen (16016a) is shuffled too.
+    const known = new Set(
+      [...surveyQuestions, ...orderAskedQuestions(surveyQuestions, "survey2")].map((q) => q.qId)
+    );
     for (const qId of RANDOMISE_QIDS) expect(known).toContain(qId);
   });
 
@@ -131,9 +138,10 @@ describe("orderedOptions", () => {
     );
 
     it("keeps None of these, Something else and Nothing major last, in authored order", () => {
-      // The flat lists. C9 (16016) is grouped into categories (orderedOptionGroups) and has
-      // no answer of this kind.
-      for (const qId of [...RANDOMISE_QIDS].filter((id) => id !== "16016")) {
+      // The flat lists. C9 (16016) is grouped into categories (orderedOptionGroups), and
+      // Survey 2.0's areas screen (16016a) lists those categories: neither has an answer of
+      // this kind.
+      for (const qId of [...RANDOMISE_QIDS].filter((id) => id !== "16016" && id !== "16016a")) {
         const q = surveyQuestions.find((x) => x.qId === qId)!;
         const anchored = q.options.filter((o) =>
           /^(none of these|nothing major|something else|other)\b/i.test(o)

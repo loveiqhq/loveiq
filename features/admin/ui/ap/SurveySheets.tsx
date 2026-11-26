@@ -5,6 +5,7 @@ import { fmt } from "@features/admin/server/ap/format";
 import { AP_SHEET_IDS } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
 import type { SurveyPayload } from "@features/admin/server/ap/survey-page";
+import { isRetiredSheet } from "@features/survey/surveySheets";
 
 import { Info } from "./field-info";
 import { AllTraffic, Card, SectionHead, StatBox, TileGrid } from "./kit";
@@ -17,6 +18,7 @@ import {
   sheetSpots,
   tapConversion,
 } from "./sheets";
+import { hasOrderChoice, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import { overFive } from "./SurveyTimeDrop";
 
 /** The table's columns, as drawn: badge and name, where it sits, then the four figures. */
@@ -37,12 +39,12 @@ export default function SheetsSection({
   /** The question funnel's rows in the order picked, for where each sheet sits. */
   rows: QuestionRow[];
   /** That order: the sheets' figures are its runs', as the funnel's are. */
-  order: "survey" | "test";
+  order: SurveyOrder;
 }) {
   const { on, seen, from } = data.sheets;
-  const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
+  const spots = new Map(sheetSpots(rows, order).map((s) => [s.id, s]));
   const asked = rows.filter((r) => r.n > 0);
-  const figures = seen?.ok ? seen.value[order] : null;
+  const figures = seen?.ok ? (seen.value[order] ?? null) : null;
   // Without the questions (their read failed) there is nothing to place a sheet against.
   const placed = asked.length > 0;
   const all = figures?.all;
@@ -56,9 +58,9 @@ export default function SheetsSection({
         // Which runs these are, when the range has both orders: the funnel's pick, two sections up
         // (review, 22 Nov 2026).
         description={
-          // Both orders in the range, or the questions unread (the order is then the page's pick).
-          !data.questions || data.questions.test
-            ? `Runs in ${order === "test" ? "the new order (C13)" : "the old order"}${data.questions ? ", as picked in the Question funnel" : ""}.`
+          // More than one order in the range, or the questions unread (the order is then the page's pick).
+          !data.questions || hasOrderChoice(data.questions)
+            ? `Runs in ${order === "survey2" ? ORDER_NAMES.survey2 : order === "test" ? "the new order (C13)" : "the old order"}${data.questions ? ", as picked in the Question funnel" : ""}.`
             : undefined
         }
       />
@@ -132,7 +134,8 @@ export default function SheetsSection({
                 const spot = spots.get(id);
                 const q = spot ? asked[spot.q] : undefined;
                 const bounce = sheetBounce(f);
-                const off = on !== null && !on.includes(id);
+                const retired = isRetiredSheet(id);
+                const off = !retired && on !== null && !on.includes(id);
                 return (
                   <div
                     key={id}
@@ -150,6 +153,9 @@ export default function SheetsSection({
                         <span className="text-[13px] font-bold leading-snug text-ap-ink">
                           {meta.name}
                         </span>
+                        {retired && (
+                          <span className="text-[11px] text-ap-muted">Taken out on 25 Nov</span>
+                        )}
                         {off && <span className="text-[11px] text-ap-muted">Switched off now</span>}
                       </span>
                     </span>
@@ -209,11 +215,11 @@ export default function SheetsSection({
 export function sheetsCsvTable(
   data: SurveyPayload,
   rows: QuestionRow[],
-  order: "survey" | "test"
+  order: SurveyOrder
 ): Table {
   const figures = data.sheets.seen?.ok ? data.sheets.seen.value[order] : null;
   const asked = rows.filter((r) => r.n > 0);
-  const spots = new Map(sheetSpots(rows).map((s) => [s.id, s]));
+  const spots = new Map(sheetSpots(rows, order).map((s) => [s.id, s]));
   const on = data.sheets.on;
   const all = figures?.all;
   const taps = tapConversion(figures?.bySheet);
@@ -232,9 +238,10 @@ export function sheetsCsvTable(
         const f = figures?.bySheet[id];
         const spot = spots.get(id);
         const tap = SHEET_NAMES[id].tap === true;
-        const off = on !== null && !on.includes(id);
+        const retired = isRetiredSheet(id);
+        const off = !retired && on !== null && !on.includes(id);
         return {
-          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${off ? " (switched off now)" : ""}`,
+          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${retired ? " (taken out on 25 Nov)" : off ? " (switched off now)" : ""}`,
           values: [
             spot
               ? `${spot.where} · ${asked[spot.q]!.id}`

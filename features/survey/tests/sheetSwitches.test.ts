@@ -37,7 +37,9 @@ describe("the sheets a visit to /survey gets", () => {
 
   it("the previewed ones on dev, previews and staging", async () => {
     env.nonProd = true;
-    expect(await surveySheetsForVisit("all")).toEqual([...SURVEY_SHEET_IDS]);
+    expect(await surveySheetsForVisit("all")).toEqual(
+      SURVEY_SHEET_IDS.filter((id) => id !== "halfway")
+    );
     expect(await surveySheetsForVisit("halfway,science")).toEqual(["science", "halfway"]);
     expect(await surveySheetsForVisit(undefined)).toEqual([]);
   });
@@ -55,22 +57,36 @@ describe("the sheets a visit to /survey gets", () => {
   // The halfway sheet and the report map are the survey's half of Mark's 50/50 of his new EUR
   // 1.99 page: both halves meet them, each in its page's words (Mark, 16 Nov). While the test's
   // switch is off they stay off, whatever theirs say.
-  it("keeps the halfway sheet and the map off while Mark's 50/50 is off", async () => {
-    env.on = new Set(["survey_sheet_report_map", "survey_sheet_halfway", "survey_sheet_science"]);
+  it("keeps the map off while Mark's 50/50 is off", async () => {
+    env.on = new Set(["survey_sheet_report_map", "survey_sheet_science"]);
     expect(await surveySheetsForVisit(undefined)).toEqual(["science"]);
     env.on.add("report_gate_archetype_reveal");
-    expect(await surveySheetsForVisit(undefined)).toEqual(["science", "halfway", "reportMap"]);
+    expect(await surveySheetsForVisit(undefined)).toEqual(["science", "reportMap"]);
   });
 
-  // The price test that replaced the 50/50 (24 Nov 2026): today's page's half keeps its two
-  // sheets, so they run with its switch too, whatever the reveal's says.
-  it("runs the halfway sheet and the map with the price test's switch alone", async () => {
+  // Sheet 4, the halfway sheet ("Preliminary Results"), is out of the survey since 25 Nov 2026
+  // (Mark, #all-loveiq): no reader meets it, whatever its switch says.
+  it("never shows the halfway sheet from its switch, even with Mark's 50/50 on", async () => {
+    env.on = new Set([
+      "survey_sheet_halfway",
+      "survey_sheet_report_map",
+      "survey_sheet_science",
+      "report_gate_archetype_reveal",
+    ]);
+    expect(await surveySheetsForVisit(undefined)).toEqual(["science", "reportMap"]);
+    expect(await surveySheetsForVisit("all")).toEqual(["science", "reportMap"]);
+  });
+
+  // The price test that replaced the 50/50 (24 Nov 2026): today's page's half keeps the report
+  // map, so it runs with its switch too, whatever the reveal's says. Sheet 4 (halfway) stays out
+  // for everyone since 25 Nov (RETIRED_SHEETS), its switch on or not.
+  it("runs the map with the price test's switch alone, never sheet 4", async () => {
     env.on = new Set([
       "survey_sheet_report_map",
       "survey_sheet_halfway",
       "report_gate_choose_price",
     ]);
-    expect(await surveySheetsForVisit(undefined)).toEqual(["halfway", "reportMap"]);
+    expect(await surveySheetsForVisit(undefined)).toEqual(["reportMap"]);
   });
 
   it("still previews them on staging, Mark's page on or off", async () => {

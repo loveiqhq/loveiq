@@ -13,8 +13,11 @@ import {
   type SheetFigures,
 } from "@features/admin/server/ap/posthog";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
-import { SURVEY_SHEETS } from "@features/survey/surveySheets";
+import { SURVEY_2_DETAILS_QID } from "@features/survey/survey2/order";
+import { placementFor, SURVEY_SHEETS } from "@features/survey/surveySheets";
 import { OPT_IN_QID } from "@features/survey/ui/questionOrder";
+
+import type { SurveyOrder } from "./surveyOrders";
 
 /**
  * Mark's names for the six sheets, numbered in his order (his boxes 1 to 6, the survey's own
@@ -52,7 +55,7 @@ export interface SheetSpot {
   after: number;
   /** The question it opens over (the one after it, for a sheet that opens on arriving). */
   q: number;
-  /** "After #32", or "Before #27" for a sheet that opens on arriving at its question. */
+  /** "After #32", "Before #27" for a sheet that opens on arriving at its question, or "On #62". */
   where: string;
 }
 
@@ -60,16 +63,18 @@ export interface SheetSpot {
  * Where each sheet sits in one order's funnel, between two of the questions asked now: after
  * its question, before its question (only from the survey's `minIndex` on, so the expert's
  * sheet has no place in the old order, which asks its question third), or after the question
- * that leaves three to go. A sheet whose question is not asked in the order has none. The
+ * that leaves three to go. A sheet whose question is not asked in the order has none. Survey
+ * 2.0's funnel (`order` "survey2") places them at its own spots (survey2Placement). The
  * miss-out sheet opens on leaving the opt-in (16015) with a No, which the survey asks last: after
- * it, while it is the order's last question.
+ * it, while it is the order's last question. Survey 2.0 asks the opt-in on its details page
+ * (00010), its last screen, and opens the sheet there, on leaving the email: on that screen.
  */
-export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
+export function sheetSpots(rows: QuestionRow[], order: SurveyOrder = "survey"): SheetSpot[] {
   const asked = rows.filter((r) => r.n > 0);
   const at = new Map(asked.map((r, i) => [r.id, i]));
   const spots: SheetSpot[] = [];
   SURVEY_SHEETS.forEach((def, k) => {
-    const p = def.placement;
+    const p = placementFor(def, order === "survey2" ? "survey2" : undefined);
     if (p.kind === "after") {
       const i = at.get(p.qId);
       if (i !== undefined)
@@ -92,6 +97,14 @@ export function sheetSpots(rows: QuestionRow[]): SheetSpot[] {
       after: last,
       q: last,
       where: `After #${asked[last]!.n}`,
+    });
+  else if (last >= 0 && asked[last]!.id === SURVEY_2_DETAILS_QID)
+    spots.push({
+      id: MISS_OUT_SHEET,
+      n: sheetNumber(MISS_OUT_SHEET),
+      after: last,
+      q: last,
+      where: `On #${asked[last]!.n}`,
     });
   return spots;
 }

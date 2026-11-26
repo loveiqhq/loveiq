@@ -17,6 +17,7 @@ import { isGatePriceEnabled } from "@features/report/server/gateRevealSwitch";
 import {
   GATE_TEST_SHEETS,
   parseSheetsPreview,
+  RETIRED_SHEETS,
   SURVEY_SHEET_IDS,
   type SurveySheetId,
 } from "@features/survey/surveySheets";
@@ -71,7 +72,8 @@ export async function gatePriceTestForVisit(
  * The sheets a visit to /survey gets: those whose switch is on, plus a `?sheets=all` (or
  * `?sheets=science,halfway`) preview on dev, previews and staging, never production.
  * SURVEY_SHEETS_PREVIEW=1 allows the preview on the production build the end-to-end tests
- * run against; nothing else sets it. Any failure reading the switches shows none.
+ * run against; nothing else sets it. Any failure reading the switches shows none. A sheet taken
+ * out of the survey (RETIRED_SHEETS: sheet 4 since 25 Nov 2026) never comes from its switch.
  */
 export async function surveySheetsForVisit(
   preview: string | string[] | undefined
@@ -86,5 +88,7 @@ export async function surveySheetsForVisit(
   } catch {
     switched = [];
   }
-  return SURVEY_SHEET_IDS.filter((id) => previewed.includes(id) || switched.includes(id));
+  return SURVEY_SHEET_IDS.filter(
+    (id) => previewed.includes(id) || (switched.includes(id) && !RETIRED_SHEETS.has(id))
+  );
 }

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
 
 import { surveyQuestions } from "@/data/survey-data";
 import { HIDDEN_QIDS, isHidden } from "@features/survey/questionFlags";
 import { SURVEY_TOTAL_QUESTIONS, isCompletionReady } from "@features/survey/server/utils";
+
+/** What a classic run is asked: not the hidden ones, nor Survey 2.0's own closing questions. */
+const classicAsked = () => {
+  const survey2Only: readonly string[] = SURVEY_2_ONLY_QIDS;
+  return surveyQuestions.filter((q) => !isHidden(q.qId) && !survey2Only.includes(q.qId));
+};
 
 describe("hidden questions", () => {
   it("every hidden qId still exists in the survey data", () => {
@@ -13,7 +20,10 @@ describe("hidden questions", () => {
   });
 
   it("excludes hidden questions from the asked total", () => {
-    expect(SURVEY_TOTAL_QUESTIONS).toBe(surveyQuestions.length - HIDDEN_QIDS.size);
+    // The classic total: Survey 2.0's own closing questions are never asked in it either.
+    expect(SURVEY_TOTAL_QUESTIONS).toBe(
+      surveyQuestions.length - HIDDEN_QIDS.size - SURVEY_2_ONLY_QIDS.length
+    );
   });
 
   it("15011 (Article 9 orientation data) is no longer asked", () => {
@@ -26,7 +36,7 @@ describe("hidden questions", () => {
     // If a hidden question stayed in that total, the count could never be reached and no
     // survey would ever register as complete.
     const answers: Record<string, string> = { "00000": "person@example.com" };
-    for (const q of surveyQuestions.filter((x) => !isHidden(x.qId))) {
+    for (const q of classicAsked()) {
       answers[q.qId] = "answer";
     }
     expect(isCompletionReady(SURVEY_TOTAL_QUESTIONS, answers)).toBe(true);
@@ -36,7 +46,7 @@ describe("hidden questions", () => {
     // One REQUIRED answer: the content asks (16019, 16020) are optional and completion
     // does not wait on them (see contentAsks.test.ts), so leaving one of those out would
     // prove nothing.
-    const asked = surveyQuestions.filter((q) => !isHidden(q.qId));
+    const asked = classicAsked();
     const lastRequired = asked.filter((q) => q.required && q.qId !== "00000").at(-1)!;
     const answers: Record<string, string> = { "00000": "person@example.com" };
     for (const q of asked) if (q.qId !== lastRequired.qId) answers[q.qId] = "answer";

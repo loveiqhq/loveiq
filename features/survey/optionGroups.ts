@@ -154,9 +154,12 @@ export const OPTION_GROUPS: ReadonlyMap<string, readonly OptionGroup[]> = new Ma
 /**
  * The categories for `question`, or `undefined` when it is not grouped.
  *
- * Also `undefined` when the grouping no longer covers the question's options one-for-one:
- * same count, no duplicates, no label the question does not have. Rendering flat is always
- * safe; rendering a grouping that has drifted from the data would hide a topic.
+ * Also `undefined` when the grouping no longer covers the question's options one-for-one: every
+ * option in exactly one category, every category wholly in the question or wholly out of it. So
+ * Survey 2.0's topics screen, which holds only the topics of the areas picked before it
+ * (features/survey/survey2/areas.ts), gets those areas' categories; a list that cuts a category
+ * in half, or holds a label no category has, renders flat. Rendering flat is always safe;
+ * rendering a grouping that has drifted from the data would hide a topic.
  */
 export function optionGroupsFor(
   question: Pick<SurveyQuestion, "qId" | "options">
@@ -164,11 +167,11 @@ export function optionGroupsFor(
   const groups = OPTION_GROUPS.get(question.qId);
   if (!groups) return undefined;
 
-  const grouped = groups.flatMap((group) => group.options);
   const own = new Set(question.options);
-  const exact =
-    grouped.length === question.options.length &&
-    new Set(grouped).size === grouped.length &&
-    grouped.every((option) => own.has(option));
-  return exact ? groups : undefined;
+  if (own.size !== question.options.length) return undefined;
+  const inside = groups.filter((group) => group.options.some((option) => own.has(option)));
+  if (inside.some((group) => !group.options.every((option) => own.has(option)))) return undefined;
+  const covered = inside.flatMap((group) => group.options);
+  const exact = covered.length === own.size && new Set(covered).size === covered.length;
+  return exact ? inside : undefined;
 }

@@ -134,6 +134,44 @@ describe("useSubmitSurvey", () => {
     });
   });
 
+  describe("Survey 2.0's two 16016 screens", () => {
+    const AREAS = ["Dating & Finding Love", "Work, Purpose & Money"];
+    const TOPIC = "Feeling stuck in your career";
+
+    beforeEach(() => {
+      sessionStorage.setItem("loveiq-survey-session", "00000000-0000-4000-8000-000000000001");
+    });
+    afterEach(() => {
+      sessionStorage.clear();
+    });
+
+    async function submitted(answers: Record<string, unknown>) {
+      const mockFetch = mockFetchOk();
+      globalThis.fetch = mockFetch;
+      const { result } = renderHook(() => useSubmitSurvey());
+      await act(async () => {
+        await result.current.submit(answers as Record<string, string>, new Date().toISOString());
+      });
+      return JSON.parse(findSurveyCall(mockFetch)![1].body as string) as {
+        answers: Record<string, unknown>;
+        optionOrder?: Record<string, string[]>;
+      };
+    }
+
+    it("never sends the areas screen's own answer", async () => {
+      const body = await submitted({ ...makeAnswers(), "16016a": AREAS, "16016": [TOPIC] });
+      expect(body.answers["16016a"]).toBeUndefined();
+      expect(body.answers["16016"]).toEqual([TOPIC]);
+    });
+
+    it("records the topics in the order they were shown: only the picked areas' ones", async () => {
+      const body = await submitted({ ...makeAnswers(), "16016a": AREAS, "16016": [TOPIC] });
+      const order = body.optionOrder!["16016"]!;
+      expect(order).toContain(TOPIC);
+      expect(order).toHaveLength(10);
+    });
+  });
+
   it("initial status is idle", () => {
     const { result } = renderHook(() => useSubmitSurvey());
     expect(result.current.status).toBe("idle");

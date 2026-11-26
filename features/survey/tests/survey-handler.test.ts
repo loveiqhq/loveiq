@@ -73,8 +73,11 @@ import logger from "@shared/observability/logger";
 import {
   __resetSurveyStatusCacheForTests,
   __setSubmitLandPollMsForTests,
+  CONSENT_TERMS_VERSION,
+  CONSENT_TERMS_VERSION_SURVEY_2,
   MARKETING_OPT_IN_SHEET_TERMS_VERSION,
   MARKETING_OPT_IN_TERMS_VERSION,
+  MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2,
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
@@ -778,6 +781,51 @@ describe("POST /api/survey", () => {
       await submitOptIn(YES, { marketingOptInVia: "popup" });
       expect(consentPatch().marketing_opt_in_terms_version).toBe(MARKETING_OPT_IN_TERMS_VERSION);
     });
+
+    // Survey 2.0 asks the newsletter question on its details screen, in its own words, so a Yes
+    // there is filed under that text's version (a 2.0 run is known by its closing questions).
+    const survey2Answers = (answer: string) => ({
+      ...validBody().answers,
+      "16015": answer,
+      "17001": 6,
+    });
+
+    it("dates the details screen's newsletter text", () => {
+      // 24 Nov 2026: the switch under the email (Mark's board 2b) replaced the Yes/No question.
+      expect(MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2).toBe("2026-11-24");
+    });
+
+    it("files a Survey 2.0 Yes under the details screen's version", async () => {
+      await submitOptIn(YES, { answers: survey2Answers(YES) });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(
+        MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2
+      );
+    });
+
+    it("files a Survey 2.0 Yes given after the sheet under both texts", async () => {
+      await submitOptIn(YES, { answers: survey2Answers(YES), marketingOptInVia: "sheet" });
+      expect(consentPatch().marketing_opt_in_terms_version).toBe(
+        `${MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2}+sheet-2026-11-10`
+      );
+    });
+
+    // Survey 2.0's consent asks for the 18+ and for the use of the answers (sex life included)
+    // in two ticks of their own, with the terms in the line under its buttons: other words, so
+    // a 2.0 run's consent is filed under their version, and every other run under today's.
+    it("dates Survey 2.0's consent text", () => {
+      expect(CONSENT_TERMS_VERSION_SURVEY_2).toBe("2026-11-23");
+      expect(CONSENT_TERMS_VERSION_SURVEY_2).not.toBe(CONSENT_TERMS_VERSION);
+    });
+
+    it("files a Survey 2.0 run's consent under 2.0's consent text", async () => {
+      await submitOptIn(NO, { answers: survey2Answers(NO) });
+      expect(consentPatch().terms_version).toBe(CONSENT_TERMS_VERSION_SURVEY_2);
+    });
+
+    it("keeps today's consent version for every other run", async () => {
+      await submitOptIn(NO);
+      expect(consentPatch().terms_version).toBe(CONSENT_TERMS_VERSION);
+    });
   });
 
   // Eman's switch note on the State of Desire sheet: the tick is kept with its own consent.
@@ -969,6 +1017,20 @@ describe("POST /api/survey", () => {
       expect(JSON.parse(rpcTracker()).question_order_arm).toBe(
         questionOrderArmAt(SESSION, Date.parse(body.startedAt))
       );
+    });
+
+    it("stamps survey2 on a run that answered a question only Survey 2.0 asks", async () => {
+      // The switch that gave the run 2.0 can't be read back for a past start, so the answers
+      // decide (questionOrderArmOfSubmission): every 2.0 run answers 17001-17003.
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: SESSION,
+          answers: { ...validBody().answers, "17001": 6 },
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe("survey2");
     });
 
     it("adds the arm to a tracker that already exists", async () => {
