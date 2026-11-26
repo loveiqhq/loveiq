@@ -14,10 +14,13 @@ import {
 } from "@features/admin/server/dropoff-report";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import {
   QUESTION_ORDER_TEST_END,
   QUESTION_ORDER_WINNER,
   questionOrderArmAt,
+  SURVEY_2_ARM,
+  type ClassicOrderArm,
   type QuestionOrderArm,
 } from "@shared/experiments/questionOrderArm";
 import logger from "@shared/observability/logger";
@@ -82,6 +85,11 @@ export interface SurveyQuestions {
   people: number;
   /** The test's new order, everyone's since the end, when the range has runs in it. */
   test: { rows: QuestionRow[]; people: number } | null;
+  /**
+   * Survey 2.0's screens (Mark's survey review, behind the `survey_2` switch), when the range has
+   * runs asked them: its own order, wording and screens, so its own funnel.
+   */
+  survey2: { rows: QuestionRow[]; people: number } | null;
   segment: Segment;
   /** Why the filters could not be applied to the questions, if they could not. */
   blocked: string | null;
@@ -137,11 +145,15 @@ function skipped(qs: string[], order: string[]): number | null {
  * fewest passed over; when both fit as well (it left within the shared opening), the order a
  * fresh run begun then was given: the arm its session drew during the test, the new order
  * after it (questionOrderArmAt).
+ *
+ * Survey 2.0 when its screens fit the run better than either classic order. It opens on 10003 and
+ * asks the name on its last screen, so a classic run (which opens on the name) never fits it, and
+ * a 2.0 run fits it with nothing passed over. A tie stays classic.
  */
 export function runOrder(
   sessionId: string,
   firstQuestions: Map<string, string[]>,
-  orders: Record<QuestionOrderArm, string[]>,
+  orders: Record<ClassicOrderArm, string[]> & { survey2?: string[] },
   startedAt: number
 ): QuestionOrderArm {
   const qs = firstQuestions.get(sessionId);
@@ -149,6 +161,9 @@ export function runOrder(
     return startedAt >= Date.parse(QUESTION_ORDER_TEST_END) ? QUESTION_ORDER_WINNER : "control";
   const control = skipped(qs, orders.control);
   const variant = skipped(qs, orders.variant);
+  const survey2 = orders.survey2 ? skipped(qs, orders.survey2) : null;
+  const beats = (classic: number | null) => classic === null || survey2! < classic;
+  if (survey2 !== null && beats(control) && beats(variant)) return SURVEY_2_ARM;
   if (variant === null && control !== null) return "control";
   if (control === null && variant !== null) return "variant";
   if (control !== null && variant !== null && control !== variant)
@@ -297,6 +312,9 @@ export function buildSurveyQuestions(
   );
   const names = surveyQuestionNames(400);
   const meta = new Map(surveyQuestions.map((q) => [q.qId, q]));
+  // Survey 2.0's own screens (the 16016 areas, the details page), which the data doesn't hold.
+  for (const q of orderAskedQuestions(surveyQuestions, SURVEY_2_ARM))
+    if (!meta.has(q.qId)) meta.set(q.qId, q);
   const stepOf = new Map(steps.steps.map((s) => [s.q_id, s]));
   const points = trendBuckets(from, to);
   // When each question was first asked: one first asked after the range wasn't asked in it,
@@ -310,10 +328,12 @@ export function buildSurveyQuestions(
   const asked = {
     control: askedQuestions(400, "control"),
     variant: askedQuestions(400, "variant"),
+    survey2: askedQuestions(400, SURVEY_2_ARM),
   };
   const ids = {
     control: asked.control.map((q) => q.qId),
     variant: asked.variant.map((q) => q.qId),
+    survey2: asked.survey2.map((q) => q.qId),
   };
   const firstQuestions = new Map((steps.orders ?? []).map((o) => [o.s, o.q]));
   const armOf = new Map(
@@ -327,6 +347,8 @@ export function buildSurveyQuestions(
   const funnel = (arm: QuestionOrderArm): { rows: QuestionRow[]; people: number } => {
     // Questions first asked after the range weren't asked in it: not rows.
     const order = asked[arm].filter((q) => !(firstDay(q.qId)! > to));
+    // Survey 2.0's rows read as 2.0 asks them (askedQuestions); the classic ones as the data has them.
+    const asAsked = new Map(arm === SURVEY_2_ARM ? order.map((q) => [q.qId, q.name]) : []);
     const at = new Map(order.map((q, i) => [q.qId, i]));
     const runsOfArm = kept.filter((r) => armOf.get(r.sessionId) === arm);
     // How far each run got along the order (furthestAlong): every question up to there was
@@ -399,7 +421,8 @@ export function buildSurveyQuestions(
         return {
           id,
           n,
-          text: names.get(id) ?? meta.get(id)?.question ?? steps.texts?.[id] ?? id,
+          text:
+            asAsked.get(id) ?? names.get(id) ?? meta.get(id)?.question ?? steps.texts?.[id] ?? id,
           chapter: meta.get(id)?.chapter ?? "",
           type: meta.get(id)?.answerType ?? "",
           reached: t.reached,
@@ -421,6 +444,8 @@ export function buildSurveyQuestions(
   const survey = funnel("control");
   const inTest = kept.some((r) => armOf.get(r.sessionId) === "variant");
   const test = inTest ? funnel("variant") : null;
+  const in2 = kept.some((r) => armOf.get(r.sessionId) === SURVEY_2_ARM);
+  const survey2 = in2 ? funnel(SURVEY_2_ARM) : null;
   const notes: string[] = [];
   if (from < EVENTS_COMPLETE_FROM)
     notes.push(
@@ -434,6 +459,7 @@ export function buildSurveyQuestions(
     rows: survey.rows,
     people: survey.people,
     test,
+    survey2,
     segment,
     blocked,
     notes,

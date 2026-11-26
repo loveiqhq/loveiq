@@ -20,6 +20,7 @@ End-to-end browser tests using Playwright. Tests run against a production build 
 | `a11y.spec.ts`               | Accessibility (axe-core WCAG checks)                                                       |
 | `admin.spec.ts`              | Admin sign-in page and the signed-out redirect                                             |
 | `survey.spec.ts`             | Survey wizard flow                                                                         |
+| `survey-2.spec.ts`           | Survey 2.0 (`?order=survey2`): the short guide, its consent, all 61 screens, the details   |
 | `visual-regression.spec.ts`  | Screenshot comparison tests                                                                |
 | `landing-hero-video.spec.ts` | The video page, landing arm A (round 4): the hero video (playback stubbed)                 |
 | `landing-pain-point.spec.ts` | The new page, landing arm B (round 4): survey links, question 1, film, FAQ, footer, widths |

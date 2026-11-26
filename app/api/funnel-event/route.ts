@@ -38,6 +38,8 @@ import { PAY_TO_START_JOURNEY, readPrepaidToken } from "@features/pay-to-start/l
 //   • the intro cards' own steps (view, back, skip) — 20261014120200, applied first
 //   • prepaid_gate_viewed / prepaid_checkout_started — the June pay-first test's two, which
 //     the CHECK kept; pay to start (/sexual-archetype) sends them again since 18.10
+//   • guide_card_1..3, guide_back_2..3, guide_skip_1..3 — Survey 2.0's short guide in place of
+//     the intro (20261123130000, applied first)
 const ALLOWED_EVENTS = [
   "unique_visitor",
   "survey_engine_mount",
@@ -58,6 +60,14 @@ const ALLOWED_EVENTS = [
   "consent_back",
   "prepaid_gate_viewed",
   "prepaid_checkout_started",
+  "guide_card_1",
+  "guide_card_2",
+  "guide_card_3",
+  "guide_back_2",
+  "guide_back_3",
+  "guide_skip_1",
+  "guide_skip_2",
+  "guide_skip_3",
 ] as const;
 
 /**
@@ -69,7 +79,10 @@ const PAY_TO_START_EVENTS: ReadonlySet<string> = new Set([
   "prepaid_checkout_started",
 ]);
 
-/** The steps added with the intro cards' Back and Skip, on a rate-limit bucket of their own. */
+/**
+ * The steps added with the intro cards' Back and Skip, on a rate-limit bucket of their own, and
+ * Survey 2.0's short guide, which takes the intro's place on it.
+ */
 const INTRO_STEPS: ReadonlySet<string> = new Set([
   "intro_view",
   "consent_view",
@@ -82,6 +95,14 @@ const INTRO_STEPS: ReadonlySet<string> = new Set([
   "intro_skip_3",
   "intro_skip_4",
   "consent_back",
+  "guide_card_1",
+  "guide_card_2",
+  "guide_card_3",
+  "guide_back_2",
+  "guide_back_3",
+  "guide_skip_1",
+  "guide_skip_2",
+  "guide_skip_3",
 ]);
 
 const schema = z.object({

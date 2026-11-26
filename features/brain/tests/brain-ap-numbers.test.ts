@@ -246,6 +246,29 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(apCalls()).toHaveLength(1);
   });
 
+  it("counts Survey 2.0's short guide in intro_completed: its last card is the intro's last slide", async () => {
+    // Survey 2.0 (behind its switch) shows three guide cards in the intro's place: a visitor who
+    // reached the third has completed the intro as one who reached slide 4 has.
+    const fetchFacts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === "/rest/v1/rpc/ap_guide_facts"
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => [
+              { day: "2026-10-14", step: "guide_card_3", n: 5, ms: [], wentOn: 4, left: 1 },
+              { day: "2026-10-14", step: "guide_card_2", n: 7, ms: [], wentOn: 5, left: 2 },
+            ],
+          }
+        : fetchFacts(path, init)
+    );
+    const { text } = await call({ since: "2026-10-13", until: "2026-10-15" });
+    const rows = rowsOf(text);
+    expect(rows.find((r) => r.day === "2026-10-14")!.intro_completed).toBe(20);
+    expect(rows.find((r) => r.day === "2026-10-13")!.intro_completed).toBe(15);
+    expect(text).toContain("Survey 2.0's last guide card");
+  });
+
   it("prints every headline figure as the dashboard's own route returns it for the link", async () => {
     const { text } = await call({ since: "2026-10-13", until: "2026-10-15" });
     const link = /https:\/\/www\.loveiq\.org\/admin\/ap\/assessment-a\?\S+/.exec(text)![0];

@@ -176,6 +176,13 @@ const PERSONAL_KEYS = new Set([
 const snakeKey = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 /** The survey's questions for the email, the name and the ZIP or postal code. */
 export const PERSONAL_QUESTIONS = ["00000", "00001", "15002"];
+/**
+ * Questions whose typed text is personal but that a database may not hold yet: Survey 2.0's
+ * expert question (17004), whose text box carries the phone number our expert calls (as
+ * `17004_other` in a draft). Masked wherever the question exists; never required to exist, since
+ * a database without it holds no answers to it. The chosen option (Yes, Maybe later, No) stays.
+ */
+export const PERSONAL_TEXT_QUESTIONS = ["17004"];
 /** `email`, `owner_email`, `subscriber_emails`; not `email_position`, the A/B arm. */
 const isEmailColumn = (column: string) => /(^|_)emails?$/.test(column);
 
@@ -407,6 +414,9 @@ export function maskRow(
     ) {
       const answers = { ...(value as Row) };
       for (const qid of PERSONAL_QUESTIONS) if (qid in answers) answers[qid] = MASKED;
+      for (const qid of PERSONAL_TEXT_QUESTIONS) {
+        if (`${qid}_other` in answers) answers[`${qid}_other`] = MASKED;
+      }
       out[column] = m.json(answers, `${table}.${column}`);
     } else {
       out[column] = typeof value === "string" ? m.text(value) : m.json(value, `${table}.${column}`);
@@ -473,8 +483,9 @@ export function readme(
     "  code in every file of this copy, so tables still join on it; the codes change with every",
     "  copy. Names, birthdays, IP addresses, report links and access tokens, card details,",
     "  receipt links, promo codes, messages to a partner, PostHog and Hotjar session ids, the",
-    "  email, name and postcode answers, the words, chips and link hash of an unlock-feedback",
-    "  answer, and the raw Stripe and Calendly payloads read [masked].",
+    "  email, name and postcode answers, the phone number left for an expert's call (Survey",
+    "  2.0's expert question), the words, chips and link hash of an unlock-feedback answer, and",
+    "  the raw Stripe and Calendly payloads read [masked].",
     "- Kept: every answer, including the two open questions as typed (any email address or",
     "  report link in them masked; a name someone typed can remain), demographics, archetypes",
     "  and scores, payments (amounts, plans, dates) and events.",
@@ -626,7 +637,10 @@ export async function buildExport(
       "could not find the survey's email, name and postcode questions to mask; nothing written"
     );
   }
-  const personalQuestionIds = new Set(personal.map((q) => q.id));
+  const personalText = questions.filter((q) =>
+    PERSONAL_TEXT_QUESTIONS.includes(String(q.frontend_qid))
+  );
+  const personalQuestionIds = new Set([...personal, ...personalText].map((q) => q.id));
   const m = masker();
   const counts: Record<string, number> = {};
   const files: ExportFile[] = [];

@@ -1291,6 +1291,15 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* Survey 2.0's short guide and its consent (features/survey/ui/guide): their background glows
+   breathe in opacity only (.animate-pulse-glow-opacity), and not at all under reduced motion.
+   `.survey-animate`'s near-zero duration would make an endless loop flicker, so it stops here. */
+@media (prefers-reduced-motion: reduce) {
+  .survey-calm-glow {
+    animation: none;
+  }
+}
+
 /* Arc gauge animation */
 @keyframes arc-draw {
   from {

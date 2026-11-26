@@ -277,6 +277,13 @@ that still fires. Both measured 2026-09-10.
 **58 questions**, generated from `data/survey-source.csv` into `data/survey-data.ts`.
 They fall into ten categories:
 
+> **2026-11-23, Survey 2.0.** The classic survey asks 62 questions. Survey 2.0 (Mark's survey
+> review, behind the `survey_2` switch, off in production) asks 61 screens in its own order: its
+> three closing questions 17001–17003 (enjoyment, reflection, a fair price) are in the data but
+> asked only there, and it puts name, email, newsletter, country and postal code on one details
+> screen. Which survey a reader took depends on the switch ([survey.md](../survey.md#survey-20)).
+> The counts below are from 2026-09-23.
+
 | Questions | Category                                   |
 | --------: | ------------------------------------------ |
 |        13 | Background & Lifestyle                     |

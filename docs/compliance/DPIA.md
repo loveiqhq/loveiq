@@ -81,7 +81,7 @@ Append-only tables grow without bound; a future DSAR delete must still complete 
 
 If Q16015 copy changes, we lose proof of what each user consented to.
 
-- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant. A Yes given once the "miss out" sheet has been shown after a No, in it or on the question after closing it (since 2026-11-10's design, [survey.md](../survey.md)), is stored as `MARKETING_OPT_IN_SHEET_TERMS_VERSION`, which names both the question's version and the sheet copy's (`OPT_IN_SHEET_COPY_VERSION`), so a change to either text keeps the proof.
+- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant. A Yes given once the "miss out" sheet has been shown after a No, in it or on the question after closing it (since 2026-11-10's design, [survey.md](../survey.md)), is stored as `MARKETING_OPT_IN_SHEET_TERMS_VERSION`, which names both the question's version and the sheet copy's (`OPT_IN_SHEET_COPY_VERSION`), so a change to either text keeps the proof. Survey 2.0 (behind the `survey_2` switch, [survey.md](../survey.md)) words both consents its own way, so it has its own versions: `CONSENT_TERMS_VERSION_SURVEY_2` for its consent screen (the 18+ and the sex-life data as two ticks, the terms by continuing; LAWFUL_BASIS A2), dated 2026-11-23, and `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (+ the sheet's) for Q16015, a switch under the email on its details screen that starts off, dated 2026-11-24. Its expert question (Q17004) adds a phone number on a Yes, for a call about a free talk: kept as the answer's text, masked in the team copy and AP's explorer, kept out of session recordings (LAWFUL_BASIS A27). The server picks them from the run's answers (a 2.0 run answers 17001–17003).
 
 ### R3.8 — Team data export (MEDIUM — pseudonymised by decision, 2026-10-11)
 
@@ -89,8 +89,8 @@ Every customer and product table is exported as CSV to a Google Drive folder sha
 named team members (Eman, Marcus, Mark, Fatih, Sanjin, Ajna), so the team can explore the data.
 What identifies a person is masked: emails become a per-copy keyed code (the same address, the
 same code within one copy), and names, birthdays, IP addresses, report links and tokens, card
-details, receipt links, promo codes, the email, name and postcode answers and the raw payment
-and booking payloads read `[masked]`. Answers about people's sex lives remain, so the copy is
+details, receipt links, promo codes, the email, name and postcode answers, the phone number left on
+Survey 2.0's expert question (17004) and the raw payment and booking payloads read `[masked]`. Answers about people's sex lives remain, so the copy is
 pseudonymised special-category data, not anonymous data.
 
 - **Decision**: Eman, 2026-10-11: "mask the emails and names and those sensitive info",
