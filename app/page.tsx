@@ -154,11 +154,13 @@ const academicBoardSchema = {
 };
 
 export default async function Page() {
-  // Round 4, 50/50: the video page ("video", the control) or Marcus's new pain-point
-  // page ("pain_point"). The arm is decided in proxy.ts and handed over as a request
-  // header rather than read from cookies() here — on the visit that MINTS the cookie,
-  // cookies() cannot see it yet, so the first render would show the wrong arm and the
-  // second would flip. The JSON-LD below is product/site metadata, identical for both
+  // Round 4, 50/50: the video page ("video", the control) or Marcus's pain-point page,
+  // since the 2026-11-24 sync as version C ("pain_point_c", asking Q10003); the
+  // page as released ("pain_point", paused B) stays open for QA. The arm is decided in
+  // proxy.ts and handed over as a request header rather than read from cookies() here —
+  // on the visit that MINTS the cookie, cookies() cannot see it yet, so the first render
+  // would show the wrong arm and the second would flip. The JSON-LD below is product/site
+  // metadata, identical for both
   // arms; crawlers are served the video page as "white_video" (see resolveLandingVariant),
   // whose FAQ is the one the FAQPage markup repeats. "white_card" (and "white") still
   // open the question-card page and "white_prev" round 2's V1, for QA.
@@ -182,7 +184,7 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      {variant === "pain_point" ? (
+      {variant === "pain_point" || variant === "pain_point_c" ? (
         <LandingPagePainPoint variant={variant} />
       ) : variant === "white_prev" ? (
         <LandingPageWhiteV1 />

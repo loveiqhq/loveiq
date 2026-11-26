@@ -9,8 +9,30 @@
  * prints every line.
  */
 
-/** Question 1 of the survey (data/survey-data.ts, Q01002), asked in the hero. */
-export const QUESTION_1 = "Right now, I feel satisfied with my sex life.";
+/** A survey question the hero asks: its id in data/survey-data.ts and its words there. */
+export interface HeroQuestion {
+  qId: string;
+  text: string;
+}
+
+/**
+ * The page as released (round 4's B, `pain_point`, paused on 26 Nov 2026): question 1 of the
+ * survey (Q01002), beside the film.
+ */
+export const QUESTION_1: HeroQuestion = {
+  qId: "01002",
+  text: "Right now, I feel satisfied with my sex life.",
+};
+
+/**
+ * Version C (`pain_point_c`, LoveIQ Sync 24 Nov 2026): Q01002 loses more people than any
+ * other question, so Mark and Marcus picked Q10003, which almost nobody leaves at, asked
+ * where B asks Q01002. Q01002 stays the survey's second question.
+ */
+export const QUESTION_C: HeroQuestion = {
+  qId: "10003",
+  text: "I'm comfortable expressing what turns me on.",
+};
 
 export const HERO = {
   titleLead: "Become a better and ",
@@ -83,11 +105,8 @@ export const PAIN_POINTS = {
   titleLead: "Is your sex life stuck in one of these ",
   titleAccent: "patterns",
   titleTail: "?",
-  /** Phone board only. */
-  intro:
-    // CHANGED (Fatih, 15 Nov): the board says "the six things people tell us most often";
-    // nobody tells LoveIQ anything before the test.
-    "These are six patterns people often recognise in themselves before they take the test. Each one has a cause you can name, and your report shows you what it is in your case and what to do about it.",
+  // CHANGED (v2, Fatih, 23 Nov): no phone intro over the cards. Mark (12 Nov): "Isn't that
+  // clear from the cards? Do we need this?"
   cards: [
     {
       quote: "“I want sex more than my partner does, and asking has started to feel like begging.”",
@@ -126,21 +145,28 @@ export const PROMISE = {
   titleLead: "What ",
   titleAccent: "changes",
   titleTail: " with LoveIQ.",
-  body: "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot kinder.",
+  // CHANGED (v2, Fatih, 23 Nov): "calmer" for "kinder". Mark asked "Why kinder?"; Marcus meant
+  // "less emotional and more clear".
+  body: "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot calmer.",
   rows: [
+    // Each change's ring icon (v2, Mark, 12 Nov: "use an icon for each").
     {
+      icon: "message",
       before: "Hoping your partner will guess",
       after: "Ask for what you want in one clear sentence.",
     },
     {
+      icon: "thermometer",
       before: "Wondering what's going on with you",
       after: "Know the conditions your desire needs, and create them on purpose.",
     },
     {
+      icon: "rings",
       before: "The same argument about frequency",
       after: "Talk about the gap between you without blame on either side.",
     },
     {
+      icon: "flame",
       before: "Sex on autopilot",
       after: "Know which new things are worth trying for you, and which aren't.",
     },
@@ -167,18 +193,19 @@ export const WORDS = {
 export const STATS = {
   title: "Sex problems are common. Talking about them isn't.",
   cards: [
-    { value: "47%", body: "of adults have a sexual concern they've never raised with a partner." },
+    // Shares in percent: the dots light that many of 100, and the number rolls up to it.
+    { share: 47, body: "of adults have a sexual concern they've never raised with a partner." },
     {
-      value: "56%",
+      share: 56,
       body: "of people who take our test need emotional closeness before desire shows up.",
     },
-    { value: "42%", body: "shut down when sex starts to feel like pressure." },
+    { share: 42, body: "shut down when sex starts to feel like pressure." },
     // CHANGED (Fatih, 14 Nov): the board says 76%; LoveIQ State of Desire 2026 says 77%.
-    { value: "77%", body: "want more variety in their sex life than they have now." },
+    { share: 77, body: "want more variety in their sex life than they have now." },
   ],
-  // CHANGED (Fatih, 14 Nov): added; the board names no source. 47% is LoveHoney's (as on
-  // the video page); 56%, 42% and 77% are our own survey's agreement shares.
-  sources: "Sources: LoveHoney Global Sex Survey 2023 · LoveIQ State of Desire 2026 (n = 2,369)",
+  // CHANGED (v2, 23 Nov): no sources line under the numbers. Mark (12 Nov): "Do we really want
+  // to show this?" Marcus: "will take out". 47% is LoveHoney Global Sex Survey 2023's (as on
+  // the video page); 56%, 42% and 77% are LoveIQ State of Desire 2026's agreement shares.
 } as const;
 
 export const FAQ_TITLE = "The questions people actually ask.";

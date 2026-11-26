@@ -175,6 +175,40 @@ describe("the KPIs, from one week", () => {
     expect(rate[2]!.value).toBeCloseTo(35 / 280, 6);
   });
 
+  it("gives the pain-point page's version C a segment of its own, never pooled with B", () => {
+    // The week C began (sync 24 Nov 2026): B before the switch, C after it.
+    const week = parseKpiWeek(
+      raw({
+        visits: {
+          all: 1200,
+          by_arm: { video: 500, pain_point: 210, pain_point_c: 290 },
+        },
+        starts: {
+          all: 160,
+          google_ads: 120,
+          by_arm: { video: 50, pain_point: 25, pain_point_c: 40 },
+        },
+      })
+    );
+    expect(
+      kpi("visitors")
+        .values(week, ctx())
+        .map((x) => [x.segment, x.value])
+    ).toEqual([
+      ["All traffic", 1200],
+      ["Landing: video", 500],
+      ["Landing: pain points", 210],
+      ["Landing: pain points C", 290],
+    ]);
+    const rate = kpi("visit_to_start").values(week, ctx());
+    expect(rate.map((x) => [x.segment, x.value])).toEqual([
+      ["All traffic", expect.closeTo(160 / 1200, 6)],
+      ["Landing: video", expect.closeTo(50 / 500, 6)],
+      ["Landing: pain points", expect.closeTo(25 / 210, 6)],
+      ["Landing: pain points C", expect.closeTo(40 / 290, 6)],
+    ]);
+  });
+
   it("leaves a number out when its source is incomplete for the week", () => {
     expect(kpi("starts").values(w, ctx({ startsComplete: false }))).toEqual([]);
     expect(kpi("visit_to_start").values(w, ctx({ startsComplete: false }))).toEqual([]);
@@ -361,6 +395,32 @@ describe("rows and summaries", () => {
     expect(text).toContain("kpi-weekly job");
     expect(text).toContain("the chart on this page shows every week"); // wherever the summary sits
     expect(text).not.toContain("—");
+  });
+
+  it("names every landing page on the landing line, the pain-point page's B and C apart", () => {
+    // The line used to name only the question card and the video page, so round 4's
+    // pain-point page never showed on the page; version C (26 Nov 2026) is its own entry.
+    const landing = weeks.map(() =>
+      parseKpiWeek(
+        raw({
+          visits: { all: 1200, by_arm: { video: 500, pain_point: 210, pain_point_c: 290 } },
+          starts: {
+            all: 160,
+            google_ads: 120,
+            by_arm: { video: 50, pain_point: 25, pain_point_c: 40 },
+          },
+        })
+      )
+    );
+    const s = summarize(buildKpiRows(landing, contexts), landing, contexts).find(
+      (x) => x.kpi.id === "visit_to_start"
+    )!;
+    const text = kpiCallout(s, "2026-10-13", "kpi-weekly job")
+      .map((l) => l.map((x) => x.text).join(""))
+      .join("\n");
+    expect(text).toContain(
+      "By landing page: video 10.0% (50 of 500), pain points 11.9% (25 of 210), pain points C 13.8% (40 of 290)."
+    );
   });
 
   it("tells on the page that a cohort KPI's recent weeks can still rise", () => {

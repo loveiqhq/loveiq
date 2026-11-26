@@ -20,6 +20,14 @@ describe("arm labels", () => {
     expect(armLabel("landing", "video").short).toBe("Landing Page V3 (Video in Hero)");
     expect(armLabel("landing", "pain_point").long).toBe("Landing Page V4: the pain-point page");
     expect(armLabel("landing", "pain_point").short).toBe("Landing Page V4 (Pain Points)");
+    // Since the 24 Nov 2026 sync V4's version C runs in B's place: the same page, its hero
+    // asking about turn-ons. Named apart from B, so the two never pool.
+    expect(armLabel("landing", "pain_point_c").long).toBe(
+      "Landing Page V4 C: the pain-point page, asking about turn-ons"
+    );
+    expect(armLabel("landing", "pain_point_c").short).toBe(
+      "Landing Page V4 C (Pain Points, Turn-Ons Question)"
+    );
     // Round 3: V2 itself (white_card) against V3, the presenter video in the hero. Its V3
     // (white_video) is named apart from round 4's, so the two never pool under one name.
     expect(armLabel("landing", "white_card").long).toBe("Landing Page V2: survey in the hero");
@@ -44,6 +52,7 @@ describe("arm labels", () => {
     for (const arm of [
       "video",
       "pain_point",
+      "pain_point_c",
       "white_card",
       "white_video",
       "white",
@@ -91,6 +100,7 @@ describe("arm labels", () => {
         "white_video",
         "video",
         "pain_point",
+        "pain_point_c",
         "control",
         "dark",
         "A",
@@ -130,9 +140,12 @@ describe("arm labels", () => {
   });
 
   it("excludes retired arms from the active set used for charts", () => {
-    // Round 4 assigns video and pain_point, in reading order (A, then B). Round 3's arms
-    // retired with it, V1 on 2026-09-19, and `white` (V2 before round 3) is no one's.
-    expect(activeArms("landing")).toEqual(["video", "pain_point"]);
+    // Round 4 assigns video and, since the 24 Nov 2026 sync, pain_point_c, in reading order
+    // (A, then C). B (pain_point) is paused, round 3's arms retired with it, V1 on
+    // 2026-09-19, and `white` (V2 before round 3) is no one's.
+    expect(activeArms("landing")).toEqual(["video", "pain_point_c"]);
+    expect(armLabel("landing", "pain_point").retired).toBe(true);
+    expect(isKnownArm("landing", "pain_point")).toBe(true);
     for (const arm of ["white_card", "white_video"]) {
       expect(armLabel("landing", arm).retired).toBe(true);
       expect(isKnownArm("landing", arm)).toBe(true);
@@ -237,11 +250,20 @@ describe("arm colours", () => {
     }
   });
 
+  it("keeps V4's emerald for its version C, which never shares a chart with B", () => {
+    // The colour follows the page: C is V4 with another hero question, and B is retired, so
+    // only C is drawn beside V3's blue, as round 4's video keeps round 3's.
+    expect(armColor("landing", "pain_point_c")).toBe(armColor("landing", "pain_point"));
+    expect(armColor("landing", "pain_point_c")).not.toBe(armColor("landing", "video"));
+    expect(activeArms("landing")).not.toContain("pain_point");
+  });
+
   it("names every landing arm differently, so no two pool under one name", () => {
     // The admin explorer groups by display name: two arms sharing one would merge.
     const names = [
       "video",
       "pain_point",
+      "pain_point_c",
       "white_card",
       "white_video",
       "white",

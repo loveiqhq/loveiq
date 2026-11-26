@@ -3849,13 +3849,215 @@ body {
   padding-bottom: var(--liq-consent-h, 0px);
 }
 
-/* The new landing page (round 4's pain_point, features/landing/ui/painpoint). Its own
-   sections do not fade in (the board draws none); the live sections it reuses do, so its
-   reveals are shown without JavaScript and under reduced motion, like pay to start's. */
+/* The new landing page (round 4's pain_point, features/landing/ui/painpoint). Its reveals
+   (the live sections it reuses, and since v2 its own; see the .pp-* rules below) are shown
+   without JavaScript and under reduced motion, like pay to start's. */
 @media (scripting: none) {
   .pp-root .animate-on-scroll {
     opacity: 1;
     transform: none;
+  }
+}
+/* Landing page v2 (Hana's board "animated pain-point section", 16 Nov; Fatih, 23 Nov: its
+   motion, played once). The triggers are ScrollAnimator's: `.animate` on a [data-reveal]
+   group or on an `.animate-on-scroll` element. The curves are the design system's ease-out,
+   cubic-bezier(0.16, 1, 0.3, 1), and ease-in-out, cubic-bezier(0.65, 0, 0.35, 1).
+
+   What changes: each tile's line crosses the old habit out, then the new line pops in. A
+   tile's place in its row (--pp-k) delays it 0.7s a place: two to a row from md, four from
+   lg, and on a phone each tile plays as it arrives. */
+.pp-root .pp-change {
+  --pp-k: 0;
+}
+@media (min-width: 768px) {
+  .pp-root .pp-change {
+    --pp-k: var(--pp-k2);
+  }
+}
+@media (min-width: 1024px) {
+  .pp-root .pp-change {
+    --pp-k: var(--pp-k4);
+  }
+}
+.pp-root .pp-strike {
+  text-decoration: none;
+  background-image: linear-gradient(#c2542f, #c2542f);
+  background-repeat: no-repeat;
+  background-position: 0 55%;
+  background-size: 0% 1.5px;
+  transition: background-size 0.6s cubic-bezier(0.65, 0, 0.35, 1) calc(0.2s + 0.7s * var(--pp-k, 0));
+}
+.pp-root .pp-change.animate .pp-strike {
+  background-size: 100% 1.5px;
+}
+.pp-root .pp-pop {
+  opacity: 0;
+  transform: translateY(12px) scale(0.94);
+  transform-origin: left center;
+  transition:
+    opacity 0.5s ease calc(0.7s + 0.7s * var(--pp-k, 0)),
+    transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) calc(0.7s + 0.7s * var(--pp-k, 0));
+}
+.pp-root .pp-change.animate .pp-pop {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-root .pp-pop {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pp-root .pp-strike {
+    background-size: 100% 1.5px;
+    transition: none;
+  }
+}
+@media (scripting: none) {
+  .pp-root .pp-pop {
+    opacity: 1;
+    transform: none;
+  }
+  .pp-root .pp-strike {
+    background-size: 100% 1.5px;
+  }
+}
+/* Landing page v2's entrances (Hana's board, played once).
+   The pain points: the heading rises 40px, then the six cards slide up 140px (90px on a
+   phone), 0.12s apart from 0.25s, and the button follows them. The closing button and its
+   note rise the same way. --pp-d is an element's own delay, --pp-i a card's place. */
+.pp-root .pp-rise.animate-on-scroll {
+  transform: translateY(40px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--pp-d, 0s),
+    transform 1s cubic-bezier(0.16, 1, 0.3, 1) var(--pp-d, 0s);
+}
+.pp-root .pp-rise.animate-on-scroll.animate {
+  transform: none;
+}
+.pp-root .pp-card-in {
+  opacity: 0;
+  transform: translateY(140px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) calc(0.25s + 0.12s * var(--pp-i, 0)),
+    transform 1.1s cubic-bezier(0.16, 1, 0.3, 1) calc(0.25s + 0.12s * var(--pp-i, 0));
+}
+@media (max-width: 600px) {
+  .pp-root .pp-card-in {
+    transform: translateY(90px);
+  }
+}
+.pp-root .animate > .pp-card-in {
+  opacity: 1;
+  transform: none;
+}
+/* "Ready to" arrives word by word (blur, rise, scale), 0.14s apart, then its gradient line
+   wipes in from the left (the report's sensual reveal). */
+.pp-root .pp-w {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(15px) scale(0.9);
+  transition:
+    opacity 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--pp-wi, 0) * 0.14s),
+    filter 1s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--pp-wi, 0) * 0.14s),
+    transform 1s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--pp-wi, 0) * 0.14s);
+}
+.pp-root .animate .pp-w {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+.pp-root .pp-wipe {
+  display: inline-block;
+  clip-path: inset(-20% 100% -25% 0);
+  filter: blur(8px);
+  transition:
+    clip-path 1.3s cubic-bezier(0.16, 1, 0.3, 1) 0.35s,
+    filter 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.35s;
+}
+.pp-root .animate .pp-wipe {
+  clip-path: inset(-20% -4% -25% 0);
+  filter: none;
+}
+/* The research steps (the shared section, on this page only): each icon pops in and the rail
+   fills with the brand gradient down to the next step, one after another. */
+.pp-root .pp-rail-icon {
+  opacity: 0;
+  transform: scale(0.4);
+}
+.pp-root .animate > .pp-rail-icon {
+  animation: pp-rail-pop 0.6s cubic-bezier(0.16, 1, 0.3, 1) var(--pp-icon-d, 0s) both;
+}
+@keyframes pp-rail-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.pp-root .pp-rail-line {
+  background-color: #ece7f3;
+  background-repeat: no-repeat;
+  background-size: 100% 0%;
+  transition: background-size 0.7s cubic-bezier(0.645, 0.045, 0.355, 1) var(--pp-line-d, 0s);
+}
+.pp-root .animate > .pp-rail-line {
+  background-size: 100% 100%;
+}
+/* Every entrance's end state, at once, under reduced motion and without JavaScript (the
+   rules above outrank the page's general ones, so they are repeated here). */
+@media (prefers-reduced-motion: reduce) {
+  .pp-root .pp-card-in,
+  .pp-root .pp-rise.animate-on-scroll {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pp-root .pp-w,
+  .pp-root .pp-wipe {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    clip-path: none;
+    transition: none;
+  }
+  .pp-root .pp-rail-icon {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .pp-root .pp-rail-line {
+    background-size: 100% 100%;
+    transition: none;
+  }
+}
+@media (scripting: none) {
+  .pp-root .pp-card-in,
+  .pp-root .pp-rise.animate-on-scroll {
+    opacity: 1;
+    transform: none;
+  }
+  .pp-root .pp-w,
+  .pp-root .pp-wipe {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    clip-path: none;
+  }
+  .pp-root .pp-rail-icon {
+    opacity: 1;
+    transform: none;
+  }
+  .pp-root .pp-rail-line {
+    background-size: 100% 100%;
   }
 }
 /* The live dot's soft pulse (the board's lqPulse). */

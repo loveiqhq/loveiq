@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
 //   landing-page            last reviewed: 2026-10-13 — Linux baseline, `white` arm (12.10 copy, #573)
 //   landing-page-white-prev last reviewed: 2026-10-13 — Linux baseline, `white_prev` arm
 //   landing-page-white-video  last reviewed: 2026-10-13 — Linux baseline, the video page (round 3's `white_video`, round 4's `video`)
-//   landing-page-pain-point   last reviewed: 2026-11-17 — Linux baseline, round 4's `pain_point` arm (made on main after #737 by visual-regression.yml, update_baselines)
+//   landing-page-pain-point-c no baseline yet — the live `pain_point_c` arm (#783): make it on main with visual-regression.yml, update_baselines. B's (`pain_point`, paused) was dropped: #783 gave B v2's sections, so it no longer matched.
 //   about-page              last reviewed: 2026-08-23 — Linux baseline
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
 //   glossary-page           last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
@@ -142,13 +142,14 @@ test.describe("Visual Regression", () => {
   // baseline each — a regression in either arm is a real regression.
   // `white` renders round 3's arm A page (the hero card), so its baseline also covers
   // `white_card`. `video` is round 4's arm A, the same video page as round 3's
-  // `white_video`, so it keeps that baseline; `pain_point` is round 4's arm B. Reduced
+  // `white_video`, so it keeps that baseline; `pain_point_c` is the pain-point page's version
+  // C, the live arm since #783 (B, `pain_point`, is paused). Reduced
   // motion (above) keeps the video's poster on screen, so the poster is what gets compared.
   const LANDING_ARMS = [
     { variant: "white", snapshot: "landing-page.png" },
     { variant: "white_prev", snapshot: "landing-page-white-prev.png" },
     { variant: "video", snapshot: "landing-page-white-video.png" },
-    { variant: "pain_point", snapshot: "landing-page-pain-point.png" },
+    { variant: "pain_point_c", snapshot: "landing-page-pain-point-c.png" },
   ] as const;
 
   for (const arm of LANDING_ARMS) {

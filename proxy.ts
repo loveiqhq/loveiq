@@ -112,7 +112,9 @@ const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
 
 /**
  * Landing variant for a `/` request. **Round 4: a 50/50 split between "video" (round 3's
- * video page, the control) and "pain_point" (Marcus's new pain-point page).**
+ * video page, the control) and, since the 2026-11-24 sync, "pain_point_c" (Marcus's
+ * pain-point page asking Q10003).** "pain_point" (the page as released, B)
+ * is paused: never assigned, and re-rolled like an earlier round's value.
  * See shared/experiments/landingVariant.ts for all four rounds.
  *
  * Order matters:
@@ -122,9 +124,10 @@ const LANDING_BOT_UA_REGEX = BOT_UA_REGEX;
  *   - `?variant=` is a QA override for any valid value (it also re-stamps the cookie
  *     below, so the arm sticks for the rest of the session);
  *   - an existing cookie wins only when it holds a LIVE arm, so a returning visitor
- *     keeps theirs. "white_card", "white_video", "white", "white_prev" and "control"
- *     belong to earlier rounds and are re-rolled: round 3's two are the ones that matter,
- *     since kept sticky they would have parked every returning round-3 visitor;
+ *     keeps theirs. "pain_point" (paused B), "white_card", "white_video", "white",
+ *     "white_prev" and "control" are re-rolled: B's returning visitors get a fresh coin
+ *     flip between A and C, and round 3's two would have parked every returning
+ *     round-3 visitor;
  *   - otherwise a coin flip from crypto, not Math.random.
  *
  * Round 2 (V2 "white" vs V1 "white_prev"), for the record:
@@ -154,7 +157,7 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
 
   const buf = new Uint8Array(1);
   crypto.getRandomValues(buf);
-  return (buf[0]! & 1) === 0 ? "video" : "pain_point";
+  return (buf[0]! & 1) === 0 ? "video" : "pain_point_c";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the

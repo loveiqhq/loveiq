@@ -49,10 +49,13 @@ import {
   type PostHogResult,
 } from "@features/admin/server/ap/posthog";
 import ApLanding from "@features/admin/ui/ap/ApLanding";
+import { fields as LANDING_FIELDS } from "@features/admin/ui/ap/fields/landing";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
@@ -101,15 +104,21 @@ const now = new Date("2026-10-13T12:00:00Z");
 
 describe("landing test windows", () => {
   it("runs a live test to yesterday, or today in a range running through today, and clips every test to the range", () => {
-    expect(testWindow(test("pain-point"), "2026-11-01", "2026-11-30", "2026-12-01")).toEqual({
+    expect(testWindow(test("pain-point-c"), "2026-11-01", "2026-11-30", "2026-12-01")).toEqual({
       from: LANDING_TEST_START_DAY,
       to: "2026-11-30",
     });
     // "Today" (or a range running through it) reads the test's visits of today too.
-    expect(testWindow(test("pain-point"), "2026-12-01", "2026-12-01", "2026-12-01")).toEqual({
+    expect(testWindow(test("pain-point-c"), "2026-12-01", "2026-12-01", "2026-12-01")).toEqual({
       from: "2026-12-01",
       to: "2026-12-01",
     });
+    // B's test keeps its own days once C took its half, as an ended test does.
+    expect(testWindow(test("pain-point"), "2026-11-01", "2026-11-30", "2026-12-01")).toEqual({
+      from: LANDING_PAIN_POINT_START_DAY,
+      to: LANDING_PAIN_POINT_LAST_DAY,
+    });
+    expect(testWindow(test("pain-point"), "2026-11-27", "2026-11-30", "2026-12-01")).toBeNull();
     // An ended test keeps its own days: clipped to the range, or none outside it.
     expect(testWindow(test("hero"), "2026-10-01", "2026-11-30", "2026-12-01")).toEqual({
       from: LANDING_HERO_RESTART_DAY,
@@ -129,12 +138,13 @@ describe("landing test windows", () => {
 
   it("reads PostHog per arm only for the tests since round 3", () => {
     const keys = engagementWindows("2026-08-01", "2026-11-30", "2026-12-01").map((w) => w.key);
-    expect(keys).toEqual(["pain-point", "hero", "hero-first-run"]);
+    expect(keys).toEqual(["pain-point-c", "pain-point", "hero", "hero-first-run"]);
     expect(test("hero-first-run").from).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
   });
 
-  it("lists round 4's test first, then #6, ended on its registry day with the video kept", () => {
+  it("lists version C's test first, then round 4's B, paused, then #6, ended with the video kept", () => {
     expect(LANDING_TESTS.map((t) => [t.key, t.name, t.arms])).toEqual([
+      ["pain-point-c", "Pain-point page C vs. video page", ["video", "pain_point_c"]],
       ["pain-point", "Pain-point page vs. video page", ["video", "pain_point"]],
       ["hero", "Video page vs. question card", ["white_card", "white_video"]],
       [
@@ -143,7 +153,19 @@ describe("landing test windows", () => {
         ["white_card", "white_video"],
       ],
     ]);
-    expect(test("pain-point")).toMatchObject({ from: LANDING_TEST_START_DAY, to: null });
+    // Sync 24 Nov 2026: C takes B's half from its first whole day, B keeps the days it ran.
+    // Sync 25 Nov 2026: a follow-up test gets its own number, stacked on #10, same control.
+    expect(test("pain-point-c")).toMatchObject({
+      code: "#12",
+      from: LANDING_TEST_START_DAY,
+      to: null,
+    });
+    expect(test("pain-point")).toMatchObject({
+      code: "#10",
+      from: "2026-11-18",
+      to: "2026-11-26",
+    });
+    expect(test("pain-point").winner).toBeUndefined();
     // Registry #6 ran 14 Oct – 11 Nov 2026, and the 10 Nov sync kept the video.
     expect(test("hero")).toMatchObject({
       from: "2026-10-14",
@@ -151,6 +173,20 @@ describe("landing test windows", () => {
       winner: "white_video",
     });
     expect(test("hero-first-run").to).toBe("2026-10-13");
+  });
+
+  it("shows queries that read #12 and #10 by their own versions, as the page does", () => {
+    const sql = Object.values(LANDING_FIELDS).map((f) => f.query.text.replace(/\s+/g, " "));
+    const tests = sql.filter((q) => q.includes("test_runs AS"));
+    const posthog = sql.filter((q) => q.includes("arrayJoin([if((run ="));
+    expect(tests.length).toBeGreaterThan(0);
+    expect(posthog.length).toBeGreaterThan(0);
+    for (const t of [test("pain-point-c"), test("pain-point")]) {
+      for (const q of tests)
+        for (const arm of t.arms) expect(q).toContain(`('${t.code}', '${arm}', DATE '${t.from}'`);
+      for (const q of posthog)
+        expect(q).toContain(`run = '${t.code}' AND arm IN ('${t.arms[0]}', '${t.arms[1]}')`);
+    }
   });
 
   it("reads the hero video from the first whole day PostHog recorded who saw it", () => {
@@ -392,9 +428,41 @@ describe("buildLanding", () => {
       armEngagement: {},
       engagement: null,
     });
+    // B's test has a last day (paused on 26 Nov 2026), so it reads as ended over the days it ran.
     expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
-      ["pain-point", "A · Video page (V3)", "Running", 80],
-      ["pain-point", "B · Pain-point page (V4)", "Running", 90],
+      ["pain-point", "Control · Video page (V3)", "Ended", 80],
+      ["pain-point", "Variant · Pain-point page (V4)", "Ended", 90],
+    ]);
+  });
+
+  it("names version C's test as the page does, the video page its control and C its variant", () => {
+    const p = buildLanding({
+      facts: factsFixture({
+        from: "2026-11-27",
+        to: "2026-11-30",
+        asOf: "2026-12-01",
+        visits: [
+          { day: "2026-11-27", arm: "video", src: null, n: 70 },
+          { day: "2026-11-27", arm: "pain_point_c", src: null, n: 75 },
+          // A browser still holding B's cookie from before the switch: in no row of C's test.
+          { day: "2026-11-27", arm: "pain_point", src: null, n: 4 },
+        ],
+        starts: [],
+        subs: [],
+      }),
+      previous: null,
+      filters: parseFilters(
+        { period: "custom", from: "2026-11-27", to: "2026-11-30" },
+        "2026-12-01"
+      ),
+      today: "2026-12-01",
+      now: new Date("2026-12-01T12:00:00Z"),
+      armEngagement: {},
+      engagement: null,
+    });
+    expect(p.rows.map((r) => [r.testKey, r.label, r.status, r.visits])).toEqual([
+      ["pain-point-c", "Control · Video page (V3)", "Running", 70],
+      ["pain-point-c", "Variant · Pain-point page C (V4 C)", "Running", 75],
     ]);
   });
 
