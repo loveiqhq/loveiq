@@ -25,6 +25,7 @@ import { redactReportTokensDeep } from "@shared/format/redact-report-token";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { postReactivationOnRead } from "@features/attribution/server/reactivation-post";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 import { exitReasons, type ExitStage } from "@features/report/ui/gate/exit/exitContent";
@@ -97,6 +98,8 @@ const ALLOWED_EVENTS = [
   "paygate_exit_leave",
   // The report opened from an email's link: a return, for the Slack journey message
   "email_return",
+  // A minute of active reading, which the #report-reactivations post waits for
+  "report_active_1min",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -128,6 +131,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "tour_left":
     case "tour_replayed":
     case "email_return":
+    case "report_active_1min":
       return "report";
     case "paywall_view":
     case "paywall_initiated":
@@ -216,6 +220,17 @@ function exitFieldsValid(event: AllowedEvent, metadata: Record<string, unknown> 
  * An email return's campaign is printed on the Slack journey message by name, so only what
  * our emails' links carry is stored: a utm-shaped token, or none.
  */
+/**
+ * The active minute's email is named on the #report-reactivations post and kept on the day's
+ * return row, whose CHECK holds the same shape: a utm-shaped token, or none.
+ */
+function activeMinuteValid(event: AllowedEvent, metadata: Record<string, unknown> = {}): boolean {
+  if (event !== "report_active_1min") return true;
+  const via = metadata.via;
+  if (via === null || via === undefined) return true;
+  return typeof via === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(via);
+}
+
 function emailReturnValid(event: AllowedEvent, metadata: Record<string, unknown> = {}): boolean {
   if (event !== "email_return") return true;
   const campaign = metadata.campaign;
@@ -268,7 +283,8 @@ export async function POST(request: Request) {
   }
   if (
     !exitFieldsValid(parsed.data.event_type, parsed.data.metadata) ||
-    !emailReturnValid(parsed.data.event_type, parsed.data.metadata)
+    !emailReturnValid(parsed.data.event_type, parsed.data.metadata) ||
+    !activeMinuteValid(parsed.data.event_type, parsed.data.metadata)
   ) {
     logger.warn({ event: parsed.data.event_type }, "analytics-event: refused a field");
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
@@ -366,6 +382,16 @@ export async function POST(request: Request) {
   } catch (err) {
     logger.warn({ err, event_type }, "analytics-event: the database could not be reached");
     return new NextResponse(null, { status: 204 });
+  }
+
+  // A returning reader who read for a minute: the #report-reactivations post waits for this.
+  // It posts only a day the server already holds as a return, for a reader who opened their
+  // report that day (a report_session): a minute faked for anyone else posts nothing.
+  if (event_type === "report_active_1min") {
+    const via = typeof metadata?.via === "string" ? metadata.via : null;
+    scheduleAfterResponse("reactivation-read", () =>
+      postReactivationOnRead({ submissionId: submission_id, at: new Date(), via })
+    );
   }
 
   /**

@@ -78,6 +78,9 @@ vi.mock("@features/analytics/client", () => ({
   // A return through one of our emails' links (the #incoming-surveys message's).
   emailReturnOf: (params: unknown) => mockEmailReturnOf(params),
   trackEmailReturn: (...args: unknown[]) => mockTrackEmailReturn(...args),
+  // The engagement timers' active minute (useReportEngagementTimers), read as the page opens.
+  pageEmailVia: () => null,
+  trackReportActiveMinute: vi.fn(),
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
   trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),

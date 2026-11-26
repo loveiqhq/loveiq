@@ -2,8 +2,9 @@
  * "Came back" replies on #incoming-surveys (Software Board card "Ping #incoming-surveys when a
  * reader comes back", LoveIQ Sync 11 Nov 2026). When a reader comes back after their first
  * visit, the Slack bot replies in the thread of their survey message: when, and the email or
- * link that brought them. Once per reader per Berlin day; the team's own surveys, our probes and
- * crawlers left out; the address masked as the message masks it.
+ * link that brought them. Once per reader per Berlin day; the team's own surveys (an @loveiq.org
+ * address, or an account on the team list, ap_team_user), our probes and crawlers left out; the
+ * address masked as the message masks it.
  *
  * A return (`isReturn`) comes half an hour or more after the first visit (AP's rule,
  * EMAIL_RETURN_AFTER_MS), never from a crawler (`isCrawler`), and is one of:
@@ -23,17 +24,18 @@
  * row stays whether or not a reply went out (no stored message, no bot, Slack refused it):
  * AP-Analytics' Report page counts it, "Came back within 7 days".
  *
- * The same claim feeds #report-reactivations (reactivation-post.ts): every return but a draft
- * also gets a top-level post there, which the team sees without opening threads.
+ * The same claim gates #report-reactivations (reactivation-post.ts), but posts nothing there by
+ * itself: a returning reader is posted once they read for a minute that day (the report page's
+ * `report_active_1min`, `postReactivationOnRead`). A browser reopening a tab claims a day too.
  *
  * Never throws. Every caller runs it after its response, and neither Slack nor the database may
  * touch the request that triggered it.
  */
 
 import { EMAILS } from "@features/admin/server/ap/email-registry";
+import { teamUserIds } from "@features/admin/server/ap/team";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { EMAIL_RETURN_AFTER_MS } from "@features/attribution/server/journey";
-import { postReactivation } from "@features/attribution/server/reactivation-post";
 import { EMAIL_NAMES } from "@features/attribution/server/slack-journey";
 import { isStaffEmail } from "@shared/env/staff-email";
 import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
@@ -55,6 +57,11 @@ export interface ReturnReader {
   internal: boolean;
   /** The address as the message shows it, a***@example.com. */
   emailMasked: string | null;
+  /**
+   * The reader's account, for the team check (ap_team_user): the team also tests from addresses
+   * of their own, which `internal` cannot see. Null or left out: not known, so never the team's.
+   */
+  userId?: number | null;
 }
 
 export interface ReturnSignal {
@@ -107,18 +114,20 @@ export function isCrawler(userAgent: string | null | undefined): boolean {
 export const EMAIL_LINK = "email";
 
 /** A utm-shaped token, as the report page keeps an email return's campaign (and the table's CHECK). */
-const VIA = /^[A-Za-z0-9_.-]{1,64}$/;
+export const VIA = /^[A-Za-z0-9_.-]{1,64}$/;
 
 export function readerOf(row: {
   finishedAt: string | null;
   startedAt?: string | null;
   email: string | null;
+  userId?: number | null;
 }): ReturnReader {
   return {
     finishedAt: row.finishedAt,
     startedAt: row.startedAt ?? null,
     internal: isStaffEmail(row.email),
     emailMasked: row.email?.trim() ? maskEmail(row.email) : null,
+    ...(row.userId === undefined ? {} : { userId: row.userId }),
   };
 }
 
@@ -236,7 +245,7 @@ const TABLE = "/rest/v1/reader_return";
  * then no thread reply and no #report-reactivations post, as the email crons and the team export
  * already skip them. Unknown counts as restricted, so a failed read stays quiet.
  */
-async function isRestricted(submissionId: number): Promise<boolean> {
+export async function isRestricted(submissionId: number): Promise<boolean> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?id=eq.${submissionId}` +
       "&select=app_user!fk_survey_submission_user" +
@@ -252,12 +261,13 @@ async function isRestricted(submissionId: number): Promise<boolean> {
 async function readReader(submissionId: number): Promise<ReturnReader | null> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?id=eq.${submissionId}` +
-      `&select=created_date_time,start_date_time,app_user!fk_survey_submission_user(email)&limit=1`
+      `&select=created_date_time,start_date_time,user_id,app_user!fk_survey_submission_user(email)&limit=1`
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<{
     created_date_time: string | null;
     start_date_time: string | null;
+    user_id: number | null;
     app_user: { email: string | null } | null;
   }>;
   const row = rows[0];
@@ -266,8 +276,36 @@ async function readReader(submissionId: number): Promise<ReturnReader | null> {
         finishedAt: row.created_date_time,
         startedAt: row.start_date_time,
         email: row.app_user?.email ?? null,
+        userId: row.user_id,
       })
     : null;
+}
+
+/**
+ * One of the team's own accounts (ap_team_user: an @loveiq.org address, or one that redeemed the
+ * team's 100% test code), whose returns are tests. A failed read counts nobody as the team's: a
+ * missed test costs one wrong post, a dropped reader a real return.
+ */
+async function isTeamReader(reader: ReturnReader, submissionId: number): Promise<boolean> {
+  // A caller that knows no account (the survey's finished draft) leaves it out: read it here.
+  const userId = reader.userId === undefined ? await readUserId(submissionId) : reader.userId;
+  if (userId === null) return false;
+  const team = await teamUserIds().catch(() => new Set<number>());
+  return team.has(userId);
+}
+
+/** The submission's account, or null when it can't be read (never the team's then). */
+async function readUserId(submissionId: number): Promise<number | null> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=user_id&limit=1`
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ user_id: number | null }>;
+    return rows[0]?.user_id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -305,6 +343,7 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     const { sentAt, userAgent } = signal;
     if (!reader || !isReturn({ source, at, sentAt, userAgent }, reader)) return;
     if (await isRestricted(submissionId)) return;
+    if (await isTeamReader(reader, submissionId)) return;
 
     const via = signal.via && VIA.test(signal.via) ? signal.via : null;
     const day = reportingDay(at);
@@ -326,30 +365,24 @@ export async function noteReaderReturn(signal: ReturnSignal): Promise<void> {
     }
     if (((await claim.json()) as unknown[]).length === 0) return;
 
-    // Its own top-level post in #report-reactivations (every source but a draft), whether or
-    // not the reader has a thread here to reply in: alongside the reply, and awaited however
-    // the reply ends. Off without its channel; it never rejects.
-    const reactivation = postReactivation({ submissionId, source, via, at, day });
-    try {
-      if (!isSlackBotConfigured()) return;
-      const message = await readMessage(submissionId);
-      if (!message) return;
-      const reply = buildReturnReply({ submissionId, source, at, via }, reader);
-      const posted = await postJourneyMessage({
-        ...reply,
-        channel: message.channel,
-        threadTs: message.message_ts,
-      });
-      if (!posted) return;
-      await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ slack_ts: posted.ts }),
-      });
-      logger.info({ submissionId, source }, "return ping: posted");
-    } finally {
-      await reactivation;
-    }
+    // #report-reactivations waits for a minute of reading that day (postReactivationOnRead,
+    // which claims this row for its post): only the thread reply goes out here.
+    if (!isSlackBotConfigured()) return;
+    const message = await readMessage(submissionId);
+    if (!message) return;
+    const reply = buildReturnReply({ submissionId, source, at, via }, reader);
+    const posted = await postJourneyMessage({
+      ...reply,
+      channel: message.channel,
+      threadTs: message.message_ts,
+    });
+    if (!posted) return;
+    await supabaseFetch(`${TABLE}?survey_submission_id=eq.${submissionId}&day=eq.${day}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ slack_ts: posted.ts }),
+    });
+    logger.info({ submissionId, source }, "return ping: posted");
   } catch (err) {
     logger.warn({ err, submissionId, source }, "return ping failed");
   }

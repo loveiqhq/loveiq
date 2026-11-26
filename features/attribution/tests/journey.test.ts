@@ -696,6 +696,30 @@ describe("buildSubmissionJourney", () => {
         expect(j?.timings.dwellSinceMs).toBe(241_000);
       });
 
+      it("knows when the reader last read before the visit: the newest minute of either kind", async () => {
+        route({
+          events: [
+            { event_type: "report_engagement_1min", event_time: at("10:21:00") },
+            { event_type: "report_active_1min", event_time: at("10:25:00") },
+            // This visit's own minute is no earlier read.
+            { event_type: "report_engagement_1min", event_time: at("10:41:00") },
+          ],
+        });
+        const j = await buildSubmissionJourney(1296, { dwellSince: at("10:40:00") });
+        expect(j?.timings.lastReadAt).toBe(at("10:25:00"));
+      });
+
+      it("has no last read when they never read a minute before the visit", async () => {
+        route({ events: [{ event_type: "report_viewed", event_time: at("10:20:00") }] });
+        const j = await buildSubmissionJourney(1296, { dwellSince: at("10:40:00") });
+        expect(j?.timings.lastReadAt).toBeNull();
+      });
+
+      it("leaves the last read out unless a visit is asked for", async () => {
+        route({ events: FIRST_DAY });
+        expect((await buildSubmissionJourney(1296))?.timings).not.toHaveProperty("lastReadAt");
+      });
+
       it("starts at the report, not at the click that came minutes before it", async () => {
         // Clicked an email at 10:40, opened the report at 11:00, left at 11:03.
         route({

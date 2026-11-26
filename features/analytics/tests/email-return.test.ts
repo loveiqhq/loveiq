@@ -49,6 +49,40 @@ describe("emailReturnOf", () => {
   });
 });
 
+describe("pageEmailVia: the email a report page was opened from, in one word", () => {
+  it("names the campaign of a tagged email link", () => {
+    expect(client.pageEmailVia("?from=email&utm_source=email&utm_campaign=initial_gift")).toBe(
+      "initial_gift"
+    );
+  });
+
+  it("is 'email' for an untagged email link, as the server's return rows write it", () => {
+    expect(client.pageEmailVia("?from=email")).toBe("email");
+  });
+
+  it("is null for any other link", () => {
+    expect(client.pageEmailVia("")).toBeNull();
+    expect(client.pageEmailVia("?utm_source=google")).toBeNull();
+  });
+});
+
+describe("trackReportActiveMinute", () => {
+  it("writes the minute to our own table, with the report type and the page's email", () => {
+    (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 4242;
+    client.trackReportActiveMinute("full_report", "initial_gift");
+
+    expect(beacon).toHaveBeenCalledTimes(1);
+    const [url, body] = beacon.mock.calls[0]!;
+    expect(url).toBe("/api/analytics-event");
+    expect(JSON.parse(body as string)).toMatchObject({
+      event_type: "report_active_1min",
+      submission_id: 4242,
+      metadata: { active_seconds: 60, report_type: "full_report", via: "initial_gift" },
+      duration_ms: 60_000,
+    });
+  });
+});
+
 describe("trackEmailReturn", () => {
   it("writes the return to our own table, against the report's survey", () => {
     (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 2698;

@@ -1531,6 +1531,8 @@ describe("GET /api/report — the EUR 1.99 gate", () => {
         startedAt: null,
         internal: false,
         emailMasked: "a***@example.com",
+        // The team check (ap_team_user) needs it: a tester's own address can be any address.
+        userId: 77,
       };
       expect(mockNoteReaderReturn.mock.calls).toEqual([
         [{ submissionId: 55, source: "report", via: "initial_gift", reader }],
