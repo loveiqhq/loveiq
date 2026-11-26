@@ -413,9 +413,9 @@ export default function PrivacyPolicyPage() {
               </p>
               <p className="mb-4">
                 A request for a free talk with one of our experts is different, because it&apos;s
-                there so we can call you. It goes to a private channel that only the people who set
-                up the talks can read, with your name, phone number and country, and your email
-                address masked. Its legal basis is your consent (section 5).
+                there so we can call you. It goes to a private channel that only a few people on our
+                team can read, with your name, phone number and country, and your email address
+                masked. Its legal basis is your consent (section 5).
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>

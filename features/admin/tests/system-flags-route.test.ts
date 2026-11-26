@@ -62,3 +62,20 @@ describe("the pre-unlock switches in the admin panel", () => {
     expect(response.status).toBe(400);
   });
 });
+
+/**
+ * The two tests LoveIQ Sync cleared on 26 Nov 2026: Survey 2.0 and Choose your price. Each
+ * changes what readers see, so each can be switched off with an admin session, not only by SQL.
+ */
+describe("the switches of the tests that went live on 26 Nov", () => {
+  it.each(["survey_2", "report_gate_choose_price"])(
+    "%s can be switched off (and on) by an admin",
+    async (key) => {
+      const off = await toggle(key, false);
+      expect(off.status).toBe(200);
+      expect(await off.json()).toMatchObject({ ok: true, flag: { key } });
+      const on = await toggle(key, true);
+      expect(on.status).toBe(200);
+    }
+  );
+});
