@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
 //   landing-page            last reviewed: 2026-10-13 — Linux baseline, `white` arm (12.10 copy, #573)
 //   landing-page-white-prev last reviewed: 2026-10-13 — Linux baseline, `white_prev` arm
 //   landing-page-white-video  last reviewed: 2026-10-13 — Linux baseline, the video page (round 3's `white_video`, round 4's `video`)
-//   landing-page-pain-point-c no baseline yet — the live `pain_point_c` arm (#783): make it on main with visual-regression.yml, update_baselines. B's (`pain_point`, paused) was dropped: #783 gave B v2's sections, so it no longer matched.
+//   landing-page-pain-point-c last reviewed: 2026-11-27 — Linux baseline, the live `pain_point_c` arm (#783), made on main by visual-regression.yml (update_baselines, run 45727163308). B's (`pain_point`, paused) was dropped: #783 gave B v2's sections, so it no longer matched.
 //   about-page              last reviewed: 2026-08-23 — Linux baseline
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
 //   glossary-page           last reviewed: 2026-11-08 — Linux baseline, glossary phase 0 (#706)
