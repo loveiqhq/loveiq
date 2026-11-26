@@ -362,3 +362,75 @@ describe("DSAR delete also erases the Resend contact (Art. 17)", () => {
     );
   });
 });
+
+/**
+ * #expert-talks: a Survey 2.0 Yes on 17004 with a number was posted to Slack, which the delete
+ * can't reach (privacy policy §9). The delete names the survey whose post to remove by hand,
+ * reading it before the answers go, and says so when it couldn't check.
+ */
+describe("DSAR delete and the #expert-talks post (Art. 17, policy §9)", () => {
+  function router(expert: "posted" | "none" | "fails") {
+    return (path: string, init?: { method?: string }) => {
+      const isDelete = init?.method === "DELETE";
+      const ok = (rows: unknown[] = [], deleted = 0) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(isDelete ? { "content-range": `*/${deleted}` } : {}),
+        json: async () => rows,
+        text: async () => "",
+      });
+      if (path.includes("frontend_qid=eq.17004")) {
+        if (expert === "fails") return { ...ok(), ok: false, status: 500 };
+        return ok(
+          expert === "posted" ? [{ survey_submission_id: 10 }, { survey_submission_id: 10 }] : []
+        );
+      }
+      if (path.includes("/app_user?email=")) return ok([{ id: 1, email: "a@x.com" }]);
+      if (path.includes("/survey_submission?user_id=")) return ok([{ id: 10 }, { id: 11 }]);
+      return ok([], 0);
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
+  });
+
+  it("names the survey whose post to delete by hand, once", async () => {
+    mockSupabaseFetch.mockImplementation(router("posted"));
+    const result = await deleteDataSubject("a@x.com");
+    expect(result.warnings.filter((w) => w.startsWith("#expert-talks"))).toEqual([
+      "#expert-talks: delete the post for survey submission #10 by hand",
+    ]);
+  });
+
+  it("reads it before the answers are deleted", async () => {
+    mockSupabaseFetch.mockImplementation(router("posted"));
+    await deleteDataSubject("a@x.com");
+    const paths = mockSupabaseFetch.mock.calls.map(([p, init]) => ({
+      p: String(p),
+      del: (init as { method?: string } | undefined)?.method === "DELETE",
+    }));
+    const lookup = paths.findIndex((c) => c.p.includes("frontend_qid=eq.17004"));
+    const answersGone = paths.findIndex(
+      (c) => c.del && c.p.startsWith("/rest/v1/survey_submission_answer?")
+    );
+    expect(lookup).toBeGreaterThanOrEqual(0);
+    expect(answersGone).toBeGreaterThan(lookup);
+  });
+
+  it("says nothing when no survey asked for a talk", async () => {
+    mockSupabaseFetch.mockImplementation(router("none"));
+    const result = await deleteDataSubject("a@x.com");
+    expect(result.warnings.some((w) => w.includes("#expert-talks"))).toBe(false);
+  });
+
+  it("asks for a search by hand when it couldn't check", async () => {
+    mockSupabaseFetch.mockImplementation(router("fails"));
+    const result = await deleteDataSubject("a@x.com");
+    expect(result.warnings).toContain(
+      "#expert-talks: couldn't check for a post; search the channel for survey submission #10, #11"
+    );
+  });
+});

@@ -156,3 +156,21 @@ describe("fitBlocks", () => {
     expect(result.size).toBe(JSON.stringify({ text: "fallback", blocks: result.blocks }).length);
   });
 });
+
+describe("verbatim text, for what a reader typed", () => {
+  it("is off unless asked for, so our own bare links stay clickable", () => {
+    expect(section("s")).toEqual({ type: "section", text: { type: "mrkdwn", text: "s" } });
+    expect(context("c")).toEqual({ type: "context", elements: [{ type: "mrkdwn", text: "c" }] });
+  });
+
+  it("is on when asked for, in a section and in a context line", () => {
+    expect(section("@here", { verbatim: true })).toEqual({
+      type: "section",
+      text: { type: "mrkdwn", text: "@here", verbatim: true },
+    });
+    expect(context("@here", { verbatim: true })).toEqual({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "@here", verbatim: true }],
+    });
+  });
+});

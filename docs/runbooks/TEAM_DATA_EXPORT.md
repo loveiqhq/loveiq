@@ -130,4 +130,6 @@ It stops before writing anything and says how many people are restricted.
 
 Erasing a person in the database (`/api/admin/data-subject`, action=delete) does not reach this
 folder. **Refresh the export the same day**, so the Drive copy drops them too. Copies a team
-member downloaded are outside our reach: ask the team to delete theirs.
+member downloaded are outside our reach: ask the team to delete theirs. If the delete's
+warnings name an `#expert-talks` post (Survey 2.0's expert call-back), delete that post in Slack
+the same day.

@@ -442,6 +442,41 @@ async function deleteResendContact(emailNorm: string, result: DsrResult): Promis
   }
 }
 
+/**
+ * #expert-talks (Survey 2.0's free expert talk, features/survey/server/expertTalkPost.ts): a Yes
+ * on 17004 with a number was posted to a Slack channel this delete can't reach, and privacy policy
+ * §9 promises that post goes too. So the delete names each survey whose post to remove by hand,
+ * read before the answers go: afterwards nothing links the email to the post's #id.
+ */
+async function warnOfExpertTalkPosts(
+  subIds: number[],
+  subFilter: string,
+  result: DsrResult
+): Promise<void> {
+  const ids = (list: number[]) => list.map((id) => `#${id}`).join(", ");
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/survey_submission_answer?survey_submission_id=${subFilter}` +
+        `&answer_text=not.is.null&answer_text=neq.` +
+        `&select=survey_submission_id,survey_question!inner(frontend_qid)` +
+        `&survey_question.frontend_qid=eq.17004`
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = (await res.json()) as Array<{ survey_submission_id: number }>;
+    const posted = [...new Set(rows.map((r) => r.survey_submission_id))];
+    if (posted.length > 0) {
+      result.warnings.push(
+        `#expert-talks: delete the post for survey submission ${ids(posted)} by hand`
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "DSR: expert-talk lookup failed");
+    result.warnings.push(
+      `#expert-talks: couldn't check for a post; search the channel for survey submission ${ids(subIds)}`
+    );
+  }
+}
+
 export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
   const result: DsrResult = { ok: true, rowsAffected: {}, warnings: [] };
   const enc = encodeURIComponent;
@@ -587,6 +622,9 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
         result
       );
     }
+
+    // Before the answers go: they are what tells a survey that asked for an expert talk.
+    await warnOfExpertTalkPosts(subIds, subFilter, result);
 
     // Survey-submission sub-cascade.
     const answerIds = (

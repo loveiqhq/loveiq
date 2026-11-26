@@ -717,8 +717,11 @@ export function buildJourneyMessage(
     text = `${tag}:credit_card: Purchase #${journey.submissionId} — ${amount ?? "amount unknown"} — ${escapeSlack(options.planLabel)} — ${name} (${email})`;
     blocks.push(header(`${tag}💳 ${amount ?? "Purchase"} — ${options.planLabel}`));
     const archetypeSuffix = options.archetype ? ` · ${escapeSlack(options.archetype)}` : "";
+    // Verbatim: the reader's name can't become an @here mention or a link (slack-blocks.ts).
     blocks.push(
-      context(`*${name}* (${email}) · submission #${journey.submissionId}${archetypeSuffix}`)
+      context(`*${name}* (${email}) · submission #${journey.submissionId}${archetypeSuffix}`, {
+        verbatim: true,
+      })
     );
     /**
      * The purchase message keeps the fields layout, deliberately.

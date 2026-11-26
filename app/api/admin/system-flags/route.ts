@@ -68,6 +68,8 @@ const ALLOWED_KEYS = new Set([
   "report_gate_archetype_reveal",
   // The EUR 1.99 page's price test: half the readers choose their price, EUR 0 included.
   "report_gate_choose_price",
+  // Survey 2.0 as a 50/50 test of fresh runs: changes what half of all survey takers see.
+  "survey_2",
 ]);
 
 export async function GET() {

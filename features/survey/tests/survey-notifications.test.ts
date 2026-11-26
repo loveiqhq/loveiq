@@ -14,6 +14,7 @@ const {
   mockSubmitSurveyOnce,
   mockSupabaseFetch,
   mockNoteReaderReturn,
+  mockPostExpertTalk,
 } = vi.hoisted(() => ({
   mockAfter: vi.fn(),
   mockLogger: {
@@ -32,6 +33,7 @@ const {
   mockSubmitSurveyOnce: vi.fn(),
   mockSupabaseFetch: vi.fn(),
   mockNoteReaderReturn: vi.fn(),
+  mockPostExpertTalk: vi.fn(),
 }));
 
 vi.mock("next/server", async () => {
@@ -79,6 +81,12 @@ vi.mock("@features/survey/server/server", () => ({
 // The "Came back" reply a resumed survey sets off: what it is handed (its rules are its own tests').
 vi.mock("@features/attribution/server/return-ping", () => ({
   noteReaderReturn: (...args: unknown[]) => mockNoteReaderReturn(...args),
+}));
+
+// #expert-talks: what the route hands over (the post itself is expertTalkPost.test.ts's).
+vi.mock("@features/survey/server/expertTalkPost", async (importActual) => ({
+  ...(await importActual<typeof import("@features/survey/server/expertTalkPost")>()),
+  postExpertTalkRequest: (...args: unknown[]) => mockPostExpertTalk(...args),
 }));
 
 vi.mock("@features/report/server/personalReport", () => ({
@@ -381,5 +389,63 @@ describe("POST /api/survey notifications", () => {
       },
       "Skipping survey Slack notification for existing submission"
     );
+  });
+
+  /**
+   * LoveIQ Sync, 26 Nov 2026: Marcus on Survey 2.0's free expert talk, "Just push it into a
+   * Slack channel. Mark and I then decide." A Yes on 17004 with a number goes to #expert-talks,
+   * after the response; nothing else does.
+   */
+  describe("a free expert talk request (Survey 2.0's 17004)", () => {
+    const YES = "Yes, I'd like a free talk with an expert";
+
+    function expertBody(expert: Record<string, unknown>) {
+      return { ...validBody(), answers: { ...validBody().answers, "15001": "Germany", ...expert } };
+    }
+
+    it("hands a Yes and its number to #expert-talks in a job of its own", async () => {
+      mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 123, isExisting: false });
+      routeJourneyAndSlack(SUBMISSION_ROW);
+      mockPostExpertTalk.mockResolvedValue(true);
+
+      const res = await POST(
+        makeRequest(expertBody({ "17004": YES, "17004_other": "+49 151 2345678" }))
+      );
+      expect(res.status).toBe(200);
+
+      // The three jobs every survey has, plus this one.
+      expect(mockAfter).toHaveBeenCalledTimes(4);
+      await vi.waitFor(() => expect(mockPostExpertTalk).toHaveBeenCalledTimes(1));
+      expect(mockPostExpertTalk).toHaveBeenCalledWith({
+        submissionId: 123,
+        firstName: "Alice",
+        email: "alice@example.com",
+        phone: "+49 151 2345678",
+        country: "Germany",
+      });
+    });
+
+    it("asks nothing of a Maybe later or a No", async () => {
+      mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 125, isExisting: false });
+      routeJourneyAndSlack({ ...SUBMISSION_ROW, id: 125 });
+
+      const res = await POST(makeRequest(expertBody({ "17004": "No, thanks" })));
+      expect(res.status).toBe(200);
+
+      expect(mockAfter).toHaveBeenCalledTimes(3);
+      expect(mockPostExpertTalk).not.toHaveBeenCalled();
+    });
+
+    it("does not post a submission twice when the browser sends it again", async () => {
+      mockSubmitSurveyOnce.mockResolvedValue({ submissionId: 456, isExisting: true });
+
+      const res = await POST(
+        makeRequest(expertBody({ "17004": YES, "17004_other": "+49 151 2345678" }))
+      );
+      expect(res.status).toBe(200);
+
+      expect(mockAfter).toHaveBeenCalledTimes(3);
+      expect(mockPostExpertTalk).not.toHaveBeenCalled();
+    });
   });
 });

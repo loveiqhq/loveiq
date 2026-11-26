@@ -57,6 +57,7 @@ import { GATE_REVEAL_ARM_KEY, type GateRevealArm } from "@shared/experiments/gat
 import type { GatePriceArm } from "@shared/experiments/gatePriceArm";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
+import { expertTalkRequestOf, postExpertTalkRequest } from "@features/survey/server/expertTalkPost";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
@@ -912,6 +913,23 @@ export async function POST(request: Request) {
         stateOfDesireTicked: stateOfDesireTicked === true,
       });
     });
+
+    // Survey 2.0's free expert talk (LoveIQ Sync, 26 Nov 2026): a Yes with a number goes to
+    // #expert-talks for Mark and Marcus, once. A job of its own, so the journey post's reads
+    // never hold it up and its failure never takes the request with it.
+    const expertTalk = isExisting
+      ? null
+      : expertTalkRequestOf({
+          submissionId,
+          firstName: normalizedFirstName,
+          email: normalizedEmail,
+          answers,
+        });
+    if (expertTalk) {
+      scheduleAfterResponse("survey-expert-talk-slack", async () => {
+        await postExpertTalkRequest(expertTalk);
+      });
+    }
 
     scheduleAfterResponse("personal-report-bootstrap", async () => {
       await ensurePersonalReportForSubmission({

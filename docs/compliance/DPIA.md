@@ -81,7 +81,7 @@ Append-only tables grow without bound; a future DSAR delete must still complete 
 
 If Q16015 copy changes, we lose proof of what each user consented to.
 
-- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant. A Yes given once the "miss out" sheet has been shown after a No, in it or on the question after closing it (since 2026-11-10's design, [survey.md](../survey.md)), is stored as `MARKETING_OPT_IN_SHEET_TERMS_VERSION`, which names both the question's version and the sheet copy's (`OPT_IN_SHEET_COPY_VERSION`), so a change to either text keeps the proof. Survey 2.0 (behind the `survey_2` switch, [survey.md](../survey.md)) words both consents its own way, so it has its own versions: `CONSENT_TERMS_VERSION_SURVEY_2` for its consent screen (the 18+ and the sex-life data as two ticks, the terms by continuing; LAWFUL_BASIS A2), dated 2026-11-23, and `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (+ the sheet's) for Q16015, a switch under the email on its details screen that starts off, dated 2026-11-24. Its expert question (Q17004) adds a phone number on a Yes, for a call about a free talk: kept as the answer's text, masked in the team copy and AP's explorer, kept out of session recordings (LAWFUL_BASIS A27). The server picks them from the run's answers (a 2.0 run answers 17001–17003).
+- **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant. A Yes given once the "miss out" sheet has been shown after a No, in it or on the question after closing it (since 2026-11-10's design, [survey.md](../survey.md)), is stored as `MARKETING_OPT_IN_SHEET_TERMS_VERSION`, which names both the question's version and the sheet copy's (`OPT_IN_SHEET_COPY_VERSION`), so a change to either text keeps the proof. Survey 2.0 (behind the `survey_2` switch, [survey.md](../survey.md)) words both consents its own way, so it has its own versions: `CONSENT_TERMS_VERSION_SURVEY_2` for its consent screen (the 18+ and the sex-life data as two ticks, the terms by continuing; LAWFUL_BASIS A2), dated 2026-11-23, and `MARKETING_OPT_IN_TERMS_VERSION_SURVEY_2` (+ the sheet's) for Q16015, a switch under the email on its details screen that starts off, dated 2026-11-24. Its expert question (Q17004) adds a phone number on a Yes, for a call about a free talk: kept as the answer's text, masked in the team copy and AP's explorer, kept out of session recordings, and posted with the name and country (the email masked) to the private Slack channel #expert-talks, where Mark and Marcus pick up the calls; a DSAR delete removes that post by hand (LAWFUL_BASIS A27, privacy policy §3.6). The server picks them from the run's answers (a 2.0 run answers 17001–17003).
 
 ### R3.8 — Team data export (MEDIUM — pseudonymised by decision, 2026-10-11)
 
@@ -116,18 +116,34 @@ pseudonymised special-category data, not anonymous data.
   one of the two open questions, and the internal ids link back to the database, which Jarvis
   can read.
 
+### R3.9 — Expert call-back requests in Slack (MEDIUM — open until `survey_2` goes on, 2026-11-26)
+
+Survey 2.0 (behind `survey_2`, off) asks if the reader wants a free talk with an expert (Q17004).
+A Yes stores the phone number and posts the first name, the whole number and the country, the email
+masked, to the private Slack channel #expert-talks (LAWFUL_BASIS A27, ROPA activity 23). It ties a
+named, reachable person to wanting help with their sex life.
+
+- **In place**: explicit consent (Art. 9(2)(a), privacy policy §3.6, §5); a private channel; no
+  answers in the post and only the survey's id in its notification text; the reader's text posted
+  verbatim, so it can't mention or link; the number masked in the team copy, AP and Jarvis, and
+  never logged; Jarvis never indexes the channel; a DSAR delete names the post to remove by hand.
+- **Open before `survey_2` goes on**: an end date for the number and the post (purge + channel
+  retention); what the expert sees of the answers; who calls and how (ask for the person by first
+  name before naming the topic, no topic on voicemail, a work phone, no saved contacts); nobody
+  from outside LoveIQ in the channel until their role and contract are settled.
+
 ## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 
-| Right (GDPR article)              | Status                                                                     | Mechanism                                                                           |
-| --------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Access (Art. 15)                  | ✅ DSAR export endpoint                                                    | `/api/admin/data-subject` action=export (F-01)                                      |
-| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                          | `/api/admin/submissions/[id]` PATCH                                                 |
-| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                    | `/api/admin/data-subject` action=delete (F-01), then refresh the team export (R3.8) |
-| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09) | Admin UI for setting it is a follow-up                                              |
-| Portability (Art. 20)             | ✅ DSAR export JSON                                                        | F-01                                                                                |
-| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                | `/api/unsubscribe` + Resend Audience cleanup (R-05)                                 |
-| Automated decisions (Art. 22)     | ✅ Not solely automated decision-making with legal/significant effect      | Self-knowledge product; no Art. 22 mechanism required                               |
-| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                               | `/api/unsubscribe` + `/api/admin/data-subject` action=delete                        |
+| Right (GDPR article)              | Status                                                                     | Mechanism                                                                                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access (Art. 15)                  | ✅ DSAR export endpoint                                                    | `/api/admin/data-subject` action=export (F-01)                                                                                                 |
+| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                          | `/api/admin/submissions/[id]` PATCH                                                                                                            |
+| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                    | `/api/admin/data-subject` action=delete (F-01), then refresh the team export (R3.8) and delete any #expert-talks post its warnings name (R3.9) |
+| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09) | Admin UI for setting it is a follow-up                                                                                                         |
+| Portability (Art. 20)             | ✅ DSAR export JSON                                                        | F-01                                                                                                                                           |
+| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                | `/api/unsubscribe` + Resend Audience cleanup (R-05)                                                                                            |
+| Automated decisions (Art. 22)     | ✅ Not solely automated decision-making with legal/significant effect      | Self-knowledge product; no Art. 22 mechanism required                                                                                          |
+| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                               | `/api/unsubscribe` + `/api/admin/data-subject` action=delete; an expert call-back by email (LAWFUL_BASIS A27)                                  |
 
 ## 5. Security controls
 
