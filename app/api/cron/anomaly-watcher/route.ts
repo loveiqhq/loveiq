@@ -38,6 +38,7 @@ import {
   CHATGPT_LOOKBACK_DAYS,
   chatgptGap,
   chatgptGapText,
+  chatgptReadFrom,
   readChatgptVisits,
   type ChatgptGap,
 } from "@features/cron/server/chatgpt-gap";
@@ -217,7 +218,7 @@ async function alertOnChatgptGap(now: Date): Promise<ChatgptGap | null> {
   if (reportingHour(now) < CHATGPT_FROM_HOUR) return null;
   const day = addDays(reportingDay(now), -1);
   const since = addDays(day, 1 - CHATGPT_LOOKBACK_DAYS);
-  const gap = chatgptGap(await readChatgptVisits(since, day), day, since);
+  const gap = chatgptGap(await readChatgptVisits(chatgptReadFrom(since), day), day, since);
   logger.info({ ...gap }, "anomaly-watcher: ChatGPT visits judged");
 
   const text = chatgptGapText(gap);

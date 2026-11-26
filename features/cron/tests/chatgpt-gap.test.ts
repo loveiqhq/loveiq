@@ -215,6 +215,37 @@ describe("chatgptGap", () => {
     });
   });
 
+  it("ends a quiet run on visits 6 days apart, not 7", () => {
+    const counts = steady("2026-10-01", "2026-10-31");
+    counts.set("2026-11-06", 1);
+    const sixApart = new Map(counts).set("2026-11-12", 1);
+    expect(chatgptGap(sixApart, "2026-11-12", windowStart("2026-11-12"))).toMatchObject({
+      action: "back",
+      back: { days: ["2026-11-06", "2026-11-12"] },
+    });
+    const sevenApart = new Map(counts).set("2026-11-13", 1);
+    expect(chatgptGap(sevenApart, "2026-11-13", windowStart("2026-11-13"))).toMatchObject({
+      action: "reminder",
+      key: "2026-11-01:week1",
+      run: { visitDays: ["2026-11-06", "2026-11-13"] },
+    });
+  });
+
+  it("takes a run's usual rate from its 28 days before even when they lie before the first day judged", () => {
+    // One visit every 4 days up to 2 Nov (1.75 a week: 24 quiet days needed), then none.
+    const counts = new Map<string, number>();
+    for (let d = "2026-11-02"; d >= "2026-09-01"; d = addDays(d, -4)) counts.set(d, 1);
+    // Judged from 1 Nov, the run from 3 Nov has only 2 of its usual days inside the days
+    // judged; read from the 28 before them, it keeps its rate and needs 24 quiet days.
+    expect(chatgptGap(counts, "2026-11-30", "2026-11-01")).toMatchObject({
+      action: "alert",
+      key: "2026-11-03:alert",
+      needed: 24,
+      usualPerWeek: 2,
+      run: { from: "2026-11-03", days: 28, capped: false },
+    });
+  });
+
   it("keeps reminding for 8 weeks through stray days that come a week or more apart", () => {
     const counts = steady("2026-10-01", "2026-10-31");
     for (const day of ["2026-11-06", "2026-11-16", "2026-11-26", "2026-12-06", "2026-12-16"])

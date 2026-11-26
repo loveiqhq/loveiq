@@ -252,9 +252,9 @@ describe("GET /api/cron/anomaly-watcher", () => {
       expect(posted).toBeLessThan(marked);
     });
 
-    it("reads the 90 days up to yesterday in Berlin", async () => {
+    it("reads the 90 days up to yesterday in Berlin, and the 28 usual days before them", async () => {
       await GET(makeReq());
-      expect(mockReadChatgpt).toHaveBeenCalledWith("2026-08-27", "2026-11-24");
+      expect(mockReadChatgpt).toHaveBeenCalledWith("2026-07-30", "2026-11-24");
     });
 
     it("says nothing when the quiet run's post is already claimed", async () => {
@@ -289,7 +289,7 @@ describe("GET /api/cron/anomaly-watcher", () => {
       expect((await (await GET(makeReq())).json()).chatgpt).toBeNull();
       vi.setSystemTime(new Date("2026-07-15T05:30:00Z")); // 07:30 in Berlin
       await GET(makeReq());
-      expect(mockReadChatgpt).toHaveBeenCalledWith("2026-04-16", "2026-07-14");
+      expect(mockReadChatgpt).toHaveBeenCalledWith("2026-03-19", "2026-07-14");
     });
 
     it("does not fail its real job when the visit log can't be read", async () => {

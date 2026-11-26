@@ -49,12 +49,16 @@ const BACK_PAIR_DAYS = 7;
  */
 const BACK_WITHIN = 7;
 /**
- * How far back a check reads. It holds the usual days of every quiet run still being reminded
- * about while 6 quiet days or fewer are needed (about 7 visits a week or more). Below that, the
- * late reminders' usual rate reads fewer than 28 days (never under a week), so a reminder can
- * come a week early or late; none is sent twice, as each step has its own key.
+ * How many days a check judges, ending on the day judged. It reads the 28 days before them too
+ * (`chatgptReadFrom`), so every run it judges has all of its usual days, and a run's rate and
+ * the quiet days it needs never change as the window moves on.
  */
 export const CHATGPT_LOOKBACK_DAYS = 90;
+
+/** The first day a check reads: the 28 usual days before the first day it judges, `since`. */
+export function chatgptReadFrom(since: string): string {
+  return addDays(since, -USUAL_DAYS);
+}
 
 export interface QuietRun {
   /** Its first quiet day. */
@@ -126,7 +130,8 @@ function quietDaysNeeded(perDay: number | null): number {
 }
 
 /**
- * `counts` is ChatGPT visits per Berlin day (a missing day had none), read from `since`.
+ * `counts` is ChatGPT visits per Berlin day (a missing day had none), read from
+ * `chatgptReadFrom(since)`; the days judged start on `since`.
  */
 export function chatgptGap(
   counts: ReadonlyMap<string, number>,
@@ -141,7 +146,7 @@ export function chatgptGap(
     const visits = counts.get(d) ?? 0;
     if (!run) {
       if (visits) continue;
-      const perDay = usualPerDay(counts, d, since);
+      const perDay = usualPerDay(counts, d, chatgptReadFrom(since));
       run = {
         from: d,
         capped: d === since,
