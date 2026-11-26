@@ -12,7 +12,12 @@
  * Off unless SLACK_EXPERT_TALKS_CHANNEL_ID is set (with the journey bot's SLACK_BOT_TOKEN +
  * SLACK_JOURNEY_CHANNEL_ID, and the bot invited to the channel). Never throws: the survey route
  * runs it after its response. A request it can't post stays in the database as the Yes
- * answer's text, and the log says which survey it was, never the number.
+ * answer's text, and the log line names the survey, never the number. One gap it shares with
+ * the #incoming-surveys post: a submit whose save outlives the route's wait answers 503 without
+ * posting, and the retry that finds the saved survey posts nothing either.
+ *
+ * What decides a post is the answers, not the `survey_2` switch: only Survey 2.0 asks 17004,
+ * and a 2.0 draft finished after the switch goes off must still reach the team.
  */
 
 import {
@@ -21,6 +26,7 @@ import {
   expertPhoneValid,
   isExpertYes,
 } from "@features/survey/survey2/expert";
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { escapeSlack, maskEmail, type SlackBlock } from "@shared/observability/slack";
@@ -77,9 +83,13 @@ export function expertTalksChannel(): string | null {
   return channel && isSlackBotConfigured() ? channel : null;
 }
 
-/** A reader's text as one bounded line Slack shows as text: no mention, no link, no new line. */
+/**
+ * A reader's text as one bounded line: no new line, cut by characters (never half an emoji)
+ * with "…" where it was cut. It goes into a verbatim block, so it can't mention or link.
+ */
 function shown(value: string | null, max: number): string {
-  const line = (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+  const chars = Array.from((value ?? "").replace(/\s+/g, " ").trim());
+  const line = chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : chars.join("");
   return line ? escapeSlack(line) : "—";
 }
 
@@ -94,16 +104,20 @@ export function buildExpertTalkMessage(request: ExpertTalkRequest): {
     section(
       `:telephone_receiver: ${team ? "*Team test:* " : ""}*Free expert talk request* from survey submission *${id}*`
     ),
+    // Verbatim: a plain "@here" in a name or a bare URL in the phone box stays text.
     section(
       [
         `Name: *${shown(request.firstName, NAME_MAX)}*`,
         `Phone: *${shown(request.phone, PHONE_MAX)}*`,
         `Country (self-reported): *${shown(request.country, COUNTRY_MAX)}*`,
         `Email: ${codeSpan(maskEmail(request.email))}`,
-      ].join("\n")
+      ].join("\n"),
+      { verbatim: true }
     ),
   ];
-  if (team) blocks.push(context("An @loveiq.org address: no call needed."));
+  // Most likely a colleague testing, but the email question invites any address, so the call
+  // stays Mark's and Marcus's to make.
+  if (team) blocks.push(context("An @loveiq.org address: most likely a team test."));
   return {
     text: `${team ? "Team test: " : ""}Free expert talk request from survey submission ${id}`,
     blocks,
@@ -113,23 +127,26 @@ export function buildExpertTalkMessage(request: ExpertTalkRequest): {
 /** Post one request into #expert-talks. True once Slack has it; never throws. */
 export async function postExpertTalkRequest(request: ExpertTalkRequest): Promise<boolean> {
   const { submissionId } = request;
+  // The id goes in the message itself: #prod-alerts shows the message, not the log's fields.
+  const what = `Expert talk request from survey submission #${submissionId} not posted`;
   const channel = expertTalksChannel();
   if (!channel) {
-    logger.warn(
+    // On production a missing setting drops every request, so it must reach #prod-alerts
+    // (errors do, warnings don't); elsewhere the channel is unset on purpose.
+    const log = isNonProdDeploy() ? logger.warn : logger.error;
+    log.call(
+      logger,
       { submissionId },
-      "Expert talk request not posted: SLACK_EXPERT_TALKS_CHANNEL_ID or the journey bot is unset"
+      `${what}: SLACK_EXPERT_TALKS_CHANNEL_ID or the journey bot is unset`
     );
     return false;
   }
   try {
     const message = buildExpertTalkMessage(request);
     if (await postJourneyMessage({ channel, ...message })) return true;
-    logger.error({ submissionId }, "Expert talk request not posted: Slack refused it");
+    logger.error({ submissionId }, `${what}: Slack refused it`);
   } catch (err) {
-    logger.error(
-      { submissionId, reason: err instanceof Error ? err.message : String(err) },
-      "Expert talk request not posted"
-    );
+    logger.error({ submissionId, reason: err instanceof Error ? err.message : String(err) }, what);
   }
   return false;
 }

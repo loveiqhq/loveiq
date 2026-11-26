@@ -40,6 +40,8 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         { id: "C4", name: "email-inbox", is_member: true, is_private: true },
         // The recruiting channel: names and assesses candidates (2026-09-23).
         { id: "C5", name: "hr", is_member: true, is_private: true },
+        // Survey 2.0's expert-talk requests: name and whole phone number (26 Nov 2026).
+        { id: "C6", name: "expert-talks", is_member: true, is_private: true },
       ];
       const visible = all.filter((c) => asked.some((t) => typeOf(c) === t));
       if (withSecondPage) {
@@ -296,6 +298,13 @@ describe("a channel carrying customer mail is never indexed, however it was invi
     const historyCalls = slackCalls.filter((u) => u.includes("conversations.history"));
     expect(historyCalls.length).toBeGreaterThan(0);
     expect(historyCalls.some((u) => u.includes("C5"))).toBe(false);
+  });
+
+  it("never reads #expert-talks, where readers' phone numbers are posted", async () => {
+    await ingestSlack(STAMP);
+    const historyCalls = slackCalls.filter((u) => u.includes("conversations.history"));
+    expect(historyCalls.length).toBeGreaterThan(0);
+    expect(historyCalls.some((u) => u.includes("C6"))).toBe(false);
   });
 
   /** The denylist must be surgical: excluding one channel must not cost the others. */

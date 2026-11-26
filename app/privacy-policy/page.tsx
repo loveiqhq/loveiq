@@ -176,9 +176,9 @@ export default function PrivacyPolicyPage() {
                 3.6 A free talk with one of our experts
               </h3>
               <p className="mb-4">
-                At the end of the survey, we ask if you&apos;d like a free talk with one of our
-                experts about improving your sex life. If you say yes, we ask for your phone number
-                so we can call you to set it up.
+                Near the end of one version of our survey, we ask if you&apos;d like a free talk
+                with one of our experts about improving your sex life. If you say yes, we ask for
+                your phone number so we can call you to set it up.
               </p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Your answer to that question</li>
@@ -186,15 +186,16 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p>
                 We use your number only to call you about the talk you asked for. Your request goes
-                to the people on our team who set up the talks, with your name, phone number and
-                country (section 7.7). If you change your mind, write to us at{" "}
+                to a private channel that a few people on our team can read, among them the people
+                who set up the talks, with your first name, phone number and country (section 7.7).
+                If you change your mind, write to us at{" "}
                 <a
                   href="mailto:hello@loveiq.org"
                   className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
-                </a>{" "}
-                and we won&apos;t call.
+                </a>
+                : we won&apos;t call, and we&apos;ll delete your number and your request.
               </p>
             </section>
 
@@ -399,6 +400,8 @@ export default function PrivacyPolicyPage() {
                   technical problems, and posts that let the team follow sign-ups and returns: one
                   for each finished survey, and a note when a reader comes back to their report. It
                   also receives your request if you ask for a free talk with one of our experts.
+                  Slack can process this data in the USA, under the EU-US Data Privacy Framework and
+                  the EU Standard Contractual Clauses.
                 </li>
               </ul>
               <p className="mb-4">
@@ -412,10 +415,10 @@ export default function PrivacyPolicyPage() {
                 following and improving our service (Art. 6(1)(f) GDPR).
               </p>
               <p className="mb-4">
-                A request for a free talk with one of our experts is different, because it&apos;s
-                there so we can call you. It goes to a private channel that only a few people on our
-                team can read, with your name, phone number and country, and your email address
-                masked. Its legal basis is your consent (section 5).
+                A request for a free talk with one of our experts is different: we need it to call
+                you. It goes to a private channel that only a few people on our team can read, with
+                your first name, phone number and country, and your email address masked. Its legal
+                basis is your consent (section 5).
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>

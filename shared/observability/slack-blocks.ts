@@ -48,8 +48,19 @@ export function codeSpan(value: string): string {
   return `\`${safe}\``;
 }
 
-export function section(text: string): SlackBlock {
-  return { type: "section", text: { type: "mrkdwn", text } };
+/**
+ * `verbatim` for text that carries what a reader typed. Without it Slack turns a plain `@here`,
+ * `@channel` or `@everyone` into a real mention and a bare URL into a link, which escaping
+ * `<`/`>` (escapeSlack) can't stop. Bold and the `<url|text>` links we write ourselves still work.
+ */
+type TextOptions = { verbatim?: boolean };
+
+function mrkdwn(text: string, options?: TextOptions) {
+  return options?.verbatim ? { type: "mrkdwn", text, verbatim: true } : { type: "mrkdwn", text };
+}
+
+export function section(text: string, options?: TextOptions): SlackBlock {
+  return { type: "section", text: mrkdwn(text, options) };
 }
 
 export function header(text: string): SlackBlock {
@@ -57,8 +68,8 @@ export function header(text: string): SlackBlock {
   return { type: "header", text: { type: "plain_text", text: text.slice(0, 150), emoji: true } };
 }
 
-export function context(text: string): SlackBlock {
-  return { type: "context", elements: [{ type: "mrkdwn", text }] };
+export function context(text: string, options?: TextOptions): SlackBlock {
+  return { type: "context", elements: [mrkdwn(text, options)] };
 }
 
 export function divider(): SlackBlock {

@@ -1103,6 +1103,23 @@ describe("journey message safety", () => {
     expect(JSON.stringify(ordinary.blocks)).toContain("Jean_Luc");
   });
 
+  it("keeps a plain @here or a bare link in a name as text: the name's line is verbatim", () => {
+    // Escaping stops `<!here>`; only `verbatim` stops Slack turning a plain "@here" into a
+    // mention of everyone in the channel, or a bare URL into a link.
+    const message = buildJourneyMessage(journey({ firstName: "@here https://evil.example" }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 29.00",
+    });
+    const withName = message.blocks.filter((b) => JSON.stringify(b).includes("@here"));
+    expect(withName).toHaveLength(1);
+    expect(withName[0]).toMatchObject({
+      type: "context",
+      elements: [{ type: "mrkdwn", verbatim: true }],
+    });
+  });
+
   it("puts the masked email in a code span, not through the markup escaper", () => {
     // escapeSlack(maskEmail(...)) renders literal backslashes in Slack mrkdwn —
     // "e\\*\\*\\*@example.com" — so the mask has to travel as code.

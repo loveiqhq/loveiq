@@ -143,10 +143,12 @@ describe("buildExpertTalkMessage", () => {
     expect(message.text).not.toContain("Anna");
   });
 
-  it("marks a team run as a test nobody needs to call", () => {
+  it("marks a team run as most likely a test, and leaves the call to Mark and Marcus", () => {
     const message = buildExpertTalkMessage(request({ email: "fh@loveiq.org" }));
     expect(message.text).toMatch(/^Team test/);
-    expect(JSON.stringify(message.blocks)).toContain("no call needed");
+    // The email question invites any address, so a reader can type one at our domain.
+    expect(JSON.stringify(message.blocks)).toContain("most likely a team test");
+    expect(JSON.stringify(message.blocks)).not.toContain("no call needed");
     expect(JSON.stringify(buildExpertTalkMessage(request()).blocks)).not.toContain("Team test");
   });
 
@@ -170,13 +172,36 @@ describe("buildExpertTalkMessage", () => {
     expect(shown).toContain("A&amp;B");
   });
 
+  it("keeps a plain @here, @channel or a bare link as text: the reader's lines are verbatim", () => {
+    // Escaping can't reach these: without `verbatim` Slack itself turns a plain "@channel"
+    // into a mention of the whole channel and a bare URL into a link.
+    const message = buildExpertTalkMessage(
+      request({ firstName: "@here", phone: "@channel 0151234567", country: "https://evil.example" })
+    );
+    const readerLines = message.blocks.filter((b) => JSON.stringify(b).includes("@channel"));
+    expect(readerLines).toHaveLength(1);
+    expect(readerLines[0]).toMatchObject({ type: "section", text: { verbatim: true } });
+    expect(JSON.stringify(readerLines[0])).toContain("@here");
+    expect(JSON.stringify(readerLines[0])).toContain("https://evil.example");
+  });
+
   it("keeps each line to one line and a sane length", () => {
     const message = buildExpertTalkMessage(
       request({ firstName: `Anna\nPhone: *0000*`, phone: `${PHONE}${"9".repeat(200)}` })
     );
     const shown = JSON.stringify(message.blocks);
     expect(shown).not.toContain("Anna\\nPhone");
-    expect(shown).not.toContain("9".repeat(41));
+    // 40 characters at most, the cut marked: 39 of the number and "…".
+    expect(shown).toContain(`Phone: *${`${PHONE}${"9".repeat(200)}`.slice(0, 39)}…*`);
+  });
+
+  it("cuts by characters, never through an emoji", () => {
+    const fits = buildExpertTalkMessage(request({ firstName: `${"a".repeat(58)}😀😀` }));
+    expect(JSON.stringify(fits.blocks)).toContain(`Name: *${"a".repeat(58)}😀😀*`);
+    const cut = buildExpertTalkMessage(request({ firstName: `${"a".repeat(59)}😀😀` }));
+    expect(JSON.stringify(cut.blocks)).toContain(`Name: *${"a".repeat(59)}…*`);
+    // No half of a surrogate pair left behind for Slack to choke on.
+    expect(JSON.stringify(cut.blocks)).not.toMatch(/\\ud83d(?!\\ude00)/i);
   });
 });
 
@@ -189,6 +214,22 @@ describe("postExpertTalkRequest", () => {
 
   afterEach(() => {
     delete process.env.SLACK_EXPERT_TALKS_CHANNEL_ID;
+    vi.unstubAllEnvs();
+  });
+
+  it("on production, a missing setting is an error #prod-alerts shows, naming the survey", async () => {
+    delete process.env.SLACK_EXPERT_TALKS_CHANNEL_ID;
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+
+    await expect(postExpertTalkRequest(request())).resolves.toBe(false);
+
+    expect(mockWarn).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledTimes(1);
+    // The alert shows the message, not the log's fields: the id must be in the words.
+    expect(String(mockError.mock.calls[0]![1])).toContain("#2891");
+    expect(JSON.stringify(mockError.mock.calls)).not.toContain("2345678");
   });
 
   it("posts the request into #expert-talks through the journey bot", async () => {
@@ -219,7 +260,7 @@ describe("postExpertTalkRequest", () => {
     await expect(postExpertTalkRequest(request())).resolves.toBe(false);
 
     expect(mockError).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(mockError.mock.calls)).toContain("2891");
+    expect(String(mockError.mock.calls[0]![1])).toContain("#2891");
     expect(JSON.stringify(mockError.mock.calls)).not.toContain("2345678");
   });
 

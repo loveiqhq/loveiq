@@ -61,8 +61,10 @@ import {
  * Names, not ids, because a channel can be recreated and the intent follows the name.
  */
 // `hr` is the recruiting channel: it names and assesses candidates (owner's decision,
-// 2026-09-23). `purgeDenylistedChannels` removes what is already stored on the next run.
-const NEVER_INDEX = new Set(["email-inbox", "hr"]);
+// 2026-09-23). `expert-talks` carries Survey 2.0 readers' names and whole phone numbers
+// (2026-11-26; the bot isn't a member, this keeps it so). `purgeDenylistedChannels` removes
+// what is already stored on the next run.
+const NEVER_INDEX = new Set(["email-inbox", "hr", "expert-talks"]);
 
 /**
  * Remove anything already indexed from a channel that is now on the denylist.
