@@ -179,8 +179,8 @@ describe("the Sheets section (Mark, 17 Nov 2026)", () => {
     expect(halfway[2]!.className).toContain("text-ap-bad");
     expect(halfway[3]!.textContent).toBe("6 s");
     expect(halfway[4]!.textContent).toBe("—");
-    // Sheet 4 is out of the survey since 27 Nov 2026 (#789, Mark's ask of 25 Nov): its figures stay, marked as such.
-    expect(sheetsRow("Halfway · profile filling in").textContent).toContain("Taken out on 27 Nov");
+    // Sheet 4 is out of the survey since 26 Nov 2026 (#789, Mark's ask of 25 Nov): its figures stay, marked as such.
+    expect(sheetsRow("Halfway · profile filling in").textContent).toContain("Taken out on 26 Nov");
     expect(sheetsRow("Science · responsive desire").textContent).not.toContain("Taken out");
     const desire = within(sheetsRow("State of Desire report promo")).getAllByRole("cell");
     expect(desire[4]!.textContent).toBe("2.8%1 click");
@@ -587,7 +587,7 @@ describe("the CSV (every table on the page is in it)", () => {
       "1 · Science · responsive desire",
       "2 · Trustpilot testimonial",
       "3 · Expert quote",
-      "4 · Halfway · profile filling in (taken out on 27 Nov)",
+      "4 · Halfway · profile filling in (taken out on 26 Nov)",
       "5 · State of Desire report promo",
       "6 · How to read your report",
       "7 · Opt-in · Sure you want to miss out?",
