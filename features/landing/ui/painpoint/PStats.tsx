@@ -1,38 +1,47 @@
 import type { FC } from "react";
+import CountUpOnView from "../CountUpOnView";
+import PStatDots from "./PStatDots";
 import { STATS } from "./painPointContent";
-import { PP_ACCENT, PP_H2, PP_INNER } from "./ppStyles";
+import { PP_H2, PP_INNER } from "./ppStyles";
+
+/** The brand sweep as text, as on the video page's stat numbers (WWowStats). */
+const STAT_NUMBER =
+  "bg-gradient-to-r from-[#fe6839] via-[#bf66d9] to-[#958ef6] bg-clip-text text-transparent";
 
 /**
- * "Sex problems are common. Talking about them isn't." (board "Stats"): four numbers in
- * outlined cards, four across at 1440 and one column on a phone. The board names no source;
- * the line under the cards does (Fatih, 14 Nov): 47% is LoveHoney's, as on the video page,
- * and 56%, 42% and 77% are LoveIQ State of Desire 2026's agreement shares.
+ * "Sex problems are common. Talking about them isn't." (board "Stats"), in the video page's
+ * stat cards since v2 (Mark, 12 Nov: "we had more engaging and more professionally looking
+ * designs for stats on the current landing page"; features/landing/ui/white/WWowStats.tsx).
+ * Each card draws its share as 100 dots with that many lit, and its number rolls up from 0 as
+ * it comes into view (Hana's board). Four across from lg, two by two from sm, one column on a
+ * phone. Where the numbers come from is noted in painPointContent.ts.
  */
 const PStats: FC = () => (
   <section data-landing-section="stats" className="px-4 py-16 lg:px-6 lg:py-24">
-    <div className={`${PP_INNER} flex flex-col gap-10`}>
-      <div className="flex max-w-[760px] flex-col gap-4">
-        <h2 className={`${PP_H2} max-w-[760px]`}>{STATS.title}</h2>
-      </div>
-      <div className="flex flex-col gap-[14px]">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-5 lg:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
-          {STATS.cards.map((card) => (
-            <div
-              key={card.value}
-              data-stat
-              className="flex flex-col gap-3 rounded-[20px] border border-solid border-[#e9e6ee] p-7"
-            >
-              <span
-                className={`font-serif text-[40px] font-semibold leading-none lg:text-[48px] ${PP_ACCENT}`}
-              >
-                {card.value}
-              </span>
-              <p className="m-0 text-[15px] leading-6 text-[#3f3a4d]">{card.body}</p>
+    <div className={`${PP_INNER} flex flex-col items-center gap-10`}>
+      <h2 className={`animate-on-scroll ${PP_H2} max-w-[760px] text-center`}>{STATS.title}</h2>
+      <ul className="m-0 grid w-full list-none gap-[22px] p-0 sm:grid-cols-2 lg:grid-cols-4">
+        {STATS.cards.map((card, i) => (
+          <li
+            key={card.share}
+            data-stat
+            className={`animate-on-scroll stagger-${i + 1} flex flex-col items-center rounded-[20px] border border-solid border-[#e9e6ee] bg-white px-6 pb-[26px] pt-[30px] shadow-[0_2px_5px_rgba(20,15,33,0.05)] transition duration-300 hover:shadow-[0_10px_28px_-14px_rgba(20,15,33,0.25)] motion-safe:hover:-translate-y-1`}
+          >
+            <div className="aspect-[282/110] w-full max-w-[282px]">
+              <PStatDots lit={card.share} id={`pp-stat-dots-${i}`} />
             </div>
-          ))}
-        </div>
-        <p className="m-0 text-[10px] leading-[15px] text-[#6f6a7a]">{STATS.sources}</p>
-      </div>
+            <p className="m-0 mt-4 text-center font-serif text-[40px] font-semibold leading-none">
+              <CountUpOnView value={card.share} suffix="%" index={i} className={STAT_NUMBER} />
+            </p>
+            <p
+              data-stat-body
+              className="m-0 mt-2 max-w-[282px] text-center text-[13px] font-semibold leading-[19px] text-[#5f6675]"
+            >
+              {card.body}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 );

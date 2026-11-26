@@ -43,10 +43,12 @@ export interface PendingSurveyCompletion {
 }
 
 /**
- * The one question the landing page asks up front (the hero / closing-CTA card
- * in features/landing/ui/white/WQuestionCard.tsx). Answering it there stores a
- * real answer and marks the qId as "prefilled", so SurveyEngine drops it from
- * the flow; every other question is asked inside /survey.
+ * The question the landing pages ask up front (the hero / closing-CTA card in
+ * features/landing/ui/white/WQuestionCard.tsx, and the paused pain-point page's hero).
+ * Answering it there stores a real answer and marks the qId as "prefilled", so
+ * SurveyEngine drops it from the flow; every other question is asked inside /survey.
+ * The pain-point page's version C asks Q10003 instead (QUESTION_C in
+ * features/landing/ui/painpoint/painPointContent.ts), saved the same way under its own id.
  */
 export const LANDING_PREFILL_QID = "01002";
 

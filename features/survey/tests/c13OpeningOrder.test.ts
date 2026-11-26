@@ -290,3 +290,24 @@ describe("the test's end", () => {
     expect(beginsNow({ ...untouched, startedAt: "not a date" })).toBe(false);
   });
 });
+
+describe("the pain-point page's version C answers Q10003 on the landing (sync 24 Nov 2026)", () => {
+  // SurveyEngine orders the whole set first and drops the prefilled answers after, so the
+  // landing's question leaves its own slot and nothing else moves.
+  const askedAfterC = () => ids(variant()).filter((qId) => qId !== "10003");
+
+  it("asks it last in the new opening, so the landing answer only frees that slot", () => {
+    expect(C13_OPENING.at(-1)).toBe("10003");
+    expect(askedAfterC().slice(0, C13_OPENING.length - 1)).toEqual(C13_OPENING.slice(0, -1));
+    expect(askedAfterC()).toHaveLength(ids(variant()).length - 1);
+  });
+
+  it("still asks Q01002 second, after the name, for a reader who answered C's question", () => {
+    expect(askedAfterC().slice(0, 2)).toEqual(["00001", "01002"]);
+  });
+
+  it("begins a fresh run in the new order when C's answer is the draft's only one", () => {
+    const landingC = { currentIndex: 0, answers: { "10003": 6 }, prefilled: ["10003"] };
+    expect(resolveDraftQuestionOrderArm(landingC)).toBe("variant");
+  });
+});

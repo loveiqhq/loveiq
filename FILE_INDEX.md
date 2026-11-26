@@ -67,8 +67,9 @@
 
 > The landing page is a 50/50 A/B (round 4, `shared/experiments/landingVariant.ts`): the
 > white design at `features/landing/ui/white/` with the presenter video in the hero (arm A,
-> `video`) against Marcus's new pain-point page at `features/landing/ui/painpoint/` (arm B,
-> `pain_point`). Round 3's question-card page (`white_card`) still renders for
+> `video`) against Marcus's pain-point page at `features/landing/ui/painpoint/`: since the
+> 2026-11-24 sync its version C (`pain_point_c`: Q10003, the privacy line under the film), with B (`pain_point`)
+> paused. Round 3's question-card page (`white_card`) still renders for
 > `?variant=white_card`. `features/landing/ui/white-v1/` is the white landing from before the
 > 2026-08-10 rebuild, round 2's retired arm (round 1, white-vs-dark, concluded
 > 2026-06-19 and the dark sections were deleted). `S06Archetypes.tsx`

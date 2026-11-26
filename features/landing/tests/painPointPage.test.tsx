@@ -16,7 +16,8 @@ import { LANDING_PREFILL_QID, SURVEY_STATE_KEY } from "@features/survey/ui/hooks
  * pain-point version", final boards "Desktop · Hero 3" and "Mobile · Hero 3"). Copy is the
  * boards' after Fatih's calls of 14.11 and 15.11: 15 minutes, the price on the archetype
  * (never implied free), the 14-day guarantee, "taken a first step", patterns people recognise,
- * today's FAQ, sources under the numbers, every button to /survey.
+ * today's FAQ, every button to /survey. v2 (23.11, Mark's comments): no phone intro over the
+ * cards, "calmer" for "kinder", and no sources line under the numbers.
  */
 class FakeObserver {
   constructor(public cb: IntersectionObserverCallback) {}
@@ -162,6 +163,31 @@ describe("pain-point page — reveals never hide content", () => {
       /@media \(scripting: none\) \{\s*\.pp-root \.animate-on-scroll \{\s*opacity: 1;\s*transform: none;/
     );
   });
+
+  it("draws v2's cross-outs and shows their new lines without JavaScript and under reduced motion", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    /** The text of every `@media (<media>)` block, braces matched. */
+    const blocks = (media: string) => {
+      const out: string[] = [];
+      const open = `@media (${media}) {`;
+      for (let at = css.indexOf(open); at !== -1; at = css.indexOf(open, at + 1)) {
+        let depth = 0;
+        for (let i = at + open.length - 1; i < css.length; i += 1) {
+          if (css[i] === "{") depth += 1;
+          if (css[i] === "}" && --depth === 0) {
+            out.push(css.slice(at, i + 1));
+            break;
+          }
+        }
+      }
+      return out.join("\n");
+    };
+    for (const media of ["prefers-reduced-motion: reduce", "scripting: none"]) {
+      const block = blocks(media);
+      expect(block).toMatch(/\.pp-root \.pp-pop \{\s*opacity: 1;\s*transform: none;/);
+      expect(block).toMatch(/\.pp-root \.pp-strike \{\s*background-size: 100% 1\.5px;/);
+    }
+  });
 });
 
 describe("pain-point page — trust band and the three steps", () => {
@@ -224,12 +250,13 @@ describe("pain-point page — the six pain points", () => {
       "You'll get the vocabulary for what you want, in plain words you can use.",
       "“We keep having the same argument about how often.”",
       "You'll see the pattern behind the argument, so you can stop repeating it.",
-      "These are six patterns people often recognise in themselves before they take the test.",
     ]) {
       expect(text).toContain(line);
     }
     // Nobody tells LoveIQ anything before the test (Fatih, 15 Nov).
     expect(text).not.toContain("people tell us");
+    // Mark (12 Nov): "Isn't that clear from the cards? Do we need this?" Cut in v2 (Fatih, 23 Nov).
+    expect(text).not.toContain("These are six patterns");
   });
 
   it("starts the survey from its button, counted from the pain points", () => {
@@ -249,7 +276,7 @@ describe("pain-point page — what changes", () => {
       .closest("section") as HTMLElement;
     expect(section.getAttribute("data-landing-section")).toBe("promise");
     expect(section.textContent).toContain(
-      "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot kinder."
+      "You can't ask for what you can't describe. Once your pattern has words, the conversation you've been avoiding gets a lot shorter, and a lot calmer."
     );
     const struck = [...section.querySelectorAll("s")].map((s) => s.textContent);
     expect(struck).toEqual([
@@ -266,6 +293,22 @@ describe("pain-point page — what changes", () => {
     ]) {
       expect(section.textContent).toContain(after);
     }
+  });
+
+  it("lays the four changes out as tiles, each led by its ring icon (Mark, 12 Nov)", () => {
+    // "this reads as a step by step instructions, which it isn't… maybe use 4 tiles next to each
+    // other and use an icon for each": the video page's ring icons, in the order of the changes.
+    renderPage();
+    const section = screen
+      .getByRole("heading", { level: 2, name: "What changes with LoveIQ." })
+      .closest("section") as HTMLElement;
+    const tiles = within(section).getAllByRole("listitem");
+    expect(tiles).toHaveLength(4);
+    expect(
+      tiles.map((t) => t.querySelector("[data-ring-icon]")?.getAttribute("data-ring-icon"))
+    ).toEqual(["message", "thermometer", "rings", "flame"]);
+    // Each tile is its own trigger: a row that enters together plays as Hana's cascade.
+    for (const tile of tiles) expect(tile.hasAttribute("data-reveal")).toBe(true);
   });
 });
 
@@ -307,26 +350,56 @@ describe("pain-point page — sentences you can actually say", () => {
 });
 
 describe("pain-point page — the numbers", () => {
-  it("shows four numbers with what they count, and where they come from", () => {
-    renderPage();
-    const section = screen
+  // v2 (Mark, 12 Nov): "we had more engaging and more professionally looking designs for stats
+  // on the current landing page": the video page's stat cards, each share drawn as dots.
+  const section = () =>
+    screen
       .getByRole("heading", {
         level: 2,
         name: "Sex problems are common. Talking about them isn't.",
       })
       .closest("section") as HTMLElement;
-    expect(section.getAttribute("data-landing-section")).toBe("stats");
-    const cards = [...section.querySelectorAll("[data-stat]")].map((card) =>
-      card.textContent?.replace(/\s+/g, " ").trim()
-    );
-    expect(cards).toEqual([
-      "47%of adults have a sexual concern they've never raised with a partner.",
-      "56%of people who take our test need emotional closeness before desire shows up.",
-      "42%shut down when sex starts to feel like pressure.",
-      "77%want more variety in their sex life than they have now.",
+  const cards = () => [...section().querySelectorAll<HTMLElement>("[data-stat]")];
+
+  it("shows four numbers with what they count", () => {
+    renderPage();
+    expect(section().getAttribute("data-landing-section")).toBe("stats");
+    // What a screen reader hears for each number: its final value.
+    expect(cards().map((c) => c.querySelector(".sr-only")?.textContent)).toEqual([
+      "47%",
+      "56%",
+      "42%",
+      "77%",
     ]);
-    expect(section.textContent).toContain(
-      "Sources: LoveHoney Global Sex Survey 2023 · LoveIQ State of Desire 2026 (n = 2,369)"
-    );
+    expect(cards().map((c) => c.querySelector("[data-stat-body]")?.textContent)).toEqual([
+      "of adults have a sexual concern they've never raised with a partner.",
+      "of people who take our test need emotional closeness before desire shows up.",
+      "shut down when sex starts to feel like pressure.",
+      "want more variety in their sex life than they have now.",
+    ]);
+    // Mark (12 Nov): "Do we really want to show this?" Marcus: "will take out". Out in v2.
+    expect(section().textContent).not.toContain("Sources:");
+  });
+
+  it("draws each share as 100 dots with that many lit, as the video page's 47% does", () => {
+    renderPage();
+    const dots = cards().map((c) => {
+      const svg = c.querySelector("svg[data-dots]")!;
+      return [
+        svg.querySelectorAll("circle").length,
+        svg.querySelectorAll("circle[data-lit]").length,
+      ];
+    });
+    expect(dots).toEqual([
+      [100, 47],
+      [100, 56],
+      [100, 42],
+      [100, 77],
+    ]);
+  });
+
+  it("rolls each number up from 0 as it comes into view", () => {
+    renderPage();
+    for (const card of cards()) expect(card.querySelector("[data-count-up]")).not.toBeNull();
   });
 });

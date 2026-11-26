@@ -621,10 +621,11 @@ describe("pricing arm — the Pricing 3.0 test", () => {
 
 describe("landing arm — round 4 of the landing test", () => {
   /**
-   * The landing test is live (V3's video page vs V4's pain-point page), and a purchase is
-   * where it pays off, so the buyer's message says which version they came through. Round
-   * 2 left this message when it concluded on 2026-09-19; round 3 put it back. A stamp from
-   * an earlier round still reads, marked as retired.
+   * The landing test is live (V3's video page vs V4's pain-point page, since the 24 Nov 2026
+   * sync its version C), and a purchase is where it pays off, so the buyer's message says
+   * which version they came through. Round 2 left this message when it concluded on
+   * 2026-09-19; round 3 put it back. A stamp from an earlier round, or from B, paused for C,
+   * still reads, marked as retired.
    */
   const purchase = (landing: string | null, pricing: string | null = "B3") =>
     JSON.stringify(
@@ -644,8 +645,10 @@ describe("landing arm — round 4 of the landing test", () => {
     );
 
   it("names the version a buyer came through, above the pricing arm", () => {
-    const painPoint = purchase("pain_point");
-    expect(painPoint).toContain("*Landing page design*\\nLanding Page V4 (Pain Points)");
+    const painPoint = purchase("pain_point_c");
+    expect(painPoint).toContain(
+      "*Landing page design*\\nLanding Page V4 C (Pain Points, Turn-Ons Question)"
+    );
     expect(painPoint).not.toContain("retired arm");
     expect(painPoint.indexOf("Landing page design")).toBeLessThan(
       painPoint.indexOf("Report pricing")
@@ -662,6 +665,8 @@ describe("landing arm — round 4 of the landing test", () => {
     expect(purchase("white_video")).toContain(
       "Landing Page V3 (Video in Hero, before V4) _(retired arm)_"
     );
+    // B, the pain-point page as released, paused at the 24 Nov 2026 sync for version C.
+    expect(purchase("pain_point")).toContain("Landing Page V4 (Pain Points) _(retired arm)_");
   });
 });
 

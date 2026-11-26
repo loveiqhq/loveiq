@@ -4,7 +4,7 @@ import { useId, useRef, type FC, type KeyboardEvent } from "react";
 import { useLandingPick } from "@features/landing/logic/landingPick";
 import PCta from "./PCta";
 import { PP_FOCUS } from "./ppStyles";
-import { HERO, QUESTION_1 } from "./painPointContent";
+import { HERO, type HeroQuestion } from "./painPointContent";
 
 /** The board's dot diameters, 1 to 7: large at the ends, small in the middle. */
 const DOT_SIZES = [40, 34, 28, 24, 28, 34, 40] as const;
@@ -12,14 +12,14 @@ const DOT_SIZES = [40, 34, 28, 24, 28, 34, 40] as const;
 const rimFor = (i: number) => (i < 3 ? "#e6b5a6" : i > 3 ? "#c9bff0" : "#e0dce6");
 
 /**
- * Question 1 of the survey, asked in the hero (board Hero 3, "inline question"): seven
- * dots, then the button. The answer is saved into the survey draft as you tap
- * (useLandingPick), so /survey skips the question; the button then reads "Continue free
- * test" and counts as question 1's continue. A radio group: one dot is in the tab order,
- * and the arrow keys move between them.
+ * A survey question asked in the hero (board Hero 3, "inline question"): seven dots, then
+ * the button. B asks question 1 (Q01002), version C Q10003 (painPointContent.ts). The answer
+ * is saved into the survey draft as you tap (useLandingPick), so /survey skips the question;
+ * the button then reads "Continue free test" and counts as the card's continue. A radio
+ * group: one dot is in the tab order, and the arrow keys move between them.
  */
-const PHeroQuestion: FC = () => {
-  const { selected, pick } = useLandingPick();
+const PHeroQuestion: FC<{ question: HeroQuestion }> = ({ question }) => {
+  const { selected, pick } = useLandingPick(question.qId);
   const questionId = useId();
   const dotsRef = useRef<Array<HTMLButtonElement | null>>([]);
   const answered = selected !== null;
@@ -46,7 +46,7 @@ const PHeroQuestion: FC = () => {
         id={questionId}
         className="m-0 font-serif text-[22px] font-medium leading-[30px] text-[#161021]"
       >
-        {QUESTION_1}
+        {question.text}
       </p>
       <div
         role="radiogroup"

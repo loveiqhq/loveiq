@@ -169,7 +169,9 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   2026-08-24 and 2026-10-13. Masking them at the source (#578) shipped and was reverted the
   same evening at the owner's request; the data stays in PostHog (EU, processor under the DPA),
   as with the replays above. The landing card's own `landing_card_answer` event carries the
-  value picked on question 1 (1-7) as well, to PostHog only, never to GA4 (also 2026-10-13).
+  value picked on its question (1-7) as well, with the question's id: Q01002 on the video page
+  and the pain-point page's B, Q10003 on its version C. Both go to PostHog only, never to GA4
+  (also 2026-10-13).
 - **Email opens and clicks are tracked without consent — owner decision 2026-10-14.** Resend's
   open image and wrapped links are on for every email from the sending domain, transactional ones
   included, and every email about the reader's report is kept per reader (`email_message_event`:

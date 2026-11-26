@@ -85,18 +85,31 @@ const UNKNOWN: ArmLabel = {
 const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   landing: {
     // Round 4's two live arms (from LANDING_TEST_START_DAY), first so charts read them in
-    // the test's order, A then B. `video` is V3 exactly as round 3 kept it, so it takes V3's
-    // name and blue; `pain_point` is Marcus's new page, V4, in the categorical order's next
-    // hue: blue and orange already belong to V1/V3 and V2, permanently.
+    // the test's order, A then C. `video` is V3 exactly as round 3 kept it, so it takes V3's
+    // name and blue. `pain_point_c` is version C of Marcus's page (sync 24.11): V4 asking
+    // Q10003. It keeps V4's emerald, because the colour follows the page: B is
+    // retired and charts draw only live arms, so the two never share a chart, as `video`
+    // keeps V3's blue beside the retired `white_video`. Checked 24.11 with the data-viz
+    // validator: no new hue clears blue, orange and emerald at once (violets fail against
+    // blue, pinks against emerald under deutan and orange in plain sight), and emerald
+    // with blue passes every check (CVD 24.9 deutan, normal vision 27.2).
     video: {
       short: "Landing Page V3 (Video in Hero)",
       long: "Landing Page V3: video in the hero",
       color: SERIES.BLUE,
     },
+    pain_point_c: {
+      short: "Landing Page V4 C (Pain Points, Turn-Ons Question)",
+      long: "Landing Page V4 C: the pain-point page, asking about turn-ons",
+      color: SERIES.EMERALD,
+    },
+    // Round 4's B, the pain-point page as released (V4): paused at the 24.11 sync, when
+    // version C took its half. Its name stays V4's, so its readouts read as before.
     pain_point: {
       short: "Landing Page V4 (Pain Points)",
       long: "Landing Page V4: the pain-point page",
       color: SERIES.EMERALD,
+      retired: true,
     },
     // Marketing's naming convention (2026-08-27), adopted verbatim so the words in
     // Slack, in AP-Analytics and in a meeting are the same words. It replaced "Landing

@@ -75,8 +75,8 @@ describe("question 1's landing card", () => {
     fireEvent.click(screen.getByRole("button", { name: /^6 of 7/ }));
     fireEvent.click(screen.getByRole("button", { name: /^2 of 7/ }));
     expect(events("landing_card_answer")).toEqual([
-      ["landing_card_answer", { location: "hero", changed: false, value: 6 }],
-      ["landing_card_answer", { location: "hero", changed: true, value: 2 }],
+      ["landing_card_answer", { location: "hero", changed: false, value: 6, question: "01002" }],
+      ["landing_card_answer", { location: "hero", changed: true, value: 2, question: "01002" }],
     ]);
   });
 

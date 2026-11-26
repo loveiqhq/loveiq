@@ -15,6 +15,8 @@ import { twoProportionSignal } from "@features/admin/server/statistics";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
@@ -1314,7 +1316,7 @@ export function buildTraffic(input: {
       return perfRow(
         arm,
         LANDING_ARM_NAMES.get(arm) ?? armLabel("landing", arm).long,
-        test ? `${test.name} · ${test.arms[0] === arm ? "A" : "B"}` : "",
+        test ? `${test.name} · ${test.arms[0] === arm ? "Control" : "Variant"}` : "",
         mine,
         {
           visitors: vB ? null : visitTotal(facts, facts.from, facts.to, scope.source, arm),
@@ -1848,14 +1850,17 @@ function buildExperiments(
   const payersOf = (xs: SubFact[]) => xs.filter((x) => x.paidAt).length;
   const revOf = (xs: SubFact[]) => round2(xs.reduce((n, x) => n + x.revenue, 0));
 
-  // The landing tests: visits per arm are counted, starts per visit decide them. Visits carry
-  // no source, device, tier or visitor history: under such a filter the visitor-based figures
-  // and the test are blank, rather than filtered starts over every visit. An ended test reads
-  // its own days, written as the Payment page writes one ("May – Aug 2026 · ended").
+  // The landing tests: visits per arm are counted, and each test is decided as the registry
+  // has it: the pain-point page tests (#10, #12) by finished surveys per visit, as the 19 Nov
+  // 2026 sync set, #6 by survey starts per visit. Visits carry no source, device, tier or
+  // visitor history: under such a filter the visitor-based figures and the test are blank,
+  // rather than filtered counts over every visit. An ended test reads its own days, written as
+  // the Payment page writes one ("May – Aug 2026 · ended").
   const landingTest = (
     test: string,
     armsOf: ReadonlyArray<readonly [arm: string, name: string]>,
     start: string,
+    decidedBy: "finished" | "starts",
     ended?: { lastDay: string; why: string }
   ) => {
     const w = win(start, ended?.lastDay);
@@ -1870,10 +1875,14 @@ function buildExperiments(
       const xs = w ? subsW(w).filter((x) => x.arm === arm) : [];
       return { arm, name, visitors, starts, xs };
     });
+    // Finished surveys need no start record: they're there whenever the visits are.
+    const [ka, kb] = rows.map((r) =>
+      decidedBy === "starts" ? r.starts : w && !vB ? r.xs.length : null
+    );
     const [a, b] = rows;
     const t =
-      a!.starts !== null && b!.starts !== null
-        ? proportionTest(a!.starts, a!.visitors, b!.starts, b!.visitors)
+      ka != null && kb != null
+        ? proportionTest(ka, a!.visitors, kb, b!.visitors)
         : {
             lift: null,
             chance: null,
@@ -1896,20 +1905,42 @@ function buildExperiments(
         paymentCvr: w ? ratio(payersOf(r.xs), r.xs.length) : null,
         revPerSub: w ? ratio(revOf(r.xs), r.xs.length) : null,
         revPerVisitor: w && !vB ? ratio(revOf(r.xs), r.visitors) : null,
-        metric: "Start CVR",
+        metric:
+          decidedBy === "starts"
+            ? "Start CVR"
+            : w && !vB
+              ? `Finished surveys per visit (${r.xs.length} of ${r.visitors})`
+              : "Finished surveys per visit",
         ...(i === 0 ? { lift: null, chance: null, confidence: null, why: null } : t),
         ...(ended ? { ended: true } : {}),
       });
     }
   };
-  // #10 · round 4: the video page (A) against Marcus's pain-point page (B).
+  // #12: the video page (the control) against version C of the pain-point page (sync 24 Nov
+  // 2026), a new test stacked on #10 with the same control (sync 25 Nov 2026).
+  landingTest(
+    landingTestName("pain-point-c"),
+    [
+      ["video", landingVersionName("video")],
+      ["pain_point_c", landingVersionName("pain_point_c")],
+    ],
+    LANDING_TEST_START_DAY,
+    "finished"
+  );
+  // #10 · round 4: the video page (the control) against Marcus's pain-point page, until B was
+  // paused.
   landingTest(
     landingTestName("pain-point"),
     [
       ["video", landingVersionName("video")],
       ["pain_point", landingVersionName("pain_point")],
     ],
-    LANDING_TEST_START_DAY
+    LANDING_PAIN_POINT_START_DAY,
+    "finished",
+    {
+      lastDay: LANDING_PAIN_POINT_LAST_DAY,
+      why: `Paused on ${shortDate(LANDING_PAIN_POINT_LAST_DAY)} ${LANDING_PAIN_POINT_LAST_DAY.slice(0, 4)}: version C of the pain-point page took its half`,
+    }
   );
   // #6 · round 3, the landing hero: ended at the 10 Nov 2026 sync, which kept the video.
   landingTest(
@@ -1919,9 +1950,10 @@ function buildExperiments(
       ["white_video", landingVersionName("white_video")],
     ],
     LANDING_HERO_RESTART_DAY,
+    "starts",
     {
       lastDay: LANDING_HERO_LAST_DAY,
-      why: "Ended on 11 Nov 2026: the video page stays, as version A of the pain-point page test",
+      why: "Ended on 11 Nov 2026: the video page stays, as the control of the pain-point page tests",
     }
   );
 

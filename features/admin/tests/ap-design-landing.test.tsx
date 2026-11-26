@@ -145,6 +145,8 @@ const heroWeek = () => buildLanding(heroInput());
 describe("the landing tests, as the design names them", () => {
   it("names each test by the pages it compares, not by its number, and shows no rebuild test", () => {
     expect(LANDING_TESTS.map((t) => t.name)).toEqual([
+      // Version C took B's half at the 24 Nov 2026 sync: its test comes first, B's after.
+      "Pain-point page C vs. video page",
       "Pain-point page vs. video page",
       "Video page vs. question card",
       "Video page vs. question card · first run (7–13 Oct)",
@@ -152,7 +154,7 @@ describe("the landing tests, as the design names them", () => {
     expect(LANDING_TESTS.flatMap((t) => t.arms)).not.toContain("white_prev");
   });
 
-  it("names A the question card (V2) and B the video page (V3), with no dates on the line", () => {
+  it("marks the question card (V2) the control and the video page (V3) the variant, no dates", () => {
     screenData.payload = heroWeek();
     render(createElement(ApLanding));
     const table = screen.getByRole("table", { name: "Landing tests and variants" });
@@ -164,8 +166,8 @@ describe("the landing tests, as the design names them", () => {
         return [first.children[0]!.textContent, first.children[1]!.textContent];
       });
     expect(lines).toEqual([
-      ["Video page vs. question card", "A · Question card (V2)"],
-      ["Video page vs. question card", "B · Video page (V3)"],
+      ["Video page vs. question card", "Control · Question card (V2)"],
+      ["Video page vs. question card", "Variant · Video page (V3)"],
     ]);
   });
 

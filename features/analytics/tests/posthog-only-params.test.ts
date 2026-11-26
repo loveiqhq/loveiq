@@ -25,12 +25,13 @@ afterEach(() => {
 });
 
 describe("an answer given to PostHog alone", () => {
-  it("reaches PostHog with the point picked, and Google's dataLayer without it", () => {
-    trackLandingCardAnswer({ location: "hero", changed: false, value: 6 });
+  it("reaches PostHog with the point picked and its question, and Google's dataLayer without", () => {
+    trackLandingCardAnswer({ location: "hero", changed: false, value: 6, question: "10003" });
     expect(ph.capture).toHaveBeenCalledWith("landing_card_answer", {
       location: "hero",
       changed: false,
       value: 6,
+      question: "10003",
     });
     // The same event still reaches GA4 (the gates are open), as where and whether only.
     const pushed = (window.dataLayer as Record<string, unknown>[]).filter(

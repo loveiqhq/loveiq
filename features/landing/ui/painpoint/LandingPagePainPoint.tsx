@@ -22,9 +22,11 @@ import { PP_REUSED_H2, PP_REUSED_SHELL, PP_TYPE } from "./ppStyles";
 /**
  * Round 4's arm B (`pain_point`): Marcus's new landing page, "LoveIQ landing page ·
  * pain-point version" (Claude Design, final boards "Desktop · Hero 3" at 1440 and
- * "Mobile · Hero 3" at 390, reviewed by Hana). It runs 50/50 against the video page
- * (`video`, features/landing/ui/white/LandingPageWhite.tsx); see
- * shared/experiments/landingVariant.ts.
+ * "Mobile · Hero 3" at 390, reviewed by Hana). Since the 24 Nov 2026 sync its version C
+ * (`pain_point_c`) runs 50/50 against the video page (`video`,
+ * features/landing/ui/white/LandingPageWhite.tsx) in B's place: the same page, its hero
+ * asking Q10003, with the privacy line under the film (PHero). B is paused but still opens
+ * for `?variant=pain_point`; see shared/experiments/landingVariant.ts.
  *
  * Its sections live in this folder. Where the design reuses a live section (archetypes,
  * reviews, research) it renders the live component with the design's sizes, so a fix
@@ -51,7 +53,7 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
         {/* The bar is fixed, 64px plus its 1px rule: the page starts under it. */}
         <div className="pt-[65px]">
           <div className={PP_TYPE}>
-            <PHero />
+            <PHero version={variant === "pain_point_c" ? "c" : "b"} />
             <PTrustBand />
             <PHowItWorks />
             <PPainPoints />
@@ -75,6 +77,7 @@ const LandingPagePainPoint: FC<{ variant: LandingVariant }> = ({ variant }) => {
             sectionClassName="bg-white py-[84px]"
             shellClassName={PP_REUSED_SHELL}
             headingClassName={`animate-on-scroll stagger-1 ${PP_REUSED_H2} [text-wrap:balance]`}
+            railMotion
           />
           <div className={PP_TYPE}>
             <PFaq />

@@ -10,6 +10,8 @@ import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
@@ -188,8 +190,10 @@ SELECT r.eur AS revenue, f.n AS finished_surveys,
        (SELECT count(*) AS n FROM finished WHERE day BETWEEN :from AND :to) f;`;
 
 const Q_ARMS = `-- Each version of each landing test run, over the run's days inside the range (one table
--- row each). In #10, A is the video page (video) and B the pain-point page (pain_point); in #6,
--- A the question card (white_card) and B the presenter video (white_video).
+-- row each). In #12, the control is the video page (video) and the variant the pain-point
+-- page's version C (pain_point_c); in #10, the control the video page and the variant the
+-- pain-point page (pain_point), until B was paused; in #6, the control the question card
+-- (white_card) and the variant the presenter video (white_video).
 WITH ${STAFF},
 ${TEAM_NETWORKS},
 ${STARTS},
@@ -197,8 +201,10 @@ ${FINISHED},
 ${PAID},
 test_runs AS (             -- each run's versions and days inside the range; the running one to today
   SELECT run, version, greatest(r_from, :from) AS r_from, least(r_to, :to) AS r_to
-    FROM (VALUES ('#10', 'video', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
-                 ('#10', 'pain_point', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
+    FROM (VALUES ('#12', 'video', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
+                 ('#12', 'pain_point_c', DATE '${LANDING_TEST_START_DAY}', (now() AT TIME ZONE 'Europe/Berlin')::date),
+                 ('#10', 'video', DATE '${LANDING_PAIN_POINT_START_DAY}', DATE '${LANDING_PAIN_POINT_LAST_DAY}'),
+                 ('#10', 'pain_point', DATE '${LANDING_PAIN_POINT_START_DAY}', DATE '${LANDING_PAIN_POINT_LAST_DAY}'),
                  ('#6', 'white_card', DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
                  ('#6', 'white_video', DATE '${LANDING_HERO_RESTART_DAY}', DATE '${LANDING_HERO_LAST_DAY}'),
                  ('#6 run 1', 'white_card', DATE '${LANDING_HERO_VIDEO_LAUNCH_DAY}', DATE '${addDays(LANDING_HERO_RESTART_DAY, -1)}'),
@@ -316,15 +322,18 @@ const PH_RANGE = `properties.$host = 'www.loveiq.org'
 
 /**
  * A PostHog row's version: each landing test run's own, by the day it happened (none between
- * #6's last day and #10's first), and only for that run's own versions.
+ * #6's last day and #10's first; #12 starts the day after B's last), and only for that
+ * run's own versions.
  */
 const PH_RUN = (
   at: string
-) => `multiIf(${at} >= toDateTime('${LANDING_TEST_START_DAY}', 'Europe/Berlin'), '#10',
+) => `multiIf(${at} >= toDateTime('${LANDING_TEST_START_DAY}', 'Europe/Berlin'), '#12',
+                    ${at} >= toDateTime('${LANDING_PAIN_POINT_START_DAY}', 'Europe/Berlin'), '#10',
                     ${at} >= toDateTime('${addDays(LANDING_HERO_LAST_DAY, 1)}', 'Europe/Berlin'), '',
                     ${at} >= toDateTime('${LANDING_HERO_RESTART_DAY}', 'Europe/Berlin'), '#6',
                     ${at} >= toDateTime('${LANDING_HERO_VIDEO_LAUNCH_DAY}', 'Europe/Berlin'), '#6 run 1', '')`;
-const PH_VERSION = `arrayJoin([if((run = '#10' AND arm IN ('video', 'pain_point'))
+const PH_VERSION = `arrayJoin([if((run = '#12' AND arm IN ('video', 'pain_point_c'))
+                             OR (run = '#10' AND arm IN ('video', 'pain_point'))
                              OR (run IN ('#6', '#6 run 1') AND arm IN ('white_card', 'white_video')),
                           concat(run, ' · ', arm), ''), 'All landing pages'])`;
 

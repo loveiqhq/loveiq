@@ -5,11 +5,13 @@
  * engagement from PostHog, the presenter video's step by step. For Assessment A the landing
  * page is its assessment page.
  */
-import { addDays } from "./days";
+import { addDays, shortDate } from "./days";
 import {
   LANDING_HERO_LAST_DAY,
   LANDING_HERO_RESTART_DAY,
   LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_PAIN_POINT_LAST_DAY,
+  LANDING_PAIN_POINT_START_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
@@ -60,24 +62,38 @@ export interface LandingTest {
   winner?: string;
   outcome: string;
   note?: string;
-  /** A, then B. */
+  /** The control, then the variant. */
   arms: [string, string];
 }
 
 /**
  * The landing tests this page shows, newest first (shared/experiments/landingVariant.ts), each
- * named by the pages it compares, new page first. The rebuild test (V1 vs V2, Aug–Sep 2026) was
- * taken off the page on the 21 Oct 2026 call. #10 is round 4, Marcus's new page against the
- * video page, under the number the registry gives it at its release.
+ * named by the pages it compares, new page first, under the number the registry gives it at
+ * its release. The rebuild test (V1 vs V2, Aug–Sep 2026) was taken off the page on the 21 Oct
+ * 2026 call. #10 is round 4, Marcus's new page against the video page. #12 is its version C
+ * (sync 24 Nov 2026: Q10003, the privacy line under the film, v2's sections) against the same
+ * video page, in B's place: a new test stacked on #10, with the same control (sync 25 Nov 2026:
+ * a follow-up test gets a name of its own, its control and its variant), so B's days stay
+ * #10's and C is read from its own first day.
  */
 export const LANDING_TESTS: LandingTest[] = [
+  {
+    key: "pain-point-c",
+    name: "Pain-point page C vs. video page",
+    code: "#12",
+    from: LANDING_TEST_START_DAY,
+    to: null,
+    outcome: "Running, read over up to 28 days.",
+    note: "Version C asks “I'm comfortable expressing what turns me on.” where B asked about satisfaction, moves the privacy line under the film, and has v2's sections: a pain-point carousel, four tiles, stat cards and animations.",
+    arms: ["video", "pain_point_c"],
+  },
   {
     key: "pain-point",
     name: "Pain-point page vs. video page",
     code: "#10",
-    from: LANDING_TEST_START_DAY,
-    to: null,
-    outcome: "Running, read over up to 28 days.",
+    from: LANDING_PAIN_POINT_START_DAY,
+    to: LANDING_PAIN_POINT_LAST_DAY,
+    outcome: `Paused on ${shortDate(LANDING_PAIN_POINT_LAST_DAY)} ${LANDING_PAIN_POINT_LAST_DAY.slice(0, 4)}, after the 24 Nov sync: version C of the pain-point page took B's half, with an easier question, the privacy line under the film and v2's sections.`,
     arms: ["video", "pain_point"],
   },
   {
@@ -88,7 +104,7 @@ export const LANDING_TESTS: LandingTest[] = [
     to: LANDING_HERO_LAST_DAY,
     winner: "white_video",
     outcome:
-      "Ended: the 10 Nov 2026 sync kept the video page, now version A of the pain-point page test.",
+      "Ended: the 10 Nov 2026 sync kept the video page, now the control of the pain-point page tests.",
     arms: ["white_card", "white_video"],
   },
   {
@@ -114,6 +130,7 @@ export const LANDING_TESTS: LandingTest[] = [
 export const LANDING_ARM_NAMES: ReadonlyMap<string, string> = new Map([
   ["video", "Video page (V3)"],
   ["pain_point", "Pain-point page (V4)"],
+  ["pain_point_c", "Pain-point page C (V4 C)"],
   ["white_card", "Question card (V2)"],
   ["white_video", "Video page (V3)"],
 ]);
@@ -170,7 +187,7 @@ export type ArmStatus = "Running" | "Winner" | "Ended";
 export interface ArmRow {
   testKey: string;
   test: string;
-  /** "A · Question card". */
+  /** "Control · Question card (V2)": the arm's part in its test, then its page. */
   label: string;
   arm: string;
   status: ArmStatus;
@@ -325,7 +342,7 @@ function armRow(
   test: LandingTest,
   w: { from: string; to: string },
   arm: string,
-  letter: "A" | "B",
+  role: "Control" | "Variant",
   today: string,
   ph: LandingArmEngagement | undefined,
   /** "Free survey": pay to start's finishers and their starts are out, as on every page. */
@@ -363,7 +380,7 @@ function armRow(
   return {
     testKey: test.key,
     test: test.name,
-    label: `${letter} · ${LANDING_ARM_NAMES.get(arm) ?? arm}`,
+    label: `${role} · ${LANDING_ARM_NAMES.get(arm) ?? arm}`,
     arm,
     status: test.to === null ? "Running" : test.winner === arm ? "Winner" : "Ended",
     from: w.from,
@@ -530,7 +547,7 @@ export function buildLanding(input: {
         test,
         w,
         arm,
-        i === 0 ? "A" : "B",
+        i === 0 ? "Control" : "Variant",
         today,
         byArm.get(arm),
         f.funnel === "free",
