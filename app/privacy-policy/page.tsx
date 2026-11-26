@@ -158,7 +158,7 @@ export default function PrivacyPolicyPage() {
                 On Mira&apos;s pages, our analytics tools (section 7.4) also see what you write in
                 the chat.
               </p>
-              <p>
+              <p className="mb-4">
                 Mira is only for adults. If you tell Mira you are under 18, she stops coaching for
                 good on that account or in that browser, turns her emails off and deletes the chats
                 saved in that account. In a browser without an account, the chat there is cleared.
@@ -170,6 +170,31 @@ export default function PrivacyPolicyPage() {
                   How Mira handles your data
                 </a>
                 .
+              </p>
+
+              <h3 className="text-gray-900 font-medium mb-2">
+                3.6 A free talk with one of our experts
+              </h3>
+              <p className="mb-4">
+                At the end of the survey, we ask if you&apos;d like a free talk with one of our
+                experts about improving your sex life. If you say yes, we ask for your phone number
+                so we can call you to set it up.
+              </p>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>Your answer to that question</li>
+                <li>Your phone number, if you say yes</li>
+              </ul>
+              <p>
+                We use your number only to call you about the talk you asked for. Your request goes
+                to the people on our team who set up the talks, with your name, phone number and
+                country (section 7.7). If you change your mind, write to us at{" "}
+                <a
+                  href="mailto:hello@loveiq.org"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
+                >
+                  hello@loveiq.org
+                </a>{" "}
+                and we won&apos;t call.
               </p>
             </section>
 
@@ -185,6 +210,7 @@ export default function PrivacyPolicyPage() {
                   measuring whether Mira helps
                 </li>
                 <li>Personalizing content and user experience</li>
+                <li>Setting up a free talk with one of our experts, if you ask for one</li>
                 <li>Operating subscriptions and paid content</li>
                 <li>Fraud prevention and platform security</li>
                 <li>Customer support</li>
@@ -215,6 +241,10 @@ export default function PrivacyPolicyPage() {
                   text of replies you rate if you allow it: Art. 6(1)(a) and Art. 9(2)(a) GDPR
                   (explicit consent); your Mira account, sign-in and Mira&apos;s emails: Art.
                   6(1)(b) GDPR (contract)
+                </li>
+                <li>
+                  A free talk with one of our experts, if you ask for one: Art. 6(1)(a) and Art.
+                  9(2)(a) GDPR (explicit consent)
                 </li>
                 <li>Legal compliance: Art. 6(1)(c) GDPR</li>
               </ul>
@@ -367,7 +397,8 @@ export default function PrivacyPolicyPage() {
                 <li>
                   Slack Technologies Ltd. (IE) - our team&apos;s messaging. It receives alerts about
                   technical problems, and posts that let the team follow sign-ups and returns: one
-                  for each finished survey, and a note when a reader comes back to their report.
+                  for each finished survey, and a note when a reader comes back to their report. It
+                  also receives your request if you ask for a free talk with one of our experts.
                 </li>
               </ul>
               <p className="mb-4">
@@ -379,6 +410,12 @@ export default function PrivacyPolicyPage() {
                 Purchases, contact requests and feedback on a report also reach the team in Slack,
                 with your email address masked. Our legal basis is our legitimate interest in
                 following and improving our service (Art. 6(1)(f) GDPR).
+              </p>
+              <p className="mb-4">
+                A request for a free talk with one of our experts is different, because it&apos;s
+                there so we can call you. It goes to a private channel that only the people who set
+                up the talks can read, with your name, phone number and country, and your email
+                address masked. Its legal basis is your consent (section 5).
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>
@@ -453,6 +490,11 @@ export default function PrivacyPolicyPage() {
                 <li>Longer if required by tax or commercial law</li>
               </ul>
               <p className="mb-4">Pseudonymized statistical data may be stored longer.</p>
+              <p className="mb-4">
+                If you asked for a free talk with one of our experts, we keep your phone number with
+                your survey answers until you ask us to delete them. When you do, we also delete
+                your request in Slack.
+              </p>
               <p className="mb-4">
                 Mira: without an account, your chat stays in your browser. With an account, Mira
                 saves your chats while &quot;Remember our conversations&quot; is on. If you turn it

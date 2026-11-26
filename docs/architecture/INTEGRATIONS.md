@@ -36,7 +36,7 @@
   - Survey webhook: `SLACK_SURVEY_WEBHOOK_URL` env var
   - Payments webhook: `SLACK_PAYMENTS_WEBHOOK_URL` env var
   - Ops webhook: `SLACK_OPS_WEBHOOK_URL` env var (5xx errors, failed cron runs, Stripe disputes and refunds, daily digest)
-  - Journey bot: `SLACK_BOT_TOKEN` + `SLACK_JOURNEY_CHANNEL_ID` (the live-updating #incoming-surveys message and its "Came back" replies); `SLACK_REACTIVATIONS_CHANNEL_ID` adds #report-reactivations, one post per reader who comes back to their report and reads it for a minute
+  - Journey bot: `SLACK_BOT_TOKEN` + `SLACK_JOURNEY_CHANNEL_ID` (the live-updating #incoming-surveys message and its "Came back" replies); `SLACK_REACTIVATIONS_CHANNEL_ID` adds #report-reactivations, one post per reader who comes back to their report and reads it for a minute; `SLACK_EXPERT_TALKS_CHANNEL_ID` adds the private #expert-talks, one post per Survey 2.0 run that asks for a free talk with an expert, with the phone number to call
   - Used in: `app/api/contact/route.ts`, `app/api/survey/route.ts`, `app/api/stripe/webhook/route.ts`
 
 **Cookie Consent:**

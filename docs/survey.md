@@ -457,9 +457,13 @@ live before checking in with us", Mark 2026-11-19).
   field under it (a country code, Germany's first, and the number; Marcus's ask), and Next waits for
   six digits ([`expert.ts`](../features/survey/survey2/expert.ts)). The number travels as the
   question's text box (`17004_other`), filed as the Yes answer's text; the server keeps it only with
-  a Yes. It is personal: AP's submission page shows it to staff, the team copy and AP's explorer mask
-  it, and the field is kept out of session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md)
-  A27).
+  a Yes. A submitted Yes with a number is posted once, after the response, to the private Slack
+  channel #expert-talks (`SLACK_EXPERT_TALKS_CHANNEL_ID`, through the journey bot), where Mark and
+  Marcus pick up the calls (LoveIQ Sync, 26 Nov 2026): the name, the whole number and the country,
+  the email masked, and a "Team test" mark for an @loveiq.org address
+  ([`expertTalkPost.ts`](../features/survey/server/expertTalkPost.ts)). It is personal: the
+  privacy policy says so (§3.6), the team copy and AP's explorer mask it, and the field is kept out
+  of session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A27).
 - **Simpler words, same answers.** Ten questions take Mark's wording in 2.0 only
   ([`copy.ts`](../features/survey/survey2/copy.ts)). A reworded option shows its new label but is
   stored, scored and matched under its old value (`optionLabels`), so scoring, boosts and the pricing
