@@ -52,7 +52,7 @@ export async function enabledSurveySheets(): Promise<SurveySheetId[]> {
  * `?sheets=science,halfway`) preview on dev, previews and staging, never production.
  * SURVEY_SHEETS_PREVIEW=1 allows the preview on the production build the end-to-end tests
  * run against; nothing else sets it. Any failure reading the switches shows none. A sheet taken
- * out of the survey (RETIRED_SHEETS: sheet 4 since 25 Nov 2026) never comes from its switch.
+ * out of the survey (RETIRED_SHEETS: sheet 4 since 27 Nov 2026, Mark's ask of 25 Nov) never comes from its switch.
  */
 export async function surveySheetsForVisit(
   preview: string | string[] | undefined

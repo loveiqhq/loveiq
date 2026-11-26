@@ -60,7 +60,7 @@ describe("the sheets a visit to /survey gets", () => {
     expect(await surveySheetsForVisit(undefined)).toEqual(["science", "reportMap"]);
   });
 
-  // Sheet 4, the halfway sheet ("Preliminary Results"), is out of the survey since 25 Nov 2026
+  // Sheet 4, the halfway sheet ("Preliminary Results"), is out of the survey since 27 Nov 2026 (Mark's ask of 25 Nov)
   // (Mark, #all-loveiq): no reader meets it, whatever its switch says.
   it("never shows the halfway sheet from its switch, even with Mark's 50/50 on", async () => {
     env.on = new Set([
