@@ -52,8 +52,9 @@ import {
   isInInitialGateCohort,
   joinInitialGateCohort,
 } from "@features/report/server/initialGateState";
-import { gateRevealArmFor } from "@features/report/server/gateRevealSwitch";
-import { GATE_REVEAL_ARM_KEY } from "@shared/experiments/gateRevealArm";
+import { gatePriceArmFor, gateRevealArmFor } from "@features/report/server/gateRevealSwitch";
+import { GATE_REVEAL_ARM_KEY, type GateRevealArm } from "@shared/experiments/gateRevealArm";
+import type { GatePriceArm } from "@shared/experiments/gatePriceArm";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
@@ -87,6 +88,20 @@ import {
 import { initialUnlockEmail } from "@features/report/server/emails/initial-unlock";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { supabaseRestUrl } from "@shared/env/supabase-urls";
+
+/**
+ * The half the pre-report wizard's map names the EUR 1.99 page's offer by (the reply's
+ * `initialGateArm`): Mark's 50/50's own half; in the price test that replaced it, today's page
+ * (`fixed`) as that 50/50's `control`, its EUR 1.99, and nothing for the half that chooses its
+ * price, whose map then names no price at all (offerForGateArm's "today").
+ */
+function wizardGateArm(
+  revealArm: GateRevealArm | null,
+  priceArm: GatePriceArm | null
+): GateRevealArm | null {
+  if (priceArm) return priceArm === "fixed" ? "control" : null;
+  return revealArm;
+}
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -232,15 +247,22 @@ async function replyWithExistingSubmission(
     scheduleAfterResponse("pts-claim-report", () => reportClaimProblem(claim, existing.id));
   }
   const gated = await isInInitialGateCohort(existing.id);
-  const revealArm = gated && !prepaidToken ? await gateRevealArmFor(sessionId) : null;
+  const [revealArm, priceArm] =
+    gated && !prepaidToken
+      ? await Promise.all([gateRevealArmFor(sessionId), gatePriceArmFor(sessionId)])
+      : [null, null];
+  const wizardArm = wizardGateArm(revealArm, priceArm);
   const response = NextResponse.json(
     {
       success: true,
       submissionId: existing.id,
       ...(reportToken ? { reportToken } : {}),
       ...(claim ? claimResponseFields(claim) : {}),
-      ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
-      ...(revealArm ? { initialGateArm: revealArm } : {}),
+      // No price for the half that chooses its own.
+      ...(gated && priceArm !== "choose"
+        ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS }
+        : {}),
+      ...(wizardArm ? { initialGateArm: wizardArm } : {}),
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
@@ -597,8 +619,13 @@ export async function POST(request: Request) {
    * Mark's 50/50 of his new EUR 1.99 page (gateRevealArm.ts), while its switch is on: from the
    * same session id, so it is the half the browser's sheets followed and the report's gate will
    * follow. A buyer who paid before the survey meets no EUR 1.99 page, so is in neither half.
+   * The price test that replaced it (gatePriceArm.ts) by the same rules, from the same session:
+   * while it runs the 50/50 gives no half, and its own (`fixed`, `choose`) is stamped instead.
    */
-  const gateRevealArm = sessionId && !prepaidToken ? await gateRevealArmFor(sessionId) : null;
+  const [gateRevealArm, gatePriceArm] =
+    sessionId && !prepaidToken
+      ? await Promise.all([gateRevealArmFor(sessionId), gatePriceArmFor(sessionId)])
+      : [null, null];
 
   let mergedUtmTracker = await stampLandingArm(utmTracker, { arm: !prepaidToken });
   /**
@@ -673,8 +700,13 @@ export async function POST(request: Request) {
     // session id: our survey always sends one, so we can't say what such a caller saw.
     sessionId && !prepaidToken ? EMAIL_QUESTION_WINNER : null
   );
-  // Mark's 50/50, by the same rules: derived, never claimed, never starting a tracker.
-  mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, GATE_REVEAL_ARM_KEY, gateRevealArm);
+  // Mark's 50/50, by the same rules: derived, never claimed, never starting a tracker. The price
+  // test's half under the same key, so the tracker gains no key the sparklines don't know.
+  mergedUtmTracker = mergeTrackerArm(
+    mergedUtmTracker,
+    GATE_REVEAL_ARM_KEY,
+    gatePriceArm ?? gateRevealArm
+  );
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget
@@ -1089,11 +1121,17 @@ export async function POST(request: Request) {
         // route tells it, to a reader allowed to see it.
         // Pay to start: whether the report is unlocked, and the wizard its offer shows.
         ...(claim ? claimResponseFields(claim) : {}),
-        // The EUR 1.99 gate will stop this reader: the pre-report map names its price.
-        ...(gated ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS } : {}),
+        // The EUR 1.99 gate will stop this reader: the pre-report map names its price. Not for
+        // the price test's half that chooses its own.
+        ...(gated && gatePriceArm !== "choose"
+          ? { initialGatePriceCents: INITIAL_UNLOCK_PRICE_CENTS }
+          : {}),
         // Which half of Mark's 50/50 that gate is: his new page, or today's. The wizard's map
-        // names that page's offer, as the survey's sheets did (Mark, 13 and 16 Nov).
-        ...(gated && gateRevealArm ? { initialGateArm: gateRevealArm } : {}),
+        // names that page's offer, as the survey's sheets did (Mark, 13 and 16 Nov); in the
+        // price test, today's page's EUR 1.99, or no price for the other half (wizardGateArm).
+        ...(gated && wizardGateArm(gateRevealArm, gatePriceArm)
+          ? { initialGateArm: wizardGateArm(gateRevealArm, gatePriceArm) }
+          : {}),
       },
       {
         // The response carries a fresh report access token — never let

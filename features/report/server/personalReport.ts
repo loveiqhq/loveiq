@@ -216,6 +216,20 @@ export async function resolveSubmissionAccessContext({
 }
 
 /**
+ * The session a submission's survey ran under (`survey_submission.session_id`): the EUR 1.99
+ * page's tests deal each reader's half from it (shared/experiments/gateRevealArm.ts). Null when
+ * it has none; throws when it can't be read, so a caller never guesses a half.
+ */
+export async function lookupSubmissionSessionId(submissionId: number): Promise<string | null> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/survey_submission?id=eq.${submissionId}&select=session_id&limit=1`
+  );
+  if (!response.ok) throw new Error("submission_session_lookup_failed");
+  const rows = (await response.json()) as Array<{ session_id?: string | null }>;
+  return rows[0]?.session_id ?? null;
+}
+
+/**
  * Look up the report access token a submission's report page actually serves —
  * the latest token by `created_at`, REVOCATION-AGNOSTIC, mirroring the owner
  * token query in `app/api/report/route.ts` (which has no `revoked_at` filter).
@@ -372,19 +386,45 @@ export function revokeArchetypeTiers(
 }
 
 /**
+ * An initial-unlock row nothing was paid for: E07's gift (`metadata.gifted`), or EUR 0 chosen
+ * on the price test's "Choose your price" page (`metadata.priceOption`, logic/choosePrice.ts).
+ */
+function isUnpaidInitialUnlock(metadata: Record<string, unknown> | null): boolean {
+  return metadata?.gifted === INITIAL_UNLOCK_GIFT || metadata?.priceOption === "free";
+}
+
+/**
  * Paid when any initial-unlock payment of theirs is not E07's gift (its EUR 0 row says
- * `metadata.gifted`), the gift when that row is all there is, null without one. The full
- * report's exit page words the EUR 10 by it: "You earned it with your €1.99 unlock" is not
- * true of a gift.
+ * `metadata.gifted`) or a EUR 0 choice, the gift when such rows are all there is, null without
+ * one. The full report's exit page words the EUR 10 by it: "You earned it with your €1.99
+ * unlock" is not true of a gift, nor of EUR 0.
  */
 export function initialUnlockSourceOf(
   payments: ReadonlyArray<{ metadata: Record<string, unknown> | null }>
 ): InitialUnlockSource | null {
   const initial = payments.filter((payment) => isInitialUnlockPlan(payment.metadata?.plan));
   if (initial.length === 0) return null;
-  return initial.some((payment) => payment.metadata?.gifted !== INITIAL_UNLOCK_GIFT)
-    ? "paid"
-    : "gift";
+  return initial.some((payment) => !isUnpaidInitialUnlock(payment.metadata)) ? "paid" : "gift";
+}
+
+/**
+ * What the reader paid for the initial unlock, in cents, from its checkout's price
+ * (`metadata.currentPrice`, "1.99" or the price they chose): the full report's exit page says
+ * "You earned it with your €6.99 unlock" to a reader who chose EUR 6.99. The newest paid row
+ * first (payments come newest first); null when none names its price (pay to start's rows),
+ * and the page then says today's EUR 1.99, the only price those were sold at.
+ */
+export function initialUnlockPaidCentsOf(
+  payments: ReadonlyArray<{ metadata: Record<string, unknown> | null }>
+): number | null {
+  for (const payment of payments) {
+    if (!isInitialUnlockPlan(payment.metadata?.plan) || isUnpaidInitialUnlock(payment.metadata)) {
+      continue;
+    }
+    const price = Number(payment.metadata?.currentPrice);
+    if (Number.isFinite(price) && price > 0) return Math.round(price * 100);
+  }
+  return null;
 }
 
 /**
@@ -438,6 +478,8 @@ export async function getReportAccessPlanForSubmission(
   initialUnlock: boolean;
   /** How the initial unlock is held: paid, or only E07's gift (initialUnlockSourceOf). */
   initialUnlockSource: InitialUnlockSource | null;
+  /** What it cost them, in cents, when its row says (initialUnlockPaidCentsOf). */
+  initialUnlockPaidCents: number | null;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
@@ -453,6 +495,7 @@ export async function getReportAccessPlanForSubmission(
       anyPlan: null,
       initialUnlock: false,
       initialUnlockSource: null,
+      initialUnlockPaidCents: null,
       archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
@@ -509,6 +552,7 @@ export async function getReportAccessPlanForSubmission(
     ),
     initialUnlock: payments.some((payment) => isInitialUnlockPlan(payment.metadata?.plan)),
     initialUnlockSource: initialUnlockSourceOf(payments),
+    initialUnlockPaidCents: initialUnlockPaidCentsOf(payments),
     archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,

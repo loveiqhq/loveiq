@@ -12,7 +12,7 @@ import {
   initialReportMap,
   questionsMap,
 } from "./chapters";
-import { ARCHETYPES, CREDIT, PRICE } from "./facts";
+import { ARCHETYPES, CREDIT, PRICE, eur } from "./facts";
 import { PAID_MAP_LEGEND } from "./free-funnel";
 import {
   C,
@@ -53,9 +53,14 @@ export const FULL_REASON = "You get this email because you bought your LoveIQ fu
 
 // ── U1 · Core Archetype unlocked ─────────────────────────────────────────────────────────
 
-const U1_STEPS: Step[] = [
+/** U1's steps, "Paid" naming what the reader paid (the price test's own pick), else EUR 1.99. */
+const u1Steps = (paidCents?: number | null): Step[] => [
   { state: "done", title: "Take the survey", detail: "Done, every question answered" },
-  { state: "done", title: "Get your Core Archetype", detail: `Paid ${PRICE}, initial report open` },
+  {
+    state: "done",
+    title: "Get your Core Archetype",
+    detail: `Paid ${paidCents == null ? PRICE : eur(paidCents)}, initial report open`,
+  },
   {
     state: "next",
     title: "Read your initial report",
@@ -78,7 +83,8 @@ export function coreUnlockedEmail({
   reportUrl,
   siteUrl,
   unsubscribeUrl,
-}: PurchaseEmailParams): KitEmail {
+  paidCents,
+}: PurchaseEmailParams & { paidCents?: number | null }): KitEmail {
   const name = greetingName(firstName);
   const subject = name
     ? `${name}, your Core Archetype was identified`
@@ -100,7 +106,7 @@ export function coreUnlockedEmail({
       ]),
       archetypeCard(siteUrl),
       button({ href: reportUrl, label: "Read my Core Archetype" }),
-      steps(U1_STEPS),
+      steps(u1Steps(paidCents)),
       chapterMap(lock, PAID_MAP_LEGEND),
       whyUnlock(),
       signOff(),
@@ -112,7 +118,7 @@ export function coreUnlockedEmail({
     "Thank you for your purchase. You’ve unlocked your Initial Report, including your Core Archetype.",
     `To learn even more about your Sexual Personality, use the ${CREDIT} credit to unlock the full report.`,
     ["Read my Core Archetype:", reportUrl],
-    textSteps(U1_STEPS),
+    textSteps(u1Steps(paidCents)),
     textFooter(INITIAL_REASON, unsubscribeUrl),
   ]);
   return { subject, html, text };

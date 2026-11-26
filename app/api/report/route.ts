@@ -24,6 +24,7 @@ import {
 import { hasLivePayToStartEntitlement } from "@features/report/server/initialUnlockGate";
 import { buildTourFirstReportPayload } from "@features/report/server/tourFirstReport";
 import { buildGateReveal, gateRevealArmFor } from "@features/report/server/gateReveal";
+import { gatePriceArmFor } from "@features/report/server/gateRevealSwitch";
 import {
   buildInitialUnlockGatePayload,
   needsInitialUnlockGate,
@@ -425,6 +426,8 @@ export async function GET(request: Request) {
     let initialUnlock = false;
     // How it is held, paid or E07's gift: the full report's exit page words the EUR 10 by it.
     let initialUnlockSource: "paid" | "gift" | null = null;
+    // What it cost them (the price test's readers chose it), for the same page's "your €X".
+    let initialUnlockPaidCents: number | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -475,6 +478,7 @@ export async function GET(request: Request) {
       purchasedPlan = access.anyPlan;
       initialUnlock = access.initialUnlock;
       initialUnlockSource = access.initialUnlockSource;
+      initialUnlockPaidCents = access.initialUnlockPaidCents;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
       personalReportId = access.personalReportId;
@@ -586,7 +590,12 @@ export async function GET(request: Request) {
         // Mark's redesigned page (gateReveal.ts), the Core Archetype on the gate: behind its own
         // switch, and then for one half of his 50/50, by the session the survey ran under
         // (gateRevealArm.ts), the arm the survey's sheets and the wizard already followed.
-        const revealArm = await gateRevealArmFor(submission.session_id);
+        // The price test (gatePriceArm.ts) replaced it: while its switch is on, no reveal
+        // (gateRevealArmFor gives no half) and the same half chooses its price instead.
+        const [revealArm, priceArm] = await Promise.all([
+          gateRevealArmFor(submission.session_id),
+          gatePriceArmFor(submission.session_id),
+        ]);
         const gatePayload = buildInitialUnlockGatePayload({
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
@@ -603,6 +612,7 @@ export async function GET(request: Request) {
                 )
               : null,
           revealArm,
+          priceArm,
         });
         // Tour first (sync 30.10): a reader who has never met the gate gets their report under
         // the guided tour first, with who they are left out (tourFirstReport.ts), and the
@@ -1239,6 +1249,7 @@ export async function GET(request: Request) {
         initialUnlock,
         // The owner's alone: a recipient is never offered the full report's exit page.
         initialUnlockSource: isShareAccess ? null : initialUnlockSource,
+        initialUnlockPaidCents: isShareAccess ? null : initialUnlockPaidCents,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

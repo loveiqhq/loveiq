@@ -15,12 +15,19 @@ import {
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
 import { toMetadataValue } from "@features/pay-to-start/server/checkout";
+import {
+  CHOOSE_PRICE_CUSTOM_MAX_CENTS,
+  chosenPriceCents,
+} from "@features/report/logic/choosePrice";
 import { INITIAL_UNLOCK_PLAN } from "@features/report/logic/initialUnlock";
 import { INITIAL_UNLOCK_PRICE_CENTS } from "@features/report/logic/initialUnlockGate";
+import { gatePriceArmFor } from "@features/report/server/gateRevealSwitch";
 import { ownerMeetsInitialGate } from "@features/report/server/initialUnlockGate";
+import { grantChosenFreeInitialUnlock } from "@features/report/server/initialUnlockGift";
 import {
   ensurePersonalReportForSubmission,
   lookupReportTokenBySubmissionId,
+  lookupSubmissionSessionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import {
@@ -42,6 +49,14 @@ import logger from "@shared/observability/logger";
  *
  * A route of its own rather than a plan of checkout-session's: that one sells the paygate's
  * priced plans, each from a quote and for an archetype, and `initial` is neither.
+ *
+ * The price test's "Choose your price" half (shared/experiments/gatePriceArm.ts) sends its pick,
+ * `priceOption` and, for an own amount, `amountCents`. Only a reader the server deals that half
+ * to may name one, and it charges only what logic/choosePrice.ts gives for it: EUR 6.99, 19.99,
+ * or an own amount between the floor and the ceiling. EUR 0 needs no Stripe: the pre-unlock is
+ * written at once (grantChosenFreeInitialUnlock) and the answer is the report's own address.
+ * A pick from a reader in the other half, or with no test running (the switch went off since
+ * the page was drawn), is told to reload, as for one the gate no longer stops.
  */
 
 export const runtime = "nodejs";
@@ -53,6 +68,8 @@ const bodySchema = z
     gaSessionId: z.string().max(64).nullable().optional(),
     reportSessionId: z.string().uuid().nullable().optional(),
     reportToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX).nullable().optional(),
+    priceOption: z.enum(["free", "fair", "support", "custom"]).optional(),
+    amountCents: z.number().int().min(0).max(CHOOSE_PRICE_CUSTOM_MAX_CENTS).optional(),
   })
   .refine((value) => !!(value.reportSessionId || value.reportToken), {
     message: "Report context required.",
@@ -122,10 +139,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "already_unlocked" }, { status: 409 });
     }
 
-    const stripe = getStripeServerClient();
-    const customerEmail = await getStripeCheckoutCustomerEmail({ reportSessionId, reportToken });
-    if (!stripe || !customerEmail) {
-      return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+    // The price test: what the reader picked, when the server deals them the half that picks.
+    const priceOption = parsed.data.priceOption ?? null;
+    let priceCents = INITIAL_UNLOCK_PRICE_CENTS;
+    if (priceOption) {
+      let sessionId: string | null;
+      try {
+        sessionId = await lookupSubmissionSessionId(context.submissionId);
+      } catch (err) {
+        logger.warn({ err }, "initial-unlock: the survey's session could not be read");
+        return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+      }
+      if ((await gatePriceArmFor(sessionId)) !== "choose") {
+        return NextResponse.json({ error: "price_changed" }, { status: 409 });
+      }
+      const chosen = chosenPriceCents(priceOption, parsed.data.amountCents ?? null);
+      if (chosen === null) {
+        return NextResponse.json({ error: "Please choose a price." }, { status: 400 });
+      }
+      priceCents = chosen;
     }
 
     // Both return URLs name the report on their own, as on the report checkout: a reader
@@ -143,6 +175,40 @@ export async function POST(request: Request) {
     }
 
     const siteUrl = new URL(request.url).origin;
+
+    // EUR 0: no checkout. The pre-unlock is written now, and the reader goes straight to their
+    // report, opened as after a sale (`?unlocked=initial`).
+    if (priceCents === 0 && report?.id) {
+      const granted = await grantChosenFreeInitialUnlock({
+        personalReportId: report.id,
+        userId: context.userId,
+        email: context.userEmail,
+        landingVariant,
+      });
+      if (!granted || !returnToken) {
+        return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+      }
+      const submissionIdForFree = context.submissionId;
+      scheduleAfterResponse("journey-message-free-choice", async () => {
+        await refreshJourneyMessage(submissionIdForFree, "paywall");
+      });
+      const reportUrl = new URL(`/report/${encodeURIComponent(returnToken)}`, siteUrl);
+      reportUrl.searchParams.set("unlocked", INITIAL_UNLOCK_PLAN);
+      const freeResponse: StripeCheckoutSessionResponse = {
+        enabled: true,
+        url: reportUrl.toString(),
+      };
+      return NextResponse.json(freeResponse, {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+      });
+    }
+
+    const stripe = getStripeServerClient();
+    const customerEmail = await getStripeCheckoutCustomerEmail({ reportSessionId, reportToken });
+    if (!stripe || !customerEmail) {
+      return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+    }
+
     const params: Stripe.Checkout.SessionCreateParams = {
       // Typed codes stay on, as for every sale, so staff can test it with a 100% code.
       allow_promotion_codes: true,
@@ -153,16 +219,17 @@ export async function POST(request: Request) {
           price_data: {
             currency: "eur",
             product_data: { name: PRODUCT_NAME },
-            // EUR 1.99 includes the VAT, which the receipt lists (`automaticTax`).
+            // EUR 1.99 (or the price chosen) includes the VAT, which the receipt lists
+            // (`automaticTax`).
             tax_behavior: "inclusive",
-            unit_amount: INITIAL_UNLOCK_PRICE_CENTS,
+            unit_amount: priceCents,
           },
           quantity: 1,
         },
       ],
       metadata: {
         archetype: "",
-        currentPrice: (INITIAL_UNLOCK_PRICE_CENTS / 100).toFixed(2),
+        currentPrice: (priceCents / 100).toFixed(2),
         // GA4 Measurement Protocol context, replayed at fulfillment ("1"/"0" consent).
         gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
         gaClientId: toMetadataValue(parsed.data.gaClientId),
@@ -171,6 +238,8 @@ export async function POST(request: Request) {
         // What fulfillment grants. No `journey`: "pay_to_start" would send the webhook
         // down pay to start's branch.
         plan: INITIAL_UNLOCK_PLAN,
+        // The price test's pick ("fair", "support", "custom"); none on today's page.
+        ...(priceOption ? { priceOption } : {}),
         reportSessionId: reportSessionId ?? "",
         reportToken: reportToken ?? "",
         requestIp: toMetadataValue(ip),

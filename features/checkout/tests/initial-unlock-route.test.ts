@@ -27,6 +27,13 @@ vi.mock("@features/report/server/personalReport", () => ({
   resolveSubmissionAccessContext: vi.fn(),
   ensurePersonalReportForSubmission: vi.fn(),
   lookupReportTokenBySubmissionId: vi.fn(),
+  lookupSubmissionSessionId: vi.fn(),
+}));
+vi.mock("@features/report/server/gateRevealSwitch", () => ({
+  gatePriceArmFor: vi.fn(),
+}));
+vi.mock("@features/report/server/initialUnlockGift", () => ({
+  grantChosenFreeInitialUnlock: vi.fn(),
 }));
 vi.mock("@features/report/server/initialUnlockGate", () => ({
   ownerMeetsInitialGate: vi.fn(),
@@ -46,9 +53,14 @@ import {
 import {
   ensurePersonalReportForSubmission,
   lookupReportTokenBySubmissionId,
+  lookupSubmissionSessionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { ownerMeetsInitialGate } from "@features/report/server/initialUnlockGate";
+import { gatePriceArmFor } from "@features/report/server/gateRevealSwitch";
+import { grantChosenFreeInitialUnlock } from "@features/report/server/initialUnlockGift";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { flushAfterResponse } from "@shared/http/after-response";
 
 const TOKEN = "rpt_abcdefghij0123456789";
 const SESSION = "02d88f31-eceb-4402-940d-c8cd98d01848";
@@ -110,6 +122,14 @@ beforeEach(() => {
   vi.mocked(ownerMeetsInitialGate).mockImplementation(
     async ({ submissionId, personalReportId }) => submissionId === 55 && personalReportId === 99
   );
+  // The price test: this reader's survey ran under SESSION, in the half that chooses its price.
+  vi.mocked(lookupSubmissionSessionId).mockImplementation(async (id) =>
+    id === 55 ? SESSION : null
+  );
+  vi.mocked(gatePriceArmFor).mockImplementation(async (sessionId) =>
+    sessionId === SESSION ? "choose" : "fixed"
+  );
+  vi.mocked(grantChosenFreeInitialUnlock).mockResolvedValue(501);
 });
 
 describe("POST /api/stripe/initial-unlock — refusals", () => {
@@ -276,5 +296,107 @@ describe("POST /api/stripe/initial-unlock — the EUR 1.99 session", () => {
     mockCreateSession.mockResolvedValue({ id: "cs_test_2", url: null });
     const res = await post({ reportToken: TOKEN });
     expect(res.status).toBe(500);
+  });
+});
+
+describe("POST /api/stripe/initial-unlock — the price test's Choose your price half", () => {
+  const lineAmount = () =>
+    (sessionCreated().params.line_items[0]!.price_data as { unit_amount: number }).unit_amount;
+
+  it.each([
+    ["fair", undefined, 699, "6.99"],
+    ["support", undefined, 1999, "19.99"],
+    ["custom", 450, 450, "4.50"],
+    ["custom", 50, 50, "0.50"],
+    ["custom", 10_000, 10_000, "100.00"],
+  ] as const)(
+    "charges the pick %s (%s) as %i cents, its pick on the session",
+    async (priceOption, amountCents, cents, price) => {
+      const res = await post({ reportToken: TOKEN, priceOption, amountCents });
+      expect(res.status).toBe(200);
+      expect(lineAmount()).toBe(cents);
+      expect(sessionCreated().params.metadata).toMatchObject({
+        plan: "initial",
+        priceOption,
+        currentPrice: price,
+      });
+      expect(gatePriceArmFor).toHaveBeenCalledWith(SESSION);
+    }
+  );
+
+  it("never charges a price the browser names: the amount counts only for the own-amount pick", async () => {
+    await post({ reportToken: TOKEN, priceOption: "fair", amountCents: 1 });
+    expect(lineAmount()).toBe(699);
+  });
+
+  it("400 for an own amount under EUR 0.50 or none, and above EUR 100 never reaches Stripe", async () => {
+    for (const body of [
+      { priceOption: "custom", amountCents: 49 },
+      { priceOption: "custom", amountCents: 0 },
+      { priceOption: "custom" },
+      { priceOption: "custom", amountCents: 10_001 },
+      { priceOption: "custom", amountCents: 4.5 },
+      { priceOption: "cheap" },
+    ]) {
+      const res = await post({ reportToken: TOKEN, ...body });
+      expect(res.status).toBe(400);
+    }
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(grantChosenFreeInitialUnlock).not.toHaveBeenCalled();
+  });
+
+  it("writes EUR 0 itself, with no Stripe, and sends the reader to their report opened", async () => {
+    const res = await post({ reportToken: TOKEN, priceOption: "free" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store, no-cache, must-revalidate");
+    expect(await res.json()).toEqual({
+      enabled: true,
+      url: `http://localhost/report/${TOKEN}?unlocked=initial`,
+    });
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(grantChosenFreeInitialUnlock).toHaveBeenCalledWith({
+      personalReportId: 99,
+      userId: 77,
+      email: "alice@example.com",
+      landingVariant: "white",
+    });
+    await flushAfterResponse();
+    expect(refreshJourneyMessage).toHaveBeenCalledWith(55, "paywall");
+  });
+
+  it("503 when EUR 0 can't be written, and the reader stays on the page", async () => {
+    vi.mocked(grantChosenFreeInitialUnlock).mockResolvedValue(null);
+    const res = await post({ reportToken: TOKEN, priceOption: "free" });
+    expect(res.status).toBe(503);
+  });
+
+  it("409 for a pick from today's page's half, or with the test switched off since: the page reloads", async () => {
+    vi.mocked(gatePriceArmFor).mockResolvedValue("fixed");
+    expect((await post({ reportToken: TOKEN, priceOption: "free" })).status).toBe(409);
+    vi.mocked(gatePriceArmFor).mockResolvedValue(null);
+    expect((await post({ reportToken: TOKEN, priceOption: "fair" })).status).toBe(409);
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(grantChosenFreeInitialUnlock).not.toHaveBeenCalled();
+  });
+
+  it("409 before any pick is read for a reader the gate no longer stops", async () => {
+    vi.mocked(ownerMeetsInitialGate).mockResolvedValue(false);
+    const res = await post({ reportToken: TOKEN, priceOption: "free" });
+    expect(res.status).toBe(409);
+    expect(grantChosenFreeInitialUnlock).not.toHaveBeenCalled();
+  });
+
+  it("503 when the survey's session can't be read: it never guesses the half", async () => {
+    vi.mocked(lookupSubmissionSessionId).mockRejectedValue(new Error("down"));
+    const res = await post({ reportToken: TOKEN, priceOption: "free" });
+    expect(res.status).toBe(503);
+    expect(grantChosenFreeInitialUnlock).not.toHaveBeenCalled();
+  });
+
+  it("charges today's EUR 1.99 for a request with no pick, and reads no half for it", async () => {
+    await post({ reportToken: TOKEN });
+    expect(lineAmount()).toBe(199);
+    expect(sessionCreated().params.metadata.priceOption).toBeUndefined();
+    expect(gatePriceArmFor).not.toHaveBeenCalled();
   });
 });

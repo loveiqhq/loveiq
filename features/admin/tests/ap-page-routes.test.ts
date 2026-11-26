@@ -33,7 +33,7 @@ import { GET as paymentGet } from "@/app/api/admin/ap/payment/route";
 import { GET as reportGet } from "@/app/api/admin/ap/report/route";
 import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
-import type { GateTestBlock } from "@features/admin/server/ap/gate-reveal-test";
+import type { PriceTestBlock } from "@features/admin/server/ap/gate-price-test";
 import type { PaygateExitsBlock } from "@features/admin/server/ap/paygate-exits";
 
 const json = (body: unknown, status = 200) => ({
@@ -354,16 +354,19 @@ describe("GET /api/admin/ap/payment: how readers reached the €1.99 page's exit
 });
 
 // #11, Mark's new €1.99 page as a 50/50: its halves are read from the switch-on.
-describe("GET /api/admin/ap/payment: the €1.99 page test (#11)", () => {
-  const DAY = "2026-11-17";
-  const after = (minutes: number) =>
-    new Date(Date.parse("2026-11-17T09:01:50Z") + minutes * 60_000).toISOString();
-  const surveyRead = () =>
+describe("GET /api/admin/ap/payment: the pre-unlock price test", () => {
+  const DAY = "2026-11-24";
+  const at = (hour: number) => `2026-11-24T${String(hour).padStart(2, "0")}:00:00Z`;
+  const paid = (hour: number, amount: number) => [
+    [Math.floor(Date.parse(at(hour)) / 1000), amount, "initial"],
+  ];
+  const reads = (table: string) =>
     mockFetchAllRows.mock.calls
       .map(([p]) => p as string)
-      .filter((p) => p.startsWith("/rest/v1/survey_submission?"));
+      .filter((p) => p.startsWith(`/rest/v1/${table}?`));
+  const stamp = (arm: string | null) => JSON.stringify(arm ? { gate_reveal_arm: arm } : {});
 
-  const gateTest = async (from: string, to: string) => {
+  const priceTest = async (from: string, to: string) => {
     mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
       const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
       if (path === "/rest/v1/rpc/ap_facts")
@@ -371,14 +374,15 @@ describe("GET /api/admin/ap/payment: the €1.99 page test (#11)", () => {
           facts(
             p_from === from
               ? [
-                  // Finished before the switch-on: not in the test.
-                  { ...finisher(1, DAY), at: "2026-11-17T08:00:00Z" },
-                  { ...finisher(2, DAY), at: after(5) },
-                  {
-                    ...finisher(3, DAY),
-                    at: after(9),
-                    pays: [[Math.floor(Date.parse(after(30)) / 1000), 1.99, "initial"]],
-                  },
+                  { ...finisher(1, DAY), at: at(9), pays: paid(10, 1.99) },
+                  { ...finisher(2, DAY), at: at(9) },
+                  { ...finisher(3, DAY), at: at(9), pays: paid(10, 6.99) },
+                  { ...finisher(4, DAY), at: at(9), pays: paid(11, 4.5) },
+                  // EUR 0 chosen: no sale, a free claim.
+                  { ...finisher(5, DAY), at: at(9) },
+                  // #11's own stamp, and none at all: neither is in the price test.
+                  { ...finisher(6, DAY), at: at(9), pays: paid(10, 1.99) },
+                  { ...finisher(7, DAY), at: at(9) },
                 ]
               : []
           )
@@ -387,37 +391,66 @@ describe("GET /api/admin/ap/payment: the €1.99 page test (#11)", () => {
     });
     mockFetchAllRows.mockImplementation(async (path: string) => {
       if (path.startsWith("/rest/v1/survey_submission?status=eq.completed"))
-        return [1, 2, 3].map((id) => ({
-          id,
-          session_id: null,
-          utm_tracker: JSON.stringify({ gate_reveal_arm: id === 3 ? "reveal" : "control" }),
-        }));
+        return [
+          { id: 1, utm_tracker: stamp("fixed") },
+          { id: 2, utm_tracker: stamp("fixed") },
+          { id: 3, utm_tracker: stamp("choose") },
+          { id: 4, utm_tracker: stamp("choose") },
+          { id: 5, utm_tracker: stamp("choose") },
+          { id: 6, utm_tracker: stamp("control") },
+          { id: 7, utm_tracker: stamp(null) },
+        ];
       if (path.startsWith("/rest/v1/personal_report?initial_gate_seen_at="))
-        return [{ survey_submission_id: 3 }];
+        return [1, 3, 4, 5].map((id) => ({ survey_submission_id: id }));
+      if (path.startsWith("/rest/v1/payment?"))
+        return [
+          { option: "fair", personal_report: { survey_submission_id: 3 } },
+          { option: "custom", personal_report: { survey_submission_id: 4 } },
+          { option: "free", personal_report: { survey_submission_id: 5 } },
+        ];
       return [];
     });
     const res = await paymentGet(
       new Request(`http://localhost/api/admin/ap/payment?period=custom&from=${from}&to=${to}`)
     );
     expect(res.status).toBe(200);
-    return ((await res.json()) as { gateTest: GateTestBlock }).gateTest;
+    return ((await res.json()) as { priceTest: PriceTestBlock }).priceTest;
   };
 
-  it("reads who is in which half from the switch-on, and counts each half's finishers", async () => {
-    const block = await gateTest(DAY, DAY);
-    expect(surveyRead()).toHaveLength(1);
+  it("files each finisher by the test's own stamp, its picks under the choosing half, and EUR 0 as a free claim", async () => {
+    const block = await priceTest(DAY, DAY);
+    expect(reads("survey_submission")).toHaveLength(1);
+    expect(reads("payment")[0]).toContain("metadata->>priceOption=not.is.null");
     expect(block.why).toBeNull();
+    // Money in cents: 6.99 + 4.5 is not 11.49 in floating point.
     expect(
-      block.arms.map((a) => [a.arm, a.finishers, a.reached, a.paid, a.paidReached, a.full])
+      block.arms.map((a) => [
+        a.arm,
+        a.finishers,
+        a.reached,
+        a.paid,
+        Math.round(a.revenue * 100),
+        a.free,
+        a.full,
+      ])
     ).toEqual([
-      ["control", 1, 0, 0, 0, 0],
-      ["reveal", 1, 1, 1, 1, 0],
+      ["fixed", 2, 1, 1, 199, 0, 0],
+      ["choose", 3, 3, 2, 1149, 1, 0],
     ]);
+    expect(block.options.map((o) => [o.option, o.n, Math.round(o.revenue * 100)])).toEqual([
+      ["fair", 1, 699],
+      ["support", 0, 0],
+      ["custom", 1, 450],
+    ]);
+    expect(block.verdict).toMatch(
+      /^Choose your price earns €3\.83 per finisher against €[\d.]+, with a higher pay rate \(66\.7% vs 50\.0%\) and 1 free claim\. /
+    );
   });
 
   it("doesn't read the halves for a range before the test, and says why", async () => {
-    const block = await gateTest("2026-11-10", "2026-11-16");
-    expect(surveyRead()).toEqual([]);
+    const block = await priceTest("2026-11-10", "2026-11-20");
+    expect(reads("survey_submission")).toEqual([]);
+    expect(reads("payment")).toEqual([]);
     expect(block.arms).toEqual([]);
     expect(block.why).toMatch(/^Not running in this range/);
   });

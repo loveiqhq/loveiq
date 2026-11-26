@@ -67,11 +67,14 @@ interface Seen {
 function backend({
   existingPayment = false,
   gifted = false,
+  chosenFree = false,
   giftLookupFails = false,
   tracker = null,
 }: {
   existingPayment?: boolean;
   gifted?: boolean;
+  /** The report already holds a EUR 0 chosen on Choose your price (`priceOption: "free"`). */
+  chosenFree?: boolean;
   giftLookupFails?: boolean;
   /** The survey's utm_tracker, as the recipient lookup reads it. */
   tracker?: string | null;
@@ -86,9 +89,11 @@ function backend({
         return { ok: true, status: 200, text: async () => "" } as Response;
       }
       if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) return json([]);
-      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&metadata->>gifted=eq.e07")) {
+      // The free unlocks a sale can come after: E07's gift, or a EUR 0 chosen on the gate.
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.5&") && url.includes("gifted")) {
         if (giftLookupFails) return { ok: false, status: 500, json: async () => ({}) } as Response;
-        return json(gifted ? [{ id: 77 }] : []);
+        const asksChosen = url.includes("metadata->>priceOption.eq.free");
+        return json(gifted || (chosenFree && asksChosen) ? [{ id: 77 }] : []);
       }
       if (
         url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
@@ -138,7 +143,10 @@ const SESSION_METADATA = {
   unlockSource: "report_gate",
 };
 
-function stripe({ amountTotal = 199 }: { amountTotal?: number } = {}) {
+function stripe({
+  amountTotal = 199,
+  metadata = SESSION_METADATA,
+}: { amountTotal?: number; metadata?: Record<string, string> } = {}) {
   return {
     charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_initial_1" }) },
     checkout: {
@@ -149,7 +157,7 @@ function stripe({ amountTotal = 199 }: { amountTotal?: number } = {}) {
           currency: "eur",
           customer: null,
           customer_details: { email: "alice@example.com" },
-          metadata: SESSION_METADATA,
+          metadata,
           payment_intent: "pi_initial_1",
           payment_status: "paid",
           total_details: { amount_discount: 0 },
@@ -221,6 +229,36 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
     expect(row?.metadata).toMatchObject({ plan: "initial", gateRevealArm: "control" });
+  });
+
+  // The price test's Choose your price half (24 Nov 2026): the pick rides on the session and is
+  // kept on the payment beside the price it was paid at, and the buyer's half beside them.
+  it("keeps the pick and the price chosen on the payment row", async () => {
+    const seen = backend({
+      tracker: JSON.stringify({ landing_path: "/", gate_reveal_arm: "choose" }),
+    });
+    await processStripeWebhookEvent({
+      event: completed(),
+      stripe: stripe({
+        amountTotal: 699,
+        metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+      }) as never,
+    });
+    const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
+    expect(row).toMatchObject({ amount: 6.99 });
+    expect(row?.metadata).toMatchObject({
+      plan: "initial",
+      priceOption: "fair",
+      currentPrice: "6.99",
+      gateRevealArm: "choose",
+    });
+  });
+
+  it("names no pick for today's EUR 1.99", async () => {
+    const seen = backend();
+    await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
+    const row = seen.find((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))?.body;
+    expect(row?.metadata).toMatchObject({ priceOption: null });
   });
 
   it("has one payment item, the Core Archetype", async () => {
@@ -325,6 +363,26 @@ describe("a paid EUR 1.99 Core Archetype", () => {
     }
   });
 
+  // The price test's Choose your price half pays what it picked: U1's "Paid €1.99" was wrong.
+  it("U1 names the price the reader paid, not today's EUR 1.99", async () => {
+    mockSwitchOn.mockImplementation(async (key: string) => key === "u1");
+    try {
+      backend();
+      await processStripeWebhookEvent({
+        event: completed(),
+        stripe: stripe({
+          amountTotal: 699,
+          metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+        }) as never,
+      });
+      const sent = mockResendSend.mock.calls[0]?.[0] as { html: string; text: string };
+      expect(sent.html).toContain("Paid €6.99, initial report open");
+      expect(sent.html + sent.text).not.toContain("€1.99");
+    } finally {
+      mockSwitchOn.mockImplementation(async () => false);
+    }
+  });
+
   it("sends nothing a second time when the same purchase arrives again", async () => {
     const seen = backend({ existingPayment: true });
     await processStripeWebhookEvent({
@@ -349,12 +407,33 @@ describe("a EUR 1.99 paid after E07 had gifted the same unlock", () => {
     await processStripeWebhookEvent({ event: completed(), stripe: stripe() as never });
     const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
     expect(ops).toHaveLength(1);
-    expect(String(ops[0]!.body?.text)).toMatch(/paid on report 5 after E07 had already gifted it/);
+    expect(String(ops[0]!.body?.text)).toMatch(
+      /€1\.99 Core Archetype paid on report 5 after it was already open for free/
+    );
     // The payment intent leads: Slack's dedupe reads the first 100 characters.
     expect(String(ops[0]!.body?.text).slice(0, 40)).toContain("pi_initial_1");
     expect(String(ops[0]!.body?.text)).toContain("pi_initial_1");
     // The sale itself is still recorded as it came.
     expect(seen.some((s) => s.method === "POST" && s.url.endsWith("/rest/v1/payment"))).toBe(true);
+  });
+
+  // Choose your price: a checkout opened at EUR 6.99, then EUR 0 taken in another tab, then
+  // the open checkout paid. The reader paid for an unlock they already held.
+  it("tells #ops to refund a price paid after the reader had taken it for EUR 0", async () => {
+    const seen = backend({ chosenFree: true });
+    await processStripeWebhookEvent({
+      event: completed(),
+      stripe: stripe({
+        amountTotal: 699,
+        metadata: { ...SESSION_METADATA, currentPrice: "6.99", priceOption: "fair" },
+      }) as never,
+    });
+    const ops = seen.filter((s) => s.method === "POST" && s.url === OPS_URL);
+    expect(ops).toHaveLength(1);
+    expect(String(ops[0]!.body?.text)).toContain("€6.99");
+    expect(String(ops[0]!.body?.text)).toMatch(
+      /paid on report 5 after it was already open for free/
+    );
   });
 
   it("says nothing when there was no gift, or on Stripe's re-delivery", async () => {

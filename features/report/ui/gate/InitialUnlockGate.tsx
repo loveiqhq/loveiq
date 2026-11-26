@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   setReportSubmissionContext,
   trackExperimentExposure,
@@ -8,16 +8,26 @@ import {
 } from "@features/analytics/client";
 import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
 import { GATE_REVEAL_EXPERIMENT, isGateRevealArm } from "@shared/experiments/gateRevealArm";
+import { GATE_PRICE_EXPERIMENT, isGatePriceArm } from "@shared/experiments/gatePriceArm";
+import { CHOOSE_PRICE_DEFAULT } from "@features/report/logic/choosePrice";
 import { isGateReveal } from "@features/report/logic/gateReveal";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
 import { GateChapterMap } from "./GateChapterMap";
+import {
+  choiceCents,
+  choiceStickyCta,
+  GateChoosePriceCard,
+  GateWhyChoose,
+  type PriceChoice,
+} from "./GateChoosePrice";
+import { GATE_CHOOSE_COPY, GATE_PICK_PRICE_EVENT } from "./gateChoosePriceContent";
 import { GateHero } from "./GateHero";
 import { GateReveal } from "./GateReveal";
 import { GATE_REVEAL_COPY } from "./gateRevealContent";
 import { GatePayments, GatePriceCard } from "./GatePriceCard";
 import { GateStickyBar } from "./GateStickyBar";
 import { GateReviews, GateWhyUnlock } from "./GateWhyUnlock";
-import { useInitialUnlockCheckout } from "./useInitialUnlockCheckout";
+import { useInitialUnlockCheckout, type GateCtaPlace } from "./useInitialUnlockCheckout";
 import "../paygate.css";
 import "./initial-unlock-gate.css";
 
@@ -51,12 +61,28 @@ export default function InitialUnlockGate({
     const active = document.activeElement;
     if (!active || active === document.body) mainRef.current?.focus({ preventScroll: true });
   }, []);
+  // The price test (shared/experiments/gatePriceArm.ts): its "Choose your price" half picks the
+  // price on Marcus's card (GateChoosePrice.tsx), EUR 6.99 picked as the page opens; today's
+  // page's half meets the gate as it always was.
+  const priceArm = isGatePriceArm(gate.priceArm) ? gate.priceArm : null;
+  const choosing = priceArm === "choose";
+  const [choice, setChoice] = useState<PriceChoice>({
+    option: CHOOSE_PRICE_DEFAULT,
+    amountText: "",
+  });
+  const chosenCents = choosing ? choiceCents(choice) : null;
+  const checkoutChoice = useMemo(
+    () => (choosing && chosenCents !== null ? { option: choice.option, cents: chosenCents } : null),
+    [choosing, choice.option, chosenCents]
+  );
   const { start, state } = useInitialUnlockCheckout({
     priceCents: gate.priceCents,
     reportSessionId,
     reportToken,
     preview,
+    choice: checkoutChoice,
   });
+  const amountRef = useRef<HTMLInputElement | null>(null);
 
   // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
   // to unlock yet" leaves for the landing page in the same tab, whose signals are not this
@@ -75,14 +101,22 @@ export default function InitialUnlockGate({
     if (viewedRef.current) return;
     viewedRef.current = true;
     trackInitialGateViewed({ submission_id: gate.submissionId });
-    if (revealArm) {
+    // The price test replaced the 50/50 and has its own name, so its exposure never joins the
+    // reveal's (one or the other, never both).
+    if (priceArm) {
+      trackExperimentExposure({
+        experiment: GATE_PRICE_EXPERIMENT,
+        variant: priceArm,
+        surface: "gate",
+      });
+    } else if (revealArm) {
       trackExperimentExposure({
         experiment: GATE_REVEAL_EXPERIMENT,
         variant: revealArm,
         surface: "gate",
       });
     }
-  }, [gate.submissionId, revealArm]);
+  }, [gate.submissionId, priceArm, revealArm]);
 
   // Mark's redesigned page (logic/gateReveal.ts), when its switch sent the archetype along.
   const reveal = isGateReveal(gate.reveal) ? gate.reveal : null;
@@ -98,25 +132,69 @@ export default function InitialUnlockGate({
     section.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   };
 
+  // The picker in view with its pick focused: an own amount that can't be charged yet, or the
+  // exit page's "Choose your price" (GATE_PICK_PRICE_EVENT). It reads only the page itself.
+  const toPicker = useCallback((focusAmount: boolean) => {
+    const section = pricingRef.current;
+    if (!section) return;
+    const reduce =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    section.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    const target = focusAmount
+      ? amountRef.current
+      : section.querySelector<HTMLInputElement>('input[type="radio"]:checked');
+    target?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (!choosing) return;
+    const onPick = () => toPicker(false);
+    window.addEventListener(GATE_PICK_PRICE_EVENT, onPick);
+    return () => window.removeEventListener(GATE_PICK_PRICE_EVENT, onPick);
+  }, [choosing, toPicker]);
+
+  // Both buttons: an own amount that can't be charged sends the reader to its field instead.
+  const unlock = (place: GateCtaPlace) => {
+    if (choosing && chosenCents === null) {
+      toPicker(true);
+      return;
+    }
+    void start(place);
+  };
+
   // The shell is the page's ground (the status pages' wash on a desktop); the frame is the column.
   return (
     <div className="iug-shell">
       <main ref={mainRef} className="iug-page" tabIndex={-1}>
         <ScrollAnimator />
-        <GateHero headline={!reveal} />
+        <GateHero headline={!reveal} lead={choosing ? GATE_CHOOSE_COPY.headlineLead : undefined} />
         {reveal ? <GateReveal reveal={reveal} onLocked={toPricing} /> : null}
         <section
           ref={pricingRef}
           className={`iug-pricing${reveal ? " iug-pricing--reveal" : ""}`}
           aria-label="Your Core Archetype"
         >
-          <GatePriceCard
-            gate={gate}
-            onUnlock={start}
-            state={state}
-            title={reveal ? GATE_REVEAL_COPY.cardTitle : undefined}
-            description={reveal ? null : undefined}
-          />
+          {choosing ? (
+            <>
+              <GateChoosePriceCard
+                gate={gate}
+                choice={choice}
+                onChoice={setChoice}
+                onUnlock={unlock}
+                state={state}
+                amountRef={amountRef}
+              />
+              <GateWhyChoose />
+            </>
+          ) : (
+            <GatePriceCard
+              gate={gate}
+              onUnlock={start}
+              state={state}
+              title={reveal ? GATE_REVEAL_COPY.cardTitle : undefined}
+              description={reveal ? null : undefined}
+            />
+          )}
         </section>
         <GatePayments />
         <div className="iug-divider" aria-hidden="true" />
@@ -128,9 +206,10 @@ export default function InitialUnlockGate({
         <GateReviews />
         <GateStickyBar
           guaranteeDays={gate.guaranteeDays}
-          onUnlock={start}
+          onUnlock={choosing ? unlock : start}
           priceCents={gate.priceCents}
           state={state}
+          ctaLabel={choosing ? choiceStickyCta(choice) : undefined}
         />
       </main>
     </div>

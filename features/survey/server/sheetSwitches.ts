@@ -13,6 +13,7 @@
 
 import { areFeaturesEnabled, type SystemFlagKey } from "@shared/flags/system-flags";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
+import { isGatePriceEnabled } from "@features/report/server/gateRevealSwitch";
 import {
   GATE_TEST_SHEETS,
   parseSheetsPreview,
@@ -32,19 +33,39 @@ export const SURVEY_SHEET_SWITCHES = {
 
 /**
  * The sheets whose switch is on, in Mark's order. The two that tell what EUR 1.99 opens
- * (GATE_TEST_SHEETS) are his 50/50's, so they also need its switch,
- * `report_gate_archetype_reveal`, whatever their own say: they run with the test, never alone.
+ * (GATE_TEST_SHEETS) are the EUR 1.99 page's tests', so they also need one of their switches,
+ * `report_gate_archetype_reveal` (Mark's 50/50) or `report_gate_choose_price` (the price test
+ * that replaced it), whatever their own say: they run with a test, never alone. In the price
+ * test only today's page's half meets them (SurveyEngine, Fatih 24 Nov).
  */
 export async function enabledSurveySheets(): Promise<SurveySheetId[]> {
-  // One read for the seven switches, not seven (areFeaturesEnabled).
+  // One read for the eight switches, not eight (areFeaturesEnabled).
   const on = await areFeaturesEnabled(
-    [...SURVEY_SHEET_IDS.map((id) => SURVEY_SHEET_SWITCHES[id]), "report_gate_archetype_reveal"],
+    [
+      ...SURVEY_SHEET_IDS.map((id) => SURVEY_SHEET_SWITCHES[id]),
+      "report_gate_archetype_reveal",
+      "report_gate_choose_price",
+    ],
     false
   );
-  const revealOn = on[SURVEY_SHEET_IDS.length] === true;
+  const testOn = on[SURVEY_SHEET_IDS.length] === true || on[SURVEY_SHEET_IDS.length + 1] === true;
   return SURVEY_SHEET_IDS.filter(
-    (id, i) => on[i] === true && (revealOn || !GATE_TEST_SHEETS.has(id))
+    (id, i) => on[i] === true && (testOn || !GATE_TEST_SHEETS.has(id))
   );
+}
+
+/**
+ * Whether this visit's survey runs in the EUR 1.99 page's price test (gatePriceArm.ts): its
+ * switch, or a `?price=1` preview on dev, previews and staging, never production. The engine
+ * then skips the two sheets that tell what EUR 1.99 opens for the half that chooses its price:
+ * nothing in them is true of that page (Fatih, 24 Nov 2026). Off on any failure.
+ */
+export async function gatePriceTestForVisit(
+  preview: string | string[] | undefined
+): Promise<boolean> {
+  const param = Array.isArray(preview) ? preview[0] : preview;
+  if (isNonProdDeploy() && param === "1") return true;
+  return isGatePriceEnabled().catch(() => false);
 }
 
 /**

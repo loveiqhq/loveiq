@@ -1352,6 +1352,8 @@ interface SurveyPageProps {
    * staging preview). None by default.
    */
   sheets?: readonly SurveySheetId[];
+  /** The EUR 1.99 page's price test runs (app/survey/page.tsx): see SurveyEngine's `gatePrice`. */
+  gatePrice?: boolean;
   /**
    * Survey 2.0 for this visit (app/survey/page.tsx): `test` while its switch is on (a fresh run
    * draws its half of the Survey 2.0 test), `forced` on a staging preview, `off` by default.
@@ -1364,6 +1366,7 @@ const NO_SHEETS: readonly SurveySheetId[] = [];
 const SurveyPage: FC<SurveyPageProps> = ({
   journey = null,
   sheets = NO_SHEETS,
+  gatePrice = false,
   survey2 = "off",
 }) => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine (Survey 2.0: 0–2 = the short guide)
@@ -1604,6 +1607,7 @@ const SurveyPage: FC<SurveyPageProps> = ({
         onStartOver={handleStartOver}
         payToStart={journey !== null}
         sheets={sheets}
+        gatePrice={gatePrice}
         // The version this visit's guide and consent showed, never a second draw: "Start a new
         // one" (or I agree, or Forward) after a finished run drops the session id in between, and
         // the new id's half could give the other version's questions after this one's consent.

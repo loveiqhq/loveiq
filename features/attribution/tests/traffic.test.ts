@@ -93,6 +93,12 @@ describe("readGateRevealStamp — the EUR 1.99 page's half", () => {
     expect(readGateRevealStamp(JSON.stringify({ gate_reveal_arm: "control" }))).toBe("control");
   });
 
+  // The price test that replaced the 50/50 (24 Nov 2026) stamps its own halves under the key.
+  it("reads the price test's halves too", () => {
+    expect(readGateRevealStamp(JSON.stringify({ gate_reveal_arm: "choose" }))).toBe("choose");
+    expect(readGateRevealStamp(JSON.stringify({ gate_reveal_arm: "fixed" }))).toBe("fixed");
+  });
+
   it("is null when nothing real is stamped", () => {
     for (const input of [
       null,

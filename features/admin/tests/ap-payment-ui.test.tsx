@@ -352,37 +352,49 @@ const payload: PaymentPayload = {
       },
     ],
   },
-  // 20 of 200 against 40 of 200: callable, and credible.
-  gateTest: {
-    test: "#11 · New €1.99 page",
-    note: "Since 17 Nov 2026 · live",
+  // 20 of 200 paid the €1.99; 30 of 200 chose a price (20 the €6.99, 2 the €19.99, 8 their own),
+  // and 12 took it free.
+  priceTest: {
+    test: "Pre-unlock price test: €1.99 vs choose your price",
     arms: [
       {
-        arm: "control",
-        name: "Today's €1.99 page",
+        arm: "fixed",
+        name: "A · Fixed €1.99",
+        sub: "Control: today’s page",
         control: true,
         finishers: 200,
         reached: 180,
         paid: 20,
-        paidReached: 19,
+        revenue: 39.8,
+        free: 0,
         full: 2,
       },
       {
-        arm: "reveal",
-        name: "New page: Core Archetype shown",
+        arm: "choose",
+        name: "B · Choose your price",
+        sub: "Suggested €6.99",
         control: false,
         finishers: 200,
         reached: 190,
-        paid: 40,
-        paidReached: 38,
+        paid: 30,
+        revenue: 209.7,
+        free: 12,
         full: 3,
       },
     ],
-    lift: 1,
-    confidence: 0.99,
-    liftWhy: null,
+    options: [
+      { option: "fair", name: "Fair price · €6.99", sub: "recommended", n: 20, revenue: 139.8 },
+      { option: "support", name: "Support our research · €19.99", sub: "", n: 2, revenue: 39.98 },
+      {
+        option: "custom",
+        name: "Own amount · from €0.50",
+        sub: "avg. of what they typed",
+        n: 8,
+        revenue: 29.92,
+      },
+    ],
     verdict:
-      "New page: Core Archetype shown is genuinely ahead: 20.0% vs 10.0% (+10pp · 95% CI +3.63 to +16.37pp).",
+      "Choose your price earns €1.05 per finisher against €0.20, with a higher pay rate (15.0% vs 10.0%) and 12 free claims. The pay rates could still differ by chance. Watch the free claims and the share choosing the lowest amounts: if they grow, the average price falls. To call it, each arm needs at least 5 paying readers per price option.",
     why: null,
   },
 };
@@ -424,7 +436,7 @@ describe("the Payment page as drawn", () => {
       "Their words",
       "Why not today · After the full report's plans",
       "Who pays",
-      "€1.99 page test",
+      "Pre-unlock price test: €1.99 vs choose your price",
       "Pricing tests",
       "Personal price multipliers in Pricing 3.0",
       "Price elasticity prediction",
@@ -437,7 +449,7 @@ describe("the Payment page as drawn", () => {
       "Checkout & methods",
       "Paygate exits",
       "Segments",
-      "€1.99 page test",
+      "Pre-unlock price test",
       "Pricing tests",
       "Price elasticity",
     ]);
@@ -723,78 +735,110 @@ describe("the Payment page as drawn", () => {
     expect(within(table).getAllByRole("row")[2]!.className).toContain("border-dashed");
   });
 
-  it("€1.99 page test: each half's funnel, the decider in bold, the lift once it can be called, and the verdict", () => {
+  it("pre-unlock price test: each half, the choosing half's picks under it, the free claims, and the verdict", () => {
     render(<ApPayment />);
-    const table = screen.getByRole("table", { name: "€1.99 page test" });
-    const [c, r] = rows(table).map((x) => texts(within(x).getAllByRole("cell")));
-    expect(c).toEqual([
-      "#11 · New €1.99 pageSince 17 Nov 2026 · live",
-      "Today's €1.99 pageControl",
-      "200",
-      "180",
-      "20",
-      "10.0%",
-      "10.6%",
-      "2",
-      "—",
-    ]);
-    expect(r).toEqual([
-      "",
-      "New page: Core Archetype shown",
-      "200",
-      "190",
-      "40",
-      "20.0%",
-      "20.0%",
-      "3",
-      "+100.0%99% confidence · credible",
+    const table = screen.getByRole("table", {
+      name: "Pre-unlock price test: €1.99 vs choose your price",
+    });
+    const all = rows(table).map((x) => texts(within(x).getAllByRole("cell")));
+    expect(all).toEqual([
+      [
+        "A · Fixed €1.99Control: today’s page",
+        "200",
+        "180",
+        "20",
+        "10.0%",
+        "€1.99",
+        "€0.20€39.80 in total",
+        "2",
+      ],
+      [
+        "B · Choose your priceSuggested €6.99",
+        "200",
+        "190",
+        "30",
+        "15.0%",
+        "€6.99",
+        "€1.05€209.70 in total",
+        "3",
+      ],
+      [
+        "Fair price · €6.99recommended",
+        "",
+        "",
+        "20",
+        "10.0%",
+        "€6.99",
+        "€0.70€139.80 in total",
+        "",
+      ],
+      ["Support our research · €19.99", "", "", "2", "1.0%", "€19.99", "€0.20€39.98 in total", ""],
+      [
+        "Own amount · from €0.50avg. of what they typed",
+        "",
+        "",
+        "8",
+        "4.0%",
+        "€3.74",
+        "€0.15€29.92 in total",
+        "",
+      ],
+      ["Took it free · €012 readers · 6.0% of finishers", "", "", "—", "—", "€0.00", "€0.00", ""],
     ]);
     const cell = (row: number, col: number) =>
       within(rows(table)[row]!).getAllByRole("cell")[col]!.className;
-    expect(cell(0, 5)).toContain("font-bold");
-    expect(cell(1, 8)).toContain("text-ap-good-ink");
-    expect(within(region("€1.99 page test")).getByText(payload.gateTest.verdict)).toBeTruthy();
+    // Green on the half ahead, on the pay rate and on revenue per finisher.
+    expect(cell(1, 4)).toContain("text-ap-good-ink");
+    expect(cell(1, 6)).toContain("text-ap-good-ink");
+    expect(cell(0, 4)).not.toContain("text-ap-good-ink");
+    expect(cell(0, 6)).not.toContain("text-ap-good-ink");
+    // The picks sit in under their half, on the board's pale ground; the halves stay white.
+    expect(cell(2, 0)).toContain("pl-7");
+    const rowClass = (row: number) => rows(table)[row]!.className;
+    for (const r of [2, 3, 4, 5]) expect(rowClass(r)).toContain("bg-[#faf9fc]");
+    for (const r of [0, 1]) expect(rowClass(r)).not.toContain("bg-[#faf9fc]");
+    for (const r of [0, 1, 2, 3, 4, 5]) expect(rowClass(r)).not.toContain("border-dashed");
+    expect(
+      within(region("Pre-unlock price test: €1.99 vs choose your price")).getByText(
+        payload.priceTest.verdict
+      )
+    ).toBeTruthy();
   });
 
-  it("€1.99 page test: a lift it can't call is blank with why, an uncertain one never green, and a read that failed says so", () => {
-    const gate = (over: Partial<PaymentPayload["gateTest"]>) => ({
+  it("pre-unlock price test: says why in place of the table, and a half it couldn't read says so", () => {
+    view.payload = {
       ...payload,
-      gateTest: { ...payload.gateTest, ...over },
-    });
-    const liftCell = () =>
-      within(rows(screen.getByRole("table", { name: "€1.99 page test" }))[1]!).getAllByRole(
-        "cell"
-      )[8]!;
-    view.payload = gate({
-      lift: null,
-      confidence: null,
-      liftWhy: "Too early to compare",
-      verdict:
-        "Too early to compare: New page: Core Archetype shown has only 25 finishers so far. Ignore the difference until that grows.",
-    });
+      priceTest: {
+        ...payload.priceTest,
+        arms: [],
+        options: [],
+        verdict: "",
+        why: "Who is in which half could not be read just now.",
+      },
+    };
     render(<ApPayment />);
-    expect(liftCell().textContent).toBe("—Too early to compare");
-    expect(screen.getByText(/^Too early to compare: New page/)).toBeTruthy();
-    cleanup();
-
-    view.payload = gate({ lift: 0.3, confidence: 0.49 });
-    render(<ApPayment />);
-    expect(liftCell().textContent).toBe("+30.0%49% confidence · not significant yet");
-    expect(liftCell().className).not.toContain("text-ap-good-ink");
-    cleanup();
-
-    view.payload = gate({
-      arms: [],
-      verdict: "",
-      why: "Who is in which half could not be read just now.",
-    });
-    render(<ApPayment />);
-    expect(screen.queryByRole("table", { name: "€1.99 page test" })).toBeNull();
     expect(
-      within(region("€1.99 page test")).getByText(
+      screen.queryByRole("table", { name: "Pre-unlock price test: €1.99 vs choose your price" })
+    ).toBeNull();
+    expect(
+      within(region("Pre-unlock price test: €1.99 vs choose your price")).getByText(
         "Who is in which half could not be read just now."
       )
     ).toBeTruthy();
+    cleanup();
+
+    view.payload = {
+      ...payload,
+      priceTest: {
+        ...payload.priceTest,
+        arms: payload.priceTest.arms.map((a) => ({ ...a, reached: null })),
+      },
+    };
+    render(<ApPayment />);
+    const first = rows(
+      screen.getByRole("table", { name: "Pre-unlock price test: €1.99 vs choose your price" })
+    )[0]!;
+    expect(within(first).getAllByRole("cell")[2]!.textContent).toBe("—could not be read");
   });
 
   it("the multipliers' sentence follows the price switch: off, on, or unread", () => {
@@ -919,19 +963,32 @@ describe("the Payment page as drawn", () => {
       "Paygate exits · how they reached it",
       "Paygate exits · why not today",
       "Who pays · Country",
-      "€1.99 page test",
+      "Pre-unlock price test",
       "Pricing tests",
     ]);
     const section = (name: string) => exported.sections.find((s) => s.name === name)!.table;
-    // Each half's counts and rates, the lift and its confidence on the new page's row only.
-    expect(section("€1.99 page test").rows).toEqual([
+    // Each half's counts, rates and money, then the choosing half's picks.
+    const near = (n: number) => expect.closeTo(n, 6);
+    expect(section("Pre-unlock price test").rows).toEqual([
       {
-        label: "#11 · New €1.99 page · Today's €1.99 page (control)",
-        values: ["Since 17 Nov 2026 · live", 200, 180, 20, 0.1, 19 / 180, 2, null, null],
+        label: "A · Fixed €1.99 (control)",
+        values: [200, 180, 20, near(0.1), near(1.99), near(0.199), 39.8, null, 2],
       },
       {
-        label: "#11 · New €1.99 page · New page: Core Archetype shown",
-        values: ["Since 17 Nov 2026 · live", 200, 190, 40, 0.2, 0.2, 3, 1, 0.99],
+        label: "B · Choose your price",
+        values: [200, 190, 30, near(0.15), near(6.99), near(1.0485), 209.7, 12, 3],
+      },
+      {
+        label: "B · Fair price · €6.99",
+        values: [null, null, 20, near(0.1), near(6.99), near(0.699), 139.8, null, null],
+      },
+      {
+        label: "B · Support our research · €19.99",
+        values: [null, null, 2, near(0.01), near(19.99), near(0.1999), 39.98, null, null],
+      },
+      {
+        label: "B · Own amount · from €0.50",
+        values: [null, null, 8, near(0.04), near(3.74), near(0.1496), 29.92, null, null],
       },
     ]);
     // The segment in full, every country.

@@ -1323,10 +1323,10 @@ export const fields: FieldRegistry = {
     stat: "Count",
     per: "per sheet, now",
     formula: {
-      num: "Sheets whose switch is on, plus the miss-out sheet; the halfway sheet and the report map only while the €1.99 page test's switch is on too",
+      num: "Sheets whose switch is on, plus the miss-out sheet; the halfway sheet and the report map only while a €1.99 page test's switch is on too",
     },
     caveat:
-      "Now, whatever the range. A sheet with a price (halfway, State of Desire, report map) never opens for someone who paid before the survey. A switch can also be forced on in a deployment's settings (SYSTEM_FLAG_…), which the table doesn't show.",
+      "Now, whatever the range. A sheet with a price (halfway, State of Desire, report map) never opens for someone who paid before the survey. In the price test (report_gate_choose_price, from 24 Nov 2026) the half that chooses its price meets neither the halfway sheet nor the report map. A switch can also be forced on in a deployment's settings (SYSTEM_FLAG_…), which the table doesn't show.",
     tables: [
       {
         source: "production",
@@ -1337,13 +1337,14 @@ export const fields: FieldRegistry = {
     ],
     query: {
       lang: "SQL",
-      text: `-- The sheets' switches now. The halfway sheet and the report map also need the EUR 1.99 page
--- test's switch (report_gate_archetype_reveal): they run with that test, never alone.
+      text: `-- The sheets' switches now. The halfway sheet and the report map also need a EUR 1.99 page
+-- test's switch (report_gate_archetype_reveal, or report_gate_choose_price, the price test that
+-- replaced it): they run with a test, never alone.
 SELECT key, enabled, updated_at
   FROM system_flags
  WHERE key IN ('survey_sheet_science', 'survey_sheet_trustpilot', 'survey_sheet_expert',
                'survey_sheet_halfway', 'survey_sheet_desire', 'survey_sheet_report_map',
-               'report_gate_archetype_reveal')
+               'report_gate_archetype_reveal', 'report_gate_choose_price')
  ORDER BY key;`,
     },
     related: ["survey.sheets"],

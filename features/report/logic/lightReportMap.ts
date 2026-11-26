@@ -1,5 +1,6 @@
 import type { ReportNavAccess } from "@features/report/ui/ReportNavBadge";
 import { isGateRevealArm, type GateRevealArm } from "@shared/experiments/gateRevealArm";
+import { isGatePriceArm } from "@shared/experiments/gatePriceArm";
 
 /**
  * How each chapter reads on a map of the EUR 1.99 Light Report offer (Mark's board F2): the
@@ -33,8 +34,17 @@ export function offerForGateArm(arm: GateRevealArm | null | undefined): "today" 
  * drew Mark's new page (`revealShown`), and the reader's half of his 50/50 (`revealArm`, absent
  * while no test runs). A new-page reader whose page could not be drawn meets today's page, so
  * the menu says today's page's offer.
+ *
+ * In the price test that replaced that 50/50 (`priceArm`, shared/experiments/gatePriceArm.ts),
+ * today's page's half (`fixed`) is told its EUR 1.99, as its survey sheets told it; the half
+ * that chooses its price is told no price (`today`), as its survey skipped those sheets.
  */
-export function tourMenuOffer(revealShown: boolean, revealArm: unknown): "today" | LightMapOffer {
+export function tourMenuOffer(
+  revealShown: boolean,
+  revealArm: unknown,
+  priceArm?: unknown
+): "today" | LightMapOffer {
+  if (isGatePriceArm(priceArm)) return priceArm === "fixed" ? "price" : "today";
   if (revealShown) return "light";
   return offerForGateArm(isGateRevealArm(revealArm) ? "control" : null);
 }

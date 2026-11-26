@@ -12,9 +12,13 @@ vi.mock("@shared/flags/system-flags", () => ({
     if (env.fail) throw new Error("supabase down");
     return keys.map((key) => (env.on.has(key) ? true : fallback));
   },
+  isFeatureEnabled: async (key: string, fallback: boolean) => {
+    if (env.fail) throw new Error("supabase down");
+    return env.on.has(key) ? true : fallback;
+  },
 }));
 
-import { surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
+import { gatePriceTestForVisit, surveySheetsForVisit } from "@features/survey/server/sheetSwitches";
 import { SURVEY_SHEET_IDS } from "@features/survey/surveySheets";
 
 beforeEach(() => {
@@ -73,6 +77,18 @@ describe("the sheets a visit to /survey gets", () => {
     expect(await surveySheetsForVisit("all")).toEqual(["science", "reportMap"]);
   });
 
+  // The price test that replaced the 50/50 (24 Nov 2026): today's page's half keeps the report
+  // map, so it runs with its switch too, whatever the reveal's says. Sheet 4 (halfway) stays out
+  // for everyone since 27 Nov (RETIRED_SHEETS), its switch on or not.
+  it("runs the map with the price test's switch alone, never sheet 4", async () => {
+    env.on = new Set([
+      "survey_sheet_report_map",
+      "survey_sheet_halfway",
+      "report_gate_choose_price",
+    ]);
+    expect(await surveySheetsForVisit(undefined)).toEqual(["reportMap"]);
+  });
+
   it("still previews them on staging, Mark's page on or off", async () => {
     env.nonProd = true;
     expect(await surveySheetsForVisit("halfway,reportMap")).toEqual(["halfway", "reportMap"]);
@@ -81,5 +97,26 @@ describe("the sheets a visit to /survey gets", () => {
   it("none when the switches cannot be read", async () => {
     env.fail = true;
     expect(await surveySheetsForVisit(undefined)).toEqual([]);
+  });
+});
+
+describe("whether a visit's survey runs in the EUR 1.99 page's price test", () => {
+  it("follows its switch", async () => {
+    expect(await gatePriceTestForVisit(undefined)).toBe(false);
+    env.on.add("report_gate_choose_price");
+    expect(await gatePriceTestForVisit(undefined)).toBe(true);
+  });
+
+  it("is off when its switch can't be read", async () => {
+    env.fail = true;
+    expect(await gatePriceTestForVisit(undefined)).toBe(false);
+  });
+
+  it("is previewed with ?price=1 on staging, never on production", async () => {
+    expect(await gatePriceTestForVisit("1")).toBe(false);
+    env.nonProd = true;
+    expect(await gatePriceTestForVisit("1")).toBe(true);
+    expect(await gatePriceTestForVisit(["1"])).toBe(true);
+    expect(await gatePriceTestForVisit("0")).toBe(false);
   });
 });

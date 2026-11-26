@@ -281,11 +281,14 @@ async function sendPurchaseEmail({
   reportTokenOverride,
   submissionId,
   unlockedArchetype,
+  paidCents = null,
 }: {
   plan: FulfilledPlan;
   reportTokenOverride: string | null;
   submissionId: number;
   unlockedArchetype?: string | null;
+  /** What the session took, for U1's "Paid €X" (the price test's readers choose it). */
+  paidCents?: number | null;
 }): Promise<void> {
   if (
     plan !== "essentials" &&
@@ -387,7 +390,13 @@ async function sendPurchaseEmail({
 
   const tpl =
     redesign === EMAIL_STAGES.u1
-      ? coreUnlockedEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
+      ? coreUnlockedEmail({
+          firstName: recipient.firstName,
+          reportUrl,
+          siteUrl,
+          unsubscribeUrl,
+          paidCents,
+        })
       : redesign === EMAIL_STAGES.c1
         ? fullUnlockedEmail({
             firstName: recipient.firstName,
@@ -697,25 +706,27 @@ async function supabaseServiceFetch(path: string, options: ServiceFetchOptions =
 }
 
 /**
- * A EUR 1.99 Core Archetype paid on a report that E07 had already gifted (Pre-unlock): a
- * checkout opened before the gift and paid after it bought nothing new. Said to #ops, to be
- * refunded by hand. It never holds the fulfillment up, and a lookup that fails says nothing.
+ * A Core Archetype paid on a report that already held it for free (Pre-unlock): E07's gift, or
+ * EUR 0 chosen on the price test's "Choose your price" page (`priceOption: "free"`). A checkout
+ * opened before that and paid after it bought nothing new. Said to #ops, to be refunded by hand.
+ * It never holds the fulfillment up, and a lookup that fails says nothing.
  */
 async function alertIfPaidAfterGift(
   personalReportId: number,
   paymentIntentId: string | null,
-  internalTag: string
+  internalTag: string,
+  amount: number
 ) {
   try {
     const res = await supabaseServiceFetch(
-      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&metadata->>gifted=eq.${INITIAL_UNLOCK_GIFT}&select=id&limit=1`
+      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&or=(metadata->>gifted.eq.${INITIAL_UNLOCK_GIFT},metadata->>priceOption.eq.free)&select=id&limit=1`
     );
     if (!res.ok || ((await res.json()) as unknown[]).length === 0) return;
     await notifySlack({
       channel: "ops",
       kind: "initial_paid_after_gift",
       // The payment intent first: Slack's dedupe reads the first 100 characters.
-      text: `${internalTag}:warning: Refund \`${escapeSlack(paymentIntentId ?? "?")}\`: a €1.99 Core Archetype paid on report ${personalReportId} after E07 had already gifted it.`,
+      text: `${internalTag}:warning: Refund \`${escapeSlack(paymentIntentId ?? "?")}\`: a €${amount.toFixed(2)} Core Archetype paid on report ${personalReportId} after it was already open for free (E07's gift or €0 chosen).`,
       username: "ops_alerts",
     });
   } catch (err) {
@@ -1484,6 +1495,9 @@ async function syncCheckoutSessionPayment({
       (typeof existingPayment?.metadata?.gateRevealArm === "string"
         ? existingPayment.metadata.gateRevealArm
         : null),
+    // The price test's pick on the "Choose your price" half ("fair", "support", "custom"),
+    // stamped on the session by /api/stripe/initial-unlock; the price is `currentPrice`.
+    priceOption: settledSession.metadata?.priceOption ?? null,
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
     pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,
@@ -1671,6 +1685,7 @@ async function syncCheckoutSessionPayment({
             : null,
         submissionId: context.submissionId,
         unlockedArchetype,
+        paidCents: settledSession.amount_total ?? null,
       });
 
       await notifySlackPurchase({
@@ -1692,8 +1707,8 @@ async function syncCheckoutSessionPayment({
         submittedAt: recipient.submittedAt,
         utmTracker: recipient.utmTracker,
       });
-      if (isInitialUnlockPlan(plan) && (amount ?? 0) > 0) {
-        await alertIfPaidAfterGift(personalReport.id, paymentIntentId, internalTag);
+      if (isInitialUnlockPlan(plan) && amount !== null && amount > 0) {
+        await alertIfPaidAfterGift(personalReport.id, paymentIntentId, internalTag, amount);
       }
 
       // The old tier 3 ("For you & your partner") only: hand the buyer a one-time

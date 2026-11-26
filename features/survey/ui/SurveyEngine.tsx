@@ -69,6 +69,7 @@ import {
 } from "@features/survey/optInSheet";
 import {
   forgetSheetsShown,
+  GATE_TEST_SHEETS,
   rememberSheetShown,
   sheetAfterQuestion,
   sheetBeforeQuestion,
@@ -137,6 +138,13 @@ interface SurveyEngineProps {
    */
   sheets?: readonly SurveySheetId[];
   /**
+   * The EUR 1.99 page's price test runs (shared/experiments/gatePriceArm.ts): the half that will
+   * choose its price meets neither sheet that tells what EUR 1.99 opens (GATE_TEST_SHEETS), as
+   * nothing in either is true of its page (Fatih, 24 Nov 2026); today's page's half meets them
+   * in their EUR 1.99 words, as before.
+   */
+  gatePrice?: boolean;
+  /**
    * Survey 2.0 for a FRESH run: `forced` (2.0) or `off` (the new order), as SurveyPage's guide and
    * consent showed it, so the questions always follow the words agreed to; `test` draws the half
    * here from the session id. A draft keeps the order it began in (resolveDraftQuestionOrderArm).
@@ -196,6 +204,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
   onStartOver,
   payToStart = false,
   sheets: sheetsOffered = NO_SHEETS,
+  gatePrice = false,
   survey2 = "off",
 }) => {
   // Mark's 50/50 (shared/experiments/gateRevealArm.ts, his write-up of 16 Nov): every reader
@@ -211,11 +220,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({
         assignGateRevealArm(getSessionId()))
   );
   const sheetOffer: LightMapOffer = revealArm === "reveal" ? "light" : "price";
+  // The price test's half that chooses its price is the same session half (gatePriceArm.ts).
+  const choosesPrice = gatePrice && revealArm === "reveal";
   // A sheet that would draw nothing is never opened, or it would hold the move with nothing
   // on screen: the Trustpilot sheet needs the site's Trustpilot switch and its numbers.
   const sheets = useMemo(
-    () => sheetsOffered.filter((id) => id !== "trustpilot" || trustpilotSheetReady()),
-    [sheetsOffered]
+    () =>
+      sheetsOffered.filter(
+        (id) =>
+          (id !== "trustpilot" || trustpilotSheetReady()) &&
+          !(choosesPrice && GATE_TEST_SHEETS.has(id))
+      ),
+    [sheetsOffered, choosesPrice]
   );
   const {
     answers,
