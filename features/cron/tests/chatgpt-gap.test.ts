@@ -246,6 +246,37 @@ describe("chatgptGap", () => {
     });
   });
 
+  it("stays quiet after its last reminder while the outage goes on, whatever trickles in", () => {
+    const counts = new Map(REAL);
+    counts.set("2026-12-05", 1);
+    counts.set("2026-12-30", 1);
+    // Once 25 Nov leaves the days read, a run measured on the outage's own trickle would need
+    // 82 quiet days: past 28, so it never posts a second "first" alert in March.
+    expect(posts(counts, "2026-11-25", "2027-04-30")).toEqual([
+      ["2026-11-28", "alert"],
+      ["2026-12-05", "reminder"],
+      ["2026-12-12", "reminder"],
+      ["2026-12-19", "reminder"],
+      ["2026-12-26", "reminder"],
+      ["2027-01-02", "reminder"],
+      ["2027-01-09", "reminder"],
+      ["2027-01-16", "reminder"],
+      ["2027-01-23", "reminder"],
+    ]);
+  });
+
+  it("never posts about a run that began before the days it reads, even at the edge of its reminders", () => {
+    // 7 visits in the 28 days before 1 Sep (24 quiet days needed), then none. On 3 Dec the
+    // days read start on 5 Sep; that capped run's own 28 days hold 6 visits, so it needs 28
+    // and would be in its eighth reminder week. It says nothing instead.
+    const counts = new Map<string, number>();
+    for (let d = "2026-08-31"; d >= "2026-08-07"; d = addDays(d, -4)) counts.set(d, 1);
+    expect(chatgptGap(counts, "2026-12-03", windowStart("2026-12-03"))).toMatchObject({
+      action: null,
+      run: { from: "2026-09-05", capped: true },
+    });
+  });
+
   it("keeps reminding for 8 weeks through stray days that come a week or more apart", () => {
     const counts = steady("2026-10-01", "2026-10-31");
     for (const day of ["2026-11-06", "2026-11-16", "2026-11-26", "2026-12-06", "2026-12-16"])

@@ -10,7 +10,9 @@
  * 3 times in 1,000 at the usual rate, and never before day 3. That is 3 days at 14 visits a
  * week, 5 at 9 or 10, 6 at 7 and 12 at one every other day. Run on the real weeks of 17 Aug
  * to 22 Nov 2026, resampled, it raises about 0.3 false alarms a year at 10 visits a week, 1.6
- * at 7 and 1.9 at 5, each with its "back" post (1 in 100 raised 1.7, 3.3 and 3.9).
+ * at 7 and 1.9 at 5, each with its "back" post (1 in 100 raised 1.7, 3.3 and 3.9). A ChatGPT
+ * slower than about 1.5 visits a week would need more than 28 quiet days: its silence says
+ * nothing, so it never posts, and a trickle measured inside an outage can't start a new one.
  *
  * A day with visits ends a quiet run too short to post about. Once it is long enough, only two
  * days with visits less than a week apart end it: a lone day can be a stray link (a bookmark, a
@@ -34,6 +36,8 @@ const CHATGPT_SOURCES = ["chatgpt.com", "chatgpt", "chat.openai.com"];
 const CHANCE = 0.003;
 /** ...and never before this many of them. */
 const MIN_QUIET_DAYS = 3;
+/** ...and never when more than this many would be needed: that run never posts. */
+const MAX_QUIET_DAYS = 28;
 /** After the first post, a reminder every week for this many weeks; the last one says so. */
 const REMINDERS = 8;
 const REMIND_EVERY = 7;
@@ -85,7 +89,7 @@ export interface ChatgptGap {
   run: QuietRun | null;
   /** Visits a week before that run, when at least a week of it was read. */
   usualPerWeek: number | null;
-  /** Quiet days in a row needed before a post, at that rate. */
+  /** Quiet days in a row needed before a post, at that rate (Infinity past 28: it never posts). */
   needed: number | null;
   action: "alert" | "reminder" | "back" | null;
   /** The claim. A run keeps its key for each step, so a missed day catches up the next. */
@@ -126,7 +130,8 @@ function usualPerDay(
 function quietDaysNeeded(perDay: number | null): number {
   if (perDay === null) return MIN_QUIET_DAYS;
   // The chance of n quiet days at a steady rate is e^(-rate*n).
-  return Math.max(MIN_QUIET_DAYS, Math.ceil(Math.log(1 / CHANCE) / perDay));
+  const needed = Math.max(MIN_QUIET_DAYS, Math.ceil(Math.log(1 / CHANCE) / perDay));
+  return needed > MAX_QUIET_DAYS ? Infinity : needed;
 }
 
 /**
