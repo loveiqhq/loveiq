@@ -154,7 +154,7 @@ export default function SheetsSection({
                           {meta.name}
                         </span>
                         {retired && (
-                          <span className="text-[11px] text-ap-muted">Taken out on 27 Nov</span>
+                          <span className="text-[11px] text-ap-muted">Taken out on 26 Nov</span>
                         )}
                         {off && <span className="text-[11px] text-ap-muted">Switched off now</span>}
                       </span>
@@ -241,7 +241,7 @@ export function sheetsCsvTable(
         const retired = isRetiredSheet(id);
         const off = !retired && on !== null && !on.includes(id);
         return {
-          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${retired ? " (taken out on 27 Nov)" : off ? " (switched off now)" : ""}`,
+          label: `${sheetNumber(id)} · ${SHEET_NAMES[id].name}${retired ? " (taken out on 26 Nov)" : off ? " (switched off now)" : ""}`,
           values: [
             spot
               ? `${spot.where} · ${asked[spot.q]!.id}`

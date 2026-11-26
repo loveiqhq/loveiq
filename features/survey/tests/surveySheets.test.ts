@@ -137,7 +137,7 @@ describe("the staging preview, ?sheets=", () => {
     expect(parseSheetsPreview(undefined)).toEqual([]);
   });
 
-  // Sheet 4 is out of the survey since 27 Nov 2026 (Mark's ask of 25 Nov): "all" is what production can show,
+  // Sheet 4 is out of the survey since 26 Nov 2026 (Mark's ask of 25 Nov): "all" is what production can show,
   // and naming it still previews it, for its redesign.
   it("leaves the halfway sheet out of all, unless it is named too", () => {
     expect([...RETIRED_SHEETS]).toEqual(["halfway"]);
