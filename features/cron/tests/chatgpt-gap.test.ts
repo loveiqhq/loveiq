@@ -246,6 +246,28 @@ describe("chatgptGap", () => {
     });
   });
 
+  it("still posts when the usual 28 days need exactly 28 quiet days: 6 visits in them", () => {
+    const counts = new Map<string, number>();
+    for (const d of [
+      "2026-10-05",
+      "2026-10-09",
+      "2026-10-14",
+      "2026-10-19",
+      "2026-10-24",
+      "2026-10-29",
+    ])
+      counts.set(d, 1);
+    // Quiet from 30 Oct; 6 visits in the 28 days before it (1.5 a week) need 28 quiet days.
+    expect(posts(counts, "2026-10-30", "2026-12-03")).toEqual([
+      ["2026-11-26", "alert"],
+      ["2026-12-03", "reminder"],
+    ]);
+    expect(chatgptGap(counts, "2026-11-26", windowStart("2026-11-26"))).toMatchObject({
+      needed: 28,
+      usualPerWeek: 2,
+    });
+  });
+
   it("stays quiet after its last reminder while the outage goes on, whatever trickles in", () => {
     const counts = new Map(REAL);
     counts.set("2026-12-05", 1);

@@ -41,10 +41,8 @@ const MAX_QUIET_DAYS = 28;
 /** After the first post, a reminder every week for this many weeks; the last one says so. */
 const REMINDERS = 8;
 const REMIND_EVERY = 7;
-/** The usual rate comes from up to this many days before the quiet ones... */
+/** The usual rate comes from this many days before the quiet ones (the read always holds them). */
 const USUAL_DAYS = 28;
-/** ...and needs at least this many of them inside the read. */
-const MIN_USUAL_DAYS = 7;
 /** Two days with visits less than this many days apart end a quiet run; lone days are strays. */
 const BACK_PAIR_DAYS = 7;
 /**
@@ -87,7 +85,7 @@ export interface ChatgptGap {
   streak: number;
   /** The quiet run a post is about: the current one, or on a comeback the one that ended. */
   run: QuietRun | null;
-  /** Visits a week before that run, when at least a week of it was read. */
+  /** Visits a week over the 28 days before that run. */
   usualPerWeek: number | null;
   /** Quiet days in a row needed before a post, at that rate (Infinity past 28: it never posts). */
   needed: number | null;
@@ -101,7 +99,7 @@ export interface ChatgptGap {
 }
 
 interface Run extends Omit<QuietRun, "days"> {
-  perDay: number | null;
+  perDay: number;
   needed: number;
 }
 
@@ -110,25 +108,16 @@ function daysFrom(from: string, to: string): number {
   return Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
 }
 
-/** Visits a day over the days before `from` (up to 28, inside the read), or null under a week. */
-function usualPerDay(
-  counts: ReadonlyMap<string, number>,
-  from: string,
-  since: string
-): number | null {
-  const earliest = addDays(from, -USUAL_DAYS);
-  let days = 0;
+/** Visits a day over the 28 days before `from`, which every read holds (`chatgptReadFrom`). */
+function usualPerDay(counts: ReadonlyMap<string, number>, from: string): number {
   let visits = 0;
-  for (let d = earliest < since ? since : earliest; d < from; d = addDays(d, 1)) {
-    days += 1;
+  for (let d = addDays(from, -USUAL_DAYS); d < from; d = addDays(d, 1))
     visits += counts.get(d) ?? 0;
-  }
-  return days >= MIN_USUAL_DAYS ? visits / days : null;
+  return visits / USUAL_DAYS;
 }
 
 /** Quiet days whose chance at `perDay` visits a day falls under CHANCE, never fewer than 3. */
-function quietDaysNeeded(perDay: number | null): number {
-  if (perDay === null) return MIN_QUIET_DAYS;
+function quietDaysNeeded(perDay: number): number {
   // The chance of n quiet days at a steady rate is e^(-rate*n).
   const needed = Math.max(MIN_QUIET_DAYS, Math.ceil(Math.log(1 / CHANCE) / perDay));
   return needed > MAX_QUIET_DAYS ? Infinity : needed;
@@ -151,7 +140,7 @@ export function chatgptGap(
     const visits = counts.get(d) ?? 0;
     if (!run) {
       if (visits) continue;
-      const perDay = usualPerDay(counts, d, chatgptReadFrom(since));
+      const perDay = usualPerDay(counts, d);
       run = {
         from: d,
         capped: d === since,
@@ -190,7 +179,7 @@ export function chatgptGap(
   const about = (r: Run, days: number): ChatgptGap => ({
     ...none,
     run: { from: r.from, days, capped: r.capped, visitDays: r.visitDays },
-    usualPerWeek: r.perDay === null ? null : Math.round(r.perDay * 7),
+    usualPerWeek: Math.round(r.perDay * 7),
     needed: r.needed,
   });
 
