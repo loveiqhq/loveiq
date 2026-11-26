@@ -8,6 +8,11 @@
  * Watch-severity stays in the daily digest's *Alerts* section — only risk
  * earns a real-time ping.
  *
+ * Also, from 07:00 Berlin: a post when ChatGPT has sent no tagged visits for longer than
+ * chance explains at its usual volume (never before day 3), a weekly reminder for up
+ * to 8 weeks, and one when they are back on two days, as one can be a stray link
+ * (`chatgpt-gap.ts`).
+ *
  * Protected by `Authorization: Bearer ${CRON_SECRET}`. Skipped on staging
  * (shares prod DB; `isProdCronHost()` gate).
  */
@@ -28,6 +33,16 @@ import { buildAnomalySnapshot } from "@features/admin/server/alerts";
 import { describeBrainHealth, readBrainHealth } from "@features/brain/server/health";
 import { recordNotice } from "@features/brain/server/notice";
 import { noticeJumps } from "@features/brain/server/jumps";
+import { addDays } from "@features/admin/server/ap/days";
+import {
+  CHATGPT_LOOKBACK_DAYS,
+  chatgptGap,
+  chatgptGapText,
+  chatgptReadFrom,
+  readChatgptVisits,
+  type ChatgptGap,
+} from "@features/cron/server/chatgpt-gap";
+import { reportingDay, reportingHour } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -157,6 +172,17 @@ export async function GET(request: Request) {
       logger.error({ err }, "anomaly-watcher: brain health check failed");
     }
 
+    /**
+     * ChatGPT going quiet, from our own visit log. From 7 to 14 Oct 2026 its links carried no
+     * tag for eight days, and we only found out a week later. Secondary, like the watchdogs above.
+     */
+    let chatgpt: ChatgptGap | null = null;
+    try {
+      chatgpt = await alertOnChatgptGap(new Date());
+    } catch (err) {
+      logger.error({ err }, "anomaly-watcher: the ChatGPT visit check failed");
+    }
+
     return NextResponse.json({
       ok: true,
       day: dayKey,
@@ -167,6 +193,7 @@ export async function GET(request: Request) {
       stalled,
       jumps,
       brain,
+      chatgpt,
     });
   } catch (err) {
     logger.error({ err }, "anomaly-watcher cron failed");
@@ -176,6 +203,37 @@ export async function GET(request: Request) {
     await trackDuration();
     await recordCronRun("anomaly-watcher", startMs, cronError ? "error" : "success", cronError);
   }
+}
+
+/** From this hour in Berlin, so the post lands when the team starts work. */
+const CHATGPT_FROM_HOUR = 7;
+
+/**
+ * Judges yesterday (Berlin), the last whole day. Each step of a quiet run (the first post,
+ * each weekly reminder, the comeback) is claimed once by its own key, so a post a run missed
+ * (a failed read, a run that never got this far) goes out on a later run instead. A Slack post
+ * that fails is kept for a manual replay (notifySlack) and not retried.
+ */
+async function alertOnChatgptGap(now: Date): Promise<ChatgptGap | null> {
+  if (reportingHour(now) < CHATGPT_FROM_HOUR) return null;
+  const day = addDays(reportingDay(now), -1);
+  const since = addDays(day, 1 - CHATGPT_LOOKBACK_DAYS);
+  const gap = chatgptGap(await readChatgptVisits(chatgptReadFrom(since), day), day, since);
+  logger.info({ ...gap }, "anomaly-watcher: ChatGPT visits judged");
+
+  const text = chatgptGapText(gap);
+  if (!text || !gap.key || !(await tryClaimSlackAlert("chatgpt_gap", "quiet_run", gap.key)))
+    return gap;
+  await notifySlack({
+    channel: "ops",
+    kind: "chatgpt_gap",
+    username: "ops_alerts",
+    text: `:robot_face: *${text.headline}*${text.body ? `\n${text.body}` : ""}`,
+    context: { ...gap },
+  });
+  await recordNotice({ headline: text.headline, detail: text.body, kind: "anomaly-watcher" });
+  await markSlackAlertDelivered("chatgpt_gap", "quiet_run", gap.key);
+  return gap;
 }
 
 /** Alerts once per cron per day for anything that has stopped firing. */

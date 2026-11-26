@@ -15,3 +15,13 @@ export function shortDate(day: string): string {
   const [, m = 1, d = 1] = day.split("-").map(Number);
   return `${d} ${MONTHS[m - 1]}`;
 }
+
+/** "22 to 24 Nov", or "30 Nov to 2 Dec" across a month end: a run of days as people say it. */
+export function dayRange(from: string, to: string): string {
+  if (from === to) return shortDate(from);
+  const [fromDay, fromMonth] = shortDate(from).split(" ");
+  const toLabel = shortDate(to);
+  return fromMonth === toLabel.split(" ")[1]
+    ? `${fromDay} to ${toLabel}`
+    : `${shortDate(from)} to ${toLabel}`;
+}
