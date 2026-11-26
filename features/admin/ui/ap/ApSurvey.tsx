@@ -34,7 +34,6 @@ import {
   Loading,
   NotTracked,
   PageHeader,
-  Pills,
   RangeLine,
   SectionHead,
   SortIcon,
@@ -52,6 +51,8 @@ import {
 } from "./sheets";
 import SheetsSection, { clicks, SheetBadge, sheetsCsvTable } from "./SurveySheets";
 import TimeDropSection, { chapterBand, overFive } from "./SurveyTimeDrop";
+import { OrderTests } from "./OrderTests";
+import { hasOrderChoice, orderFunnel, ORDER_NAMES, type SurveyOrder } from "./surveyOrders";
 import { useApFilters } from "./useApFilters";
 
 /** The design's three colours, one per group (at most three). */
@@ -76,8 +77,11 @@ const DEMO_INFO: Array<{ title: string; k: string }> = [
   { title: "Device", k: "survey.demoDevice" },
 ];
 
-/** Which order the funnel counts in: the survey's old one, or the opening-order test's (C13). */
-type Order = "survey" | "test";
+/**
+ * Which order the funnel counts in: the survey's old one, the opening-order test's (C13), or
+ * Survey 2.0's screens.
+ */
+type Order = SurveyOrder;
 
 /**
  * The Berlin day the opening-order test ended: every run begun since is asked the new order,
@@ -150,16 +154,24 @@ export default function ApSurvey() {
 
   const questions = data?.questions ?? null;
   // Until one is picked: the new order for a range that reaches the test's end, when every run
-  // began to be asked it, and the old one for a range before it.
-  const order: Order = picked ?? (data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey");
-  // The funnel in the order picked: the test's only while the range has runs in it.
-  const rows = ((order === "test" ? questions?.test : null) ?? questions)?.rows ?? [];
+  // began to be asked it, and the old one for a range before it. Survey 2.0's funnel is one pick
+  // away (its pill) while it runs beside them, and the default when the range has no runs in the
+  // new order (staging with its switch on; every range once 2.0 is everyone's survey).
+  const classic: Order = data && data.range.to >= ORDER_TEST_END_DAY ? "test" : "survey";
+  const order: Order =
+    picked ?? (classic === "test" && questions?.survey2 && !questions.test ? "survey2" : classic);
+  // The funnel in the order picked: the test's or Survey 2.0's only while the range has runs in it.
+  const rows = orderFunnel(questions, order)?.rows ?? [];
   // The Sheets section's runs: the funnel's order; without the questions, the order the range
   // opens on. The CSV's single Sheets table follows it too.
-  const sheetOrder: Order = questions?.test ? order : questions ? "survey" : order;
-  // Everyone a question was put to, in either order: what its skips (both orders') are a share of.
+  const sheetOrder: Order = hasOrderChoice(questions) ? order : questions ? "survey" : order;
+  // Everyone a question was put to, in any order: what its skips (every order's) are a share of.
   const shownBoth = new Map<string, number>();
-  for (const r of [...(questions?.rows ?? []), ...(questions?.test?.rows ?? [])])
+  for (const r of [
+    ...(questions?.rows ?? []),
+    ...(questions?.test?.rows ?? []),
+    ...(questions?.survey2?.rows ?? []),
+  ])
     shownBoth.set(r.id, (shownBoth.get(r.id) ?? 0) + r.shownAll);
   // Opens on the countable question most people leave on (a free-text one has no answers to show).
   const countableRows = rows.filter((r) => ["scale", "single", "multiple"].includes(r.type));
@@ -197,14 +209,26 @@ export default function ApSurvey() {
                       })),
                     },
                   })),
-                  // Both orders' funnels when the range has runs in the new order, each in its own.
-                  ...(questions?.test
+                  // Every order's funnel when the range has runs in more than one, each in its own.
+                  ...(questions && hasOrderChoice(questions)
                     ? [
                         { name: "Questions · old order", table: questionTable(questions.rows) },
-                        {
-                          name: "Questions · new order (C13)",
-                          table: questionTable(questions.test.rows),
-                        },
+                        ...(questions.test
+                          ? [
+                              {
+                                name: "Questions · new order (C13)",
+                                table: questionTable(questions.test.rows),
+                              },
+                            ]
+                          : []),
+                        ...(questions.survey2
+                          ? [
+                              {
+                                name: `Questions · ${ORDER_NAMES.survey2}`,
+                                table: questionTable(questions.survey2.rows),
+                              },
+                            ]
+                          : []),
                       ]
                     : [{ name: "Questions", table: questionTable(questions?.rows ?? []) }]),
                   {
@@ -234,24 +258,67 @@ export default function ApSurvey() {
                       })),
                     },
                   },
+                  ...(data.guide
+                    ? [
+                        {
+                          name: "Short guide (Survey 2.0)",
+                          table: {
+                            columns: [
+                              { label: "Card", unit: "text" as const },
+                              { label: "Median time", unit: "mmss" as const },
+                              { label: "Reached", unit: "count" as const },
+                              { label: "Share of the first card", unit: "pct" as const },
+                              { label: "Continue", unit: "pct" as const },
+                              { label: "Skip intro", unit: "pct" as const },
+                              { label: "Back", unit: "pct" as const },
+                              { label: "Exit", unit: "pct" as const },
+                            ],
+                            rows: data.guide.cards.map((c, i) => ({
+                              label: `${i + 1} · ${c.name}`,
+                              values: [
+                                c.medianMs,
+                                c.reached,
+                                c.reachedShare,
+                                c.cont,
+                                c.skip,
+                                c.back,
+                                c.exit,
+                              ],
+                            })),
+                          },
+                        },
+                      ]
+                    : []),
                   // The Sheets section, in each order the range has runs in, as the funnel splits
                   // them; nothing when the range ends before the sheets or PostHog failed.
                   ...(!data.sheets.seen?.ok
                     ? []
-                    : questions?.test
+                    : questions && hasOrderChoice(questions)
                       ? [
                           {
                             name: "Sheets · old order",
                             table: sheetsCsvTable(data, questions.rows, "survey"),
                           },
-                          {
-                            name: "Sheets · new order (C13)",
-                            table: sheetsCsvTable(data, questions.test.rows, "test"),
-                          },
+                          ...(questions.test
+                            ? [
+                                {
+                                  name: "Sheets · new order (C13)",
+                                  table: sheetsCsvTable(data, questions.test.rows, "test"),
+                                },
+                              ]
+                            : []),
+                          ...(questions.survey2
+                            ? [
+                                {
+                                  name: `Sheets · ${ORDER_NAMES.survey2}`,
+                                  table: sheetsCsvTable(data, questions.survey2.rows, "survey2"),
+                                },
+                              ]
+                            : []),
                         ]
                       : [
                           {
-                            name: `Sheets · ${sheetOrder === "test" ? "new order (C13)" : "old order"}`,
+                            name: `Sheets · ${sheetOrder === "test" ? "new order (C13)" : sheetOrder === "survey2" ? ORDER_NAMES.survey2 : "old order"}`,
                             table: sheetsCsvTable(data, rows, sheetOrder),
                           },
                         ]),
@@ -289,7 +356,7 @@ export default function ApSurvey() {
           <TimeDropSection
             data={data}
             rows={rows}
-            order={questions?.test ? order : null}
+            order={hasOrderChoice(questions) ? order : null}
             onOrder={setOrder}
             onPick={(id) => {
               setSelected(id);
@@ -302,7 +369,7 @@ export default function ApSurvey() {
           <FunnelSection
             data={data}
             rows={rows}
-            order={questions?.test ? order : null}
+            order={hasOrderChoice(questions) ? order : null}
             onOrder={setOrder}
             selected={current?.id ?? null}
             onSelect={setSelected}
@@ -378,6 +445,7 @@ export default function ApSurvey() {
           </Card>
 
           <IntroSection data={data} />
+          {data.guide && <GuideSection data={data} cards={data.guide.cards} />}
         </Busy>
       )}
     </>
@@ -607,6 +675,92 @@ function IntroSection({ data }: { data: SurveyPayload }) {
           </div>
           {sortRows(cards, sort).map((card) => (
             <IntroRow key={card.n} card={card} from={data.intro.recordedFrom} />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Survey 2.0's short guide (Mark's Pre Survey Wizard): its three cards and its consent, as the
+ * intro's table shows the intro's, for the runs that saw it. Recorded from its first day, so no
+ * PostHog fallback and no engagement column.
+ */
+function GuideSection({ data, cards }: { data: SurveyPayload; cards: IntroCard[] }) {
+  const [sort, setSort] =
+    useState<Sort<"time" | "reachedShare" | "cont" | "skip" | "back" | "exit">>(null);
+  const rows: IntroRowData[] = cards.map((card, i) => ({
+    ...card,
+    n: i + 1,
+    time: card.medianMs,
+    eng: "—",
+  }));
+  return (
+    <Card id="guide" labelledBy="h-guide">
+      <SectionHead
+        id="h-guide"
+        title="Short guide (Survey 2.0)"
+        info="survey.guide"
+        description="The cards Survey 2.0 shows in the intro's place, for the runs that saw them. Their consent row is theirs alone; the intro's leaves them out."
+      />
+      <AllTraffic note={data.narrowed} />
+      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div role="table" aria-label="Short guide cards" style={{ minWidth: 1040 }}>
+          <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: INTRO_GRID }}>
+            <Th label="#" />
+            <Th label="Card" />
+            <Th
+              label="Median time"
+              info="survey.wizTime"
+              sortKey="time"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Reached"
+              info="survey.wizReached"
+              sortKey="reachedShare"
+              sort={sort}
+              onSort={setSort}
+            />
+            <Th
+              label="Continue"
+              info="survey.wizContinue"
+              sortKey="cont"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Skip intro"
+              info="survey.wizSkip"
+              sortKey="skip"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Back"
+              info="survey.wizBack"
+              sortKey="back"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th
+              label="Exit"
+              info="survey.wizExit"
+              sortKey="exit"
+              sort={sort}
+              onSort={setSort}
+              right
+            />
+            <Th label="Engagement on card" />
+          </div>
+          {sortRows(rows, sort).map((card) => (
+            <IntroRow key={card.n} card={card} from={null} />
           ))}
         </div>
       </div>
@@ -1043,12 +1197,14 @@ function FunnelSection({
   // questions would read as theirs.
   const allTraffic = !q || q.segment === "All traffic";
   if (!first && !term && data.sheets.seen && allTraffic)
-    for (const spot of sheetSpots(rows)) {
+    for (const spot of sheetSpots(rows, order ?? "survey")) {
       const id = asked0[spot.after]!.id;
       sheetsAfter.set(id, [...(sheetsAfter.get(id) ?? []), spot]);
     }
   // The sheets' figures for this funnel's own runs: begun in the range, in the order shown.
-  const sheetsSeen = data.sheets.seen?.ok ? data.sheets.seen.value[order ?? "survey"] : null;
+  const sheetsSeen = data.sheets.seen?.ok
+    ? (data.sheets.seen.value[order ?? "survey"] ?? null)
+    : null;
   const sheetsKnown = sheetsSeen !== null;
   // A column clicked becomes the first sort and the first becomes the second; the first clicked
   // again goes back to survey order.
@@ -1083,17 +1239,9 @@ function FunnelSection({
       />
       {data.questionsError && <p className="m-0 text-sm text-ap-bad-ink">{data.questionsError}</p>}
       {/* No note under it (Marcus, 10 Nov 2026): its info card explains the two orders. */}
-      {order && q?.test && (
+      {order && q && hasOrderChoice(q) && (
         <div className="flex flex-wrap items-center gap-2">
-          <Pills
-            label="Question order"
-            value={order}
-            onChange={onOrder}
-            options={[
-              { value: "survey", label: `Old order · ${fmt("count", q.people)} runs` },
-              { value: "test", label: `New order (C13) · ${fmt("count", q.test.people)} runs` },
-            ]}
-          />
+          <OrderTests label="Question order" q={q} value={order} onChange={onOrder} />
           <Info k="survey.order" />
         </div>
       )}

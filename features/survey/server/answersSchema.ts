@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
+import { EXPERT_QID, isExpertYes } from "@features/survey/survey2/expert";
 import { SURVEY_SELECTION_CAPS } from "./utils";
 
 const SCALE_QIDS = new Set(
@@ -76,11 +77,19 @@ export const surveyAnswersSchema = z
       const qId = key.endsWith("_other") ? key.slice(0, -"_other".length) : key;
       if (isHidden(qId)) continue;
       if (SCALE_QIDS.has(key) && typeof value !== "number") continue;
-      if (key !== qId && !picksOther(capped(qId, given.get(qId)))) continue;
+      if (key !== qId && !keepsText(qId, capped(qId, given.get(qId)))) continue;
       tidied.set(key, capped(key, value)!);
     }
     return Object.fromEntries(tidied);
   });
+
+/**
+ * Whether a question's text box is kept with its answer: with its "Other" option, or, for Survey
+ * 2.0's expert question, with a Yes (the box holds the number its expert calls; expert.ts).
+ */
+function keepsText(qId: string, answer: string | string[] | number | undefined): boolean {
+  return qId === EXPERT_QID ? isExpertYes(answer) : picksOther(answer);
+}
 
 /** Whether an answer is (or includes) an "Other" option, the one with a text box. */
 function picksOther(answer: string | string[] | number | undefined): boolean {

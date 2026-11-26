@@ -566,3 +566,17 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - No thanks",N/A,"The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust."
 16019,16,Next Steps & Preferences,Was there a learning or insight that profoundly changed or improved your sexuality?,Open response,Optional. Share as much or as little as you like.,Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?,Free text - Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?,Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?,Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.
 16020,16,Next Steps & Preferences,"What are books, articles, blogs or YouTube channels around sexuality that helped you?",Open response,Optional. Share as much or as little as you like.,Post any links or names that reference to the helpful content,Free text - Post any links or names that reference to the helpful content,N/A,Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.
+17001,17,Feedback,How much did you enjoy taking this survey?,1-7 scale,Select one point on the scale.,"Go with your overall feeling, not just the last few questions.","1 = Not at all
+7 = Extremely",N/A,"Tells us how the survey felt to take, so we can keep making it better."
+17002,17,Feedback,How much did the questions help you reflect and learn about your sexuality?,1-7 scale,Select one point on the scale.,Think of any question that made you pause or notice something new about yourself.,"1 = Not at all
+7 = Extremely",N/A,"Tells us whether the questions themselves helped you, apart from the report."
+17003,17,Feedback,What feels like a fair price for your full report to become a more intelligent lover?,Single choice,Select one option.,"60 pages (~2 hours of insights), built from the leading research around sexuality. Consider it is a one-off payment and your answers don't influence the price of the report.","- Fair would be to have it for free
+- €1.99–€3.99
+- €4.00–€9.99
+- €10.00–€19.99
+- €20.00–€29.99
+- €30.00–€49.99
+- €50.00 or more",N/A,Helps us set a fair price for the full report. Your answer doesn't change what you pay.
+17004,17,Next steps,Would you like a free talk with one of our experts about improving your sex life?,Single choice,Select one option.,"It's free. Our trained coaches and therapists can help you understand your results and find next steps that fit you. We only get in touch if you say yes.","- Yes, I'd like a free talk with an expert
+- Maybe later, after I've read my report
+- No, thanks",N/A,So one of our experts can offer you a free talk about your results. We only ask for your phone number if you say yes.

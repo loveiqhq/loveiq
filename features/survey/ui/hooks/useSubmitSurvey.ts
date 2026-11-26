@@ -1,5 +1,6 @@
 "use client";
 
+import { submittableAnswers, withPickedAreas } from "@features/survey/survey2/areas";
 import { useState, useCallback } from "react";
 import posthog from "posthog-js";
 import { surveyQuestions } from "@/data/survey-data";
@@ -76,7 +77,9 @@ function buildOptionOrder(
   for (const question of surveyQuestions) {
     if (!isRandomised(question.qId)) continue;
     if (answers[question.qId] === undefined) continue; // never shown, or skipped
-    shown[question.qId] = orderedOptions(question, sessionId);
+    // Survey 2.0 shows 16016's topics only for the areas picked before it (survey2/areas.ts).
+    const onScreen = withPickedAreas([question], answers)[0]!;
+    shown[question.qId] = orderedOptions(onScreen, sessionId);
   }
   return shown;
 }
@@ -224,7 +227,8 @@ export function useSubmitSurvey() {
           body: JSON.stringify({
             email: payload.email,
             firstName: payload.firstName,
-            answers: payload.answers,
+            // Survey 2.0's areas screen stays in the draft; the topics say which were picked.
+            answers: submittableAnswers(payload.answers),
             startedAt: payload.startedAt,
             durationMs: payload.durationMs,
             ...(payload.utmTracker ? { utmTracker: payload.utmTracker } : {}),

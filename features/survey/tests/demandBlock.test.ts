@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { SURVEY_2_ONLY_QIDS } from "@shared/experiments/questionOrderArm";
 
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 import { isRandomised } from "@features/survey/questionFlags";
@@ -118,7 +119,12 @@ describe("completion accounting", () => {
     // isCompletionReady tests answerCount >= SURVEY_TOTAL_QUESTIONS. Adding askable
     // questions without raising this total lets a survey register complete early;
     // adding them to a total that excludes them makes completion unreachable.
-    const askable = surveyQuestions.filter((entry) => entry.qId !== "15011");
+    // The classic survey's askable questions: not the hidden 15011, nor the closing questions
+    // only Survey 2.0 asks.
+    const survey2Only: readonly string[] = SURVEY_2_ONLY_QIDS;
+    const askable = surveyQuestions.filter(
+      (entry) => entry.qId !== "15011" && !survey2Only.includes(entry.qId)
+    );
     expect(SURVEY_TOTAL_QUESTIONS).toBe(askable.length);
     for (const qId of DEMAND_BLOCK_QIDS) {
       expect(

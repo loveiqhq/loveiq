@@ -261,15 +261,17 @@ describe("the Survey page's time and drop-out per question", () => {
   it("follows the order picked here or in the funnel, and a picked bar opens its question", () => {
     render(<ApSurvey />);
     const charts = toggle("Question order for these charts");
-    fireEvent.click(charts.getByRole("button", { name: "New order (C13) · 2 runs" }));
+    fireEvent.click(charts.getByRole("button", { name: "Variant · New order · 2 runs" }));
     expect(columns("Median time per question").map((c) => c.id)).toEqual(test);
     expect(screen.getByText(/^Every question in the new order \(C13\)\./)).toBeTruthy();
     // One choice for the page: the funnel's toggle and rows follow it.
     expect(
-      toggle("Question order").getByRole("button", { name: "New order (C13) · 2 runs" })
+      toggle("Question order").getByRole("button", { name: "Variant · New order · 2 runs" })
     ).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(toggle("Question order").getByRole("button", { name: "Old order · 4 runs" }));
-    expect(charts.getByRole("button", { name: "Old order · 4 runs" })).toHaveAttribute(
+    fireEvent.click(
+      toggle("Question order").getByRole("button", { name: "Control · Old order · 4 runs" })
+    );
+    expect(charts.getByRole("button", { name: "Control · Old order · 4 runs" })).toHaveAttribute(
       "aria-pressed",
       "true"
     );

@@ -430,6 +430,50 @@ describe("the team data export", () => {
     ).toEqual(["lead.dob", "lead.home_location", "lead.lat", "lead.instagram_handle"]);
   });
 
+  it("masks the phone number a Yes to Survey 2.0's expert question carries, and keeps the Yes", async () => {
+    // 17004 (Mark's board "Q-new-expert"): on a Yes the reader leaves a number for an expert's
+    // call, stored as the answer's text like an "Other" box; its draft keeps it as 17004_other.
+    const YES = "Yes, I'd like a free talk with an expert";
+    const data = merge(
+      {
+        survey_question: [
+          ...QUESTIONS.survey_question!,
+          { id: 70, frontend_qid: "17004", question: "Would you like a free talk?" },
+        ],
+      },
+      person(1),
+      {
+        survey_submission_answer: [
+          {
+            id: 199,
+            survey_submission_id: 10,
+            survey_question_id: 70,
+            answer_text: "+49 151 2345678",
+            normalized_value: null,
+          },
+        ],
+        survey_partial_save: [
+          {
+            id: 99,
+            session_id: "session-99",
+            answers: { "17004": YES, "17004_other": "+49 151 2345678" },
+            started_at: "2026-10-01T10:00:00Z",
+            saved_at: "2026-10-01T10:20:00Z",
+          },
+        ],
+      }
+    );
+    const files = await buildExport(specsFor(data), reader(data));
+    expect(files.map((f) => f.body).join("\n")).not.toContain("2345678");
+    expect(csvOf(files, "survey_submission_answer")).toContain("199,10,70,[masked],");
+    expect(csvOf(files, "survey_partial_save")).toContain("a free talk with an expert");
+  });
+
+  it("runs on a database without the expert question, which then holds no answers to it", async () => {
+    const data = merge(QUESTIONS, person(1));
+    await expect(buildExport(specsFor(data), reader(data))).resolves.toBeTruthy();
+  });
+
   it("stops when it cannot find the email, name or postcode question, writing nothing", async () => {
     const data = merge(
       { survey_question: QUESTIONS.survey_question!.filter((q) => q.frontend_qid !== "00001") },

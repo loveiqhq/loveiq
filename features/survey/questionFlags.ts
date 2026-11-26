@@ -35,7 +35,14 @@
  * price ladders, for instance, where a "none of these" opt-out has to stay last for the
  * answer to mean anything.
  */
-export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "16014", "16016"]);
+export const RANDOMISE_QIDS: ReadonlySet<string> = new Set([
+  "16001",
+  "16011",
+  "16014",
+  "16016",
+  // Survey 2.0's areas screen (16016's 13 categories), shuffled as 16016's categories are.
+  "16016a",
+]);
 
 /** Whether this question's options should be shown in a randomised order. */
 export function isRandomised(qId: string): boolean {

@@ -197,7 +197,7 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
                     return (
                       <ChoiceCard
                         key={option}
-                        label={option}
+                        label={question.optionLabels?.[option] ?? option}
                         description={
                           isSelected ? getOptionExplanation(question, option) : undefined
                         }
