@@ -64,7 +64,7 @@ describe("the sheets a visit to /survey gets", () => {
     expect(await surveySheetsForVisit(undefined)).toEqual(["science", "reportMap"]);
   });
 
-  // Sheet 4, the halfway sheet ("Preliminary Results"), is out of the survey since 25 Nov 2026
+  // Sheet 4, the halfway sheet ("Preliminary Results"), is out of the survey since 27 Nov 2026 (Mark's ask of 25 Nov)
   // (Mark, #all-loveiq): no reader meets it, whatever its switch says.
   it("never shows the halfway sheet from its switch, even with Mark's 50/50 on", async () => {
     env.on = new Set([
@@ -79,7 +79,7 @@ describe("the sheets a visit to /survey gets", () => {
 
   // The price test that replaced the 50/50 (24 Nov 2026): today's page's half keeps the report
   // map, so it runs with its switch too, whatever the reveal's says. Sheet 4 (halfway) stays out
-  // for everyone since 25 Nov (RETIRED_SHEETS), its switch on or not.
+  // for everyone since 27 Nov (RETIRED_SHEETS), its switch on or not.
   it("runs the map with the price test's switch alone, never sheet 4", async () => {
     env.on = new Set([
       "survey_sheet_report_map",
