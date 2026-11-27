@@ -108,7 +108,9 @@ export async function grantGiftedInitialUnlock({
  *
  * POST /api/stripe/initial-unlock writes it only for an owner the gate stops, in the half that
  * chooses, so it never opens a report for anyone else. Written once: a second call finds the
- * report's initial unlock and returns its id. Null when it could not be read or written.
+ * report's initial unlock and returns its id, and one at the same moment is refused by
+ * payment_chosen_free_once (20261127210000) and returns the first one's. Null when it could not
+ * be read or written.
  */
 export async function grantChosenFreeInitialUnlock({
   personalReportId,
@@ -121,13 +123,17 @@ export async function grantChosenFreeInitialUnlock({
   email: string | null;
   landingVariant: string | null;
 }): Promise<number | null> {
-  try {
+  const initialUnlockId = async (): Promise<number | null> => {
     const existing = await serviceFetch(
       `/rest/v1/payment?personal_report_id=eq.${personalReportId}&metadata->>plan=eq.${INITIAL_UNLOCK_PLAN}&status=eq.succeeded&select=id&limit=1`
     );
     if (!existing.ok) throw new Error(`free_lookup_failed:${existing.status}`);
     const found = (await existing.json()) as Array<{ id: number }>;
-    if (found[0]) return found[0].id;
+    return found[0]?.id ?? null;
+  };
+  try {
+    const found = await initialUnlockId();
+    if (found !== null) return found;
 
     const now = new Date().toISOString();
     const created = await serviceFetch("/rest/v1/payment", {
@@ -156,6 +162,9 @@ export async function grantChosenFreeInitialUnlock({
         updated_date_time: now,
       }),
     });
+    // Two requests at the same moment both found none: payment_chosen_free_once keeps the second
+    // row out (PostgREST answers 409), and the first one's row is the claim.
+    if (created.status === 409) return await initialUnlockId();
     if (!created.ok) throw new Error(`free_write_failed:${created.status}`);
     const rows = (await created.json()) as Array<{ id: number }>;
     return rows[0]?.id ?? null;

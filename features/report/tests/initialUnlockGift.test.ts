@@ -241,6 +241,36 @@ describe("grantChosenFreeInitialUnlock", () => {
     expect(lookup).toContain("status=eq.succeeded");
   });
 
+  // Review of #799: two requests at the same moment both found no row and both wrote a EUR 0
+  // claim. payment_chosen_free_once (20261127210000) refuses the second (PostgREST answers 409),
+  // and that request answers with the first one's row, as unlock feedback's grant does.
+  it("keeps one claim when two arrive at once: the second is refused and answers with the first", async () => {
+    let lookups = 0;
+    let posts = 0;
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          posts += 1;
+          return json({ code: "23505", message: "duplicate key value" }, 409);
+        }
+        if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
+          lookups += 1;
+          return json(lookups === 1 ? [] : [{ id: 401 }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+    const id = await grantChosenFreeInitialUnlock({
+      personalReportId: 9,
+      userId: 7,
+      email: "reader@example.com",
+      landingVariant: null,
+    });
+    expect(id).toBe(401);
+    expect(posts).toBe(1);
+    expect(lookups).toBe(2);
+  });
+
   it("marks a staff reader's as a test, and gives nothing back when the write fails", async () => {
     const posted = routeFree({ existing: [] });
     await grantChosenFreeInitialUnlock({
