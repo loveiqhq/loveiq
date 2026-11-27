@@ -519,7 +519,8 @@ function PaymentTypes({ d }: { d: PaymentPayload }) {
           <PayTable
             label="Payment types"
             columns="minmax(220px, 2fr) repeat(8, minmax(92px, 1fr))"
-            minWidth={1140}
+            // Fits the card at a 1440 px window (1,060 px inside): all nine columns, no sideways scroll.
+            minWidth={1040}
             head={[
               { label: "Payment type", left: true },
               { label: "Paywall shown", info: "payment.type-shown" },
