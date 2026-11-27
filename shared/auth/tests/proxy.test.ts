@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "@/__tests__/__fixtures__/msw-server";
 
 // Mock crypto for deterministic nonce generation
 vi.stubGlobal("crypto", {
@@ -94,6 +96,7 @@ import {
   shouldCountVisit,
 } from "@/proxy";
 import { renderBrandHeader } from "@shared/emails/shared";
+import { __resetSystemFlagsCacheForTests } from "@shared/flags/system-flags";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
 
@@ -1313,5 +1316,118 @@ describe("short links", () => {
     await proxy(shortLinkRequest("/"));
     await proxy(shortLinkRequest("/k3x9p2a", { method: "POST" }));
     expect(mockFollowShortLink).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Pay to start is retired (27 Nov 2026). While its switch is off, a visitor to either offer's
+ * page goes to the free survey, answered before the visit is counted; a buyer's ways back stay.
+ * The switch is read from a stand-in PostgREST, as production reads it.
+ */
+describe("pay to start, retired", () => {
+  const DB = "https://flags.test";
+  const OFFER_PAGES = ["/sexual-archetype", "/sexual-archetype/initial"];
+  let switchReads = 0;
+
+  /** system_flags as PostgREST answers for the switch: its row, or no answer at all. */
+  function switchIs(state: "on" | "off" | "unreadable") {
+    server.use(
+      http.get(`${DB}/rest/v1/system_flags`, ({ request }) => {
+        if (new URL(request.url).searchParams.get("key") !== "eq.pay_to_start_checkout") {
+          return HttpResponse.json([]);
+        }
+        switchReads++;
+        return state === "unreadable"
+          ? HttpResponse.error()
+          : HttpResponse.json([{ enabled: state === "on" }]);
+      })
+    );
+  }
+
+  /** A person's page load: a document GET, which the visit count would count. */
+  function visit(path: string) {
+    const request = makeNextRequest(`https://www.loveiq.org${path}`) as unknown as {
+      headers: Headers;
+    };
+    request.headers.set("sec-fetch-dest", "document");
+    return request as never;
+  }
+
+  beforeEach(() => {
+    process.env.SUPABASE_URL = DB;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+    __resetSystemFlagsCacheForTests();
+    switchReads = 0;
+    mockRedirect.mockClear();
+    mockCookiesSet.mockClear();
+    mockNextOpts.value = null;
+  });
+
+  afterEach(() => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    __resetSystemFlagsCacheForTests();
+  });
+
+  it("sends a visitor to the free survey while the switch is off, with the address's parameters", async () => {
+    switchIs("off");
+    for (const page of OFFER_PAGES) {
+      mockRedirect.mockClear();
+      await proxy(visit(`${page}?utm_source=google&utm_campaign=pts&gclid=Cj0abc`));
+      expect(mockRedirect, page).toHaveBeenCalledTimes(1);
+      const [target, init] = mockRedirect.mock.calls[0] as unknown as [
+        URL,
+        { status: number; headers: Record<string, string> },
+      ];
+      expect(target.toString(), page).toBe(
+        "https://www.loveiq.org/survey?utm_source=google&utm_campaign=pts&gclid=Cj0abc"
+      );
+      // Temporary and never stored: the switch can come back.
+      expect(init.status).toBe(307);
+      expect(init.headers["Cache-Control"]).toBe("private, no-store");
+    }
+    // Answered before the visit is counted: the survey it lands on is the day's visit.
+    expect(mockNextOpts.value).toBeNull();
+    expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv")).toBeUndefined();
+  });
+
+  it("shows both pages as before while the switch is on", async () => {
+    switchIs("on");
+    for (const page of OFFER_PAGES) {
+      mockNextOpts.value = null;
+      await proxy(visit(`${page}?utm_source=google`));
+      // The page's own handling ran, its visit labelled pay_to_start as before.
+      expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit"), page).toBe(
+        "pay_to_start"
+      );
+    }
+    expect(switchReads).toBe(1);
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it("keeps a buyer's ways back while the switch is off", async () => {
+    switchIs("off");
+    for (const path of [
+      // The continue link explaining why it could not open the survey, on either offer's page.
+      "/sexual-archetype?continue=invalid",
+      "/sexual-archetype/initial?continue=refunded&utm_campaign=pts_s2",
+      "/sexual-archetype?continue=used",
+      // The status page Stripe returns to, and the continue link itself.
+      "/sexual-archetype/checkout?session_id=cs_test_e2eAbcdefghijKLMN&offer=pre",
+      `/sexual-archetype/continue?t=rpp_${"a".repeat(32)}`,
+    ]) {
+      mockNextOpts.value = null;
+      await proxy(visit(path));
+      expect(mockNextOpts.value, path).not.toBeNull();
+    }
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it("shows the page as before when the switch can't be read", async () => {
+    switchIs("unreadable");
+    await proxy(visit("/sexual-archetype"));
+    expect(switchReads).toBe(1);
+    expect(mockRedirect).not.toHaveBeenCalled();
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("pay_to_start");
   });
 });

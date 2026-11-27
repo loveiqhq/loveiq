@@ -13,7 +13,9 @@
  *   report_paywall_enforced
  *   chapter_nudge
  *   pricing_uplift_enabled   — when OFF, all per-visitor price boosts are paused (base prices only)
- *   pay_to_start_checkout    — when OFF, /sexual-archetype sells nothing (20261018120000)
+ *   pay_to_start_checkout    — when OFF, pay to start is retired (27 Nov 2026): its checkout sells
+ *                              nothing and proxy.ts sends visitors to its two offer pages to /survey
+ *                              (20261018120000; read default ON)
  *   unlock_feedback          — when OFF, the "why didn't you unlock?" email stops (20261019120000)
  *   report_initial_unlock_gate — when ON, surveys submitted from then on meet the EUR 1.99
  *                              gate before their report (20261020090000; read default OFF)

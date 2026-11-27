@@ -15,12 +15,14 @@ import { safeAdminNext } from "@shared/url/admin-next";
 import { reportingDay } from "@shared/time/reporting-day";
 import { isProbeRequest } from "@shared/http/probe-cookie";
 import { BOT_UA_REGEX } from "@shared/http/bot-user-agent";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 import {
   PAY_TO_START_JOURNEY,
   PAY_TO_START_RETURN_PATH,
   readPrepaidToken,
 } from "@features/pay-to-start/logic/journey";
 import {
+  PAY_TO_START_OFFER_IDS,
   PAY_TO_START_STATUS_PATH,
   getOfferDefinition,
   type PayToStartOfferId,
@@ -217,6 +219,18 @@ export function payToStartOfferOf(path: string, offerParam: string | null): PayT
   if (path === pre || path.startsWith(`${pre}/`)) return "pre";
   return path === PAY_TO_START_STATUS_PATH && offerParam === "pre" ? "pre" : "full";
 }
+
+/**
+ * Pay to start is retired (27 Nov 2026, Marcus's "Pay to start is retired"): while its switch,
+ * `pay_to_start_checkout`, is off, a visitor to either offer's page goes to the free survey, not
+ * to a buy button that sells nothing. Read as the checkout reads it, so a switch that can't be
+ * read is on and the page shows as before. A buyer's ways back stay: the status page and the
+ * email's continue link are other paths, and an offer page with `?continue=` is that link saying
+ * why it could not open the survey.
+ */
+const PAY_TO_START_OFFER_PAGES: readonly string[] = PAY_TO_START_OFFER_IDS.map(
+  (id) => getOfferDefinition(id).landingPath
+);
 
 /**
  * True when this request is the survey page itself, by the same rules
@@ -467,6 +481,22 @@ export async function proxy(request: NextRequest) {
   if (shortCode) {
     const shortLink = await answerShortLink(request, shortCode);
     if (shortLink) return shortLink;
+  }
+
+  // A retired pay-to-start page (PAY_TO_START_OFFER_PAGES), answered before the visit is counted
+  // too: the survey it sends to is the visit, with the ad's tags it came with. Temporary and never
+  // stored, because the switch can come back.
+  if (
+    PAY_TO_START_OFFER_PAGES.includes(request.nextUrl.pathname) &&
+    !request.nextUrl.searchParams.has("continue") &&
+    !(await isFeatureEnabled("pay_to_start_checkout"))
+  ) {
+    const survey = new URL(request.url);
+    survey.pathname = "/survey";
+    return NextResponse.redirect(survey, {
+      status: 307,
+      headers: { "Cache-Control": "private, no-store" },
+    });
   }
 
   // Generate a random nonce for CSP

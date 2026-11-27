@@ -10,9 +10,11 @@ takes the survey, and the report opens unlocked or pre-unlocked. How it works is
 
 The `pay_to_start_checkout` system flag. There is no screen for it: `PATCH
 /api/admin/system-flags` with an admin session, as `docs/runbooks/DISASTER_RECOVERY.md` §3
-shows, with `{"key":"pay_to_start_checkout","enabled":false}`. Off: every button on the page
-answers "Checkout is paused for a moment" and nothing is charged; the page stays up, so an ad
-keeps landing somewhere. A checkout already open at Stripe can still be paid and is honoured.
+shows, with `{"key":"pay_to_start_checkout","enabled":false}`. Off is pay to start retired (27
+Nov 2026): the checkout sells nothing, and `proxy.ts` sends a visitor to either offer's page to
+the free survey (`/survey`, a 307 that keeps the address's parameters). A buyer's ways back stay:
+the status page, the email's continue link and an offer page with `?continue=`. A checkout
+already open at Stripe can still be paid and is honoured. On again, both pages sell within 30 s.
 
 The page also refuses to sell while the survey is closed or `survey_submissions` is off.
 
