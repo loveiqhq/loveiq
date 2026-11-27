@@ -7,8 +7,8 @@ import {
 import { isPayToStartTracker } from "@features/pay-to-start/logic/journey";
 import {
   CHOOSE_PRICE_CUSTOM_MIN_CENTS,
-  CHOOSE_PRICE_TILES,
   isChoosePriceOption,
+  tileCents,
   type ChoosePriceOption,
 } from "@features/report/logic/choosePrice";
 import { GATE_CHOOSE_COPY } from "@features/report/ui/gate/gateChoosePriceContent";
@@ -24,9 +24,10 @@ import { fmt } from "./format";
 /**
  * AP-Analytics, Payment · the pre-unlock price test (Marcus's board "Assessment A · Payment
  * copy", 24 Nov 2026; shared/experiments/gatePriceArm.ts): half the free finishers meet today's
- * EUR 1.99 page, half the "Choose your price" page, where they pick EUR 0, 6.99, 19.99 or their
- * own amount for the same pre-unlock. It replaced #11 (the Core Archetype shown), and its
- * section took #11's place on the page.
+ * EUR 1.99 page, half the "Choose your price" page, where they pick EUR 1.99 (since 27 Nov, in
+ * the EUR 0 tile's place), 6.99, 19.99 or their own amount for the same pre-unlock; EUR 0 is
+ * still theirs, as an own amount of 0 they confirm. It replaced #11 (the Core Archetype shown),
+ * and its section took #11's place on the page.
  *
  * Read as #11 was, from the page's own finishers (ap_facts: the range under its filters, the
  * team and our probes left out), less those who paid before the survey. A finisher is in the
@@ -53,9 +54,7 @@ export const GATE_PRICE_FROM = "2026-11-26";
 /** The section's title, as the board names it. */
 export const PRICE_TEST_NAME = "Pre-unlock price test: €1.99 vs choose your price";
 
-function centsOf(option: Exclude<ChoosePriceOption, "custom">): number {
-  return CHOOSE_PRICE_TILES.find((tile) => tile.option === option)?.cents ?? 0;
-}
+const centsOf = tileCents;
 
 const euros = (cents: number) => fmt("eur", cents / 100);
 
@@ -68,9 +67,15 @@ const ARMS: ReadonlyArray<{ arm: GatePriceArm; name: string; sub: string }> = [
 /**
  * The choosing half's picks with a price, in the page's order, named as the board names them
  * ("Fair price · €6.99", recommended) with this page's amounts: its EUR 19.99 tile and its
- * own amount's floor, where the board's sample drew EUR 12.99 and "from €1".
+ * own amount's floor, where the board's sample drew EUR 12.99 and "from €1". The EUR 1.99 tile
+ * (Marcus's hotfix of 27 Nov) goes by its own words, "If money is tight".
  */
 const PAID_OPTIONS: ReadonlyArray<{ option: ChoosePriceOption; name: string; sub: string }> = [
+  {
+    option: "tight",
+    name: `${GATE_CHOOSE_COPY.card.notes.tight} · ${euros(centsOf("tight"))}`,
+    sub: "",
+  },
   {
     option: "fair",
     name: `Fair price · ${euros(centsOf("fair"))}`,

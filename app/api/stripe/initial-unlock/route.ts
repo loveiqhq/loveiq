@@ -52,8 +52,9 @@ import logger from "@shared/observability/logger";
  *
  * The price test's "Choose your price" half (shared/experiments/gatePriceArm.ts) sends its pick,
  * `priceOption` and, for an own amount, `amountCents`. Only a reader the server deals that half
- * to may name one, and it charges only what logic/choosePrice.ts gives for it: EUR 6.99, 19.99,
- * or an own amount between the floor and the ceiling. EUR 0 needs no Stripe: the pre-unlock is
+ * to may name one, and it charges only what logic/choosePrice.ts gives for it: EUR 1.99 (`tight`,
+ * since 27 Nov), 6.99, 19.99, or an own amount between the floor and the ceiling. EUR 0 (`free`,
+ * an own amount of 0 the page asked "Are you sure?" about) needs no Stripe: the pre-unlock is
  * written at once (grantChosenFreeInitialUnlock) and the answer is the report's own address.
  * A pick from a reader in the other half, or with no test running (the switch went off since
  * the page was drawn), is told to reload, as for one the gate no longer stops.
@@ -68,7 +69,7 @@ const bodySchema = z
     gaSessionId: z.string().max(64).nullable().optional(),
     reportSessionId: z.string().uuid().nullable().optional(),
     reportToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX).nullable().optional(),
-    priceOption: z.enum(["free", "fair", "support", "custom"]).optional(),
+    priceOption: z.enum(["free", "tight", "fair", "support", "custom"]).optional(),
     amountCents: z.number().int().min(0).max(CHOOSE_PRICE_CUSTOM_MAX_CENTS).optional(),
   })
   .refine((value) => !!(value.reportSessionId || value.reportToken), {
@@ -238,7 +239,7 @@ export async function POST(request: Request) {
         // What fulfillment grants. No `journey`: "pay_to_start" would send the webhook
         // down pay to start's branch.
         plan: INITIAL_UNLOCK_PLAN,
-        // The price test's pick ("fair", "support", "custom"); none on today's page.
+        // The price test's pick ("tight", "fair", "support", "custom"); none on today's page.
         ...(priceOption ? { priceOption } : {}),
         reportSessionId: reportSessionId ?? "",
         reportToken: reportToken ?? "",

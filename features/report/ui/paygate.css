@@ -7,9 +7,11 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 /* The EUR 1.99 pre-unlock gate (features/report/ui/gate/initial-unlock-gate.css) draws with the
- * same tokens. */
+ * same tokens, and so does its "Are you sure?" sheet, which sits beside the page, not in it
+ * (gate-choose-price.css `.iug-zero`). */
 .report-pricing-modal--paygate,
-.iug-page {
+.iug-page,
+.iug-zero {
   --rpg-ink: #17121f;
   --rpg-ink-strong: #161021;
   --rpg-muted: #4b5563;

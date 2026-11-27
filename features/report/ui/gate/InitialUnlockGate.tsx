@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   setReportSubmissionContext,
   trackExperimentExposure,
+  trackInitialGateCta,
   trackInitialGateViewed,
 } from "@features/analytics/client";
 import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
@@ -12,12 +13,15 @@ import { GATE_PRICE_EXPERIMENT, isGatePriceArm } from "@shared/experiments/gateP
 import { CHOOSE_PRICE_DEFAULT } from "@features/report/logic/choosePrice";
 import { isGateReveal } from "@features/report/logic/gateReveal";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { shieldTaps } from "./exit/exitHistory";
 import { GateChapterMap } from "./GateChapterMap";
 import {
   choiceCents,
   choiceStickyCta,
   GateChoosePriceCard,
   GateWhyChoose,
+  GateZeroConfirm,
+  isFreeChoice,
   type PriceChoice,
 } from "./GateChoosePrice";
 import { GATE_CHOOSE_COPY, GATE_PICK_PRICE_EVENT } from "./gateChoosePriceContent";
@@ -83,6 +87,24 @@ export default function InitialUnlockGate({
     choice: checkoutChoice,
   });
   const amountRef = useRef<HTMLInputElement | null>(null);
+
+  // The "Are you sure?" sheet (GateZeroConfirm, Marcus's hotfix of 27 Nov): open from the button
+  // that asked for the result with an own amount of EUR 0, which takes the focus back when it
+  // closes.
+  const [zeroFrom, setZeroFrom] = useState<GateCtaPlace | null>(null);
+  const refocus = useRef<GateCtaPlace | null>(null);
+  const closeZero = useCallback(() => {
+    refocus.current = zeroFrom;
+    setZeroFrom(null);
+  }, [zeroFrom]);
+  useEffect(() => {
+    const place = refocus.current;
+    if (zeroFrom !== null || !place) return;
+    refocus.current = null;
+    mainRef.current
+      ?.querySelector<HTMLElement>(place === "sticky" ? ".iug-sticky__cta" : ".iug-choose__cta")
+      ?.focus({ preventScroll: true });
+  }, [zeroFrom]);
 
   // The submission is bound while the gate is on screen, and let go when it goes: "Not ready
   // to unlock yet" leaves for the landing page in the same tab, whose signals are not this
@@ -153,8 +175,17 @@ export default function InitialUnlockGate({
     return () => window.removeEventListener(GATE_PICK_PRICE_EVENT, onPick);
   }, [choosing, toPicker]);
 
-  // Both buttons: an own amount that can't be charged sends the reader to its field instead.
+  // Both buttons: an own amount of EUR 0 asks "Are you sure?" first, and one that can't be
+  // charged sends the reader to its field instead.
   const unlock = (place: GateCtaPlace) => {
+    if (choosing && isFreeChoice(choice)) {
+      // Counted as any Unlock press is (AP's "pressed Unlock"), and shielded: a double tap's
+      // second tap would land on the sheet's buttons, which open under the finger.
+      trackInitialGateCta({ place });
+      shieldTaps();
+      setZeroFrom(place);
+      return;
+    }
     if (choosing && chosenCents === null) {
       toPicker(true);
       return;
@@ -165,7 +196,7 @@ export default function InitialUnlockGate({
   // The shell is the page's ground (the status pages' wash on a desktop); the frame is the column.
   return (
     <div className="iug-shell">
-      <main ref={mainRef} className="iug-page" tabIndex={-1}>
+      <main ref={mainRef} className="iug-page" tabIndex={-1} inert={zeroFrom !== null}>
         <ScrollAnimator />
         <GateHero headline={!reveal} lead={choosing ? GATE_CHOOSE_COPY.headlineLead : undefined} />
         {reveal ? <GateReveal reveal={reveal} onLocked={toPricing} /> : null}
@@ -212,6 +243,13 @@ export default function InitialUnlockGate({
           ctaLabel={choosing ? choiceStickyCta(choice) : undefined}
         />
       </main>
+      {choosing && zeroFrom !== null ? (
+        <GateZeroConfirm
+          state={state}
+          onChoose={(pick) => void start(zeroFrom, pick)}
+          onClose={closeZero}
+        />
+      ) : null}
     </div>
   );
 }

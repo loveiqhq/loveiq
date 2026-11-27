@@ -1061,7 +1061,8 @@ function PriceTest({ d }: { d: PaymentPayload }) {
           tint: true,
           cells: [
             {
-              // The board's "Took it free · …", priced as the picks above are: the page's €0 tile.
+              // The board's "Took it free · …", priced as the picks above are: an own amount of
+              // €0, confirmed (the page's €0 tile until 27 Nov).
               v: `Took it free · ${fmt("eur", 0)}`,
               sub: `${fmt("count", b.free)} ${b.free === 1 ? "reader" : "readers"} · ${fmt("pct", ratio(b.free, b.finishers))} of finishers`,
               left: true,

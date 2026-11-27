@@ -4,7 +4,8 @@
  * a) 1.99 to pre-unlock b) choose your price to pre-unlock"). Half the free finishers meet
  * today's EUR 1.99 page (`fixed`); half meet his "Choose your price" page (`choose`, Claude
  * Design "Paygate exit pages", board "Paygate · €1,99 (Figma recreation) copy 2"), where they
- * pick EUR 0, 6.99, 19.99 or their own amount for the same pre-unlock.
+ * pick EUR 1.99, 6.99, 19.99 or their own amount for the same pre-unlock (EUR 0 as an own
+ * amount of 0 they confirm; it had its own tile until 27 Nov).
  *
  * THE SAME SPLIT AS MARK'S 50/50 (gateRevealArm.ts), on purpose: `choose` is the half that met
  * his "Core Archetype shown" page, so a reader whose survey sheets promised the archetype free

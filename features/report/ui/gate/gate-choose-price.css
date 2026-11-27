@@ -249,11 +249,13 @@
   background: #fcf1f7;
 }
 
-.iug-why-choose__icon--free {
+/* The board's "€1,99" mark (EUR 0's before 27 Nov), small enough to sit inside the circle. */
+.iug-why-choose__icon--low {
   background: #fff4ef;
   font-family: var(--font-serif), Georgia, serif;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   /* The exit page's AA orange (4.8:1 here), not the board's #fe6839 (2.7:1). */
   color: #c2410c;
 }
@@ -320,4 +322,197 @@
 
 .iug-why-choose__guide tr.is-highlight td {
   color: #5b52e8;
+}
+
+/* ── Marcus's hotfix, 27 Nov 2026: "Custom €0,00 · Are you sure?" ───────────
+   A sheet from the bottom of the screen over the dimmed page, in the gate's column. */
+.iug-zero {
+  position: fixed;
+  inset: 0;
+  /* Over the sticky bar (40). */
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  /* Above the cookie banner while it is up, as the sticky bar is (ConsentBannerOffset). */
+  padding-bottom: var(--liq-consent-h, 0px);
+}
+
+.iug-zero__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(22, 16, 33, 0.45);
+}
+
+.iug-zero__sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 430px;
+  max-height: calc(100dvh - 24px - var(--liq-consent-h, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  border-radius: 26px 26px 0 0;
+  background: #ffffff;
+  box-shadow: 0 -20px 50px -20px rgba(22, 16, 33, 0.5);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  color: var(--rpg-ink-strong);
+  animation: iug-zero-in 240ms ease-out;
+}
+
+/* It takes the focus as it opens, so its name is read; the ring is for its controls. */
+.iug-zero__sheet:focus {
+  outline: none;
+}
+
+@keyframes iug-zero-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iug-zero__sheet {
+    animation: none;
+  }
+}
+
+/* The board's grabber, a 44 px button for whoever can't swipe. */
+.iug-zero__handle {
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 44px;
+  margin: 0 0 -12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.iug-zero__handle span {
+  width: 40px;
+  height: 4px;
+  border-radius: 9999px;
+  background: #e9e6ee;
+}
+
+.iug-zero__handle:focus-visible,
+.iug-zero__price:focus-visible,
+.iug-zero__free:focus-visible {
+  outline: 2px solid var(--rpg-purple);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+.iug-zero__title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.iug-zero__body {
+  margin: -8px 0 0;
+  font-size: 14px;
+  line-height: 21px;
+  color: #3f3a4d;
+}
+
+.iug-zero__point {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #3f3a4d;
+}
+
+.iug-zero__point strong {
+  font-weight: 700;
+  color: var(--rpg-ink-strong);
+}
+
+.iug-zero__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 9999px;
+  background: #6a5ef0;
+}
+
+.iug-zero .iug-why-choose__guide {
+  margin-top: 0;
+}
+
+.iug-zero__prices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.iug-zero__price {
+  min-height: 48px;
+  margin: 0;
+  border: 1px solid #ddd5fb;
+  border-radius: 14px;
+  background: #ffffff;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--rpg-ink-strong);
+  cursor: pointer;
+}
+
+.iug-zero__price[aria-pressed="true"] {
+  border: 2px solid #6a5ef0;
+  background: #f3f1fd;
+}
+
+.iug-zero__cta {
+  height: 52px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.iug-zero__free {
+  min-height: 44px;
+  margin: -6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b6678;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.iug-zero__price:disabled,
+.iug-zero__free:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.iug-zero__error {
+  margin: -6px 0 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: #a62700;
+  text-align: center;
 }

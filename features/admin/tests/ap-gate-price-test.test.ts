@@ -78,9 +78,11 @@ describe("AP Payment · the pre-unlock price test", () => {
         // A sale with no pick recorded: the reader's own amount.
         finisher(5, { pays: [paid(5)] }),
         finisher(6),
+        finisher(7, { pays: [paid(1.99)] }),
       ],
-      [1, 2, 3, 4, 5, 6].map((id) => row(id, id === 1 ? "fixed" : "choose")),
+      [1, 2, 3, 4, 5, 6, 7].map((id) => row(id, id === 1 ? "fixed" : "choose")),
       new Map<number, ChoosePriceOption>([
+        [7, "tight"],
         [2, "fair"],
         [3, "support"],
         [4, "custom"],
@@ -88,14 +90,17 @@ describe("AP Payment · the pre-unlock price test", () => {
       ])
     );
     const [a, b] = block.arms;
-    expect([a!.paid, a!.free, b!.paid, b!.free]).toEqual([1, 0, 4, 1]);
+    expect([a!.paid, a!.free, b!.paid, b!.free]).toEqual([1, 0, 5, 1]);
     expect(block.options.map((o) => [o.option, o.n, Math.round(o.revenue * 100)])).toEqual([
+      ["tight", 1, 199],
       ["fair", 1, 699],
       ["support", 1, 1999],
       ["custom", 2, 800],
     ]);
-    // Named as Marcus's board names the picks, with this page's amounts.
+    // Named as Marcus's board names the picks, with this page's amounts; the EUR 1.99 tile
+    // (his hotfix of 27 Nov) by its own words.
     expect(block.options.map((o) => [o.name, o.sub])).toEqual([
+      ["If money is tight · €1.99", ""],
       ["Fair price · €6.99", "recommended"],
       ["Support our research · €19.99", ""],
       ["Own amount · from €0.50", "avg. of what they typed"],
@@ -139,9 +144,11 @@ describe("AP Payment · the pre-unlock price test", () => {
     const subs: SubFact[] = [];
     const rows: PriceTestRow[] = [];
     const choices = new Map<number, ChoosePriceOption>();
-    // A: 6 of 60 paid EUR 1.99. B: five each paid 6.99, 19.99 and their own 3; 3 took it free.
+    // A: 6 of 60 paid EUR 1.99. B: five each paid 1.99, 6.99, 19.99 and their own 3; 3 took
+    // it free.
     const five = (pick: ChoosePriceOption) => Array.from({ length: 5 }, () => pick);
     const picks: ChoosePriceOption[] = [
+      ...five("tight"),
       ...five("fair"),
       ...five("support"),
       ...five("custom"),
@@ -150,6 +157,7 @@ describe("AP Payment · the pre-unlock price test", () => {
       "free",
     ];
     const price: Record<ChoosePriceOption, number> = {
+      tight: 1.99,
       fair: 6.99,
       support: 19.99,
       custom: 3,
@@ -164,7 +172,7 @@ describe("AP Payment · the pre-unlock price test", () => {
       if (pick) choices.set(i, pick);
     }
     const block = build(subs, rows, choices);
-    expect(block.options.map((o) => o.n)).toEqual([5, 5, 5]);
+    expect(block.options.map((o) => o.n)).toEqual([5, 5, 5, 5]);
     expect(block.verdict).toMatch(/ and 3 free claims\. /);
     expect(block.verdict).toMatch(/the average price falls\.$/);
     expect(block.verdict).not.toContain("To call it");

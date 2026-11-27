@@ -441,6 +441,7 @@ describe("GET /api/admin/ap/payment: the pre-unlock price test", () => {
       ["choose", 3, 3, 2, 1149, 1, 0],
     ]);
     expect(block.options.map((o) => [o.option, o.n, Math.round(o.revenue * 100)])).toEqual([
+      ["tight", 0, 0],
       ["fair", 1, 699],
       ["support", 0, 0],
       ["custom", 1, 450],
