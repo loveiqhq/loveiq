@@ -569,7 +569,7 @@ const PERSON_RULE =
 const PRE_RULE =
   "The Initial plan is the €1.99 Core Archetype: on sale from the evening of 22 Oct 2026 on pay to start's €1.99 page (counted from 23 Oct, its first whole day; a rate over a range starting earlier is blank, never 0%), and from 27 Oct 2026 also on the report's own €1.99 gate. E07's €0 gift is no sale.";
 const TYPES_RULE =
-  "Each sale is in one row: the pre-unlock at a fixed €1.99 or at a price the reader chose (their survey's half in the price test, from 26 Nov 2026), the full report bought on the report, and the full report bought after a pre-unlock, in either funnel. Pay to start is retired (27 Nov 2026): its purchases and what its readers bought later on their report keep a row of their own, shown only in a range that has them. A row not on sale over the range is blank, never 0.";
+  "Each sale is in one row: the pre-unlock at a fixed €1.99 or at a price the reader chose (the page that sold it decides; Choose your price from 26 Nov 2026), the full report bought on the report, and the full report bought after a paid pre-unlock. A €0 choice is free, not a sale. So a full report bought after it counts as bought on the report, as after E07's gift. Pay to start is retired (27 Nov 2026): its purchases and what its readers bought later on their report keep a row of their own, shown only in a range that has them. A row not on sale over the range is blank, never 0.";
 const BY_PAYMENT_DAY =
   "Counted on the payment day, so a sale can come from someone who finished the survey before the range.";
 const CHECKOUT_RULES =

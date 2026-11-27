@@ -55,7 +55,6 @@ describe("/survey for a visitor who paid before it", () => {
     expect(await journeyFor(`__Host-liq_pp=${TOKEN}`)).toEqual({
       kind: "pay_to_start",
       paid: true,
-      returnPath: "/sexual-archetype",
     });
   });
 
@@ -64,14 +63,6 @@ describe("/survey for a visitor who paid before it", () => {
     expect(await journeyFor(`__liq_pp=${TOKEN}`)).toEqual({
       kind: "pay_to_start",
       paid: false,
-      returnPath: "/sexual-archetype",
-    });
-  });
-
-  it("sends a buyer of the initial report back to its own page", async () => {
-    vi.mocked(findEntitlementByToken).mockResolvedValue(row({ offer: "pre", plan: "initial" }));
-    expect(await journeyFor(`__liq_pp=${TOKEN}`)).toMatchObject({
-      returnPath: "/sexual-archetype/initial",
     });
   });
 
