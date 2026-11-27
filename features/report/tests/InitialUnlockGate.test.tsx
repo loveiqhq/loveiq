@@ -927,6 +927,26 @@ describe("the price test's Choose your price half", () => {
       }
     });
 
+    // Review of #799: its keys worked only while the focus was inside it. A button pressed in it
+    // is disabled while its checkout starts, which drops the focus to the page, and Safari skips
+    // buttons on Tab by default, which let the focus leave it. Every key is taken on the window.
+    it("closes on Escape and keeps Tab inside it, wherever the focus is", () => {
+      renderChoose();
+      typeZero();
+      fireEvent.click(cta());
+      const buttons = within(sheet()).getAllByRole("button");
+      (document.activeElement as HTMLElement | null)?.blur();
+      expect(fireEvent.keyDown(document.body, { key: "Tab" })).toBe(false);
+      expect(document.activeElement).toBe(buttons[0]);
+      fireEvent.keyDown(document.body, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(buttons.at(-1));
+      fireEvent.keyDown(document.body, { key: "Tab" });
+      expect(document.activeElement).toBe(buttons[0]);
+      (document.activeElement as HTMLElement).blur();
+      expect(fireEvent.keyDown(document.body, { key: "Escape" })).toBe(false);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
     it("opens without an error the card's button met before it", async () => {
       fetchMock.mockImplementation(() => reply({ error: "Service unavailable." }, 503));
       renderChoose();

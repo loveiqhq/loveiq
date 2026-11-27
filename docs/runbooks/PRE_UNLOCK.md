@@ -143,6 +143,7 @@ readout is "Assessment A · Payment copy" in the AP canvas (`5SkhvkohZMdPfohcbwg
   amount), reads the survey's session and charges only when the server deals that reader the
   `choose` half: EUR 1.99, 6.99, 19.99 or the amount. EUR 0 skips Stripe: a succeeded EUR 0 `initial`
   row (`metadata.priceOption = "free"`, `grantChosenFreeInitialUnlock`), then the report opens.
+  One per report: `payment_chosen_free_once` (20261127210000) refuses a second at the same moment.
   Every price carries the EUR 10 credit (`getReportCredits`). The full report's exit page names
   the price paid ("You earned it with your €6.99 unlock"), and a EUR 0 choice is worded as the gift.
 - **The halves elsewhere** (Fatih, 24 Nov): the choosing half skips the halfway sheet and the

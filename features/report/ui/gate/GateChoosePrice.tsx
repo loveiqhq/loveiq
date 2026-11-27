@@ -1,15 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FC,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
-} from "react";
+import { useEffect, useId, useRef, useState, type FC, type RefObject } from "react";
 import {
   CHOOSE_PRICE_CUSTOM_MAX_CENTS,
   CHOOSE_PRICE_CUSTOM_MIN_CENTS,
@@ -429,34 +421,39 @@ export const GateZeroConfirm: FC<GateZeroConfirmProps> = ({ state, onChoose, onC
 
   useExitCloseRequest(true, onClose);
 
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape" && !event.nativeEvent.isComposing) {
-      // Cancelled, so the browser makes no close request of it: the sheet is gone by the time
-      // one would land, and the gate's own watcher (useGateBack) would open the exit page. The
-      // key goes on to the window, where useGateBack cancels it too.
+  // Its keys are taken on the window, wherever the focus is (review of #799): a button pressed in
+  // it is disabled while its checkout starts, which drops the focus to the page, and Safari skips
+  // buttons on Tab by default, which let the focus leave it. Every Tab step is taken here, as the
+  // survey's sheets do (SurveySheetShell).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.isComposing) {
+        // Cancelled, so the browser makes no close request of it: the sheet is gone by the time
+        // one would land, and the gate's own watcher (useGateBack) would open the exit page.
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      // The page behind is inert; Tab and Shift+Tab go round the sheet's own controls.
       event.preventDefault();
-      onClose();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    // The page behind is inert; Tab and Shift+Tab go round the sheet's own controls.
-    const focusable = Array.from(
-      sheetRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []
-    );
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (!first || !last) return;
-    if (
-      event.shiftKey &&
-      (document.activeElement === first || document.activeElement === sheetRef.current)
-    ) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
+      const focusable = Array.from(
+        sheetRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []
+      );
+      if (focusable.length === 0) return;
+      const at = focusable.indexOf(document.activeElement as HTMLElement);
+      const next = event.shiftKey
+        ? at <= 0
+          ? focusable.length - 1
+          : at - 1
+        : at < 0 || at === focusable.length - 1
+          ? 0
+          : at + 1;
+      focusable[next]!.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="iug-zero">
@@ -468,7 +465,6 @@ export const GateZeroConfirm: FC<GateZeroConfirmProps> = ({ state, onChoose, onC
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        onKeyDown={onKeyDown}
         data-lenis-prevent=""
       >
         <button
