@@ -902,6 +902,41 @@ describe("the price test's Choose your price half", () => {
       expect(within(sheet()).getByRole("alert").textContent).toMatch(/couldn.t prepare/i);
       expect(inSheet("Yes, continue for free")).not.toBeDisabled();
     });
+
+    // Review of #799: the sheet opens under the finger, its "Yes, continue for free" where the
+    // sticky bar's button was, so a double tap's second tap took EUR 0 unseen (measured on
+    // Pixel 7 and iPhone 15 Pro at 200 to 350 ms). The exit page's tap shield takes it instead.
+    it("takes no tap for a moment as it opens, and counts the press as any Unlock press", () => {
+      // Shields the tests before this one put up are still on their real-time 400 ms.
+      document.querySelectorAll("[data-exit-tap-shield]").forEach((el) => el.remove());
+      vi.useFakeTimers();
+      try {
+        renderChoose();
+        typeZero();
+        fireEvent.click(sticky());
+        expect(sheet()).toBeInTheDocument();
+        expect(document.querySelector("[data-exit-tap-shield]")).not.toBeNull();
+        expect(mockTrackCta).toHaveBeenCalledWith({ place: "sticky" });
+        act(() => {
+          vi.advanceTimersByTime(400);
+        });
+        expect(document.querySelector("[data-exit-tap-shield]")).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("opens without an error the card's button met before it", async () => {
+      fetchMock.mockImplementation(() => reply({ error: "Service unavailable." }, 503));
+      renderChoose();
+      fireEvent.click(cta());
+      await settle();
+      expect(screen.getByRole("alert").textContent).toMatch(/couldn.t prepare/i);
+      typeZero();
+      fireEvent.click(cta());
+      expect(within(sheet()).queryByRole("alert")).toBeNull();
+    });
   });
 
   it("sends nothing for an own amount that can't be charged: its field takes the focus", async () => {

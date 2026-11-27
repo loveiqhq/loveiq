@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   setReportSubmissionContext,
   trackExperimentExposure,
+  trackInitialGateCta,
   trackInitialGateViewed,
 } from "@features/analytics/client";
 import ScrollAnimator from "@features/landing/ui/ScrollAnimator";
@@ -12,6 +13,7 @@ import { GATE_PRICE_EXPERIMENT, isGatePriceArm } from "@shared/experiments/gateP
 import { CHOOSE_PRICE_DEFAULT } from "@features/report/logic/choosePrice";
 import { isGateReveal } from "@features/report/logic/gateReveal";
 import type { InitialUnlockGatePayload } from "@features/report/logic/initialUnlockGate";
+import { shieldTaps } from "./exit/exitHistory";
 import { GateChapterMap } from "./GateChapterMap";
 import {
   choiceCents,
@@ -177,6 +179,10 @@ export default function InitialUnlockGate({
   // charged sends the reader to its field instead.
   const unlock = (place: GateCtaPlace) => {
     if (choosing && isFreeChoice(choice)) {
+      // Counted as any Unlock press is (AP's "pressed Unlock"), and shielded: a double tap's
+      // second tap would land on the sheet's buttons, which open under the finger.
+      trackInitialGateCta({ place });
+      shieldTaps();
       setZeroFrom(place);
       return;
     }

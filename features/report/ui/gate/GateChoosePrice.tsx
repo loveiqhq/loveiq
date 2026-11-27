@@ -399,7 +399,8 @@ export const GateZeroConfirm: FC<GateZeroConfirmProps> = ({ state, onChoose, onC
   const [sent, setSent] = useState<"free" | "paid" | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const busy = state.status === "redirecting";
-  const failed = state.status === "error" ? state.message : null;
+  // Only its own buttons' failures: one the card's button met before it opened stays there.
+  const failed = state.status === "error" && sent ? state.message : null;
   const cents = CHOOSE_PRICE_TILES.find((tile) => tile.option === option)?.cents ?? 0;
 
   const closeRef = useRef(onClose);

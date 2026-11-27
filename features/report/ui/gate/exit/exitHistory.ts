@@ -32,9 +32,11 @@ export const TAP_SHIELD_MS = 400;
  * opening, the exit page's back arrow (it sits where "Not ready to unlock yet" was), which
  * bounced the reader straight back; closing, a second step back off the report itself (to the
  * page before it, measured on Chrome) or the gate's Unlock (Safari). For a moment after either
- * swap a clear layer over the whole screen takes the taps instead. Keys go through.
+ * swap a clear layer over the whole screen takes the taps instead. Keys go through. The "Are
+ * you sure?" sheet takes it too: it opens under the finger, its "Yes, continue for free" where
+ * the sticky bar's button was (GateZeroConfirm).
  */
-function shieldTaps(): void {
+export function shieldTaps(): void {
   const shield = document.createElement("div");
   shield.setAttribute("aria-hidden", "true");
   shield.dataset.exitTapShield = "";

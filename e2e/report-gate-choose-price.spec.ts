@@ -101,12 +101,52 @@ test.describe("The EUR 1.99 page's Choose your price half", () => {
     await expect(cardCta(page)).toBeFocused();
     await expect(page).toHaveURL(/price=1/);
 
-    // The bar shows only once the card's button is off screen: the card's button again.
     await cardCta(page).click();
     await expect(sheet).toBeVisible();
     await sheet.getByRole("button", { name: "Yes, continue for free" }).click();
     // A preview has nothing to buy: it opens the preview of the report after the unlock.
     await expect(page).toHaveURL(/plan=initial/);
+  });
+
+  // Review of #799: the sheet opens under the finger, and a double tap's second tap took EUR 0
+  // from "Yes, continue for free", which opens where the bar's button was.
+  test("a double tap on the bar's button stays on “Are you sure?”, taking nothing", async ({
+    page,
+  }) => {
+    await page.goto(URL);
+    await page.getByLabel("Your own amount in euros").fill("0");
+    await expect(stickyCta(page)).toContainText("Get my result for free");
+    // The second tap, 250 ms on, goes to whatever is under the finger by then. Timed in the
+    // page, so a busy machine can't stretch the gap past the shield's 400 ms.
+    await stickyCta(page).evaluate(async (button: HTMLElement) => {
+      const r = button.getBoundingClientRect();
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const under = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (under instanceof HTMLElement) under.click();
+    });
+    await expect(zeroSheet(page)).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(zeroSheet(page)).toBeVisible();
+    await expect(page).not.toHaveURL(/plan=initial/);
+  });
+
+  test("sits above the cookie banner while the banner is up", async ({ page }) => {
+    await page.goto(URL);
+    // CookieYes' banner as ConsentBannerOffset finds it: on the bottom edge, over everything.
+    await page.evaluate(() => {
+      const banner = document.createElement("div");
+      banner.className = "cky-consent-container";
+      banner.style.cssText =
+        "position:fixed;left:0;right:0;bottom:0;height:316px;z-index:9999999;background:#fff";
+      document.body.appendChild(banner);
+    });
+    await page.getByLabel("Your own amount in euros").fill("0");
+    await stickyCta(page).click();
+    const free = zeroSheet(page).getByRole("button", { name: "Yes, continue for free" });
+    await free.scrollIntoViewIfNeeded();
+    // Playwright's own hit test: the button, not the banner, takes a tap there.
+    await free.click({ trial: true, timeout: 5_000 });
   });
 
   test("its exit page names no EUR 1.99, and its buttons lead back to the picker", async ({
