@@ -34,7 +34,6 @@ import { GET as reportGet } from "@/app/api/admin/ap/report/route";
 import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
 import type { PriceTestBlock } from "@features/admin/server/ap/gate-price-test";
-import type { PaygateExitsBlock } from "@features/admin/server/ap/paygate-exits";
 
 const json = (body: unknown, status = 200) => ({
   ok: status < 400,
@@ -298,65 +297,69 @@ describe("the New & returning filter on every page route", () => {
   });
 });
 
-// The card "count every way out": the €1.99 page's own Back opens its exit page too (#700).
-describe("GET /api/admin/ap/payment: how readers reached the €1.99 page's exit page", () => {
-  const DAY = "2026-11-04";
-  const ev = (sid: number, event_type: string, stage: string | null = null) => ({
-    survey_submission_id: sid,
-    event_type,
-    event_time: `${DAY}T12:00:00Z`,
-    stage,
-    reason: null,
-    place: null,
-    via: null,
-    note: null,
-  });
-  /** The page's exit block, with personal_report answering `seen` (null: the read fails). */
-  const exits = async (seen: unknown[] | null) => {
-    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
-      const { p_from } = JSON.parse(init?.body ?? "{}") as { p_from?: string };
-      if (path === "/rest/v1/rpc/ap_facts")
-        return json(facts(p_from === DAY ? [1, 2, 3].map((id) => finisher(id, DAY)) : []));
+// Marcus's Payment board (24 Nov 2026): the payment types split the pre-unlock by the price
+// test's halves, read from the test's own start, and nothing reads the removed sections' data.
+describe("GET /api/admin/ap/payment: the payment types' reads", () => {
+  const reads = (prefix: string) =>
+    mockFetchAllRows.mock.calls.map(([p]) => p as string).filter((p) => p.startsWith(prefix));
+
+  it("reads the halves since the test began, whatever the range's start, and no exit-page events", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/rpc/ap_facts") return json(facts([]));
       return json(null, 404);
     });
-    mockFetchAllRows.mockImplementation(async (path: string) => {
-      if (path.startsWith("/rest/v1/analytics_event?event_type=in.(paygate_exit_viewed"))
-        return [ev(1, "paygate_exit_viewed", "pre"), ev(2, "paygate_exit_viewed", "pre")];
-      if (path.startsWith("/rest/v1/analytics_event?event_type=in.(initial_gate_back,"))
-        return [ev(1, "initial_gate_back"), ev(2, "initial_gate_browser_back")];
-      if (path.startsWith("/rest/v1/personal_report?initial_gate_seen_at=")) return seen;
-      return [];
-    });
+    mockFetchAllRows.mockImplementation(async () => []);
     const res = await paymentGet(
-      new Request(`http://localhost/api/admin/ap/payment?period=custom&from=${DAY}&to=${DAY}`)
+      new Request(
+        "http://localhost/api/admin/ap/payment?period=custom&from=2026-11-27&to=2026-11-27"
+      )
     );
     expect(res.status).toBe(200);
-    return ((await res.json()) as { exits: PaygateExitsBlock }).exits;
-  };
-
-  it("splits the page's readers by what opened it, of the finishers who saw the €1.99 page", async () => {
-    // 9 saw it but finished outside the range: not one of the page's people.
-    const block = await exits([1, 2, 3, 9].map((id) => ({ survey_submission_id: id })));
-    expect(block.why).toBeNull();
-    expect(block.pages[0]).toMatchObject({
-      stage: "pre",
-      reached: 2,
-      came: { notReady: 1, browserBack: 1, sawGate: 3 },
-    });
-    expect(block.pages[1]!.came).toBeNull();
+    const halves = reads("/rest/v1/survey_submission?status=eq.completed");
+    expect(halves).toHaveLength(1);
+    // 26 Nov 2026 at Berlin midnight (the test's start), not the range's 27 Nov: a sale in the
+    // range can come from a survey finished before it. Bounded by the range's end.
+    expect(halves[0]).toContain(
+      `created_date_time=gte.${encodeURIComponent("2026-11-25T23:00:00.000Z")}`
+    );
+    expect(halves[0]).toContain(
+      `created_date_time=lt.${encodeURIComponent("2026-11-27T23:00:00.000Z")}`
+    );
+    expect(reads("/rest/v1/analytics_event?")).toEqual([]);
+    const body = (await res.json()) as Record<string, unknown> & {
+      types: { rows: Array<{ key: string }> };
+    };
+    expect(body.types.rows.map((r) => r.key)).toEqual([
+      "pre-fixed",
+      "pre-choose",
+      "full",
+      "upgrade",
+    ]);
+    for (const gone of ["pricing", "elasticity", "exits"]) expect(body).not.toHaveProperty(gone);
   });
 
-  it("keeps the page when who saw the €1.99 page can't be read, the shares left out", async () => {
-    const block = await exits(null);
-    expect(block.why).toBeNull();
-    expect(block.pages[0]!.came).toEqual({ notReady: 1, browserBack: 1, sawGate: null });
+  it("reads who saw the €1.99 page from its switch-on day, and not for a range before it", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/rpc/ap_facts") return json(facts([]));
+      return json(null, 404);
+    });
+    mockFetchAllRows.mockImplementation(async () => []);
+    const seenFor = async (day: string) => {
+      mockFetchAllRows.mockClear();
+      await paymentGet(
+        new Request(`http://localhost/api/admin/ap/payment?period=custom&from=${day}&to=${day}`)
+      );
+      return reads("/rest/v1/personal_report?initial_gate_seen_at=");
+    };
+    expect(await seenFor("2026-10-27")).toHaveLength(1);
+    expect(await seenFor("2026-10-26")).toEqual([]);
   });
 });
 
 // #11, Mark's new €1.99 page as a 50/50: its halves are read from the switch-on.
 describe("GET /api/admin/ap/payment: the pre-unlock price test", () => {
-  const DAY = "2026-11-24";
-  const at = (hour: number) => `2026-11-24T${String(hour).padStart(2, "0")}:00:00Z`;
+  const DAY = "2026-11-26";
+  const at = (hour: number) => `2026-11-26T${String(hour).padStart(2, "0")}:00:00Z`;
   const paid = (hour: number, amount: number) => [
     [Math.floor(Date.parse(at(hour)) / 1000), amount, "initial"],
   ];

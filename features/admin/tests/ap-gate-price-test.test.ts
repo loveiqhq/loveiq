@@ -22,7 +22,8 @@ import { FIELDS } from "@features/admin/ui/ap/fields";
 
 import { sub } from "./ap-fixtures";
 
-const DAY = "2026-11-25";
+// The test's switch-on day.
+const DAY = "2026-11-26";
 const at = (minute: number) => new Date(Date.parse(`${DAY}T09:00:00Z`) + minute * 60_000);
 const paid = (amount: number): [number, number, string] => [
   Math.floor(at(30).getTime() / 1000),
@@ -185,8 +186,9 @@ describe("AP Payment · the pre-unlock price test", () => {
   });
 
   it("says why it is blank: before the test, a filter it can't follow, or a failed read", () => {
-    expect(build([], [], new Map(), { to: "2026-11-23" }).why).toMatch(
-      /^Not running in this range: the test starts with its switch, from 24 Nov 2026/
+    // Up to the day before its switch-on.
+    expect(build([], [], new Map(), { to: "2026-11-25" }).why).toMatch(
+      /^Not running in this range: the test starts with its switch, from 26 Nov 2026/
     );
     expect(build([], [], new Map(), { blocked: "Tablets aren't recorded" }).why).toBe(
       "Tablets aren't recorded"
@@ -202,8 +204,8 @@ describe("AP Payment · the pre-unlock price test", () => {
     await readPriceTestRows("2026-11-01");
     await readPriceTestChoices("2026-11-26");
     const [rows, choices] = mockFetchAllRows.mock.calls.map(([p]) => decodeURIComponent(p));
-    // Berlin midnight, 24 and 26 Nov.
-    expect(rows).toContain("created_date_time=gte.2026-11-23T23:00:00.000Z");
+    // Berlin midnight, 26 Nov, for both: the halves never from before the switch-on.
+    expect(rows).toContain("created_date_time=gte.2026-11-25T23:00:00.000Z");
     expect(choices).toContain("created_date_time=gte.2026-11-25T23:00:00.000Z");
     expect(choices).toContain("metadata->>priceOption=not.is.null");
     expect(choices).toContain("is_test=is.false");

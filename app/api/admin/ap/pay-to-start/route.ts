@@ -12,7 +12,7 @@ import {
   funnelAndPaywall,
   payToStartPrices,
 } from "@features/admin/server/ap/pay-to-start";
-import { readGateSeen } from "@features/admin/server/ap/paygate-exits";
+import { readGateSeen } from "@features/admin/server/ap/gate-seen";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { GATE_REVEAL_START_AT } from "@shared/experiments/gateRevealArm";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
