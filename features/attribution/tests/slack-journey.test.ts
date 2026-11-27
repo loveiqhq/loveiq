@@ -790,8 +790,29 @@ describe("funnel, money, first page and returns", () => {
     ],
     [
       "EUR 0 chosen on Choose your price",
-      { gateCohort: true, freeUnlocks: ["chosen"] },
-      "Funnel: *€1.99 after the survey*  |  *Free* (chose €0 on Choose your price)",
+      { gateCohort: true, gateRevealArm: "choose", freeUnlocks: ["chosen"] },
+      "Funnel: *Choose your price after the survey*  |  *Free* (chose €0 on Choose your price)",
+    ],
+    [
+      "the price test's half on today's EUR 1.99 page",
+      { gateCohort: true, gateRevealArm: "fixed" },
+      "Funnel: *€1.99 after the survey*  |  *Free*",
+    ],
+    [
+      "the price test's half that chooses its price",
+      { gateCohort: true, gateRevealArm: "choose" },
+      "Funnel: *Choose your price after the survey*  |  *Free*",
+    ],
+    [
+      "the choosing half, EUR 1.99 if money is tight",
+      { gateCohort: true, gateRevealArm: "choose", paid: [{ amount: 1.99, currency: "EUR" }] },
+      "Funnel: *Choose your price after the survey*  |  *Paid €1.99*",
+    ],
+    [
+      // Mark's 50/50 (ended 26 Nov 2026): both of its pages sold the pre-unlock at EUR 1.99.
+      "the Core Archetype test's new page",
+      { gateCohort: true, gateRevealArm: "reveal" },
+      "Funnel: *€1.99 after the survey*  |  *Free*",
     ],
     [
       "a gift and the feedback grant",
@@ -824,6 +845,21 @@ describe("funnel, money, first page and returns", () => {
   });
 
   /**
+   * Marcus, #bugs-issues 27 Nov 2026: #2942's recording shows the EUR 1.99 page and #2943's
+   * "Choose your price", yet both posts read "Funnel: €1.99 after the survey". The funnel now
+   * names the page the half's line under it names.
+   */
+  it("tells the price test's two pages apart on the funnel line", () => {
+    const fixed = lines({ submissionId: 2942, gateCohort: true, gateRevealArm: "fixed" });
+    const choose = lines({ submissionId: 2943, gateCohort: true, gateRevealArm: "choose" });
+
+    expect(fixed[1]).toBe("Funnel: *€1.99 after the survey*  |  *Free*");
+    expect(fixed).toContain("€1.99 page: *Fixed €1.99* (today's page)");
+    expect(choose[1]).toBe("Funnel: *Choose your price after the survey*  |  *Free*");
+    expect(choose).toContain("€1.99 page: *Choose your price* (new page)");
+  });
+
+  /**
    * AP-Analytics' names, from AP's own builder (Eman, 5 Nov: one set of words). A renamed
    * funnel on the dashboard fails here until Slack says the same, and the other way round.
    */
@@ -851,6 +887,8 @@ describe("funnel, money, first page and returns", () => {
 
     expect(slackName({})).toBe(apName("after"));
     expect(slackName({ gateCohort: true })).toBe(apName("gate"));
+    // Today's page keeps the gate's name; only the half that chooses its price is named apart.
+    expect(slackName({ gateCohort: true, gateRevealArm: "fixed" })).toBe(apName("gate"));
     expect(slackName({ payToStart: true, payToStartOffer: "full" })).toBe(apName("full"));
     expect(slackName({ payToStart: true, payToStartOffer: "pre" })).toBe(apName("pre"));
     // And the window that decides the EUR 1.99 page's funnel is AP's.

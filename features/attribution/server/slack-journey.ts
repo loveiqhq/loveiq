@@ -411,15 +411,18 @@ function freeUnlockText(kind: FreeUnlock): string {
  * the two equal. A survey a pay-to-start payment claimed is "Pay to start · €29.99" or
  * "· €1.99" by the page it was bought on, at the offer's price now. A free survey is "€1.99
  * after the survey" when its submit stamped it into the gate's cohort, else "Pay after the
- * report".
+ * report". The price test's half that chooses its price met no EUR 1.99 page, so its funnel
+ * is "Choose your price after the survey" (Marcus, #bugs-issues 27 Nov 2026: two recordings,
+ * two pages, one label); AP counts both halves in the gate's funnel.
  */
 function funnelName(journey: SubmissionJourney): string {
   if (journey.payToStartOffer) {
     return `Pay to start · ${euros(getPayToStartOffer(journey.payToStartOffer).priceCents)}`;
   }
-  return journey.gateCohort
-    ? `${euros(INITIAL_UNLOCK_PRICE_CENTS)} after the survey`
-    : "Pay after the report";
+  if (!journey.gateCohort) return "Pay after the report";
+  return journey.gateRevealArm === "choose"
+    ? "Choose your price after the survey"
+    : `${euros(INITIAL_UNLOCK_PRICE_CENTS)} after the survey`;
 }
 
 /**
