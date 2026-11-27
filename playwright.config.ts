@@ -144,7 +144,13 @@ export default defineConfig({
         url: baseURL,
         // The survey's `?sheets=` preview, which production refuses, works on this test
         // server only (e2e/survey-sheets.spec.ts); no spec without the parameter sees a sheet.
-        env: { ...process.env, SURVEY_SHEETS_PREVIEW: "1" } as Record<string, string>,
+        // Pay to start's switch is pinned on: off, proxy.ts sends both offer pages to /survey
+        // (retired 27 Nov 2026), and pay-to-start.spec.ts and the a11y list open those pages.
+        env: {
+          ...process.env,
+          SURVEY_SHEETS_PREVIEW: "1",
+          SYSTEM_FLAG_pay_to_start_checkout: "true",
+        } as Record<string, string>,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         stdout: "ignore",
