@@ -236,8 +236,9 @@ page `1604:2374`, its sticky bar `1650:2667`; Notion "RFD > Pre-Unlock"). Runboo
     (`initialUnlockSource` on `/api/report`).
   - Events `paygate_exit_*`, stored; the sentence under `metadata.answer_text`, masked in the
     team export and Jarvis. Every reason tap is sent as it is made, up to twelve a visit, then
-    the last choice as the reader leaves (`ExitReasons`). AP's Payment page has a "Paygate
-    exits" section (`features/admin/server/ap/paygate-exits.ts`).
+    the last choice as the reader leaves (`ExitReasons`). AP's Payment page showed them in a
+    "Paygate exits" section until Marcus's Payment board of 24 Nov 2026 (removed 27 Nov); the
+    events are still stored, and nothing on AP reads them now.
 - **Payment logos.** `ui/PaymentLogos.tsx` draws `PAYMENT_MARKS` as the official logos (Figma
   "Payment Icons", LoveIQ file 11482:1487; `public/payment-logos/official`), the same row on the
   gate, the plan picker and both exit pages (Marcus, 29.10). Pay to start keeps its own wallet
