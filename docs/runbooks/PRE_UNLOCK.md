@@ -123,17 +123,25 @@ readout is "Assessment A · Payment copy" in the AP canvas (`5SkhvkohZMdPfohcbwg
   its own switch says (`gateRevealArmFor` gives no half), and the same session split
   (`shared/experiments/gatePriceArm.ts`) gives the half that met the reveal **Choose your
   price** (`choose`) and the other today's page (`fixed`). A reader whose survey sheets told
-  them the archetype was free lands on a page with a EUR 0 price.
+  them the archetype was free can still take it for EUR 0, as an own amount of 0 (below).
 - **The page** (`features/report/ui/gate/GateChoosePrice.tsx`): today's gate with the board's
   changes only: "Unlock Your Sexual Archetypes", the card "Pay What Is Fair to You, Choose a
-  Price." with four tiles (EUR 0 "Paying nothing is fair", EUR 6.99 "Recommended" and picked as
+  Price." with four tiles (EUR 1.99 "If money is tight", EUR 6.99 "Recommended" and picked as
   the page opens, EUR 19.99 "Support our research", the reader's own amount, EUR 0.50 to 100),
   "One-time payment, no subscription" as the first line under the guarantee, and the box "Why
   You Choose the Price" with the income guide. The button and the sticky bar follow the pick.
   Prices, options and limits: `features/report/logic/choosePrice.ts`.
+- **EUR 0 (Marcus's hotfix, 27 Nov 2026,** boards "Paygate · €1,99 (Figma recreation) copy 3"
+  and "Custom €0,00 · Are you sure?"): the EUR 0 tile ("Paying nothing is fair") gave its place
+  to EUR 1.99 (`tight`). A reader who types 0 as their own amount sees "Get my result for free",
+  and either button opens the sheet "Are You Sure? €0.00 Means Free." (`GateZeroConfirm`): why a
+  payment helps, the income guide, the three prices (EUR 6.99 picked) with "Unlock for …", and
+  "Yes, continue for free", the only way EUR 0 is sent (`priceOption: "free"`, as before). It adds
+  no history entry: Escape, its handle, the page behind it and a phone's back close it; a
+  browser's Back opens the exit page as on the gate, and the sheet closes with it.
 - **Paying:** `POST /api/stripe/initial-unlock` takes `priceOption` (and `amountCents` for an own
   amount), reads the survey's session and charges only when the server deals that reader the
-  `choose` half: EUR 6.99, 19.99 or the amount. EUR 0 skips Stripe: a succeeded EUR 0 `initial`
+  `choose` half: EUR 1.99, 6.99, 19.99 or the amount. EUR 0 skips Stripe: a succeeded EUR 0 `initial`
   row (`metadata.priceOption = "free"`, `grantChosenFreeInitialUnlock`), then the report opens.
   Every price carries the EUR 10 credit (`getReportCredits`). The full report's exit page names
   the price paid ("You earned it with your €6.99 unlock"), and a EUR 0 choice is worded as the gift.

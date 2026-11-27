@@ -304,6 +304,7 @@ describe("POST /api/stripe/initial-unlock — the price test's Choose your price
     (sessionCreated().params.line_items[0]!.price_data as { unit_amount: number }).unit_amount;
 
   it.each([
+    ["tight", undefined, 199, "1.99"],
     ["fair", undefined, 699, "6.99"],
     ["support", undefined, 1999, "19.99"],
     ["custom", 450, 450, "4.50"],
@@ -327,6 +328,9 @@ describe("POST /api/stripe/initial-unlock — the price test's Choose your price
   it("never charges a price the browser names: the amount counts only for the own-amount pick", async () => {
     await post({ reportToken: TOKEN, priceOption: "fair", amountCents: 1 });
     expect(lineAmount()).toBe(699);
+    mockCreateSession.mockClear();
+    await post({ reportToken: TOKEN, priceOption: "tight", amountCents: 0 });
+    expect(lineAmount()).toBe(199);
   });
 
   it("400 for an own amount under EUR 0.50 or none, and above EUR 100 never reaches Stripe", async () => {

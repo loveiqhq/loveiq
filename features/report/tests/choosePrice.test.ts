@@ -6,14 +6,16 @@ import {
   CHOOSE_PRICE_TILES,
   chosenPriceCents,
   isChoosePriceOption,
+  isFreeOwnAmount,
   parseAmountCents,
 } from "@features/report/logic/choosePrice";
 
-// Marcus's board "Paygate · €1,99 (Figma recreation) copy 2" (RFD 24 Nov 2026).
+// Marcus's board "Paygate · €1,99 (Figma recreation) copy 3" (hotfix, 27 Nov 2026), after the
+// RFD's "copy 2" (24 Nov): EUR 1.99 "If money is tight" took the EUR 0 tile's place.
 describe("the Choose your price tiles", () => {
-  it("are the board's: EUR 0, 6.99 recommended and picked first, 19.99, then an own amount", () => {
+  it("are the board's: EUR 1.99 if money is tight, 6.99 recommended and picked first, 19.99, then an own amount", () => {
     expect(CHOOSE_PRICE_TILES).toEqual([
-      { option: "free", cents: 0 },
+      { option: "tight", cents: 199 },
       { option: "fair", cents: 699 },
       { option: "support", cents: 1999 },
     ]);
@@ -21,9 +23,19 @@ describe("the Choose your price tiles", () => {
   });
 
   it("charges each tile its own price, whatever amount comes with it", () => {
-    expect(chosenPriceCents("free", 500)).toBe(0);
+    expect(chosenPriceCents("tight", 500)).toBe(199);
     expect(chosenPriceCents("fair")).toBe(699);
     expect(chosenPriceCents("support", 1)).toBe(1999);
+  });
+
+  it("still takes EUR 0 with no tile of its own: an own amount of 0, confirmed on the page", () => {
+    expect(chosenPriceCents("free", 500)).toBe(0);
+    for (const zero of ["0", "0,00", "0.0", "€ 0", " 0 ", ",0"]) {
+      expect(isFreeOwnAmount(zero)).toBe(true);
+    }
+    for (const other of ["", " ", "0,01", "0.5", "abc", "-0", "00,001"]) {
+      expect(isFreeOwnAmount(other)).toBe(false);
+    }
   });
 
   it("charges an own amount only from Stripe's EUR 0.50 to EUR 100, in whole cents", () => {
@@ -38,7 +50,7 @@ describe("the Choose your price tiles", () => {
   });
 
   it("knows its options", () => {
-    for (const o of ["free", "fair", "support", "custom"])
+    for (const o of ["free", "tight", "fair", "support", "custom"])
       expect(isChoosePriceOption(o)).toBe(true);
     for (const o of ["", "Fair", "own", null]) expect(isChoosePriceOption(o)).toBe(false);
   });

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockTrackViewed = vi.fn();
@@ -618,7 +618,9 @@ describe("with the archetype on the gate (report_gate_archetype_reveal)", () => 
 });
 
 // Marcus, 24 Nov 2026 (RFD, board "Paygate · €1,99 (Figma recreation) copy 2"): the half that
-// met the Core Archetype page picks its price instead; the other half keeps today's page.
+// met the Core Archetype page picks its price instead; the other half keeps today's page. His
+// hotfix of 27 Nov (board "copy 3" and "Custom €0,00 · Are you sure?"): EUR 1.99 "If money is
+// tight" took the EUR 0 tile's place, and an own amount of EUR 0 asks "Are you sure?" first.
 describe("the price test's Choose your price half", () => {
   const scrollIntoView = vi.fn();
   beforeEach(() => {
@@ -644,7 +646,7 @@ describe("the price test's Choose your price half", () => {
     expect(screen.getByRole("group", { name: "Choose your price" })).toBeInTheDocument();
     const radios = screen.getAllByRole("radio");
     expect(radios.map((r) => r.closest("label")!.textContent)).toEqual([
-      "€0Paying nothing is fair",
+      "€1.99If money is tight",
       "€6.99Recommended",
       "€19.99Support our research",
       "Your own amount",
@@ -661,9 +663,10 @@ describe("the price test's Choose your price half", () => {
       "€10 credit toward your Full Report",
     ]);
     expect(pageText()).toContain("14-day money-back guarantee.");
-    // Nothing of today's card, and no EUR 1.99 anywhere on the page.
+    // Nothing of today's card, and no EUR 0 tile: EUR 0 is only ever an own amount.
     expect(pageText()).not.toContain("Your Personal Results");
-    expect(pageText()).not.toContain("1.99");
+    expect(pageText()).not.toContain("Paying nothing is fair");
+    expect(screen.queryByRole("radio", { name: /€0/ })).toBeNull();
   });
 
   it("says why the reader chooses, with the income guide under it", () => {
@@ -673,8 +676,8 @@ describe("the price test's Choose your price half", () => {
     for (const line of [
       "We believe in fairness. So you set the price, not us.",
       "Knowing your sexuality shouldn’t depend on your budget.",
-      "€0Really can’t afford it? Then paying nothing is fair.",
-      "Paying more keeps it free for those who can’t, and funds our research.",
+      "€1.99Really can’t afford more? Then €1.99 is fair.",
+      "Paying more keeps it affordable for those who can’t, and funds our research.",
     ]) {
       expect(text.replace(/ /g, "")).toContain(line.replace(/ /g, ""));
     }
@@ -686,7 +689,7 @@ describe("the price test's Choose your price half", () => {
         tr.className,
       ])
     ).toEqual([
-      ["Under €500", "€0", ""],
+      ["Under €500", "€1.99", ""],
       ["€500 to €2,000", "€6.99", ""],
       ["Over €2,000", "€19.99 or more", "is-highlight"],
     ]);
@@ -701,9 +704,9 @@ describe("the price test's Choose your price half", () => {
 
   it("has the card's button and the bar follow the pick", () => {
     renderChoose();
-    pick(/€0/);
-    expect(cta().textContent).toContain("Get my result for free");
-    expect(sticky().textContent).toContain("Get my result for free");
+    pick(/€1\.99/);
+    expect(cta().textContent).toContain("Unlock for €1.99");
+    expect(sticky().textContent).toContain("Unlock for €1.99 now");
     pick(/€19\.99/);
     expect(cta().textContent).toContain("Unlock for €19.99");
     fireEvent.focus(amount());
@@ -718,6 +721,12 @@ describe("the price test's Choose your price half", () => {
     expect(amount()).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(amount(), { target: { value: "699" } });
     expect(cta().textContent).toContain("Enter your amount");
+    // EUR 0 is no amount out of range: it is the free result, asked about before it is taken.
+    fireEvent.change(amount(), { target: { value: "0,00" } });
+    expect(cta().textContent).toContain("Get my result for free");
+    expect(sticky().textContent).toContain("Get my result for free");
+    expect(pageText()).not.toContain("Your own amount can be from");
+    expect(amount()).not.toHaveAttribute("aria-invalid");
   });
 
   // A keyboard or screen-reader user arrowing through the four prices stays in the group: the
@@ -730,7 +739,7 @@ describe("the price test's Choose your price half", () => {
     expect(own).toBeChecked();
     expect(document.activeElement).not.toBe(amount());
     fireEvent.pointerDown(own);
-    pick(/€0/);
+    pick(/€1\.99/);
     fireEvent.pointerDown(own);
     fireEvent.click(own);
     expect(document.activeElement).toBe(amount());
@@ -762,16 +771,137 @@ describe("the price test's Choose your price half", () => {
     expect(mockTrackCta).toHaveBeenCalledWith({ place: "sticky" });
   });
 
-  it("takes EUR 0 straight to the report the server opened, with no checkout begun", async () => {
-    const opened = `https://www.loveiq.org/report/${GATE.reportToken}?unlocked=initial`;
-    fetchMock.mockImplementation(() => reply({ enabled: true, url: opened }));
+  it("charges EUR 1.99 for the tile for when money is tight", async () => {
+    fetchMock.mockImplementation(() =>
+      reply({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_3" })
+    );
     renderChoose();
-    pick(/€0/);
+    pick(/€1\.99/);
     fireEvent.click(cta());
     await settle();
-    expect(sent()).toMatchObject({ priceOption: "free" });
-    expect(mockTrackBeginCheckout).not.toHaveBeenCalled();
-    expect(assign).toHaveBeenCalledWith(opened);
+    expect(sent()).toMatchObject({ priceOption: "tight" });
+    expect(sent()).not.toHaveProperty("amountCents");
+    expect(mockTrackBeginCheckout).toHaveBeenCalledWith("initial", 1.99, "EUR");
+  });
+
+  describe("an own amount of EUR 0: the board's “Are you sure?”", () => {
+    const sheet = () => screen.getByRole("dialog", { name: "Are You Sure? €0.00 Means Free." });
+    const inSheet = (name: string) => within(sheet()).getByRole("button", { name });
+    const typeZero = () => {
+      fireEvent.focus(amount());
+      fireEvent.change(amount(), { target: { value: "0" } });
+    };
+
+    it("asks first, from either button, with the fair guide and the three prices, and sends nothing", () => {
+      renderChoose();
+      typeZero();
+      fireEvent.click(cta());
+      expect(sheet()).toBeInTheDocument();
+      const heading = within(sheet()).getByRole("heading", { level: 2 }).textContent ?? "";
+      expect(heading).toBe(titleCase(heading));
+      const text = (sheet().textContent ?? "").replace(/\s+/g, " ");
+      expect(text).toContain(
+        "That’s okay if money is really tight. We believe in fairness, so you set the price, not us."
+      );
+      expect(text).toContain(
+        "Every payment keeps LoveIQ affordable for those who can’t pay more, and funds our research."
+      );
+      const guide = within(sheet()).getByRole("table", {
+        name: "A fair guide by monthly net income",
+      });
+      expect(Array.from(guide.querySelectorAll("tr")).map((tr) => tr.textContent)).toEqual([
+        "Under €500€1.99",
+        "€500 to €2,000€6.99",
+        "Over €2,000€19.99 or more",
+      ]);
+      const prices = within(within(sheet()).getByRole("group")).getAllByRole("button");
+      expect(prices.map((b) => [b.textContent, b.getAttribute("aria-pressed")])).toEqual([
+        ["€1.99", "false"],
+        ["€6.99", "true"],
+        ["€19.99", "false"],
+      ]);
+      expect(inSheet("Unlock for €6.99")).toBeInTheDocument();
+      expect(inSheet("Yes, continue for free")).toBeInTheDocument();
+      // The page behind it can't be reached while it is up.
+      expect(document.querySelector("main")).toHaveAttribute("inert");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // Escape is cancelled as it closes the sheet: a close request made of it would reach the
+      // gate's own watcher once the sheet is gone, and open the exit page.
+      expect(fireEvent.keyDown(sheet(), { key: "Escape" })).toBe(false);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.querySelector("main")).not.toHaveAttribute("inert");
+      fireEvent.click(sticky());
+      expect(sheet()).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("takes EUR 0 only from “Yes, continue for free”: the report the server opened, no checkout begun", async () => {
+      const opened = `https://www.loveiq.org/report/${GATE.reportToken}?unlocked=initial`;
+      fetchMock.mockImplementation(() => reply({ enabled: true, url: opened }));
+      renderChoose();
+      typeZero();
+      fireEvent.click(sticky());
+      fireEvent.click(inSheet("Yes, continue for free"));
+      await settle();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(sent()).toMatchObject({ reportToken: GATE.reportToken, priceOption: "free" });
+      expect(sent()).not.toHaveProperty("amountCents");
+      expect(mockTrackBeginCheckout).not.toHaveBeenCalled();
+      expect(mockTrackCta).toHaveBeenCalledWith({ place: "sticky" });
+      expect(assign).toHaveBeenCalledWith(opened);
+    });
+
+    it("begins a checkout from its prices instead, its button following the pick", async () => {
+      fetchMock.mockImplementation(() =>
+        reply({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_4" })
+      );
+      renderChoose();
+      typeZero();
+      fireEvent.click(cta());
+      fireEvent.click(inSheet("€19.99"));
+      expect(inSheet("€19.99")).toHaveAttribute("aria-pressed", "true");
+      expect(inSheet("€6.99")).toHaveAttribute("aria-pressed", "false");
+      fireEvent.click(inSheet("Unlock for €19.99"));
+      await settle();
+      expect(sent()).toMatchObject({ priceOption: "support" });
+      expect(sent()).not.toHaveProperty("amountCents");
+      expect(mockTrackBeginCheckout).toHaveBeenCalledWith("initial", 19.99, "EUR");
+      expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_4");
+    });
+
+    it("closes with nothing sent from its handle, the page behind it or Back, the button that opened it focused again", () => {
+      renderChoose();
+      typeZero();
+      fireEvent.click(cta());
+      fireEvent.click(inSheet("Close"));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(cta());
+
+      fireEvent.click(sticky());
+      fireEvent.click(document.querySelector(".iug-zero__backdrop")!);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(sticky());
+
+      fireEvent.click(cta());
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("says inside it when the free result can't be opened", async () => {
+      fetchMock.mockImplementation(() => reply({ error: "Service unavailable." }, 503));
+      renderChoose();
+      typeZero();
+      fireEvent.click(cta());
+      fireEvent.click(inSheet("Yes, continue for free"));
+      await settle();
+      // A 5xx body is internal: the page's own words for it, as on the card.
+      expect(within(sheet()).getByRole("alert").textContent).toMatch(/couldn.t prepare/i);
+      expect(inSheet("Yes, continue for free")).not.toBeDisabled();
+    });
   });
 
   it("sends nothing for an own amount that can't be charged: its field takes the focus", async () => {

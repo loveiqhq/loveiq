@@ -52,6 +52,8 @@ export interface InitialUnlockChoice {
  *   and, for an own amount, the amount; the server checks both and charges that. EUR 0 needs
  *   no Stripe: the server records the pre-unlock and answers with the report's own address,
  *   followed the same way, and nothing counts it as a checkout begun.
+ * - `start`'s second argument is a pick made somewhere other than the card, sent in its place:
+ *   the "Are you sure?" sheet's prices and its "Yes, continue for free" (GateZeroConfirm).
  */
 export function useInitialUnlockCheckout({
   priceCents,
@@ -80,8 +82,9 @@ export function useInitialUnlockCheckout({
   }, []);
 
   const start = useCallback(
-    async (place: GateCtaPlace) => {
+    async (place: GateCtaPlace, override?: InitialUnlockChoice) => {
       if (inFlight.current) return;
+      const pick = override ?? choice;
       inFlight.current = true;
       setState({ status: "redirecting", message: null, place });
       if (preview) {
@@ -89,7 +92,7 @@ export function useInitialUnlockCheckout({
         return;
       }
       trackInitialGateCta({ place });
-      const cents = choice ? choice.cents : priceCents;
+      const cents = pick ? pick.cents : priceCents;
       if (cents > 0) trackBeginCheckout("initial", cents / 100, "EUR");
 
       const fail = (message: string) => {
@@ -108,10 +111,10 @@ export function useInitialUnlockCheckout({
             gaClientId: ga.clientId ?? undefined,
             gaConsent: ga.consent,
             gaSessionId: ga.sessionId ?? undefined,
-            ...(choice
+            ...(pick
               ? {
-                  priceOption: choice.option,
-                  ...(choice.option === "custom" ? { amountCents: choice.cents } : {}),
+                  priceOption: pick.option,
+                  ...(pick.option === "custom" ? { amountCents: pick.cents } : {}),
                 }
               : {}),
           }),
@@ -147,7 +150,7 @@ export function useInitialUnlockCheckout({
           posthog.capture("checkout_started", {
             currency: "EUR",
             plan: "initial",
-            ...(choice ? { price_option: choice.option, price_cents: choice.cents } : {}),
+            ...(pick ? { price_option: pick.option, price_cents: pick.cents } : {}),
           });
         }
         // Replace, not push, when the entry on top is the Back catch's own (useGateBack), the
