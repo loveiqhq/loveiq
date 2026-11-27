@@ -222,7 +222,8 @@ gift keeps the Core Archetype and the EUR 10 credit open, so the reader loses no
   `initial_gate_back`, stored since 27.10, and `initial_gate_browser_back`, stored once the
   page's Back opens the exit page). Since 28.10 "Not ready" opens the exit page, where readers
   can still unlock, so it no longer means they left.
-- AP-Analytics, Payment, "Paygate exits" (28.10): for both exit pages, who reached each, why
+- AP-Analytics, Payment, "Paygate exits" (28.10 to 27.11.2026; the section left the page with
+  Marcus's Payment board of 24.11, the events are still stored): for both exit pages, who reached each, why
   not today (each reader's latest reason), who wrote a sentence, pressed Unlock there, paid
   within 24 hours, and how they left, from the pages' own `paygate_exit_*` events. Their
   sentences are shown masked. For the gate's own exit page, "How they reached it": who came by

@@ -194,9 +194,8 @@ function clampExitNote(
 }
 
 /**
- * The exit pages' fields AP-Analytics counts and shows (features/admin/server/ap/paygate-exits.ts)
- * hold only what the pages send: a made-up stage, way out or place would be counted nowhere, and
- * a made-up reason code would be shown on the admin page as a reason of its own.
+ * The exit pages' fields hold only what the pages send: a made-up stage, way out or place would
+ * be counted nowhere, and a made-up reason code would be read as a reason of its own.
  */
 const EXIT_VIA = new Set(["back", "maybe_later", "chapters", "browser_back"]);
 const EXIT_PLACES = new Set(["card", "sticky"]);

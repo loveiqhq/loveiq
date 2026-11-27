@@ -6,12 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Table } from "@features/admin/server/ap/common";
 import type { Facts, MoneyFact, RefundFact } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
-import {
-  buildPayment,
-  fitMonths,
-  people,
-  type PaymentPayload,
-} from "@features/admin/server/ap/payment";
+import { buildPayment, people, type PaymentPayload } from "@features/admin/server/ap/payment";
 import { FIELDS } from "@features/admin/ui/ap/fields";
 
 import { factsFixture, sub } from "./ap-fixtures";
@@ -70,7 +65,6 @@ const payment = (
   to: string,
   over: Partial<Facts> = {},
   f: Record<string, string> = {},
-  fitFacts?: Facts,
   gateOn: boolean | null = false
 ) =>
   buildPayment({
@@ -78,8 +72,6 @@ const payment = (
     filters: parseFilters({ period: "custom", from, to, ...f }, TODAY),
     today: TODAY,
     now,
-    uplift: { enabled: false, updatedAt: "2026-08-03T18:28:00Z" },
-    fitFacts,
     gateOn,
   });
 
@@ -105,31 +97,6 @@ const twice = [
   // Person 9 answered differently the second time: counted under each answer.
   sub({ id: 5, uid: 9, day: "2026-10-09", at: "2026-10-09T10:00:00Z", gender: "Woman" }),
 ];
-
-/** Whole months whose people bought a full unlock at €10, €20 and €40: cvr = 5 / price. */
-function fitFixture(months = ["2026-05", "2026-06", "2026-07"]): Facts {
-  let id = 100;
-  const subs = months.flatMap((m, i) => {
-    const price = [10, 20, 40][i]!;
-    const n = [4, 4, 8][i]!;
-    const buyers = [2, 1, 1][i]!;
-    return Array.from({ length: n }, (_, k) =>
-      sub({
-        id: ++id,
-        uid: id,
-        day: `${m}-10`,
-        at: `${m}-10T10:00:00Z`,
-        ...(k < buyers
-          ? { paidAt: `${m}-11T10:00:00Z`, sales: 1, revenue: price, full: true, fullSales: 1 }
-          : {}),
-        fullRevenue: k < buyers ? price : 0,
-      })
-    );
-  });
-  // A May finisher who finished again the same month: still four people in May.
-  subs.push(sub({ id: 999, uid: 101, day: "2026-05-12", at: "2026-05-12T10:00:00Z" }));
-  return factsFixture({ from: "2026-05-01", to: "2026-09-30", subs, money: [], checkouts: [] });
-}
 
 describe("Payment builder (design sync, 21 Oct 2026)", () => {
   it("counts people once in the Payment CVR, Over time and Who pays; the full-unlock CVR stays on submissions", () => {
@@ -160,50 +127,40 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
       refunds: [refund({ sid: 6 }), refund({ sid: 2, refund: 2, full: false })],
     });
     const rows = p.types.rows;
-    // Before pay to start went live (22 Oct) and with the EUR 1.99 gate off: those rows blank.
-    expect(rows.map((r) => [r.name, r.live, r.sales, r.revenue, r.refunds, r.fullRefunds])).toEqual(
-      [
-        ["Full unlock after report", true, 2, 39.98, 2, 1],
-        ["Pre-unlock after report", false, null, null, null, null],
-        ["Essentials (retired)", true, 1, 4.99, 0, 0],
-        ["Pay to start · full", false, null, null, null, null],
-        ["Pay to start · €1.99 pre", false, null, null, null, null],
-        ["Pay to start · later purchase on the report", false, null, null, null, null],
-        ["Upgrade after €1.99", false, null, null, null, null],
-      ]
-    );
-    expect(rows.map((r) => r.line)).toEqual([
-      "Free survey · live",
-      "Free survey · the €1.99 gate is switched off",
-      "Free survey",
-      "Pay to start · live from 22 Oct 2026",
-      "Pay to start · live from 22 Oct 2026",
-      "Pay to start · live from 22 Oct 2026",
-      "Pay to start · live from 22 Oct 2026",
+    // Before the free survey's EUR 1.99 page (27 Oct) and the price test: blank, never 0.
+    expect(rows.map((r) => [r.key, r.live, r.sales, r.revenue, r.refunds, r.fullRefunds])).toEqual([
+      ["pre-fixed", false, null, null, null, null],
+      ["pre-choose", false, null, null, null, null],
+      ["full", true, 2, 39.98, 2, 1],
+      ["upgrade", false, null, null, null, null],
+      ["plan-essentials", true, 1, 4.99, 0, 0],
+    ]);
+    expect(rows.map((r) => [r.name, r.line])).toEqual([
+      ["Pre-unlock · fixed €1.99", "On sale from 27 Oct 2026"],
+      ["Pre-unlock · choose your price", "On sale with the price test, from 26 Nov 2026"],
+      ["Full report on the report", ""],
+      ["Full report after a pre-unlock", "On sale from 27 Oct 2026"],
+      ["Essentials (retired)", ""],
     ]);
     const live = rows.filter((r) => r.live).reduce((n, r) => n + (r.sales ?? 0), 0);
     expect(live).toBe(p.tiles.find((t) => t.key === "sales")!.value);
     expect(p.types.refundsWhy).toBeNull();
+    // No pay-to-start sale in the range: no retired row.
+    expect(rows.some((r) => r.key === "pay-to-start")).toBe(false);
     // A switch that couldn't be read is never read as off.
-    const unreadGate = payment("2026-09-21", "2026-10-20", { money: sales }, {}, undefined, null);
-    expect(unreadGate.types.rows.find((r) => r.key === "pre")!.line).toBe(
-      "Free survey · the €1.99 gate's switch couldn't be read"
-    );
-    // So does the upgrade's line under Free survey, where only the gate sells the €1.99.
-    const unreadFree = payment(
-      "2026-10-22",
-      "2026-10-28",
-      { money: sales },
-      { funnel: "free" },
-      undefined,
-      null
-    );
-    expect(unreadFree.types.rows.find((r) => r.key === "upgrade")!.line).toBe(
-      "Free survey · the €1.99 gate's switch couldn't be read"
-    );
+    const fixedLine = (gate: boolean | null) =>
+      payment("2026-10-22", "2026-10-28", { money: sales }, {}, gate).types.rows.find(
+        (r) => r.key === "pre-fixed"
+      )!.line;
+    expect(fixedLine(null)).toBe("The €1.99 gate's switch couldn't be read");
+    expect(fixedLine(false)).toBe("The €1.99 gate is switched off");
+    expect(fixedLine(true)).toBe("");
     // Not read (an older reader): blank, never 0.
     const unread = payment("2026-09-21", "2026-10-20", { money: sales });
-    expect(unread.types.rows[0]).toMatchObject({ sales: 2, refunds: null });
+    expect(unread.types.rows.find((r) => r.key === "full")).toMatchObject({
+      sales: 2,
+      refunds: null,
+    });
     expect(unread.types.refundsWhy).toBe("Refunds were not read for this range.");
     // Refunds carry no source: blank under a filter.
     const filtered = payment(
@@ -212,8 +169,244 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
       { money: sales, refunds: [] },
       { source: "google_ads" }
     );
-    expect(filtered.types.rows[0]!.refunds).toBeNull();
+    expect(filtered.types.rows.find((r) => r.key === "full")!.refunds).toBeNull();
     expect(filtered.types.refundsWhy).toMatch(/filter leaves them blank/);
+  });
+
+  it("payment types: the EUR 1.99 page counts from its switch-on, the choosing page from the test's", () => {
+    const subs = [
+      sub({ id: 1, day: "2026-10-26", at: "2026-10-26T12:00:00Z" }),
+      // The free survey's EUR 1.99 page went on at 14:38 UTC on 27 Oct: before it, no gate.
+      sub({ id: 2, day: "2026-10-27", at: "2026-10-27T10:00:00Z" }),
+      sub({ id: 3, day: "2026-10-27", at: "2026-10-27T15:00:00Z" }),
+    ];
+    const build = (to: string) =>
+      buildPayment({
+        facts: factsFixture({
+          from: "2026-10-26",
+          to,
+          subs,
+          money: [],
+          checkouts: [],
+          refunds: [],
+        }),
+        filters: parseFilters({ period: "custom", from: "2026-10-26", to }, TODAY),
+        today: TODAY,
+        now,
+        gateOn: true,
+        priceOn: true,
+        gateSeen: new Set([3]),
+      }).types.rows;
+    const row = (rows: ReturnType<typeof build>, k: string) => rows.find((r) => r.key === k)!;
+    // A range that ends before the switch-on: neither the page nor its upgrade was on sale.
+    const before = build("2026-10-26");
+    const onSale = "On sale from 27 Oct 2026";
+    expect(row(before, "pre-fixed")).toMatchObject({ live: false, line: onSale });
+    expect(row(before, "upgrade")).toMatchObject({ live: false, line: onSale });
+    // Through it: only who finished after the switch-on met the page.
+    const through = build("2026-10-27");
+    expect(row(through, "pre-fixed")).toMatchObject({ live: true, line: "", shown: 1, base: 1 });
+    expect(row(through, "upgrade")).toMatchObject({ live: true, line: "" });
+    // The price test's switch, on today, doesn't put the choosing page on sale before the test.
+    expect(row(through, "pre-choose")).toMatchObject({
+      live: false,
+      line: "On sale with the price test, from 26 Nov 2026",
+    });
+  });
+
+  it("payment types: the page that sold a pre-unlock decides its row, the price test's half who could buy it", () => {
+    const tracker = (arm: string) => JSON.stringify({ gate_reveal_arm: arm });
+    const t = (iso: string) => Date.parse(iso) / 1000;
+    const subs = [
+      sub({
+        id: 10,
+        day: "2026-11-26",
+        at: "2026-11-26T20:30:00Z",
+        pays: [[t("2026-11-26T20:40:00Z"), 1.99, "initial"]],
+      }),
+      sub({ id: 11, day: "2026-11-26", at: "2026-11-26T20:31:00Z" }),
+      sub({
+        id: 12,
+        day: "2026-11-26",
+        at: "2026-11-26T20:52:00Z",
+        pays: [[t("2026-11-26T21:00:00Z"), 6.99, "initial"]],
+      }),
+      sub({ id: 13, day: "2026-11-27", at: "2026-11-27T01:00:00Z" }),
+      // A survey bought before it was taken: it never meets a EUR 1.99 page.
+      sub({ id: 14, day: "2026-11-27", at: "2026-11-27T02:00:00Z", pts: true }),
+    ];
+    const pre = [
+      money({ sid: 10, day: "2026-11-26", amount: 1.99, plan: "initial" }),
+      money({ sid: 12, day: "2026-11-26", amount: 6.99, plan: "initial" }),
+      // A reader who finished before the switch, unstamped, paid a chosen price after it.
+      money({ sid: 9, day: "2026-11-27", amount: 4.5, plan: "initial" }),
+      // An upgrade, bought after the pre-unlock.
+      money({ sid: 10, day: "2026-11-27", amount: 19.99, upgrade: true }),
+    ];
+    const build = (
+      priceRows: Array<{ id: number; utm_tracker: string | null }> | null,
+      priceChoices: Map<number, "fair" | "support" | "custom" | "free"> | null
+    ) =>
+      buildPayment({
+        facts: factsFixture({
+          from: "2026-11-26",
+          to: "2026-11-27",
+          subs,
+          checkouts: [],
+          refunds: [],
+          money: pre,
+        }),
+        filters: parseFilters(
+          { period: "custom", from: "2026-11-26", to: "2026-11-27" },
+          "2026-11-27"
+        ),
+        today: "2026-11-27",
+        now: new Date("2026-11-27T10:00:00Z"),
+        gateOn: true,
+        priceOn: true,
+        gateSeen: new Set([10, 11, 12]),
+        priceRows,
+        priceChoices,
+      });
+    const stamps = [
+      { id: 10, utm_tracker: tracker("fixed") },
+      { id: 11, utm_tracker: tracker("fixed") },
+      { id: 12, utm_tracker: tracker("choose") },
+      { id: 13, utm_tracker: tracker("choose") },
+    ];
+    const picks = new Map<number, "fair" | "support" | "custom" | "free">([
+      [12, "fair"],
+      [9, "custom"],
+    ]);
+    const p = build(stamps, picks);
+    const row = (k: string) => p.types.rows.find((r) => r.key === k)!;
+    expect(row("pre-fixed")).toMatchObject({
+      live: true,
+      sales: 1,
+      revenue: 1.99,
+      shown: 2,
+      base: 2,
+      baseOf: "finishers",
+      line: "",
+    });
+    expect(row("pre-choose")).toMatchObject({
+      live: true,
+      sales: 2,
+      revenue: 11.49,
+      shown: 1,
+      base: 2,
+      baseOf: "finishers",
+      line: "",
+    });
+    expect(row("full")).toMatchObject({
+      live: true,
+      sales: 0,
+      shown: null,
+      base: 4,
+      baseOf: "finishers",
+    });
+    expect(row("upgrade")).toMatchObject({
+      live: true,
+      sales: 1,
+      revenue: 19.99,
+      shown: 2,
+      base: 2,
+      baseOf: "pre-unlock buyers",
+    });
+    const added = (q: typeof p) => q.types.rows.reduce((n, r) => n + (r.sales ?? 0), 0);
+    expect(added(p)).toBe(p.tiles.find((x) => x.key === "sales")!.value);
+    // Without the halves: the sales still split by their page, the bases blank, and why.
+    const why = "Who is in which half of the price test could not be read just now.";
+    const noHalves = build(null, picks).types.rows;
+    expect(noHalves.find((r) => r.key === "pre-choose")).toMatchObject({
+      live: true,
+      sales: 2,
+      base: null,
+      shown: null,
+      line: why,
+    });
+    // Without the picks: one Pre-unlock row holds every pre-unlock, so the rows still add up.
+    const noPicks = build(stamps, null);
+    expect(noPicks.types.rows.map((r) => r.key)).toEqual(["pre", "full", "upgrade"]);
+    expect(noPicks.types.rows[0]).toMatchObject({
+      name: "Pre-unlock",
+      live: true,
+      sales: 3,
+      line: "Who chose a price could not be read just now.",
+    });
+    expect(added(noPicks)).toBe(noPicks.tiles.find((x) => x.key === "sales")!.value);
+    // An unreadable price switch is never read as off.
+    const priceLine = (priceOn: boolean | null) =>
+      buildPayment({
+        facts: factsFixture({
+          from: "2026-11-26",
+          to: "2026-11-27",
+          subs: [],
+          checkouts: [],
+          refunds: [],
+          money: [],
+        }),
+        filters: parseFilters(
+          { period: "custom", from: "2026-11-26", to: "2026-11-27" },
+          "2026-11-27"
+        ),
+        today: "2026-11-27",
+        now: new Date("2026-11-27T10:00:00Z"),
+        gateOn: true,
+        priceOn,
+        priceRows: [],
+        priceChoices: new Map(),
+      }).types.rows.find((r) => r.key === "pre-choose")!.line;
+    expect(priceLine(null)).toBe("The price test's switch couldn't be read");
+    expect(priceLine(false)).toBe("The price test is switched off");
+    expect(priceLine(true)).toBe("");
+  });
+
+  it("pay to start is retired: its purchases and its readers' later ones share one row, only where the range has them", () => {
+    const pts = { journey: "pay_to_start", pts: true };
+    const sales = [
+      money({ sid: 2, day: "2026-10-24", amount: 19.99 }),
+      // Pay to start's own purchases: the report in full and the EUR 1.99 first.
+      money({ sid: 4, day: "2026-10-24", amount: 29.99, ...pts }),
+      money({ sid: 5, day: "2026-10-26", amount: 1.99, plan: "initial", ...pts }),
+      // A 100% code's EUR 0 purchase is no sale.
+      money({ sid: 6, day: "2026-10-26", amount: 0, method: null, ...pts }),
+      // What a pay-to-start reader bought on the report after, an upgrade from their EUR 1.99 too.
+      money({ sid: 4, day: "2026-10-27", amount: 9.99, plan: "all_reports", pts: true }),
+      money({ sid: 5, day: "2026-10-28", amount: 19.99, pts: true, upgrade: true }),
+    ];
+    const refunds = [refund({ sid: 7, day: "2026-10-24", amount: 29.99, ...pts })];
+    const p = payment("2026-10-22", "2026-10-28", { money: sales, refunds }, {}, true);
+    const rows = p.types.rows;
+    expect(rows.at(-1)).toMatchObject({
+      key: "pay-to-start",
+      name: "Pay to start (retired)",
+      live: true,
+      sales: 4,
+      revenue: 61.96,
+      refunds: 1,
+      fullRefunds: 1,
+      shown: null,
+      base: null,
+    });
+    expect(rows.find((r) => r.key === "full")).toMatchObject({ sales: 1, revenue: 19.99 });
+    // Not the free survey's upgrade: that row is for the pre-unlocks sold after the survey.
+    expect(rows.find((r) => r.key === "upgrade")).toMatchObject({ sales: 0 });
+    expect(rows.reduce((n, r) => n + (r.sales ?? 0), 0)).toBe(
+      p.tiles.find((t) => t.key === "sales")!.value
+    );
+    // "Free survey" leaves pay to start out: no retired row, and the rows still add up.
+    const free = payment(
+      "2026-10-22",
+      "2026-10-28",
+      { money: sales, refunds },
+      { funnel: "free" },
+      true
+    );
+    expect(free.types.rows.some((r) => r.key === "pay-to-start")).toBe(false);
+    expect(free.types.rows.reduce((n, r) => n + (r.sales ?? 0), 0)).toBe(
+      free.tiles.find((t) => t.key === "sales")!.value
+    );
   });
 
   it("checkout success says how many reached the payment page", () => {
@@ -236,54 +429,6 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
       "From 1 May 2026, when paid checkout began: nothing was sold before."
     );
     expect(payment("2026-06-01", "2026-10-20").overTime.note).toBeNull();
-  });
-
-  it("a live pricing test is cut only by a range that cuts it", () => {
-    const note = (from: string, to: string) =>
-      payment(from, to).pricing.arms.find((a) => a.arm === "A3")!.note;
-    expect(note("2026-09-21", "2026-10-20")).toBe("Live · from 8 Oct 17:23");
-    expect(note("2026-10-14", "2026-10-20")).toBe("Live · from 8 Oct 17:23 · cut to this range");
-    expect(note("2026-09-21", "2026-10-15")).toBe("Live · from 8 Oct 17:23 · cut to this range");
-    const ended = payment("2026-08-01", "2026-10-20").pricing.arms.find(
-      (a) => a.test === "Pricing 2.0"
-    )!;
-    expect(ended.note).toBe("3 Aug 22:09 – 24 Aug 04:43 · ended");
-  });
-
-  it("the elasticity fits every whole month since 1 May, whatever the range's start, per person", () => {
-    expect(fitMonths("2026-10-20")).toEqual({ from: "2026-05-01", to: "2026-09-30" });
-    expect(fitMonths("2026-09-30")).toEqual({ from: "2026-05-01", to: "2026-09-30" });
-    expect(fitMonths("2026-05-30")).toBeNull();
-    const el = payment("2026-09-21", "2026-10-20", {}, {}, fitFixture()).elasticity;
-    expect(el.points.map((x) => [x.label, x.price, x.cvr, x.finishers])).toEqual([
-      ["May", 10, 0.5, 4],
-      ["Jun", 20, 0.25, 4],
-      ["Jul", 40, 0.125, 8],
-    ]);
-    expect(el.months).toBe("May – Jul");
-    expect(el.fit!.e).toBeCloseTo(-1);
-    expect(el.why).toBeNull();
-    // A month without a full unlock is left out, and named around.
-    const gap = payment(
-      "2026-09-21",
-      "2026-10-20",
-      {},
-      {},
-      fitFixture(["2026-05", "2026-06", "2026-08"])
-    );
-    expect(gap.elasticity.months).toBe("May, Jun and Aug");
-    // Ending before three whole months exist keeps the reason.
-    const early = payment("2026-06-15", "2026-07-15", {}, {}, fitFixture());
-    expect(early.elasticity.fit).toBeNull();
-    expect(early.elasticity.why).toBe(
-      "The model needs three whole months from 1 May 2026, when paid checkout began, whose finishers bought a full unlock; up to this range's end there are two."
-    );
-    // A filter the records can't follow back to May leaves it blank, though the range is fine.
-    const google = payment("2026-09-21", "2026-10-20", {}, { source: "google_ads" }, fitFixture());
-    expect(google.blocked).toBeNull();
-    expect(google.elasticity.why).toBe(
-      "The model is fitted on every whole month from 1 May 2026, when paid checkout began, but sources are recorded only from 19 Jul 2026: it can't follow this filter."
-    );
   });
 
   it("leaves out the notes about visits and unfinished starts, which concern other pages", () => {
@@ -328,23 +473,17 @@ const sampleCheckout = {
   n: 1,
 };
 
-/** A page from the builder itself: two sales, the model fitted. */
+/** A page from the builder itself: two sales. */
 function built(): PaymentPayload {
-  return payment(
-    "2026-09-21",
-    "2026-10-20",
-    {
-      subs: twice,
-      money: [
-        money({ sid: 2, amount: 9.99 }),
-        money({ sid: 3, amount: 29.99, plan: "all_reports", method: "link" }),
-      ],
-      refunds: [],
-      checkouts: [{ ...sampleCheckout, status: "succeeded", attempted: true, n: 2 }],
-    },
-    {},
-    fitFixture()
-  );
+  return payment("2026-09-21", "2026-10-20", {
+    subs: twice,
+    money: [
+      money({ sid: 2, amount: 9.99 }),
+      money({ sid: 3, amount: 29.99, plan: "all_reports", method: "link" }),
+    ],
+    refunds: [],
+    checkouts: [{ ...sampleCheckout, status: "succeeded", attempted: true, n: 2 }],
+  });
 }
 
 afterEach(() => cleanup());
@@ -384,19 +523,8 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
       "Share of sales",
       "Full CVR",
       "Rev. / finisher",
-      "Arm",
-      "Base price",
-      "Paywall views",
-      "Checkout → paid",
-      "AOV lift · confidence",
-      "Country tier",
-      "Discount step",
-      "Price elasticity prediction",
-      "Price elasticity",
-      "Best price (net revenue)",
-      // The tiles name the price they read ("At €15.00", "At today’s €29.99 (A3)").
-      "At €",
-      "At today’s",
+      "Paywall shown",
+      "CVR",
     ]) {
       // Named as the page names the figure, which may add its value ("At the price tested · €15").
       expect(
@@ -413,88 +541,6 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
     }
   });
 
-  it("payment types once pay to start is live: each sale in one row, by its journey", () => {
-    // Pay to start's own purchase carries its journey; every payment on its survey is pay to start's.
-    const pts = { journey: "pay_to_start", pts: true };
-    const sales = [
-      // The free survey's full unlock, and one bought after a paid EUR 1.99 (its upgrade).
-      money({ sid: 2, day: "2026-10-24", amount: 19.99 }),
-      money({ sid: 3, day: "2026-10-25", amount: 9.99, upgrade: true }),
-      // The report's EUR 1.99 gate.
-      money({ sid: 3, day: "2026-10-24", amount: 1.99, plan: "initial" }),
-      // Pay to start's own purchases: the report in full and the EUR 1.99 first.
-      money({ sid: 4, day: "2026-10-24", amount: 29.99, ...pts }),
-      money({ sid: 5, day: "2026-10-26", amount: 1.99, plan: "initial", ...pts }),
-      // A 100% code's EUR 0 purchase is no sale.
-      money({ sid: 6, day: "2026-10-26", amount: 0, method: null, ...pts }),
-      // What a pay-to-start reader bought on the report after: its own row, not the free survey's.
-      money({ sid: 4, day: "2026-10-27", amount: 9.99, plan: "all_reports", pts: true }),
-    ];
-    const p = payment(
-      "2026-10-22",
-      "2026-10-28",
-      { money: sales, refunds: [refund({ sid: 7, day: "2026-10-24", amount: 29.99, ...pts })] },
-      {},
-      undefined,
-      true
-    );
-    const rows = p.types.rows;
-    expect(rows.map((r) => [r.key, r.live, r.sales, r.revenue, r.refunds, r.fullRefunds])).toEqual([
-      ["full", true, 1, 19.99, 0, 0],
-      ["pre", true, 1, 1.99, 0, 0],
-      ["pay-full", true, 1, 29.99, 1, 1],
-      ["pay-pre", true, 1, 1.99, 0, 0],
-      ["pay-later", true, 1, 9.99, 0, 0],
-      ["upgrade", true, 1, 9.99, 0, 0],
-    ]);
-    expect(rows.map((r) => r.line)).toEqual([
-      "Free survey · live",
-      "Free survey · the €1.99 gate is on",
-      "Pay to start · live",
-      "Pay to start · live",
-      "Pay to start · live",
-      "Both funnels · live",
-    ]);
-    // Every paid sale in one row: the rows add up to the Paid sales tile.
-    expect(rows.reduce((n, r) => n + (r.sales ?? 0), 0)).toBe(
-      p.tiles.find((t) => t.key === "sales")!.value
-    );
-    // With the gate switched off and nothing sold through it, its row is blank, never 0.
-    const off = payment("2026-10-22", "2026-10-28", { money: sales.filter((m) => m.sid !== 3) });
-    expect(off.types.rows.find((r) => r.key === "pre")).toMatchObject({ live: false, sales: null });
-    // Only pay to start sells the EUR 1.99 then, so only it can lead to an upgrade.
-    expect(off.types.rows.find((r) => r.key === "upgrade")!.line).toBe(
-      "Pay to start · live (the report's €1.99 gate is switched off)"
-    );
-    // Switched off now but sold in the range: shown, so the rows still add up to the sales.
-    const offSold = payment("2026-10-22", "2026-10-28", { money: sales });
-    expect(offSold.types.rows.find((r) => r.key === "pre")).toMatchObject({ live: true, sales: 1 });
-    // "Free survey": pay to start's rows are blank, its refunds out, and the rows still add up.
-    const free = payment(
-      "2026-10-22",
-      "2026-10-28",
-      { money: sales, refunds: [refund({ sid: 7, day: "2026-10-24", amount: 29.99, ...pts })] },
-      { funnel: "free" },
-      undefined,
-      true
-    );
-    const freeRows = free.types.rows;
-    for (const key of ["pay-full", "pay-pre", "pay-later"])
-      expect(freeRows.find((r) => r.key === key)).toMatchObject({
-        live: false,
-        sales: null,
-        refunds: null,
-        line: "Pay to start · left out by the Funnel filter",
-      });
-    expect(freeRows.find((r) => r.key === "upgrade")).toMatchObject({
-      sales: 1,
-      line: "Free survey · live",
-    });
-    expect(freeRows.reduce((n, r) => n + (r.sales ?? 0), 0)).toBe(
-      free.tiles.find((t) => t.key === "sales")!.value
-    );
-  });
-
   it("blanks the free survey's €1.99 figures, with why, while its gate is off and none was sold in it", () => {
     // Pay to start's €1.99 sold; nothing went through the report's own gate.
     const pts = { journey: "pay_to_start", pts: true };
@@ -505,7 +551,7 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
       ],
     };
     const at = (gate: boolean | null, funnel = "free") =>
-      payment("2026-10-22", "2026-10-28", noGateSale, { funnel }, undefined, gate);
+      payment("2026-10-22", "2026-10-28", noGateSale, { funnel }, gate);
     const tile = (p: ReturnType<typeof at>, k: string) => p.tiles.find((t) => t.key === k)!;
     const off = at(false);
     expect(tile(off, "pre")).toMatchObject({
@@ -524,14 +570,20 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
     expect(tile(at(false, "all"), "pre").value).toBeGreaterThan(0);
   });
 
-  it("draws the payment types between the tiles and Over time, with whole euros where drawn", () => {
+  it("draws the payment types first, then the price test, with who met each page and the CVR", () => {
     view.payload = built();
     render(<ApPayment />);
     const h2 = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent?.trim());
-    expect(h2.slice(0, 2)).toEqual([
+    expect(h2.slice(0, 5)).toEqual([
       "Payment types",
+      "Pre-unlock price test: €1.99 vs choose your price",
       "Pre-unlock and full-unlock payments over time",
+      "Who pays",
+      "Checkout and payment methods",
     ]);
+    // The sections that left with Marcus's board of 24 Nov are gone.
+    for (const gone of ["Paygate exits", "Pricing tests", "Price elasticity prediction"])
+      expect(h2).not.toContain(gone);
     const table = screen.getByRole("table", { name: "Payment types" });
     const cells = within(table)
       .getAllByRole("row")
@@ -540,43 +592,50 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
         [...r.querySelectorAll('[role="rowheader"], [role="cell"]')].map((c) => c.textContent)
       );
     expect(cells[0]).toEqual([
-      "Full unlock after reportFree survey · live",
+      "Pre-unlock · fixed €1.99On sale from 27 Oct 2026",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+    ]);
+    expect(cells[2]).toEqual([
+      "Full report on the report",
+      "—",
       "2",
+      "40.0%of 5 finishers",
       "€19.99",
       "€39.98",
       "100.0%",
       "0",
       "0.0%",
     ]);
-    expect(cells[1]).toEqual([
-      "Pre-unlock after reportFree survey · the €1.99 gate is switched off",
-      "—",
-      "—",
-      "—",
-      "—",
-      "—",
-      "—",
-    ]);
     expect(
       screen.getByText(
-        "Refunds come from the payment records (refunded in full or in part). Pay to start is live from 22 Oct 2026; the report's €1.99 gate only while it is switched on."
+        "Refunds come from the payment records (refunded in full or in part). The free survey's €1.99 page is on from 27 Oct 2026, the Choose your price page with the price test from 26 Nov 2026. CVR is of the range's finishers who could buy the type, or of the pre-unlock buyers for the full report after one. Pay to start is retired (27 Nov 2026): its sales keep a row only in a range that has them."
       )
     ).toBeTruthy();
-    // The Revenue tile in whole euros; the elasticity's dots too ("May €10").
+    // The Revenue tile in whole euros.
     expect(
       screen.getAllByText("Revenue")[0]!.parentElement!.textContent!.replace(/\u00a0/g, " ")
     ).toBe("Revenue €4021 Sep – 20 Oct 2026");
-    expect(screen.getByText("May €10")).toBeTruthy();
-    expect(
-      screen.getByText(/fitted to monthly full-unlock price and payment conversion, May – Jul\./)
-    ).toBeTruthy();
-    expect(screen.getByText(/^Low confidence: three monthly points/)).toBeTruthy();
-    // The CSV carries the table first.
+    // The CSV carries the tables in the page's order, the payment types first.
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
-    expect(exported.sections[0]!.name).toBe("Payment types");
-    expect(exported.sections[0]!.table.rows[0]!.values).toEqual([
-      "Free survey · live",
+    expect(exported.sections.map((x) => x.name).slice(0, 3)).toEqual([
+      "Payment types",
+      "Pre-unlock price test",
+      "Payments over time",
+    ]);
+    expect(exported.sections[0]!.table.rows[2]!.values).toEqual([
+      "",
+      null,
       2,
+      0.4,
+      5,
+      "finishers",
       19.99,
       39.98,
       1,
@@ -613,7 +672,7 @@ describe("Payment page (design sync, 21 Oct 2026)", () => {
 
   it("writes every Payment query whole", () => {
     const keys = Object.keys(FIELDS).filter((x) => x.startsWith("payment."));
-    expect(keys.length).toBeGreaterThanOrEqual(60);
+    expect(keys.length).toBeGreaterThanOrEqual(50);
     for (const k of keys) expect(FIELDS[k]!.query.text, k).not.toMatch(/undefined|\$\{/);
   });
 });

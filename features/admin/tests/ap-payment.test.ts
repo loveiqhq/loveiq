@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CheckoutFact, MoneyFact } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
-import {
-  buildPayment,
-  CHECKOUT_FROM,
-  fitElasticity,
-  welch,
-} from "@features/admin/server/ap/payment";
+import { buildPayment, CHECKOUT_FROM } from "@features/admin/server/ap/payment";
 
 import { factsFixture, sub } from "./ap-fixtures";
 
@@ -59,7 +54,6 @@ const payment = (from: string, to: string, over: Parameters<typeof factsFixture>
     filters: parseFilters({ period: "custom", from, to }, TODAY),
     today: TODAY,
     now,
-    uplift: { enabled: false, updatedAt: "2026-08-03T18:28:00Z" },
   });
 
 describe("Payment page builder", () => {
@@ -121,88 +115,6 @@ describe("Payment page builder", () => {
       value: 1 / 3,
       blocked: null,
     });
-  });
-
-  it("pricing tests: each stretch's own readers, on the list they were dealt, and what they did on it", () => {
-    const at = (iso: string) => Date.parse(iso) / 1000;
-    const p = payment("2026-08-01", "2026-10-20", {
-      subs: [
-        // Pricing 2.0, arm A: bought the €9.99 single in the stretch.
-        sub({
-          id: 1,
-          day: "2026-08-10",
-          at: "2026-08-10T10:00:00Z",
-          quotedAt: "2026-08-10T10:01:00Z",
-          priceArm: "A",
-          paidAt: "2026-08-10T11:00:00Z",
-          pays: [[at("2026-08-10T11:00:00Z"), 9.99, "full_report"]],
-        }),
-        // Pricing 2.0, arm B: bought after A was raised, so outside 2.0's stretch.
-        sub({
-          id: 2,
-          day: "2026-08-20",
-          at: "2026-08-20T10:00:00Z",
-          quotedAt: "2026-08-20T10:01:00Z",
-          priceArm: "B",
-          paidAt: "2026-08-25T11:00:00Z",
-          pays: [[at("2026-08-25T11:00:00Z"), 29, "full_report"]],
-        }),
-        // Pricing 2.1, arm A.
-        sub({
-          id: 3,
-          day: "2026-08-26",
-          at: "2026-08-26T10:00:00Z",
-          quotedAt: "2026-08-26T10:01:00Z",
-          priceArm: "A",
-        }),
-        // Finished in 2.0's stretch but first quoted after it ended: priced by 2.1, in neither.
-        sub({
-          id: 5,
-          day: "2026-08-23",
-          at: "2026-08-23T20:00:00Z",
-          quotedAt: "2026-08-25T09:00:00Z",
-          priceArm: "B",
-        }),
-        // Pricing 3.0, arm B3: finished after its restart, saw the paywall, checked out.
-        sub({
-          id: 4,
-          day: "2026-10-12",
-          at: "2026-10-12T10:00:00Z",
-          quotedAt: "2026-10-12T10:01:00Z",
-          priceArm: "B3",
-          paywallAt: "2026-10-12T10:05:00Z",
-        }),
-      ],
-      money: [],
-      checkouts: [checkout({ day: "2026-10-12", sid: 4, priceArm: "B3" })],
-    });
-    const arm = (test: string, a: string) =>
-      p.pricing.arms.find((r) => r.test === test && r.arm === a)!;
-    expect(p.pricing.arms.map((r) => `${r.test} ${r.arm}`)).toEqual([
-      "Pricing 2.0 A",
-      "Pricing 2.0 B",
-      "Pricing 2.1 A",
-      "Pricing 2.1 B",
-      "Pricing 3.0 A3",
-      "Pricing 3.0 B3",
-    ]);
-    expect(arm("Pricing 2.0", "A")).toMatchObject({
-      basePrice: "€9.99 full · €19.99 core · €29.99 all",
-      finishers: 1,
-      paidSales: 1,
-      revenue: 9.99,
-      // The seen stamp starts on 6 Sep 2026: no paywall views to show for August.
-      paywallViews: null,
-    });
-    // B's buyer paid after the stretch ended: not 2.0's sale.
-    expect(arm("Pricing 2.0", "B")).toMatchObject({ finishers: 1, paidSales: 0 });
-    expect(arm("Pricing 2.1", "A")).toMatchObject({
-      basePrice: "€39.99 full · €49.99 core · €59.00 all",
-      finishers: 1,
-    });
-    expect(arm("Pricing 3.0", "B3")).toMatchObject({ finishers: 1, paywallViews: 1, checkouts: 1 });
-    expect(arm("Pricing 2.0", "A").note).toMatch(/· ended$/);
-    expect(arm("Pricing 3.0", "A3").note).toMatch(/^Live · from 8 Oct/);
   });
 
   it("who pays: a segment's full-unlock average counts its full unlocks only", () => {
@@ -339,30 +251,8 @@ describe("Payment page builder", () => {
       ["Visa", 1, 19.99],
       ["Stripe Link", 1, 9.99],
     ]);
-    // The per-visitor price switch is off: the page says the multipliers are not applied.
-    expect(p.pricing.factors).toMatchObject({ on: false, since: "2026-08-03T18:28:00Z" });
-    const traffic = p.pricing.factors.groups.find((g) => g.label === "Traffic source")!;
-    expect(traffic.items.map((i) => i.key)).toContain("TikTok");
   });
 
-  it("the elasticity model: a straight line in logs, and only with three months", () => {
-    // cvr = 2 · price^-1, exactly.
-    const fit = fitElasticity([
-      { price: 10, cvr: 0.2 },
-      { price: 20, cvr: 0.1 },
-      { price: 40, cvr: 0.05 },
-    ])!;
-    expect(fit.e).toBeCloseTo(-1);
-    expect(Math.exp(fit.a)).toBeCloseTo(2);
-    expect(fitElasticity([{ price: 10, cvr: 0.2 }])).toBeNull();
-  });
-
-  it("the AOV comparison: B's mean over A's, with a two-sided confidence", () => {
-    const t = welch([10, 10, 12, 12], [20, 20, 22, 22]);
-    expect(t.lift).toBeCloseTo(21 / 11 - 1);
-    expect(t.confidence).toBeGreaterThan(0.99);
-    expect(welch([10], [20, 21])).toEqual({ lift: null, confidence: null });
-  });
   it("a filter the records can't follow blanks every section about people, never zeros", () => {
     // A source filter before sources were recorded (19 Jul 2026).
     const p = buildPayment({
@@ -373,19 +263,13 @@ describe("Payment page builder", () => {
       ),
       today: TODAY,
       now,
-      uplift: null,
     });
     expect(p.blocked).toMatch(/^Sources are recorded from 19 Jul 2026/);
     expect(p.tiles.every((t) => t.value === null && t.blocked === p.blocked)).toBe(true);
     expect(p.overTime.rows).toEqual([]);
     expect(p.segments).toEqual([]);
-    expect(p.pricing.arms).toEqual([]);
-    expect(p.elasticity.why).toBe(p.blocked);
+    expect(p.types.rows).toEqual([]);
+    expect(p.priceTest.why).toBe(p.blocked);
     expect(p.checkout.why).toBe(p.blocked);
-  });
-
-  it("an AOV lift's confidence is Welch's t-test, not the normal curve, on a handful of sales", () => {
-    // p = 0.0030094339 by numerically integrating Student's t (df 3.909, t 6.570).
-    expect(1 - welch([10, 12, 9], [20, 25, 30, 28]).confidence!).toBeCloseTo(0.0030094339, 9);
   });
 });

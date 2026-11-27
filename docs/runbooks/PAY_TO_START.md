@@ -162,8 +162,8 @@ only a range of exactly those days makes its "Before the paywall" column agree w
 and leave under the Funnel filter's Free survey (its ad spend is then blank: the account's spend
 includes pay to start's campaigns); a section whose records can't tell a buyer apart (the
 survey's question funnel, the report's chapters and tour) says so instead. The Payment page's
-payment types put each sale in one row: pay to start · full and · EUR 1.99 by the payment's
-journey, what a buyer bought on the report afterwards, the report's EUR 1.99 gate, and the
-upgrade after a paid EUR 1.99. A purchase is dated by when it was paid, though its payment row
-is written only when the buyer's survey claims it. Pricing tests leave pay to start's surveys out. Pre-unlock rates start on 23 Oct 2026, the first whole day the
+payment types put each sale in one row; since pay to start was retired (27 Nov 2026) its
+purchases (by the payment's journey) and what its buyers bought on the report afterwards share
+one "Pay to start (retired)" row, shown only in a range that has them. A purchase is dated by
+when it was paid, though its payment row is written only when the buyer's survey claims it. Pre-unlock rates start on 23 Oct 2026, the first whole day the
 EUR 1.99 was on sale: a range starting earlier shows them blank, never 0%.

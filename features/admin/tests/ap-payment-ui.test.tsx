@@ -100,24 +100,30 @@ const payload: PaymentPayload = {
   types: {
     rows: [
       {
-        key: "full",
-        name: "Full unlock after report",
-        line: "Free survey · live",
-        live: true,
-        sales: 31,
-        revenue: 649.93,
-        refunds: 0,
-        fullRefunds: 0,
-      },
-      {
-        key: "pre",
-        name: "Pre-unlock after report",
-        line: "Free survey · Initial plan not on sale yet",
+        key: "pre-fixed",
+        name: "Pre-unlock · fixed €1.99",
+        line: "On sale from 27 Oct 2026",
         live: false,
         sales: null,
         revenue: null,
         refunds: null,
         fullRefunds: null,
+        shown: null,
+        base: null,
+        baseOf: null,
+      },
+      {
+        key: "full",
+        name: "Full report on the report",
+        line: "",
+        live: true,
+        sales: 31,
+        revenue: 649.93,
+        refunds: 0,
+        fullRefunds: 0,
+        shown: null,
+        base: 1240,
+        baseOf: "finishers",
       },
     ],
     refundsWhy: null,
@@ -210,150 +216,6 @@ const payload: PaymentPayload = {
       note: "",
     },
   ],
-  pricing: {
-    arms: [
-      {
-        test: "Pricing 2.0",
-        note: "3 Aug 22:09 – 24 Aug 04:43 · ended",
-        arm: "A",
-        control: true,
-        basePrice: "€9.99 full · €19.99 core · €29.99 all",
-        finishers: 111,
-        paywallViews: null,
-        checkouts: 10,
-        paidSales: 2,
-        revenue: 19.98,
-        aovLift: null,
-        aovConfidence: null,
-        aovWhy: null,
-      },
-      {
-        test: "Pricing 2.0",
-        note: "3 Aug 22:09 – 24 Aug 04:43 · ended",
-        arm: "B",
-        control: false,
-        basePrice: "€29.00 full · €39.00 core · €49.00 all",
-        finishers: 108,
-        paywallViews: null,
-        checkouts: 16,
-        paidSales: 4,
-        revenue: 136,
-        aovLift: 2.4,
-        aovConfidence: 0.9,
-        aovWhy: null,
-      },
-      {
-        test: "Pricing 3.0",
-        note: "Live · from 8 Oct 17:23",
-        arm: "A3",
-        control: true,
-        basePrice: "€29.99 full · €39.99 all",
-        finishers: 73,
-        paywallViews: 29,
-        checkouts: 1,
-        paidSales: 0,
-        revenue: 0,
-        aovLift: null,
-        aovConfidence: null,
-        aovWhy: null,
-      },
-      {
-        test: "Pricing 3.0",
-        note: "Live · from 8 Oct 17:23",
-        arm: "B3",
-        control: false,
-        basePrice: "€4.99 full · €6.99 all",
-        finishers: 73,
-        paywallViews: 24,
-        checkouts: 1,
-        paidSales: 0,
-        revenue: 0,
-        aovLift: null,
-        aovConfidence: null,
-        aovWhy: "Too few sales to compare",
-      },
-    ],
-    factors: {
-      on: false,
-      since: "2026-08-03T18:28:58Z",
-      groups: [
-        {
-          label: "Country tier",
-          items: [
-            { key: "Tier 1", multiplier: 1.2 },
-            { key: "Other countries", multiplier: 0.9 },
-          ],
-        },
-        { label: "Device", items: [{ key: "Desktop", multiplier: 1.05 }] },
-      ],
-    },
-  },
-  // cvr(p) = min(1%, 2.25 / p²): the cap meets the curve at €15, where net revenue peaks.
-  elasticity: {
-    points: [
-      { label: "May 2026", price: 10, cvr: 0.01, sales: 4, finishers: 400 },
-      { label: "Jun 2026", price: 15, cvr: 0.008, sales: 4, finishers: 500 },
-      { label: "Jul 2026 (1 Jul–15 Jul)", price: 20, cvr: 0.005, sales: 1, finishers: 200 },
-    ],
-    months: "May – Jul",
-    fit: { a: Math.log(2.25), e: -2 },
-    cap: 0.01,
-    why: null,
-    today: [
-      { arm: "A3", price: 29.99 },
-      { arm: "B3", price: 4.99 },
-    ],
-  },
-  exits: {
-    why: null,
-    pages: [
-      {
-        stage: "pre",
-        name: "After the €1.99 page",
-        reached: 40,
-        views: 52,
-        // Of the 160 who saw the €1.99 page: 32 came by "Not ready", 12 by the browser's Back.
-        came: { notReady: 32, browserBack: 12, sawGate: 160 },
-        answered: 18,
-        wrote: 3,
-        reasons: [
-          {
-            code: "see_first",
-            label: "I want to see some of it before I pay",
-            n: 10,
-            share: 10 / 18,
-          },
-          {
-            code: "too_expensive",
-            label: "It was too expensive and more than I wanted to pay",
-            n: 7,
-            share: 7 / 18,
-          },
-          { code: "other", label: "Something else (tell us in a sentence)", n: 1, share: 1 / 18 },
-        ],
-        pressed: { card: 4, sticky: 3, any: 6 },
-        paidAfter: 5,
-        left: { maybeLater: 12, back: 9, chapters: 0, browserBack: 4 },
-        words: [{ day: "2026-10-29", reason: "other", text: "I wanted a sample chapter first." }],
-      },
-      {
-        stage: "full",
-        name: "After the full report's plans",
-        reached: 9,
-        views: 9,
-        came: null,
-        answered: 0,
-        wrote: 0,
-        reasons: [],
-        pressed: { card: 0, sticky: 0, any: 0 },
-        paidAfter: 0,
-        left: { maybeLater: 0, back: 2, chapters: 5, browserBack: 1 },
-        words: [],
-      },
-    ],
-  },
-  // 20 of 200 paid the €1.99; 30 of 200 chose a price (20 the €6.99, 2 the €19.99, 8 their own),
-  // and 12 took it free.
   priceTest: {
     test: "Pre-unlock price test: €1.99 vs choose your price",
     arms: [
@@ -412,11 +274,6 @@ const region = (name: string) =>
   });
 const rows = (table: HTMLElement) => within(table).getAllByRole("row").slice(1);
 const texts = (els: HTMLElement[]) => els.map((e) => e.textContent);
-const withFactors = (factors: Partial<PaymentPayload["pricing"]["factors"]>) => ({
-  ...payload,
-  pricing: { ...payload.pricing, factors: { ...payload.pricing.factors, ...factors } },
-});
-
 describe("the Payment page as drawn", () => {
   it("has the breadcrumb, the header, the section pills and the sections in order", () => {
     render(<ApPayment />);
@@ -426,41 +283,27 @@ describe("the Payment page as drawn", () => {
     expect(screen.getAllByRole("heading").map((h) => h.textContent?.trim())).toEqual([
       "Payment",
       "Payment types",
+      "Pre-unlock price test: €1.99 vs choose your price",
       "Pre-unlock and full-unlock payments over time",
+      "Who pays",
       "Checkout and payment methods",
       "Checkout success",
       "Payment methods",
-      "Paygate exits",
-      "How they reached it · After the €1.99 page",
-      "Why not today · After the €1.99 page",
-      "Their words",
-      "Why not today · After the full report's plans",
-      "Who pays",
-      "Pre-unlock price test: €1.99 vs choose your price",
-      "Pricing tests",
-      "Personal price multipliers in Pricing 3.0",
-      "Price elasticity prediction",
     ]);
     const pills = within(screen.getByRole("navigation", { name: "Payment sections" })).getAllByRole(
       "link"
     );
     expect(texts(pills)).toEqual([
-      "Over time",
-      "Checkout & methods",
-      "Paygate exits",
-      "Segments",
       "Pre-unlock price test",
-      "Pricing tests",
-      "Price elasticity",
+      "Over time",
+      "Segments",
+      "Checkout & methods",
     ]);
     expect(pills.map((p) => p.getAttribute("href"))).toEqual([
-      "#over-time",
-      "#checkout",
-      "#exits",
-      "#segments",
       "#gate-test",
-      "#experiments",
-      "#elasticity",
+      "#over-time",
+      "#segments",
+      "#checkout",
     ]);
     expect(pills[0]!.getAttribute("aria-current")).toBe("true");
     expect(pills[1]!.getAttribute("aria-current")).toBeNull();
@@ -553,82 +396,6 @@ describe("the Payment page as drawn", () => {
   });
 
   // Marcus's "Paygate exit pages" (28.10): "add it to the payment report".
-  it("paygate exits: each page's reach, answers, presses, sales and ways out, then why and their words", () => {
-    render(<ApPayment />);
-    const card = region("Paygate exits");
-    const table = within(card).getByRole("table", { name: "Paygate exits" });
-    expect(texts(rows(table))).toEqual([
-      "After the €1.99 page“Not ready” or Back on the €1.99 page4052 views1845.0% · 3 wrote6card 4 · bar 3512.5%12Maybe later · back arrow 9 · browser Back 4",
-      "After the full report's plans“Not ready” on the plans, €1.99 holders900.0% · 0 wrote0card 0 · bar 000.0%5to the chapters · back arrow 2 · browser Back 1",
-    ]);
-    expect(within(card).getByText("I want to see some of it before I pay")).toBeTruthy();
-    expect(within(card).getByText("55.6%")).toBeTruthy();
-    expect(within(card).getByText("Nobody has answered on this page in this range.")).toBeTruthy();
-    expect(within(card).getByText("I wanted a sample chapter first.")).toBeTruthy();
-    expect(within(card).getByText(/2026-10-29 · Something else/)).toBeTruthy();
-  });
-
-  // The card "count every way out": what opened the €1.99 page's exit page, of those who saw it.
-  it("paygate exits: how readers reached the €1.99 page's exit page, as shares of who saw it", () => {
-    render(<ApPayment />);
-    const card = region("Paygate exits");
-    const heads = within(card).getAllByRole("heading", { level: 3 });
-    const head = heads.find((h) => h.textContent === "How they reached it · After the €1.99 page")!;
-    // Before the reasons, and only for the €1.99 page's: the full report's page has no way in.
-    expect(heads.indexOf(head)).toBe(0);
-    expect(heads.filter((h) => /^How they reached it/.test(h.textContent ?? ""))).toHaveLength(1);
-    expect(within(head).getByRole("button").getAttribute("aria-label")).toMatch(
-      /How they reached it/
-    );
-    expect(
-      within(card).getByText(
-        "Of the 160 readers who saw the €1.99 page. One who came both ways is on both lines."
-      )
-    ).toBeTruthy();
-    const line = (label: string) => within(card).getByText(label).parentElement!.textContent;
-    expect(line("Pressed “Not ready to unlock yet”")).toBe(
-      "Pressed “Not ready to unlock yet”3220.0%"
-    );
-    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back127.5%");
-  });
-
-  it("paygate exits: the ways in without a share when who saw the €1.99 page is unknown or none", () => {
-    const withCame = (came: { notReady: number; browserBack: number; sawGate: number | null }) => ({
-      ...payload,
-      exits: {
-        ...payload.exits,
-        pages: payload.exits.pages.map((p) => (p.stage === "pre" ? { ...p, came } : p)),
-      },
-    });
-    view.payload = withCame({ notReady: 3, browserBack: 0, sawGate: null });
-    const { unmount } = render(<ApPayment />);
-    let card = region("Paygate exits");
-    expect(
-      within(card).getByText("Who saw the €1.99 page could not be read just now.")
-    ).toBeTruthy();
-    const line = (label: string) => within(card).getByText(label).parentElement!.textContent;
-    expect(line("Pressed “Not ready to unlock yet”")).toBe("Pressed “Not ready to unlock yet”3—");
-    unmount();
-    view.payload = withCame({ notReady: 0, browserBack: 0, sawGate: 0 });
-    render(<ApPayment />);
-    card = region("Paygate exits");
-    expect(within(card).getByText("Nobody saw the €1.99 page in this range.")).toBeTruthy();
-    expect(line("Pressed the browser's Back")).toBe("Pressed the browser's Back0—");
-  });
-
-  it("paygate exits: says why when it has nothing to show", () => {
-    view.payload = {
-      ...payload,
-      exits: { why: "The exit pages are recorded from 28 Oct 2026, after this range.", pages: [] },
-    };
-    render(<ApPayment />);
-    const card = region("Paygate exits");
-    expect(
-      within(card).getByText("The exit pages are recorded from 28 Oct 2026, after this range.")
-    ).toBeTruthy();
-    expect(within(card).queryByRole("table")).toBeNull();
-  });
-
   it("who pays: switches segment; countries of 15 finishers or more all shown", () => {
     render(<ApPayment />);
     const card = region("Who pays");
@@ -686,53 +453,6 @@ describe("the Payment page as drawn", () => {
         "Pre-unlock figures start on 23 Oct 2026, the first whole day the €1.99 Core Archetype was on sale (from the evening of 22 Oct): earlier periods have none to count."
       )
     ).toBeTruthy();
-  });
-
-  it("pricing tests: as drawn, with the AOV lift and its confidence", () => {
-    render(<ApPayment />);
-    const table = screen.getByRole("table", { name: "Pricing tests" });
-    const [a, b, a3, b3] = rows(table).map((r) => texts(within(r).getAllByRole("cell")));
-    expect(a).toEqual([
-      "Pricing 2.03 Aug 22:09 – 24 Aug 04:43 · ended",
-      "AControl · 111 finishers",
-      "€9.99full · €19.99 core · €29.99 all",
-      "—recorded from 6 Sep 2026",
-      "10",
-      "2",
-      // Revenue in whole euros, as drawn; the AOV keeps its cents.
-      "€20",
-      "€9.99",
-      "20.0%",
-      "—",
-      "—",
-    ]);
-    expect(b).toEqual([
-      "",
-      "B108 finishers",
-      "€29.00full · €39.00 core · €49.00 all",
-      "—recorded from 6 Sep 2026",
-      "16",
-      "4",
-      "€136",
-      "€34.00",
-      "25.0%",
-      "—",
-      "+240.0%90% confidence · not significant yet",
-    ]);
-    expect(a3!.slice(0, 3)).toEqual([
-      "Pricing 3.0Live · from 8 Oct 17:23",
-      "A3Control · 73 finishers",
-      "€29.99full · €39.99 all",
-    ]);
-    expect(b3!.slice(-2)).toEqual(["€0.00", "—Too few sales to compare"]);
-    // B's larger AOV is green; no sale from a checkout is red.
-    const cell = (row: number, col: number) =>
-      within(rows(table)[row]!).getAllByRole("cell")[col]!.className;
-    expect(cell(1, 7)).toContain("text-ap-good-ink");
-    expect(cell(0, 7)).not.toContain("text-ap-good-ink");
-    expect(cell(2, 5)).toContain("text-ap-bad-ink");
-    expect(cell(2, 8)).toContain("text-ap-bad-ink");
-    expect(within(table).getAllByRole("row")[2]!.className).toContain("border-dashed");
   });
 
   it("pre-unlock price test: each half, the choosing half's picks under it, the free claims, and the verdict", () => {
@@ -841,132 +561,24 @@ describe("the Payment page as drawn", () => {
     expect(within(first).getAllByRole("cell")[2]!.textContent).toBe("—could not be read");
   });
 
-  it("the multipliers' sentence follows the price switch: off, on, or unread", () => {
-    render(<ApPayment />);
-    expect(
-      screen.getByText(
-        "Switched off since 3 Aug 2026: everyone pays their arm's flat price. Each quote still records these factors, which the price would be multiplied by if the switch were turned on."
-      )
-    ).toBeTruthy();
-    expect(screen.queryByText(/Each visitor's price is the arm's base price/)).toBeNull();
-    expect(screen.getByText("Tier 1").nextSibling!.textContent).toBe("×1.20");
-    cleanup();
-
-    view.payload = withFactors({ on: true });
-    render(<ApPayment />);
-    expect(
-      screen.getByText(
-        "Each visitor's price is the arm's base price times these factors. These are the levers to target or test next."
-      )
-    ).toBeTruthy();
-    expect(screen.queryByText(/Switched off/)).toBeNull();
-    cleanup();
-
-    view.payload = withFactors({ on: null, since: null });
-    render(<ApPayment />);
-    expect(screen.getByText("The price switch could not be read just now.")).toBeTruthy();
-  });
-
-  it("price elasticity: the four tiles for a known fit, and the probe moves with the slider", () => {
-    render(<ApPayment />);
-    const card = region("Price elasticity prediction");
-    const tileText = (label: string) => within(card).getByText(label).parentElement!.textContent;
-    expect(
-      within(card).getByText(
-        /fitted to monthly full-unlock price and payment conversion, May – Jul\./
-      )
-    ).toBeTruthy();
-    // Per finisher: the model's conversion counts people. Each label has its info icon.
-    expect(tileText("Price elasticity")).toBe(
-      "Price elasticity −2.00A 10% higher price cuts paying users by about 20%"
-    );
-    expect(tileText("Best price (net revenue)")).toBe(
-      "Best price (net revenue) €15.00Where net revenue per finisher peaks: €0.143"
-    );
-    expect(tileText("At €15.00")).toBe(
-      "At €15.00 1.0%Predicted payment CVR · €0.143 net per finisher"
-    );
-    expect(tileText("At today’s €29.99 (A3)")).toBe(
-      "At today’s €29.99 (A3) 0.3%€0.072 net per finisher · 50% less than at the best price"
-    );
-    expect(within(card).getByText("Best ≈ €15.00")).toBeTruthy();
-    expect(within(card).getByText("May €10")).toBeTruthy();
-    expect(
-      within(card).getByText(/Conversion is capped at 1\.0%, the best month observed/)
-    ).toBeTruthy();
-
-    fireEvent.change(within(card).getByLabelText(/Test a price/), { target: { value: "20" } });
-    expect(within(card).getByLabelText("Test a price · €20.00")).toBeTruthy();
-    expect(tileText("At €20.00")).toBe(
-      "At €20.00 0.6%Predicted payment CVR · €0.108 net per finisher"
-    );
-  });
-
-  it("price elasticity: a price picked on the chart is the one its card shows", () => {
-    render(<ApPayment />);
-    const card = region("Price elasticity prediction");
-    const chart = within(card).getByRole("group", { name: /^Price elasticity\./ });
-    fireEvent.focus(chart);
-    fireEvent.keyDown(chart, { key: "Home" });
-    // The read-out stops where the slider does: €3.00, then €3.50.
-    fireEvent.keyDown(chart, { key: "ArrowRight" });
-    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €3.50");
-    fireEvent.keyDown(chart, { key: "Enter" });
-    expect(within(card).getByLabelText("Test a price · €3.50")).toBeTruthy();
-    // The pointer finds the same stops: €20 sits 17/37 of the way along a €3–€40 axis.
-    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
-      left: 0,
-      top: 0,
-      right: 740,
-      bottom: 280,
-      width: 740,
-      height: 280,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-    fireEvent.pointerMove(chart, { clientX: (17 / 37) * 740, clientY: 100, pointerType: "mouse" });
-    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €20.00");
-    fireEvent.click(chart);
-    expect(within(card).getByLabelText("Test a price · €20.00")).toBeTruthy();
-  });
-
-  it("price elasticity: says why in place of the model when there is no fit", () => {
-    view.payload = {
-      ...payload,
-      elasticity: {
-        ...payload.elasticity,
-        points: [],
-        fit: null,
-        cap: null,
-        why: "The model needs three months in the range with a full unlock sold; none has one. Pick a longer range (Last 12 months).",
-      },
-    };
-    render(<ApPayment />);
-    const card = region("Price elasticity prediction");
-    expect(within(card).getByText(/The model needs three months in the range/)).toBeTruthy();
-    expect(within(card).queryByText("Price elasticity")).toBeNull();
-    expect(within(card).queryByRole("slider")).toBeNull();
-    expect(card.querySelector("polyline")).toBeNull();
-  });
-
-  it("exports the over-time table, checkout, methods, the exits, the chosen segment and the pricing arms", () => {
+  it("exports the tables in the page's order: types, the price test, over time, the chosen segment, checkout, methods", () => {
     render(<ApPayment />);
     fireEvent.change(screen.getByLabelText("Segment by"), { target: { value: "country" } });
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(exported.sections.map((s) => s.name)).toEqual([
       "Payment types",
+      "Pre-unlock price test",
       "Payments over time",
+      "Who pays · Country",
       "Checkout success",
       "Payment methods",
-      "Paygate exits",
-      "Paygate exits · how they reached it",
-      "Paygate exits · why not today",
-      "Who pays · Country",
-      "Pre-unlock price test",
-      "Pricing tests",
     ]);
     const section = (name: string) => exported.sections.find((s) => s.name === name)!.table;
+    // Paywall shown, the CVR and what it is of, as the table shows them.
+    expect(section("Payment types").rows[1]).toEqual({
+      label: "Full report on the report",
+      values: ["", null, 31, 31 / 1240, 1240, "finishers", 649.93 / 31, 649.93, 1, 0, 0],
+    });
     // Each half's counts, rates and money, then the choosing half's picks.
     const near = (n: number) => expect.closeTo(n, 6);
     expect(section("Pre-unlock price test").rows).toEqual([
@@ -993,23 +605,29 @@ describe("the Payment page as drawn", () => {
     ]);
     // The segment in full, every country.
     expect(section("Who pays · Country").rows).toHaveLength(14);
-    expect(section("Paygate exits").rows[0]).toEqual({
-      label: "After the €1.99 page",
-      values: [40, 52, 18, 3, 6, 5, 12, 0, 9, 4],
-    });
-    // The €1.99 page's only: what it is a share of, then each way in.
-    expect(section("Paygate exits · how they reached it").rows).toEqual([
-      { label: "Saw the €1.99 page", values: ["After the €1.99 page", 160, null] },
-      { label: "Pressed “Not ready to unlock yet”", values: ["After the €1.99 page", 32, 0.2] },
-      { label: "Pressed the browser's Back", values: ["After the €1.99 page", 12, 0.075] },
-    ]);
-    expect(
-      section("Paygate exits · why not today").rows.map((r) => [r.label, r.values[0], r.values[1]])
-    ).toEqual([
-      ["I want to see some of it before I pay", "After the €1.99 page", 10],
-      ["It was too expensive and more than I wanted to pay", "After the €1.99 page", 7],
-      ["Something else (tell us in a sentence)", "After the €1.99 page", 1],
-    ]);
+  });
+
+  it("writes a CVR over 100% but never shades it as the best", () => {
+    const type = payload.types.rows[1]!;
+    view.payload = {
+      ...payload,
+      types: {
+        ...payload.types,
+        rows: [
+          // Sales count on the payment day, finishers on the finishing day: 6 of 5 in a short range.
+          { ...type, key: "a", name: "A", sales: 6, revenue: 60, base: 5 },
+          { ...type, key: "b", name: "B", sales: 1, revenue: 10, base: 10 },
+          { ...type, key: "c", name: "C", sales: 5, revenue: 50, base: 10 },
+        ],
+      },
+    };
+    render(<ApPayment />);
+    const table = screen.getByRole("table", { name: "Payment types" });
+    const cvr = (i: number) => within(rows(table)[i]!).getAllByRole("cell")[2]!;
+    expect(cvr(0).textContent).toBe("120.0%of 5 finishers");
+    expect(cvr(0).className).not.toContain("text-ap-good");
+    expect(cvr(1).className).toContain("text-ap-bad");
+    expect(cvr(2).className).toContain("text-ap-good");
   });
 
   it("never writes NaN, undefined or Infinity, with or without sales", () => {
@@ -1031,7 +649,6 @@ describe("the Payment page as drawn", () => {
       },
       checkout: { reached: 0, attempted: 0, paid: 0, points: [], methods: [], sales: 0, why: null },
       segments: payload.segments.map((s) => ({ ...s, rows: [] })),
-      elasticity: { ...payload.elasticity, points: [], fit: null, cap: null, why: "No fit." },
     };
     const empty = render(<ApPayment />);
     expect(empty.container.innerHTML).not.toMatch(/NaN|undefined|Infinity/);

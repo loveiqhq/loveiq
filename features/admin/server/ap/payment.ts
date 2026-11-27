@@ -1,28 +1,20 @@
 /**
- * Assessment A · Payment (Marcus's artboard, synced 21 Oct 2026): who pays, how, at what price,
- * and what each pricing test did. Nine headline figures, the payment types, paid sales over time
- * by unlock type, checkout success and payment methods, who pays by segment, the pricing tests
- * and the personal price factors, and a price-elasticity model fitted to every whole month since
- * paid checkout began.
+ * Assessment A · Payment (Marcus's artboard "Payment copy", 24 Nov 2026): who pays, how and at
+ * what price. Nine headline figures, the payment types, the pre-unlock price test (EUR 1.99
+ * against choose your price), paid sales over time by unlock type, who pays by segment, and
+ * checkout success and payment methods. The pricing tests, the personal price factors, the
+ * price-elasticity model and the paygate exits left the page with that board.
  *
  * Money is the payment ledger (succeeded, not a test, staff out), by payment day; "who pays" and
  * the payment CVR are cohort figures (the range's finishers and what they bought so far), with
  * each person counted once (the design's "each person counted once").
  */
-import {
-  getPricingBucketsForPlan,
-  personalPriceFactors,
-} from "@features/pricing/logic/reportPricing";
-import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
-import { PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
-import { reportingDateTime, reportingDayStart } from "@shared/time/reporting-day";
+import { isPayToStartTracker, PAY_TO_START_JOURNEY } from "@features/pay-to-start/logic/journey";
 
-import { addDays, shortDate } from "./days";
 import {
   classifySource,
   deviceClass,
   FULL_PLANS,
-  PAY_TO_START_FROM,
   PRE_ON_SALE_FROM,
   PRE_PLANS,
   preBuysOf,
@@ -48,21 +40,23 @@ import { assessmentScope } from "./assessment";
 import {
   inScope,
   launched,
-  PAYWALL_SEEN_FROM,
   peopleBlocked,
   QUOTED_FROM,
   ratio,
-  reachedPaywall,
   salesIn,
-  SOURCE_FROM,
   STEP_DEVICE_FROM,
   subsIn,
   VISITOR_FROM,
   type Scope,
 } from "./metrics";
 import { genderShort, relationshipShort } from "./traffic";
-import { buildPaygateExits, type ExitEventRow, type PaygateExitsBlock } from "./paygate-exits";
-import { buildPriceTest, type PriceTestBlock, type PriceTestRow } from "./gate-price-test";
+import {
+  buildPriceTest,
+  GATE_PRICE_FROM,
+  priceArmOf,
+  type PriceTestBlock,
+  type PriceTestRow,
+} from "./gate-price-test";
 import type { ChoosePriceOption } from "@features/report/logic/choosePrice";
 
 export interface OverTimeRow {
@@ -104,6 +98,11 @@ export interface PaymentTypeRow {
   refunds: number | null;
   /** Of them, those refunded in full: they left the sales, so the refund rate counts them back. */
   fullRefunds: number | null;
+  /** The range's finishers who met this type's paywall; null where it has none to count. */
+  shown: number | null;
+  /** What the CVR is of: how many (`base`) of whom (`baseOf`); null where it has no rate. */
+  base: number | null;
+  baseOf: string | null;
 }
 
 export interface CheckoutPoint {
@@ -152,57 +151,6 @@ export interface SegmentTable {
   note: string;
 }
 
-export interface PricingArmRow {
-  test: string;
-  /** "May – Aug 2026 · ended", "Live". */
-  note: string;
-  arm: string;
-  control: boolean;
-  /** "€29.99 full · €39.99 all": the arm's list in the stretch. */
-  basePrice: string;
-  /** The readers in the stretch dealt this arm: everything in the row is theirs. */
-  finishers: number | null;
-  paywallViews: number | null;
-  /** Null when checkouts can't follow the filters (new or returning). */
-  checkouts: number | null;
-  /** Null when the test ran outside the range: nothing to count, not none sold. */
-  paidSales: number | null;
-  revenue: number | null;
-  /** For the AOV test: each sale's amount. */
-  aovLift: number | null;
-  aovConfidence: number | null;
-  /** Why the AOV comparison is blank. */
-  aovWhy: string | null;
-}
-
-export interface Elasticity {
-  /**
-   * Every whole month since paid checkout began (CHECKOUT_FROM) up to the range's end, whatever
-   * its start, whose finishers bought a full unlock: the average price they paid and their
-   * payment CVR (people who bought one ÷ people who finished, each person once).
-   */
-  points: Array<{
-    label: string;
-    price: number;
-    cvr: number;
-    sales: number;
-    finishers: number;
-    /** The month's days in the range, for its read-out. */
-    from?: string;
-    to?: string;
-    partial: boolean;
-  }>;
-  /** The months the points are, as the description names them: "May – Sep". */
-  months: string | null;
-  /** ln(cvr) = a + e · ln(price), or null under three points. */
-  fit: { a: number; e: number } | null;
-  /** The best month's CVR: the model is capped there. */
-  cap: number | null;
-  why: string | null;
-  /** Today's single-report prices, to read the model at. */
-  today: Array<{ arm: string; price: number }>;
-}
-
 export interface PaymentPayload extends PageHead {
   launched: boolean;
   /** Why every section about people is blank under these filters (peopleBlocked), or null. */
@@ -239,17 +187,6 @@ export interface PaymentPayload extends PageHead {
     note: string | null;
   };
   segments: SegmentTable[];
-  pricing: {
-    arms: PricingArmRow[];
-    factors: {
-      on: boolean | null;
-      since: string | null;
-      groups: Array<{ label: string; items: Array<{ key: string; multiplier: number }> }>;
-    };
-  };
-  elasticity: Elasticity;
-  /** The paygate's exit pages (paygate-exits.ts): reached, why not, pressed, paid after. */
-  exits: PaygateExitsBlock;
   /**
    * The pre-unlock price test, EUR 1.99 against "Choose your price" (gate-price-test.ts), per
    * half and per pick. It replaced #11 (the Core Archetype shown) and took its section.
@@ -257,23 +194,7 @@ export interface PaymentPayload extends PageHead {
   priceTest: PriceTestBlock;
 }
 
-/** The per-visitor price switch, as system_flags holds it; null when it couldn't be read. */
-export interface UpliftFlag {
-  enabled: boolean;
-  updatedAt: string | null;
-}
-
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-/** The pricing code's traffic sources, as their owners write them. */
-const TRAFFIC_NAMES: Record<string, string> = {
-  google: "Google",
-  direct: "Direct",
-  newsletter: "Newsletter",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  other: "Other",
-};
 
 /**
  * A checkout that was paid: succeeded, or paid and later refunded or disputed (a refund or a
@@ -283,6 +204,14 @@ const PAID: ReadonlySet<string> = new Set(["succeeded", "refunded", "disputed"])
 
 /** Paid checkout's first day: earlier checkout sessions were the team's tests. */
 export const CHECKOUT_FROM = "2026-05-01";
+
+/**
+ * The free survey's EUR 1.99 page went on at 14:38 UTC on 27 Oct 2026 (experiment registry #5,
+ * docs/runbooks/PRE_UNLOCK.md): only surveys submitted after it ever met the page, so the fixed
+ * pre-unlock's base counts from then.
+ */
+const FREE_GATE_ON_MS = Date.parse("2026-10-27T14:38:00Z");
+export const FREE_GATE_ON_DAY = "2026-10-27";
 
 /**
  * Finishers as people (the design's "each person counted once"): a person's finished surveys
@@ -302,71 +231,8 @@ export function people(subs: SubFact[]): SubFact[][] {
 const payingPeople = (ps: SubFact[][]) => ps.filter((p) => p.some((s) => s.paidAt)).length;
 const fullPeople = (ps: SubFact[][]) => ps.filter((p) => p.some((s) => s.full)).length;
 
-/**
- * The days the price-elasticity model is fitted on: every whole month from paid checkout's
- * start up to `to`, whatever the range's start (the design fits May – Sep under any range).
- * Null before the first whole month has ended.
- */
-export function fitMonths(to: string): { from: string; to: string } | null {
-  const whole = buckets(CHECKOUT_FROM, to, "month").filter((b) => b.full);
-  return whole.length ? { from: whole[0]!.from, to: whole[whole.length - 1]!.to } : null;
-}
-
-/** "May – Sep" for months in a row, "May, Jun and Aug" with a gap. */
-function monthsText(ms: Array<{ label: string; from: string; to: string }>): string | null {
-  if (!ms.length) return null;
-  const names = ms.map((m) => m.label.split(" (")[0]!);
-  const inRow = ms.every((m, i) => i === 0 || m.from === addDays(ms[i - 1]!.to, 1));
-  if (ms.length === 1) return names[0]!;
-  return inRow
-    ? `${names[0]} – ${names[names.length - 1]}`
-    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
 /** The notes of head() that concern other pages: nothing here reads visits or unfinished starts. */
 const OTHER_PAGES = [/^The visit log counts every visitor/, /^Unfinished survey starts older than/];
-
-/**
- * The pricing tests, one stretch of unchanged price lists each, as get_price_list_changes()
- * pins them and the experiment readouts split them: Pricing 2.0's A and B lists, A raised on
- * 24 Aug 2026 (2.1, a new comparison against the same B), A retired on 31 Aug; Pricing 3.0
- * from its restart with B3 lowered (PRICE_TEST_START_AT). "list": today's price list. Before
- * Pricing 2.0 the letters named earlier experiments with personal prices, not read here.
- */
-const PRICE_TESTS: Array<{
-  test: string;
-  from: string;
-  to: string | null;
-  arms: Array<{ arm: string; price: string }>;
-}> = [
-  {
-    test: "Pricing 2.0",
-    from: "2026-08-03T20:09:45Z",
-    to: "2026-08-24T02:43:12Z",
-    arms: [
-      { arm: "A", price: "€9.99 full · €19.99 core · €29.99 all" },
-      { arm: "B", price: "€29.00 full · €39.00 core · €49.00 all" },
-    ],
-  },
-  {
-    test: "Pricing 2.1",
-    from: "2026-08-24T02:43:12Z",
-    to: "2026-08-31T10:09:20Z",
-    arms: [
-      { arm: "A", price: "€39.99 full · €49.99 core · €59.00 all" },
-      { arm: "B", price: "€29.00 full · €39.00 core · €49.00 all" },
-    ],
-  },
-  {
-    test: "Pricing 3.0",
-    from: PRICE_TEST_START_AT,
-    to: null,
-    arms: [
-      { arm: "A3", price: "list" },
-      { arm: "B3", price: "list" },
-    ],
-  },
-];
 
 const METHOD_NAMES: Record<string, string> = {
   link: "Stripe Link",
@@ -383,104 +249,15 @@ const METHOD_NAMES: Record<string, string> = {
   google_pay: "Google Pay",
 };
 
-/** ln Γ(x), by Lanczos' approximation (g = 7). */
-function lnGamma(x: number): number {
-  const c = [
-    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
-    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
-    1.5056327351493116e-7,
-  ];
-  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
-  const y = x - 1;
-  let s = c[0]!;
-  for (let i = 1; i < 9; i++) s += c[i]! / (y + i);
-  const t = y + 7.5;
-  return 0.5 * Math.log(2 * Math.PI) + (y + 0.5) * Math.log(t) - t + Math.log(s);
-}
-
-/** The regularized incomplete beta function I_x(a, b), by Lentz's continued fraction. */
-function betaInc(x: number, a: number, b: number): number {
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  if (x > (a + 1) / (a + b + 2)) return 1 - betaInc(1 - x, b, a);
-  const front =
-    Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x)) / a;
-  const TINY = 1e-30;
-  let f = 1;
-  let c = 1;
-  let d = 0;
-  for (let i = 0; i <= 300; i++) {
-    const m = i >> 1;
-    const num =
-      i === 0
-        ? 1
-        : i % 2 === 0
-          ? (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m))
-          : -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1));
-    d = 1 + num * d;
-    d = 1 / (Math.abs(d) < TINY ? TINY : d);
-    c = 1 + num / c;
-    if (Math.abs(c) < TINY) c = TINY;
-    f *= c * d;
-    if (Math.abs(1 - c * d) < 1e-12) break;
-  }
-  return front * (f - 1);
-}
-
-/**
- * Welch's t-test, B against A on their means, with the Welch-Satterthwaite degrees of freedom:
- * a handful of sales a side is far from the normal curve, which would read it near-certain.
- */
-export function welch(
-  a: number[],
-  b: number[]
-): { lift: number | null; confidence: number | null } {
-  const mean = (x: number[]) => x.reduce((s, v) => s + v, 0) / x.length;
-  if (a.length < 2 || b.length < 2) return { lift: null, confidence: null };
-  const ma = mean(a);
-  const mb = mean(b);
-  const sa = a.reduce((s, v) => s + (v - ma) ** 2, 0) / (a.length - 1) / a.length;
-  const sb = b.reduce((s, v) => s + (v - mb) ** 2, 0) / (b.length - 1) / b.length;
-  const lift = ma > 0 ? mb / ma - 1 : null;
-  if (sa + sb === 0) return { lift, confidence: null };
-  const t = (mb - ma) / Math.sqrt(sa + sb);
-  const df = (sa + sb) ** 2 / (sa ** 2 / (a.length - 1) + sb ** 2 / (b.length - 1));
-  // Two-sided: 1 − p, where p = I_{df/(df+t²)}(df/2, 1/2).
-  return { lift, confidence: 1 - betaInc(df / (df + t * t), df / 2, 0.5) };
-}
-
-/** Least squares of ln(cvr) on ln(price). */
-export function fitElasticity(
-  points: Array<{ price: number; cvr: number }>
-): { a: number; e: number } | null {
-  const ok = points.filter((p) => p.price > 0 && p.cvr > 0);
-  if (ok.length < 3) return null;
-  const lx = ok.map((p) => Math.log(p.price));
-  const ly = ok.map((p) => Math.log(p.cvr));
-  const mx = lx.reduce((a, b) => a + b, 0) / lx.length;
-  const my = ly.reduce((a, b) => a + b, 0) / ly.length;
-  const sxx = lx.reduce((a, x) => a + (x - mx) ** 2, 0);
-  if (sxx === 0) return null;
-  const e = lx.reduce((a, x, i) => a + (x - mx) * (ly[i]! - my), 0) / sxx;
-  return { a: my - e * mx, e };
-}
-
 export function buildPayment(input: {
   facts: Facts;
   filters: ApFilters;
   today: string;
   now: Date;
-  /** pricing_uplift_enabled, or null when it couldn't be read. */
-  uplift: UpliftFlag | null;
-  /**
-   * The facts of fitMonths(range end), when the range's own don't cover those months; without
-   * them the model reads the range's facts.
-   */
-  fitFacts?: Facts | null;
   /** Whether the report's EUR 1.99 gate is switched on now; null when it couldn't be read. */
   gateOn?: boolean | null;
-  /** The exit pages' events (readPaygateExitRows); null when they couldn't be read. */
-  exitRows?: ExitEventRow[] | null;
+  /** Whether the price test (choose your price) is switched on now; null when unreadable. */
+  priceOn?: boolean | null;
   /** The surveys whose report saw the EUR 1.99 page (readGateSeen); null when unreadable. */
   gateSeen?: ReadonlySet<number> | null;
   /** The price test's surveys with their tracker (readPriceTestRows); null when unreadable. */
@@ -488,7 +265,7 @@ export function buildPayment(input: {
   /** The choosing half's picks by survey (readPriceTestChoices); null when unreadable. */
   priceChoices?: ReadonlyMap<number, ChoosePriceOption> | null;
 }): PaymentPayload {
-  const { facts, filters: f, today, now, uplift } = input;
+  const { facts, filters: f, today, now } = input;
   const scope: Scope = assessmentScope(f);
   const on = launched(scope);
   // A filter the records can't follow over this range: every figure about people is blank.
@@ -838,187 +615,15 @@ export function buildPayment(input: {
       : "";
   for (const t of segments) t.note = (notes[t.key] ?? "") + preFrom;
 
-  // ---- the pricing tests: each a stretch of unchanged price lists (get_price_list_changes),
-  // read as the experiment readouts read them: the readers who finished in the stretch, each on
-  // the list their quote was dealt (a later re-sync moved unpaid quotes to newer lists), and
-  // their own checkouts and sales on it, up to the stretch's end or the range's.
-  const listPrice = (arm: "A3" | "B3") => {
-    const full = getPricingBucketsForPlan("full_report").find((b) => b.code === arm);
-    const all = getPricingBucketsForPlan("all_reports").find((b) => b.code === arm);
-    return `${full ? `€${(full.startingCents / 100).toFixed(2)} full` : ""}${all ? ` · €${(all.startingCents / 100).toFixed(2)} all` : ""}`;
-  };
-  const rangeFrom = reportingDayStart(facts.from).getTime();
-  const rangeUntil = reportingDayStart(addDays(facts.to, 1)).getTime();
-  const at = (iso: string) => {
-    const [day, time] = reportingDateTime(new Date(iso)).split(" ");
-    return `${shortDate(day!)} ${time}`;
-  };
-  const pricingArms: PricingArmRow[] = PRICE_TESTS.flatMap((test) => {
-    const start = Date.parse(test.from);
-    const end = test.to ? Date.parse(test.to) : Infinity;
-    const from = Math.max(start, rangeFrom);
-    const until = Math.min(end, rangeUntil);
-    const inRange = from < until;
-    // A stretch the range cuts short says so: its readers are only the range's part of it. A
-    // live test runs on, so only a range ending before yesterday (the last whole day) cuts its end.
-    const endCut = test.to ? until < end : facts.to < addDays(today, -1);
-    const cut = inRange && (from > start || endCut) ? " · cut to this range" : "";
-    const note = test.to
-      ? `${at(test.from)} – ${at(test.to)} · ended${cut}`
-      : `Live · from ${at(test.from)}${cut}`;
-    // Paywall views are recorded from PAYWALL_SEEN_FROM: an earlier stretch has none to show.
-    const viewsOk = start >= reportingDayStart(PAYWALL_SEEN_FROM).getTime();
-    const lastDay = reportingDateTime(new Date(until - 1)).slice(0, 10);
-    const rows = test.arms.map((a) => {
-      // The readers who finished in the stretch and were first quoted in it: one first quoted
-      // after it ended saw the next prices, as the experiment readouts leave them out, and so is
-      // a survey bought before it was taken (pay to start): no arm's price sold it.
-      const cohort = inRange
-        ? subs.filter((x) => {
-            const t = Date.parse(x.at);
-            const quoted = x.quotedAt === null ? NaN : Date.parse(x.quotedAt);
-            return x.priceArm === a.arm && !x.pts && t >= from && t < until && quoted < end;
-          })
-        : [];
-      const ids = new Set(cohort.map((x) => x.id));
-      const amounts = cohort.flatMap((x) =>
-        (x.pays ?? []).filter(([t]) => t * 1000 >= from && t * 1000 < until).map(([, v]) => v)
-      );
-      const cs = checkouts.filter((c) => c.sid !== null && ids.has(c.sid) && c.day <= lastDay);
-      return { a, cohort, amounts, cs };
-    });
-    const t = welch(rows[0]!.amounts, rows[1]!.amounts);
-    return rows.map(({ a, cohort, amounts, cs }, i): PricingArmRow => ({
-      test: test.test,
-      note: inRange ? note : `${note} · not in this range`,
-      arm: a.arm,
-      control: i === 0,
-      basePrice: a.price === "list" ? listPrice(a.arm as "A3" | "B3") : a.price,
-      finishers: inRange && !tablet ? cohort.length : null,
-      paywallViews: inRange && viewsOk ? cohort.filter(reachedPaywall).length : null,
-      checkouts: checkoutWhy || !inRange ? null : cs.reduce((n, c) => n + c.n, 0),
-      paidSales: inRange ? amounts.length : null,
-      revenue: inRange ? round2(amounts.reduce((n, v) => n + v, 0)) : null,
-      aovLift: i === 0 ? null : t.lift,
-      aovConfidence: i === 0 ? null : t.confidence,
-      aovWhy:
-        i === 0
-          ? null
-          : !inRange
-            ? "Not in this range"
-            : rows[0]!.amounts.length < 2 || rows[1]!.amounts.length < 2
-              ? "Too few sales to compare"
-              : null,
-    }));
-  });
-  const factors = personalPriceFactors();
-  const TIER_NAMES: Record<string, string> = Object.fromEntries(
-    TIERS.map((t) => [t.value, t.label])
-  );
-  const factorGroups = [
-    {
-      label: "Country tier",
-      items: factors.country.map((x) => ({
-        key: TIER_NAMES[x.key] ?? x.key,
-        multiplier: x.multiplier,
-      })),
-    },
-    { label: "Device", items: factors.device },
-    {
-      label: "Traffic source",
-      items: factors.traffic.map((x) => ({
-        key: TRAFFIC_NAMES[x.key] ?? x.key,
-        multiplier: x.multiplier,
-      })),
-    },
-    {
-      label: "Behaviour bucket",
-      items: factors.behaviour.map((x) => ({
-        key: x.key.charAt(0).toUpperCase() + x.key.slice(1),
-        multiplier: x.multiplier,
-      })),
-    },
-    { label: "Engagement score", items: factors.engagement },
-    {
-      label: "Discount step",
-      items: factors.discount.map((x) => ({
-        key: x.key.charAt(0).toUpperCase() + x.key.slice(1),
-        multiplier: x.multiplier,
-      })),
-    },
-  ];
-
-  // ---- price elasticity: every whole month since paid checkout began, up to the range's end
-  // (whatever its start, as drawn), whose finishers bought a full unlock (so far): each month's
-  // own people, each once, the share who bought one, and what their full unlocks cost on average.
-  // A survey bought before it was taken (pay to start) is left out: no report price sold it.
-  // A filter its records can't follow back to that start leaves it blank (peopleBlocked).
-  const checkoutDay = rangeLabel(CHECKOUT_FROM, CHECKOUT_FROM);
-  // A finisher's tier and device come from their price quote, which every finisher has only
-  // from QUOTED_FROM (15 May): May's first fortnight would be partly missing under either filter.
-  const quoteFiltered =
-    (scope.tier !== "all" || scope.device !== "all") && CHECKOUT_FROM < QUOTED_FROM;
-  const fitBlocked =
-    peopleBlocked(scope, CHECKOUT_FROM) || quoteFiltered
-      ? `The model is fitted on every whole month from ${checkoutDay}, when paid checkout began, but ${
-          scope.device === "tablet"
-            ? `tablets are told apart only from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}`
-            : scope.source !== "all"
-              ? `sources are recorded only from ${rangeLabel(SOURCE_FROM, SOURCE_FROM)}`
-              : scope.visitor !== "all"
-                ? `new and returning are told apart only from ${rangeLabel(VISITOR_FROM, VISITOR_FROM)}`
-                : `a finisher's ${scope.tier !== "all" ? "country tier" : "device"} comes from their price quote, which every finisher has only from ${rangeLabel(QUOTED_FROM, QUOTED_FROM)}`
-        }: it can't follow this filter.`
-      : null;
-  const fitDays = tablet || fitBlocked ? null : fitMonths(facts.to);
-  const elFacts = input.fitFacts ?? facts;
-  const elPoints = (fitDays ? buckets(fitDays.from, fitDays.to, "month") : [])
-    .map((b) => {
-      const xs = subsIn(elFacts, scope, b.from, b.to).filter((x) => !x.pts);
-      const ps = people(xs);
-      const n = xs.reduce((a, x) => a + x.fullSales, 0);
-      return {
-        label: b.label,
-        price: n ? round2(xs.reduce((a, x) => a + x.fullRevenue, 0) / n) : 0,
-        cvr: ps.length ? fullPeople(ps) / ps.length : 0,
-        sales: n,
-        finishers: ps.length,
-        from: b.from,
-        to: b.to,
-        partial: false,
-      };
-    })
-    .filter((p) => p.sales > 0 && p.finishers > 0);
-  const fit = fitElasticity(elPoints);
-  const k = elPoints.length;
-  const elasticity: Elasticity = {
-    points: elPoints,
-    months: monthsText(elPoints),
-    fit,
-    cap: elPoints.length ? Math.max(...elPoints.map((p) => p.cvr)) : null,
-    why:
-      tablet ??
-      fitBlocked ??
-      (fit
-        ? null
-        : k >= 3
-          ? "The model could not be fitted: every month's average price is the same."
-          : `The model needs three whole months from ${checkoutDay}, when paid checkout began, whose finishers bought a full unlock; up to this range's end there ${k === 0 ? "is none" : k === 1 ? "is one" : "are two"}.`),
-    today: (["A3", "B3"] as const).flatMap((arm) => {
-      const b = getPricingBucketsForPlan("full_report").find((x) => x.code === arm);
-      return b ? [{ arm, price: b.startingCents / 100 }] : [];
-    }),
-  };
-
-  // ---- payment types: every way a reader pays, across both funnels (design, 21 Oct 2026), each
-  // sale in one row, so the live rows add up to the paid sales. Pay to start's own purchase
-  // carries its journey (metadata.journey); a full unlock bought after a paid EUR 1.99 is its
-  // upgrade, whichever funnel sold the EUR 1.99. A type not on sale over the range is blank,
-  // never 0: pay to start before it went live, the report's EUR 1.99 gate while it is switched
-  // off (and sold nothing). A plan sold outside them (a retired one) gets its own row, and what a
-  // pay-to-start reader bought on the report afterwards its own. Refunds carry no visitor
-  // history: blank under the narrowing filters (the Funnel filter they follow), and when they
-  // weren't read.
+  // ---- payment types (Marcus's Payment board, 24 Nov 2026): every way a reader pays after the
+  // free survey, each sale in one row, so the rows add up to the paid sales. The pre-unlock at a
+  // fixed EUR 1.99 or at a price the reader chose (the price test's halves, by survey), the full
+  // report bought on the report, and the full report bought after a pre-unlock (an upgrade,
+  // whichever page sold the pre-unlock). Pay to start is retired (27 Nov 2026): its purchases and
+  // what its readers bought later keep a row of their own, shown only in a range that has them,
+  // as a retired plan's are. A type not on sale over the range is blank, never 0. Paywall shown
+  // and CVR read the range's finishers: those who met that page, and what share bought.
+  // Refunds carry no visitor history: blank under the narrowing filters, and when not read.
   const free = scope.funnel === "free";
   const refundsWhy =
     facts.refunds === undefined
@@ -1032,17 +637,21 @@ export function buildPayment(input: {
       ? (facts.refunds ?? []).filter((r) => !(free && r.pts))
       : [];
   type Sold = {
+    sid: number;
     plan: string | null;
     journey?: string | null;
     upgrade?: boolean;
     pts?: boolean;
   };
+  type Reach = { shown: number | null; base: number | null; baseOf: string | null };
+  const NO_REACH: Reach = { shown: null, base: null, baseOf: null };
   const typeRow = (
     key: string,
     name: string,
     line: string,
     onSale: boolean,
-    has: (m: Sold) => boolean
+    has: (m: Sold) => boolean,
+    reach: Reach = NO_REACH
   ): PaymentTypeRow => {
     const xs = sales.filter(has);
     const rs = refunds?.filter(has) ?? null;
@@ -1057,78 +666,138 @@ export function buildPayment(input: {
       revenue: live ? sum(xs) : null,
       refunds: live && rs ? rs.length : null,
       fullRefunds: live && rs ? rs.filter((r) => r.full).length : null,
+      shown: live ? reach.shown : null,
+      base: live ? reach.base : null,
+      baseOf: live ? reach.baseOf : null,
     };
   };
   const bought = (m: Sold) => m.journey === PAY_TO_START_JOURNEY;
-  // Bought on a pay-to-start reader's report after the purchase (not an upgrade from EUR 1.99).
-  const later = (m: Sold) => !bought(m) && m.pts === true && !m.upgrade;
-  // "Free survey" leaves pay to start's rows out: blank, never 0.
-  const ptsOn = facts.to >= PAY_TO_START_FROM && !free;
-  const ptsLine = free
-    ? "Pay to start · left out by the Funnel filter"
-    : ptsOn
-      ? "Pay to start · live"
-      : `Pay to start · live from ${rangeLabel(PAY_TO_START_FROM, PAY_TO_START_FROM)}`;
+  // Everything a pay-to-start reader bought on their report afterwards, an upgrade included:
+  // it all belongs to the retired funnel's row.
+  const later = (m: Sold) => !bought(m) && m.pts === true;
+  const retiredPts = (m: Sold) => bought(m) || later(m);
+  const beforeTest = facts.to < GATE_PRICE_FROM;
+  // The page that sold a pre-unlock decides its row: only the "Choose your price" page's
+  // checkout names a pick (metadata.priceOption, readPriceTestChoices). A reader who finished
+  // before the switch and paid a chosen price after it is a choice, whatever their survey's
+  // stamp says; a EUR 1.99 sale is fixed, whichever half its survey was in.
+  const choices = input.priceChoices ?? null;
+  const chose = (m: Sold) => choices?.has(m.sid) === true;
+  // Without the picks, a range that reaches the test can't split its pre-unlocks: one row holds
+  // them all, with the reason, so the rows still add up to the paid sales.
+  const splitWhy =
+    !beforeTest && choices === null ? "Who chose a price could not be read just now." : null;
+  // The survey's stamp (the price test's half) decides who could buy each: the bases.
+  const halves = new Map<number, string>();
+  for (const row of input.priceRows ?? []) {
+    if (isPayToStartTracker(row.utm_tracker)) continue;
+    const arm = priceArmOf(row);
+    if (arm) halves.set(row.id, arm);
+  }
+  const halvesWhy =
+    !beforeTest && (input.priceRows ?? null) === null
+      ? "Who is in which half of the price test could not be read just now."
+      : null;
+  const seen = input.gateSeen ?? null;
+  const shownOf = (xs: SubFact[]) => (seen ? xs.filter((s) => seen.has(s.id)).length : null);
+  const noun = (n: number, one: string, many: string) => (n === 1 ? one : many);
+  const freeFinishers = subs.filter((s) => !s.pts);
+  // The free survey's EUR 1.99 page met only the finishers who submitted after its switch-on.
+  const gated = freeFinishers.filter((s) => Date.parse(s.at) >= FREE_GATE_ON_MS);
+  const fixedFinishers = gated.filter((s) => halves.get(s.id) !== "choose");
+  const chooseFinishers = gated.filter((s) => halves.get(s.id) === "choose");
+  const preBuyers = freeFinishers.filter((s) => preBuysOf(s).length > 0).length;
   const gateOn = input.gateOn === true;
+  const priceOn = input.priceOn === true && !beforeTest;
+  const gateDay = rangeLabel(FREE_GATE_ON_DAY, FREE_GATE_ON_DAY);
+  const beforeGate = facts.to < FREE_GATE_ON_DAY;
   const otherPlans = [
     ...new Set([...sales.map((m) => m.plan), ...(refunds ?? []).map((r) => r.plan)]),
   ].filter((p) => !isFull({ plan: p }) && !isPre({ plan: p }));
+  const isPreHere = (m: Sold) => isPre(m) && !retiredPts(m);
+  const reachOf = (xs: SubFact[]): Reach =>
+    halvesWhy
+      ? NO_REACH
+      : { shown: shownOf(xs), base: xs.length, baseOf: noun(xs.length, "finisher", "finishers") };
+  // A switch that couldn't be read is never read as off.
+  const gateLine = beforeGate
+    ? `On sale from ${gateDay}`
+    : gateOn
+      ? (halvesWhy ?? "")
+      : input.gateOn === false
+        ? "The €1.99 gate is switched off"
+        : "The €1.99 gate's switch couldn't be read";
+  const priceLine = beforeTest
+    ? "On sale with the price test, from 26 Nov 2026"
+    : priceOn
+      ? (halvesWhy ?? "")
+      : input.priceOn === false
+        ? "The price test is switched off"
+        : "The price test's switch couldn't be read";
+  const ptsRow = typeRow(
+    "pay-to-start",
+    "Pay to start (retired)",
+    "Retired 27 Nov 2026: the purchases made on its pages, and what their readers bought later",
+    false,
+    retiredPts
+  );
   const types: PaymentTypeRow[] = [
+    ...(splitWhy
+      ? [typeRow("pre", "Pre-unlock", splitWhy, gateOn || priceOn, isPreHere)]
+      : [
+          typeRow(
+            "pre-fixed",
+            "Pre-unlock · fixed €1.99",
+            gateLine,
+            gateOn && !beforeGate,
+            (m) => isPreHere(m) && !chose(m),
+            reachOf(fixedFinishers)
+          ),
+          typeRow(
+            "pre-choose",
+            "Pre-unlock · choose your price",
+            priceLine,
+            priceOn,
+            (m) => isPreHere(m) && chose(m),
+            reachOf(chooseFinishers)
+          ),
+        ]),
     typeRow(
       "full",
-      "Full unlock after report",
-      "Free survey · live",
+      "Full report on the report",
+      "",
       true,
-      (m) => isFull(m) && !bought(m) && !m.upgrade && !later(m)
+      (m) => isFull(m) && !retiredPts(m) && !m.upgrade,
+      {
+        shown: null,
+        base: freeFinishers.length,
+        baseOf: noun(freeFinishers.length, "finisher", "finishers"),
+      }
     ),
     typeRow(
-      "pre",
-      "Pre-unlock after report",
-      // The switch as it is now: null when it couldn't be read (never read as off).
-      gateOn
-        ? "Free survey · the €1.99 gate is on"
-        : input.gateOn === null || input.gateOn === undefined
-          ? "Free survey · the €1.99 gate's switch couldn't be read"
-          : "Free survey · the €1.99 gate is switched off",
-      gateOn,
-      (m) => isPre(m) && !bought(m) && !later(m)
+      "upgrade",
+      "Full report after a pre-unlock",
+      beforeGate ? `On sale from ${gateDay}` : "",
+      (gateOn || priceOn) && !beforeGate,
+      (m) => isFull(m) && !retiredPts(m) && m.upgrade === true,
+      {
+        shown: preBuyers,
+        base: preBuyers,
+        baseOf: noun(preBuyers, "pre-unlock buyer", "pre-unlock buyers"),
+      }
     ),
     ...otherPlans.map((p) =>
       typeRow(
         `plan-${p ?? "none"}`,
         p === "essentials" ? "Essentials (retired)" : (p ?? "Plan not recorded"),
-        "Free survey",
+        "",
         true,
-        (x) => x.plan === p && !later(x)
+        (x) => x.plan === p && !retiredPts(x)
       )
     ),
-    typeRow("pay-full", "Pay to start · full", ptsLine, ptsOn, (m) => isFull(m) && bought(m)),
-    typeRow("pay-pre", "Pay to start · €1.99 pre", ptsLine, ptsOn, (m) => isPre(m) && bought(m)),
-    typeRow("pay-later", "Pay to start · later purchase on the report", ptsLine, ptsOn, later),
-    typeRow(
-      "upgrade",
-      "Upgrade after €1.99",
-      // An upgrade follows a paid EUR 1.99: pay to start's page, or the report's own gate.
-      free
-        ? gateOn
-          ? "Free survey · live"
-          : input.gateOn === false
-            ? "Free survey · the €1.99 gate is switched off"
-            : "Free survey · the €1.99 gate's switch couldn't be read"
-        : ptsOn && gateOn
-          ? "Both funnels · live"
-          : ptsOn
-            ? input.gateOn === false
-              ? "Pay to start · live (the report's €1.99 gate is switched off)"
-              : "Pay to start · live (the report's €1.99 gate's switch couldn't be read)"
-            : gateOn
-              ? "Free survey · live"
-              : ptsLine,
-      ptsOn || gateOn,
-      (m) => isFull(m) && !bought(m) && m.upgrade === true
-    ),
+    // Retired: only where the range has its sales or refunds.
+    ...(ptsRow.live ? [ptsRow] : []),
   ];
-
   // Under a filter the records can't follow over this range, the sections about people are
   // blank with the reason (blocked), never a column of zeros.
   const pageHead = head(f, today, now, false, facts);
@@ -1172,7 +841,7 @@ export function buildPayment(input: {
       preWhy,
       note:
         facts.from < CHECKOUT_FROM
-          ? `From ${checkoutDay}, when paid checkout began: nothing was sold before.`
+          ? `From ${rangeLabel(CHECKOUT_FROM, CHECKOUT_FROM)}, when paid checkout began: nothing was sold before.`
           : null,
     },
     checkout: {
@@ -1193,22 +862,6 @@ export function buildPayment(input: {
         .join(" "),
     },
     segments: tablet ? [] : segments,
-    pricing: {
-      arms: tablet ? [] : pricingArms,
-      factors: {
-        on: uplift ? uplift.enabled : null,
-        since: uplift?.updatedAt ?? null,
-        groups: factorGroups,
-      },
-    },
-    elasticity,
-    exits: buildPaygateExits({
-      subs,
-      rows: input.exitRows ?? null,
-      gateSeen: input.gateSeen ?? null,
-      blocked: tablet,
-      to: facts.to,
-    }),
     priceTest: buildPriceTest({
       subs,
       rows: input.priceRows ?? null,

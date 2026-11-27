@@ -121,25 +121,27 @@ select count(*) as reached_payment_page,
 
 const TYPES_Q = `-- The range's real sales by payment type (payment day), each sale in one row, with those
 -- refunded since: a full refund turns a payment to refunded, a part refund keeps it with
--- refund_amount. Pay to start's own purchase carries its journey; an upgrade after EUR 1.99 is
--- a full unlock bought on a report whose EUR 1.99 Core Archetype was paid before it; what a
--- pay-to-start reader bought on the report after has its own row.
+-- refund_amount. A pre-unlock is at a chosen price when the "Choose your price" page sold it
+-- (its checkout names the pick: metadata->>'priceOption'), whichever half its survey was in;
+-- an upgrade is a full report bought on a report whose pre-unlock was paid before it. Pay to
+-- start is retired (27 Nov 2026): its own purchases and everything its readers bought on the
+-- report afterwards, upgrades included, share one row.
 with sold as (
-  select case when p.metadata->>'journey' = 'pay_to_start' and ${FULL_PLAN} then 'Pay to start · full'
-              when p.metadata->>'journey' = 'pay_to_start' and ${PRE_PLAN} then 'Pay to start · €1.99 pre'
+  select case when p.metadata->>'journey' = 'pay_to_start'
+                or exists (select 1 from prepaid_report_access pa
+                            where pa.consumed_submission_id = s.id and pa.offer is not null
+                              and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
+                then 'Pay to start (retired)'
+              when ${PRE_PLAN} and p.metadata->>'priceOption' is not null
+                then 'Pre-unlock · choose your price'
+              when ${PRE_PLAN} then 'Pre-unlock · fixed €1.99'
               when ${FULL_PLAN} and exists (
                      select 1 from payment e
                       where e.personal_report_id = p.personal_report_id and e.metadata->>'plan' = 'initial'
                         and e.amount > 0 and e.status in ('succeeded', 'refunded')
                         and not coalesce(e.is_test, false) and coalesce(e.payment_date_time, e.created_date_time) < coalesce(p.payment_date_time, p.created_date_time))
-                then 'Upgrade after €1.99'
-              -- Bought on a pay-to-start reader's report afterwards: their survey was bought first.
-              when exists (select 1 from prepaid_report_access pa
-                            where pa.consumed_submission_id = s.id and pa.offer is not null
-                              and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
-                then 'Pay to start · later purchase on the report'
-              when ${FULL_PLAN} then 'Full unlock after report'
-              when ${PRE_PLAN} then 'Pre-unlock after report'
+                then 'Full report after a pre-unlock'
+              when ${FULL_PLAN} then 'Full report on the report'
               else coalesce(p.metadata->>'plan', 'Plan not recorded') end as payment_type,
          p.status, p.amount, coalesce(p.refund_amount, 0) as refunded
     ${SALES_JOIN}
@@ -159,6 +161,34 @@ select payment_type,
   from sold
  group by 1
  order by 2 desc;`;
+
+// The finishers behind a payment type's Paywall shown and CVR: the range's free-survey
+// finishers by the price test's half, and those whose report showed the EUR 1.99 page.
+const TYPES_REACH_Q = `-- The range's free-survey finishers by the price test's half (the survey's stamp), and those
+-- whose report showed the EUR 1.99 page (its first view). The pre-unlock rows count finishers
+-- submitted after the free survey's EUR 1.99 page went on (27 Oct 2026, 14:38 UTC); a survey
+-- claimed by a pay-to-start purchase is left out. The pre-unlock buyers are the base of the
+-- full report bought after one.
+with fin as (
+  select s.id, s.created_date_time,
+         case when s.utm_tracker is not null and pg_input_is_valid(s.utm_tracker, 'jsonb')
+                   and jsonb_typeof(s.utm_tracker::jsonb) = 'object'
+              then s.utm_tracker::jsonb end as j
+    from survey_submission s
+   where s.status = 'completed'
+     and (s.created_date_time at time zone 'Europe/Berlin')::date between :from and :to
+     and s.created_date_time >= '2026-10-27 14:38+00'
+     and not exists (select 1 from prepaid_report_access pa
+                      where pa.consumed_submission_id = s.id and pa.offer is not null
+                        and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
+     and not exists (select 1 from ap_team_user t where t.id = s.user_id)
+)
+select case when j->>'gate_reveal_arm' = 'choose' then 'choose' else 'fixed' end as half,
+       count(*) as finishers,
+       count(*) filter (where r.initial_gate_seen_at is not null) as paywall_shown
+  from fin f
+  left join personal_report r on r.survey_submission_id = f.id
+ group by 1;`;
 
 /** The over-time periods: as the page, weeks up to about four months, from 1 May 2026. */
 const PERIODS_NOTE = `-- Per period at the page's grain (:grain: a day up to two weeks, a week up to about four months,
@@ -323,76 +353,6 @@ select segment,
  group by 1
  order by 2 desc;`;
 
-const PT_Q = `-- Pricing 3.0, from its start (8 Oct 2026, 15:23 UTC) to the range's end: the readers who
--- finished in it, each on the arm their FIRST price quote was dealt (before any re-sync moved
--- it), and what they did. For Pricing 2.0 or 2.1 put the stretch in b and the arms A and B
--- (2.0: 3 Aug 20:09:45 – 24 Aug 02:43:12 UTC; 2.1: on to 31 Aug 10:09:20 UTC); the page shows
--- their paywall views as — (a paywall seen is recorded from 6 Sep 2026). The AOV lift is B's
--- aov over A's, less 1; its confidence is Welch's t-test on each arm's sales (sale_variance).
-with b as (
-  select timestamptz '2026-10-08 15:23:00+00' as start, timestamptz 'infinity' as stop,
-         (date :from)::timestamp at time zone 'Europe/Berlin' as range_start,
-         ((date :to) + 1)::timestamp at time zone 'Europe/Berlin' as range_end
-), w as (
-  select greatest(start, range_start) as since, least(stop, range_end) as until, stop from b
-), first_quote as (
-  select q.survey_submission_id as sid, min(q.created_date_time) as quoted_at,
-         (array_agg(coalesce(h.arm, q.experiment_group) order by q.created_date_time, q.id)
-            filter (where coalesce(h.arm, q.experiment_group) is not null))[1] as arm
-    from report_price_quote q
-    left join lateral (select x.old_experiment_group as arm from report_price_quote_arm_history x
-                        where x.quote_id = q.id order by x.changed_at, x.id limit 1) h on true
-   group by 1
-), cohort as (
-  select s.id, f.arm,
-         exists (select 1 from report_price_quote q where q.survey_submission_id = s.id
-                   and (q.paywall_reached_at is not null or q.checkout_started_at is not null))
-         or exists (select 1 from analytics_event a where a.survey_submission_id = s.id
-                      and a.event_type = 'paywall_initiated'
-                      and coalesce(a.metadata->>'source', '') <> 'offer_link')
-         or exists (select 1 from personal_report pr join payment p on p.personal_report_id = pr.id
-                     where pr.survey_submission_id = s.id and ${REAL_SALE}) as reached_paywall
-    from survey_submission s join first_quote f on f.sid = s.id, w
-   where s.status = 'completed' and s.created_date_time >= w.since and s.created_date_time < w.until
-     and f.quoted_at < w.stop and f.arm in ('A3', 'B3')
-     and ${NOT_STAFF}
-     -- A survey bought before it was taken (pay to start): no arm's price sold it.
-     and not exists (select 1 from prepaid_report_access pa
-                      where pa.consumed_submission_id = s.id and pa.offer is not null
-                        and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
-), pays as (
-  select c.arm, p.status, p.amount, coalesce(p.payment_date_time, p.created_date_time) as created_date_time,
-         case when p.status = 'canceled' then p.created_date_time - interval '24 hours'
-              else p.created_date_time end as opened
-    from cohort c
-    join personal_report pr on pr.survey_submission_id = c.id
-    join payment p on p.personal_report_id = pr.id
-   where not coalesce(p.is_test, false) and p.amount > 0
-), money as (
-  select x.arm,
-         count(*) filter (where (x.opened at time zone 'Europe/Berlin')::date between :from
-                     and ((w.until - interval '1 millisecond') at time zone 'Europe/Berlin')::date) as checkouts,
-         count(*) filter (where x.status = 'succeeded'
-                            and x.created_date_time >= w.since and x.created_date_time < w.until) as paid_sales,
-         coalesce(sum(x.amount) filter (where x.status = 'succeeded'
-                            and x.created_date_time >= w.since and x.created_date_time < w.until), 0) as revenue,
-         var_samp(x.amount) filter (where x.status = 'succeeded'
-                            and x.created_date_time >= w.since and x.created_date_time < w.until) as sale_variance
-    from pays x, w
-   group by 1
-)
-select c.arm, count(*) as finishers, count(*) filter (where c.reached_paywall) as paywall_views,
-       coalesce(max(m.checkouts), 0) as checkouts, coalesce(max(m.paid_sales), 0) as paid_sales,
-       round(coalesce(max(m.revenue), 0), 2) as revenue,
-       round(max(m.revenue) / nullif(max(m.paid_sales), 0), 2) as aov,
-       round(100.0 * max(m.paid_sales) / nullif(max(m.checkouts), 0), 0) as checkout_to_paid_pct,
-       round(coalesce(max(m.revenue), 0)
-             / nullif(count(*) filter (where c.reached_paywall), 0), 2) as revenue_per_paywall_view,
-       max(m.sale_variance) as sale_variance
-  from cohort c left join money m on m.arm = c.arm
- group by c.arm
- order by c.arm;`;
-
 const GATE_TEST_Q = `-- #11, Mark's new EUR 1.99 page as a 50/50, from its switch-on (17 Nov 2026, 09:01:50 UTC):
 -- the range's free finishers in each half, who reached the EUR 1.99 page (their report's
 -- initial_gate_seen_at), who paid it (a real initial payment), and who bought a full unlock, so
@@ -422,7 +382,7 @@ with recursive b as (
      and lower(btrim(coalesce(j->>'utm_medium', ''))) <> 'probe'
      and lower(btrim(coalesce(j->>'utm_source', ''))) not in
          ('prod-verification', 'prod-e2e-check', 'staging-e2e-check', 'verify')
-     -- The price test that replaced it (24 Nov 2026) stamps its own halves under the same key:
+     -- The price test that replaced it (from 26 Nov 2026) stamps its own halves under the same key:
      -- those finishers are in neither of #11's.
      and coalesce(j->>'gate_reveal_arm', '') not in ('fixed', 'choose')
 ), fnv as (
@@ -469,7 +429,7 @@ select arm, count(*) as free_finishers,
  group by arm
  order by arm;`;
 
-const GATE_PRICE_Q = `-- The pre-unlock price test (24 Nov 2026): EUR 1.99 against "Choose your price", one half each,
+const GATE_PRICE_Q = `-- The pre-unlock price test (switched on 26 Nov 2026): EUR 1.99 against "Choose your price", one half each,
 -- by the stamp the survey's server writes while the test runs (utm_tracker's gate_reveal_arm:
 -- 'fixed' or 'choose'). The range's free finishers in each half, who reached the page, who paid
 -- for the pre-unlock and what, who took it for EUR 0, and who bought a full unlock, so far; then
@@ -538,72 +498,6 @@ select arm, pick, null, null, count(*), null, round(avg(amount), 2), null,
  where arm = 'choose' and amount is not null
  group by arm, pick
  order by 1, 2;`;
-
-const PT_BASE_Q = `-- The price lists (get_price_list_changes): each arm's starting price per plan, the latest
--- change before now. Pricing 2.0 and 2.1 read the lists in force in their stretches.
-select distinct on (arm, plan) arm, plan, starting_price, changed_at
-  from get_price_list_changes()
- where arm in ('A3', 'B3') and changed_at <= now()
- order by arm, plan, changed_at desc;`;
-
-/** What every price quote recorded for one factor, and when it was last seen. */
-const multQ = (
-  what: string,
-  key: string,
-  mult: string
-) => `-- What Pricing 3.0's price quotes recorded for the reader's ${what}: the factor it multiplies
--- the arm's base price by (with the per-visitor switch off it is recorded, not applied). Older
--- quotes carry earlier pricing's factors (May and June's discount steps), not the page's.
-select ${key} as factor, ${mult} as multiplier, count(*) as quotes,
-       max(created_date_time)::date as last_quote
-  from report_price_quote
- where created_date_time >= timestamptz '2026-10-06 18:18:28+00'  -- Pricing 3.0's first deploy
- group by 1, 2
- order by 1, 2;`;
-
-/** The months the elasticity model is fitted on, each month's people and full unlocks. */
-const EL_WITH = `-- Every whole month from 1 May 2026 (paid checkout's start) up to the range's end, whatever
--- the range's start: each month's finishers as people (each once), the share who bought a full
--- unlock (so far) and the average price of their full unlocks.
-with f as (
-  select date_trunc('month', ${FINISH_DAY})::date as month, ${PERSON} as person,
-         coalesce(pay.full_sales, 0) as full_sales, coalesce(pay.full_revenue, 0) as full_revenue
-    from survey_submission s
-    left join lateral (
-      select count(*) as full_sales, sum(p.amount) as full_revenue
-        from personal_report pr join payment p on p.personal_report_id = pr.id
-       where pr.survey_submission_id = s.id and ${REAL_SALE} and ${FULL_PLAN}) pay on true
-   where s.status = 'completed'
-     and ${FINISH_DAY} between date '2026-05-01'
-         and (date_trunc('month', (date :to) + 1) - interval '1 day')::date
-     and ${NOT_STAFF}
-     -- A survey bought before it was taken (pay to start): no report price sold it.
-     and not exists (select 1 from prepaid_report_access pa
-                      where pa.consumed_submission_id = s.id and pa.offer is not null
-                        and pa.paid_at is not null and pa.status in ('succeeded', 'refunded'))
-), m as (
-  select month, count(distinct person) as finishers,
-         count(distinct person) filter (where full_sales > 0) as full_unlock_people,
-         sum(full_sales) as full_unlock_sales,
-         round(sum(full_revenue) / nullif(sum(full_sales), 0), 2) as price,
-         count(distinct person) filter (where full_sales > 0)::float8 / count(distinct person) as cvr
-    from f
-   group by 1
-  having sum(full_sales) > 0
-), fit as (
-  -- ln(CVR) = a + e · ln(price), least squares; the model is capped at the best month.
-  select count(*) as months, regr_slope(ln(cvr), ln(price::float8)) as e,
-         regr_intercept(ln(cvr), ln(price::float8)) as a, max(cvr) as cap
-    from m
-)`;
-
-/** The model's prediction at a price: CVR, and net revenue per finisher after Stripe's fee. */
-const atPrice = (price: string, note: string) => `${EL_WITH}
--- ${note}
-select round(100 * least(cap, exp(a) * power(${price}::float8, e))::numeric, 2) as predicted_cvr_pct,
-       round((least(cap, exp(a) * power(${price}::float8, e)) * (${price} * 0.971 - 0.25))::numeric, 3)
-         as net_per_finisher
-  from fit;`;
 
 // ---- the tables, as the Data sources catalog lists them
 
@@ -675,41 +569,17 @@ const PERSON_RULE =
 const PRE_RULE =
   "The Initial plan is the €1.99 Core Archetype: on sale from the evening of 22 Oct 2026 on pay to start's €1.99 page (counted from 23 Oct, its first whole day; a rate over a range starting earlier is blank, never 0%), and from 27 Oct 2026 also on the report's own €1.99 gate. E07's €0 gift is no sale.";
 const TYPES_RULE =
-  "Each sale is in one row. Pay to start's are the purchases made on its pages (live from 22 Oct 2026), and what a pay-to-start reader later buys on their report has its own row; an upgrade after €1.99 is a full unlock bought on a report whose €1.99 Core Archetype was paid before it, in either funnel. The report's €1.99 gate has a row while it is switched on or sold. A row not on sale over the range is blank, never 0.";
+  "Each sale is in one row: the pre-unlock at a fixed €1.99 or at a price the reader chose (their survey's half in the price test, from 26 Nov 2026), the full report bought on the report, and the full report bought after a pre-unlock, in either funnel. Pay to start is retired (27 Nov 2026): its purchases and what its readers bought later on their report keep a row of their own, shown only in a range that has them. A row not on sale over the range is blank, never 0.";
 const BY_PAYMENT_DAY =
   "Counted on the payment day, so a sale can come from someone who finished the survey before the range.";
 const CHECKOUT_RULES =
   "Counted from 1 May 2026, when paid checkout went live (earlier ones were the team's tests). An unpaid checkout is written when Stripe closes it a day later, so the last day can still change. Free (€0) unlocks are left out, and so are pay to start's own checkouts before the survey (the Pay to start page counts those).";
-const PRICE_TEST_RULES =
-  "A test is one stretch of unchanged price lists; its readers are those who finished in it (within this range) and were first priced by it, each on the arm their first quote was dealt.";
 const GATE_TEST_RULES =
-  "Test #11: half the free finishers meet Mark's new €1.99 page, which shows their Core Archetype before they pay; half meet today's page. The price, the guarantee and what €1.99 opens are the same in both. Counted from the switch-on, 17 Nov 2026 at 10:01: readers who finished before it are left out, even if they meet the new page now. The code went out at 01:32 that night, but the page, its sheets and the half's stamp on the survey all began with the switch. A reader's half is the one stamped on their survey (utm_tracker's gate_reveal_arm), else the one their survey's session gives, as the report's server works it out; without a session, today's page. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising. From 24 Nov 2026 the price test that replaced it stamps its own halves (fixed, choose) under the same key: those readers are in neither half.";
+  "Test #11: half the free finishers meet Mark's new €1.99 page, which shows their Core Archetype before they pay; half meet today's page. The price, the guarantee and what €1.99 opens are the same in both. Counted from the switch-on, 17 Nov 2026 at 10:01: readers who finished before it are left out, even if they meet the new page now. The code went out at 01:32 that night, but the page, its sheets and the half's stamp on the survey all began with the switch. A reader's half is the one stamped on their survey (utm_tracker's gate_reveal_arm), else the one their survey's session gives, as the report's server works it out; without a session, today's page. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising. From 26 Nov 2026 the price test that replaced it stamps its own halves (fixed, choose) under the same key: those readers are in neither half.";
 const GATE_PRICE_RULES =
-  "The pre-unlock price test (24 Nov 2026): half the free finishers meet today's €1.99 page, half the \"Choose your price\" page, where they pick €0, €6.99 (recommended, picked as the page opens), €19.99 or their own amount (€0.50 to €100) for the same pre-unlock and its €10 credit. It replaced test #11 (the Core Archetype shown): the choosing half is the half that met that page. A reader is in the test when their survey carries its stamp, fixed or choose under utm_tracker's gate_reveal_arm, which the survey's server writes while its switch (report_gate_choose_price) is on; #11's control and reveal never count. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising.";
+  "The pre-unlock price test (switched on 26 Nov 2026, 20:23 Berlin): half the free finishers meet today's €1.99 page, half the \"Choose your price\" page, where they pick €0, €6.99 (recommended, picked as the page opens), €19.99 or their own amount (€0.50 to €100) for the same pre-unlock and its €10 credit. It replaced test #11 (the Core Archetype shown): the choosing half is the half that met that page. A reader is in the test when their survey carries its stamp, fixed or choose under utm_tracker's gate_reveal_arm, which the survey's server writes while its switch (report_gate_choose_price) is on; #11's control and reveal never count. Readers who paid before the survey (pay to start) never meet a €1.99 page and are left out. A cohort figure: the range's finishers within the test and what they did so far, so a recent range keeps rising.";
 const E07_RULE =
   "A day after the page, E07 gives the Core Archetype free to 4 in 5 readers still unpaid (test #9), in both halves alike: its €0 gift is no payment, and a reader who got it can no longer pay the €1.99.";
-const MODEL_RULES =
-  "Low confidence: a handful of monthly points, and price moved together with traffic and the paywall. Conversion is capped at the best month observed. Fitted on every whole month from 1 May 2026, whatever the range's start, without surveys bought before they were taken (pay to start: no report price sold them); a filter the records can't follow back to May leaves it blank: a source, tablets or new-or-returning, and a country tier or device (a finisher's comes from their price quote, which every finisher has only from 15 May).";
-const MULT_RULES =
-  "The factors come from the pricing code; each price quote records the one it would apply. The per-visitor switch (system_flags) decides whether they change the price: the sentence above the cards says which.";
-
-const pricingTest = (
-  label: string,
-  what: string,
-  formula: FieldDef["formula"],
-  extra: Partial<FieldDef> = {}
-): FieldDef => ({
-  label,
-  what,
-  stat: "Count",
-  per: "per finished survey of the arm",
-  formula,
-  caveat: PRICE_TEST_RULES,
-  tables: [SUBMISSION, QUOTE, REPORT, COHORT_PAYMENT, STAFF],
-  query: { lang: "SQL", text: PT_Q },
-  related: ["payment.pt-sales", "payment.pt-checkouts", "payment.pt-lift"],
-  ...extra,
-});
 
 const GATE_TABLES: FieldTable[] = [
   {
@@ -799,140 +669,6 @@ const gatePrice = (
   related: ["payment.gp-revenue", "payment.gp-rate", "payment.gp-reached"],
   ...extra,
 });
-
-const multiplier = (label: string, what: string, key: string, mult: string): FieldDef => ({
-  label,
-  what: `The factor a reader's ${what} multiplies their arm's base price by in Pricing 3.0. These are the levers to target or test next.`,
-  stat: "Multiplier",
-  per: "per price quote",
-  formula: { num: `Base price × ${what} factor × the other factors` },
-  caveat: MULT_RULES,
-  tables: [
-    {
-      source: "production",
-      table: "report_price_quote",
-      columns: `${key}, ${mult}, created_date_time`,
-      filters:
-        "Pricing 3.0's quotes (from 6 Oct 2026). No other filter: the factors are the pricing code's, the same under every filter.",
-    },
-  ],
-  query: { lang: "SQL", text: multQ(what, key, mult) },
-  related: ["payment.pt-base", "payment.mult-tier", "payment.mult-device"],
-});
-
-const EXITS_EVENTS = `-- The paygate's exit pages' own events (from 28 Oct 2026), for the range's finishers: the
--- pages' views, reasons, sentences, presses and leaves, and the EUR 1.99 page's Unlock presses
--- made on its exit page (initial_gate_cta_click, place exit_card / exit_sticky), which are pre's.
-with fin as (
-  select s.id
-    from survey_submission s
-   where s.status = 'completed'
-     and ${FINISH_DAY} between :from and :to
-     and ${NOT_STAFF}
-), ev as (
-  select a.survey_submission_id as sid, a.event_type, a.event_time,
-         case when a.event_type = 'initial_gate_cta_click' then 'pre' else a.metadata->>'stage' end as stage,
-         a.metadata->>'reason' as reason, a.metadata->>'via' as via
-    from analytics_event a join fin on fin.id = a.survey_submission_id
-   where a.event_type in ('paygate_exit_viewed', 'paygate_exit_reason', 'paygate_exit_note',
-                          'paygate_exit_cta_click', 'paygate_exit_leave')
-      or (a.event_type = 'initial_gate_cta_click' and a.metadata->>'place' in ('exit_card', 'exit_sticky'))
-), seen as (
-  select sid, stage, min(event_time) as first_view, count(*) as views
-    from ev where event_type = 'paygate_exit_viewed' group by sid, stage
-)`;
-
-const EXITS_Q = `${EXITS_EVENTS}
--- Per page: who reached it, answered, wrote, pressed Unlock there, paid within 24 hours of their
--- first view (the EUR 1.99 on pre, a full unlock on full), and how they left.
-select seen.stage,
-       count(*) as reached,
-       sum(seen.views) as views,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.event_type = 'paygate_exit_reason')) as answered,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.event_type = 'paygate_exit_note')) as wrote,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.event_type in ('paygate_exit_cta_click', 'initial_gate_cta_click'))) as pressed_unlock,
-       count(*) filter (where exists (
-         select 1 from personal_report pr join payment p on p.personal_report_id = pr.id
-          where pr.survey_submission_id = seen.sid and ${REAL_SALE}
-            and p.payment_date_time between seen.first_view and seen.first_view + interval '24 hours'
-            and case when seen.stage = 'pre' then ${PRE_PLAN} else ${FULL_PLAN} end)) as paid_within_24h,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.via = 'maybe_later')) as maybe_later,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.via = 'chapters')) as back_to_chapters,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.via = 'back')) as back_arrow,
-       count(*) filter (where exists (select 1 from ev where ev.sid = seen.sid and ev.stage = seen.stage
-                                          and ev.via = 'browser_back')) as browser_back
-  from seen
- group by seen.stage;`;
-
-const EXIT_REASONS_Q = `${EXITS_EVENTS}
--- Each reader's latest reason on each page, counted.
-, latest as (
-  select distinct on (sid, stage) sid, stage, reason
-    from ev where event_type = 'paygate_exit_reason'
-   order by sid, stage, event_time desc
-)
-select stage, reason, count(*) as readers,
-       round(100.0 * count(*) / sum(count(*)) over (partition by stage), 1) as share_pct
-  from latest
- group by stage, reason
- order by stage, readers desc;`;
-
-const EXIT_CAME_Q = `${EXITS_EVENTS}
--- How the EUR 1.99 page's exit page (pre) was reached: by "Not ready to unlock yet"
--- (initial_gate_back) or by the browser's own Back on the EUR 1.99 page (initial_gate_browser_back),
--- each when it opened the exit page (to = exit_page), of the readers who reached it, as shares of
--- the finishers who saw the EUR 1.99 page (their report's initial_gate_seen_at). A reader who
--- came both ways counts on both lines.
-, ways as (
-  select a.survey_submission_id as sid, a.event_type
-    from analytics_event a join fin on fin.id = a.survey_submission_id
-   where a.event_type in ('initial_gate_back', 'initial_gate_browser_back')
-     and a.metadata->>'to' = 'exit_page'
-), came as (
-  select count(*) filter (where exists (select 1 from ways w where w.sid = seen.sid
-                                          and w.event_type = 'initial_gate_back')) as by_not_ready,
-         count(*) filter (where exists (select 1 from ways w where w.sid = seen.sid
-                                          and w.event_type = 'initial_gate_browser_back')) as by_browser_back
-    from seen
-   where seen.stage = 'pre'
-), saw as (
-  select count(*) as n
-    from fin join personal_report pr on pr.survey_submission_id = fin.id
-   where pr.initial_gate_seen_at is not null
-)
-select saw.n as saw_the_page, came.by_not_ready, came.by_browser_back,
-       round(100.0 * came.by_not_ready / nullif(saw.n, 0), 1) as by_not_ready_pct,
-       round(100.0 * came.by_browser_back / nullif(saw.n, 0), 1) as by_browser_back_pct
-  from saw, came;`;
-
-const EXIT_WORDS_Q = `-- The exit pages' "Something else" sentences, newest first (the page masks email addresses,
--- report links and phone numbers before it shows them; this query does not).
-select a.event_time, a.metadata->>'stage' as stage, a.metadata->>'answer_text' as words
-  from analytics_event a
-  join survey_submission s on s.id = a.survey_submission_id
- where a.event_type = 'paygate_exit_note'
-   and ${FINISH_DAY} between :from and :to
-   and ${NOT_STAFF}
- order by a.event_time desc
- limit 10;`;
-
-const EXIT_EVENTS_TABLE: FieldTable = {
-  source: "production",
-  table: "analytics_event",
-  columns:
-    "survey_submission_id, event_type (paygate_exit_viewed, _reason, _note, _cta_click, _leave; initial_gate_cta_click), event_time, metadata (stage, reason, place, via, answer_text)",
-  filters:
-    "The range's finishers (survey day), the team's own left out. Written by the pages themselves from 28 Oct 2026; a reader whose browser refused the request is missing.",
-};
-const EXIT_TABLES = [EXIT_EVENTS_TABLE, SUBMISSION, STAFF];
-const EXIT_RULE =
-  "The two pages “Not ready to unlock yet” opens: pre after the €1.99 page (whose browser's Back opens it too, from 5 Nov 2026), full after the full report's plans for a €1.99 holder (E07's gift readers included). Each reader once a line, per page. Recorded from 28 Oct 2026.";
 
 export const fields: FieldRegistry = {
   // ---- the tiles
@@ -1064,7 +800,7 @@ export const fields: FieldRegistry = {
   // ---- payment types
   "payment.type-sales": {
     label: "Sales",
-    what: "Paid sales of each payment type in the range: the free survey's full unlock and €1.99 gate, pay to start's two offers and its readers' later purchases on the report, and the upgrade after €1.99.",
+    what: "Paid sales of each payment type in the range: the pre-unlock at a fixed €1.99 or at a price the reader chose, the full report bought on the report, and the full report bought after a pre-unlock.",
     good: "up",
     stat: "Count",
     per: "per payment",
@@ -1073,6 +809,31 @@ export const fields: FieldRegistry = {
     tables: SALES_TABLES,
     query: { lang: "SQL", text: TYPES_Q },
     related: ["payment.sales", "payment.type-revenue", "payment.type-refund-rate"],
+  },
+  "payment.type-shown": {
+    label: "Paywall shown",
+    what: "The range's free-survey finishers who met the type's page: the €1.99 page in the fixed half (and before the price test), the choose-your-price page in the choosing half. For the full report after a pre-unlock, the pre-unlock buyers, who all meet the full report's plans.",
+    good: "up",
+    stat: "Count",
+    per: "per finished survey",
+    formula: { num: "Finishers whose report showed the page" },
+    caveat:
+      "Read from the report's first view of the page (initial_gate_seen_at), from 28 Oct 2026: blank in a range before it. Readers who paid before the survey (pay to start) never meet the page. Counted on the finishing day.",
+    tables: [SUBMISSION, REPORT, STAFF],
+    query: { lang: "SQL", text: TYPES_REACH_Q },
+    related: ["payment.type-cvr", "payment.type-sales"],
+  },
+  "payment.type-cvr": {
+    label: "CVR",
+    what: "The type's sales as a share of the finishers who could buy it: the fixed half's finishers for a pre-unlock at €1.99, the choosing half's for one at a chosen price, every free-survey finisher for the full report on the report, and the pre-unlock buyers for the full report after one.",
+    good: "up",
+    stat: "Rate",
+    per: "per finished survey",
+    formula: { num: "Sales of the type", den: "Finishers (or pre-unlock buyers) of the range" },
+    caveat: `Sales count on the payment day and finishers on the finishing day, so a sale can come from someone who finished before the range: a guide, not a cohort. The fixed half's finishers count from 27 Oct 2026 at 14:38 UTC, when the free survey's €1.99 page went on; a pre-unlock sold on the Choose your price page is a choice, whichever half its survey was in. ${TYPES_RULE}`,
+    tables: SALES_TABLES,
+    query: { lang: "SQL", text: TYPES_REACH_Q },
+    related: ["payment.type-shown", "payment.type-sales", "payment.pre-cvr"],
   },
   "payment.type-avg": {
     label: "Average price",
@@ -1217,7 +978,7 @@ export const fields: FieldRegistry = {
       "An average of a handful of sales in most periods; prices changed with the pricing tests.",
     tables: SALES_TABLES,
     query: { lang: "SQL", text: OT_TABLE_Q },
-    related: ["payment.ot-full-sales", "payment.pt-base"],
+    related: ["payment.ot-full-sales", "payment.type-avg"],
   },
   "payment.ot-revenue": {
     label: "Revenue",
@@ -1518,7 +1279,7 @@ export const fields: FieldRegistry = {
     "Reached the €1.99 page",
     "Of the half's free finishers, those whose report showed them the €1.99 page. A reader who leaves during the report's tour, before the page, hasn't reached it.",
     { num: "Free finishers whose report has initial_gate_seen_at (so far)" },
-    { related: ["payment.gt-rate-reached", "payment.exit-came"] }
+    { related: ["payment.gt-rate-reached"] }
   ),
   "payment.gt-paid": gateTest(
     "Paid €1.99",
@@ -1597,7 +1358,7 @@ export const fields: FieldRegistry = {
     "Reached the paywall",
     "Of the half's free finishers, those whose report showed them the page. A reader who leaves during the report's tour, before the page, hasn't reached it.",
     { num: "Free finishers whose report has initial_gate_seen_at (so far)" },
-    { related: ["payment.gp-rate", "payment.exit-came"] }
+    { related: ["payment.gp-rate"] }
   ),
   "payment.gp-paid": gatePrice(
     "Paid",
@@ -1650,353 +1411,4 @@ export const fields: FieldRegistry = {
     { num: "Free finishers with a real full-unlock payment (so far)" },
     { good: "up", related: ["payment.gp-revenue", "payment.full-cvr"] }
   ),
-
-  // ---- pricing tests
-  "payment.pt-arm": pricingTest(
-    "Arm",
-    "The price arm, and how many readers finished the survey in the test's stretch and were priced by it on that arm.",
-    { num: "Finished surveys in the stretch on the arm" },
-    { related: ["payment.pt-views", "payment.pt-base"] }
-  ),
-  "payment.pt-base": {
-    label: "Base price",
-    what: "The arm's list prices in the test's stretch: the full report, then what the other plans cost.",
-    stat: "Price",
-    per: "per report, before any personal factor",
-    formula: { num: "The arm's starting price per plan (the price list)" },
-    caveat:
-      "List prices. With the per-visitor switch off everyone pays them; on, each price is multiplied by the factors below.",
-    tables: [
-      {
-        source: "production",
-        table: "report_price_quote_arm_history",
-        columns: "changed_at, new_experiment_group, plan, new_starting_price",
-        filters: "None: the lists are the same under every filter.",
-        watch:
-          "get_price_list_changes() holds Pricing 2.0 and 2.1's lists itself; later lists are the re-syncs recorded here.",
-      },
-    ],
-    query: { lang: "SQL", text: PT_BASE_Q },
-    related: ["payment.pt-aov", "payment.mult-tier"],
-  },
-  "payment.pt-views": pricingTest(
-    "Paywall views",
-    "Of the arm's readers, those who reached the paywall: it was seen, clicked, or they went on to a checkout or a payment.",
-    { num: "The arm's readers who reached the paywall (so far)" },
-    {
-      caveat: `${PRICE_TEST_RULES} The report records a paywall seen from 6 Sep 2026: earlier stretches show —.`,
-      related: ["payment.pt-checkouts", "payment.pt-rev-view"],
-    }
-  ),
-  "payment.pt-checkouts": pricingTest(
-    "Checkouts",
-    "Paid checkouts the arm's readers opened within the stretch.",
-    { num: "Checkouts opened by the arm's readers" },
-    { per: "per checkout", related: ["payment.pt-co-paid", "payment.pt-sales"] }
-  ),
-  "payment.pt-sales": pricingTest(
-    "Paid sales",
-    "Paid sales the arm's readers made within the stretch.",
-    { num: "The arm's readers' real sales in the stretch" },
-    { per: "per payment", good: "up", related: ["payment.pt-revenue", "payment.pt-co-paid"] }
-  ),
-  "payment.pt-revenue": pricingTest(
-    "Revenue",
-    "Money from the arm's readers' sales within the stretch, in whole euros.",
-    { num: "Sum of the arm's readers' real sales in the stretch" },
-    {
-      stat: "Sum",
-      per: "per payment, in euros",
-      good: "up",
-      related: ["payment.pt-aov", "payment.pt-rev-view"],
-    }
-  ),
-  "payment.pt-aov": pricingTest(
-    "AOV",
-    "What the arm's sales brought in on average.",
-    { num: "The arm's revenue", den: "The arm's paid sales" },
-    { stat: "Average", per: "per paid sale", related: ["payment.pt-lift", "payment.pt-revenue"] }
-  ),
-  "payment.pt-co-paid": pricingTest(
-    "Checkout → paid",
-    "Of the arm's checkouts, how many turned into a paid sale.",
-    { num: "The arm's paid sales", den: "The arm's checkouts", mult: "× 100" },
-    {
-      stat: "Share",
-      per: "per checkout",
-      good: "up",
-      related: ["payment.pt-checkouts", "payment.checkout"],
-    }
-  ),
-  "payment.pt-rev-view": pricingTest(
-    "Rev. / paywall view",
-    "What each reader who reached the paywall brought in on average: the fairest way to compare arms that price differently.",
-    { num: "The arm's revenue", den: "The arm's paywall views" },
-    {
-      stat: "Average",
-      per: "per reader who reached the paywall",
-      good: "up",
-      caveat: `${PRICE_TEST_RULES} Blank where paywall views aren't recorded (before 6 Sep 2026).`,
-      related: ["payment.pt-views", "payment.pt-revenue"],
-    }
-  ),
-  "payment.pt-lift": pricingTest(
-    "AOV lift · confidence",
-    "How much larger the second arm's average sale is than the control's, and how sure that is.",
-    { num: "The arm's AOV", den: "The control's AOV", mult: "− 1, × 100" },
-    {
-      stat: "Ratio (and a confidence)",
-      per: "per paid sale",
-      caveat: `${PRICE_TEST_RULES} The confidence is Welch's t-test, two-sided, on each sale's amount (the query gives each arm's sales, mean and variance; the page turns them into 1 − p). Below 95% it says "not significant yet"; under two sales an arm can't be compared.`,
-      related: ["payment.pt-aov", "payment.pt-sales"],
-    }
-  ),
-
-  // ---- the personal price multipliers
-  "payment.mult-tier": multiplier(
-    "Country tier",
-    "country tier",
-    "country_tier",
-    "country_multiplier"
-  ),
-  "payment.mult-device": multiplier("Device", "device", "device_type", "device_multiplier"),
-  "payment.mult-source": multiplier(
-    "Traffic source",
-    "traffic source",
-    "traffic_source",
-    "traffic_multiplier"
-  ),
-  "payment.mult-behaviour": multiplier(
-    "Behaviour bucket",
-    "behaviour bucket",
-    "behavioral_bucket",
-    "behavioral_multiplier"
-  ),
-  "payment.mult-engagement": multiplier(
-    "Engagement score",
-    "engagement score",
-    "case when engagement_score >= 40 then '40 or more' else 'under 40' end",
-    "engagement_multiplier"
-  ),
-  "payment.mult-discount": multiplier(
-    "Discount step",
-    "discount step",
-    "discount_step",
-    "discount_multiplier"
-  ),
-
-  // ---- price elasticity
-  "payment.elasticity": {
-    label: "Price elasticity prediction",
-    what: "Each whole month's average full-unlock price against its payment conversion (the dots), and the model fitted through them: predicted conversion and net revenue per finisher at any price.",
-    stat: "Share and average",
-    per: "per person (conversion) and per full-unlock sale (price)",
-    formula: {
-      num: "People who bought a full unlock (so far)",
-      den: "People who finished in the month",
-      mult: "× 100, against the month's average full-unlock price",
-    },
-    caveat: `${MODEL_RULES} ${PERSON_RULE}`,
-    tables: [SUBMISSION, REPORT, COHORT_PAYMENT, STAFF],
-    query: {
-      lang: "SQL",
-      text: `${EL_WITH}
-select month, finishers, full_unlock_people, round(100 * cvr::numeric, 2) as payment_cvr_pct,
-       full_unlock_sales, price as average_price
-  from m
- order by month;`,
-    },
-    related: ["payment.el-e", "payment.el-best", "payment.ot-full-avg"],
-  },
-  "payment.el-e": {
-    label: "Price elasticity",
-    what: "How strongly conversion falls as the price rises: −1.6 means a 10% higher price cuts paying people by about 16%.",
-    stat: "Ratio (the model's slope)",
-    per: "per month observed",
-    formula: { num: "Slope of ln(payment CVR) on ln(average full-unlock price)" },
-    caveat: MODEL_RULES,
-    tables: [SUBMISSION, REPORT, COHORT_PAYMENT, STAFF],
-    query: {
-      lang: "SQL",
-      text: `${EL_WITH}
-select months, round(e::numeric, 2) as elasticity, round(a::numeric, 4) as a,
-       round(100 * cap::numeric, 2) as cap_pct
-  from fit;`,
-    },
-    related: ["payment.elasticity", "payment.el-best"],
-  },
-  "payment.el-best": {
-    label: "Best price (net revenue)",
-    what: "The price, between €3 and €40, where the model's net revenue per finisher peaks: a candidate for the next price test, not a promise.",
-    good: "up",
-    stat: "Price (the model's best)",
-    per: "per finisher (net revenue)",
-    formula: { num: "The price that maximises predicted CVR × (price × 0.971 − €0.25)" },
-    caveat: `${MODEL_RULES} Net revenue takes off Stripe's 2.9% + €0.25.`,
-    tables: [SUBMISSION, REPORT, COHORT_PAYMENT, STAFF],
-    query: {
-      lang: "SQL",
-      text: `${EL_WITH}, grid as (
-  select (g / 100.0)::float8 as price from generate_series(300, 4000, 25) g
-)
-select price as best_price,
-       round((least(cap, exp(a) * power(price, e)) * (price * 0.971 - 0.25))::numeric, 3)
-         as net_per_finisher
-  from grid, fit
- order by 2 desc, 1
- limit 1;`,
-    },
-    related: ["payment.el-e", "payment.el-at", "payment.el-today"],
-  },
-  "payment.el-at": {
-    label: "At the price tested",
-    what: "The model's predicted payment conversion, and net revenue per finisher, at the price on the slider (€15 to start).",
-    stat: "Share (predicted)",
-    per: "per person",
-    formula: { num: "min(best month's CVR, e^a × price^e)", mult: "× 100" },
-    caveat: MODEL_RULES,
-    tables: [SUBMISSION, REPORT, COHORT_PAYMENT, STAFF],
-    query: {
-      lang: "SQL",
-      text: atPrice("15", "15: the slider's price to start; put the price tested."),
-    },
-    related: ["payment.el-best", "payment.el-today"],
-  },
-  "payment.el-today": {
-    label: "At today’s price (A3)",
-    what: "The model's predicted payment conversion and net revenue per finisher at today's full-report price on the control arm, and how far that is below the best price.",
-    stat: "Share (predicted)",
-    per: "per person",
-    formula: { num: "min(best month's CVR, e^a × price^e)", mult: "× 100" },
-    caveat: `${MODEL_RULES} Today's price is A3's full report (€29.99), from the price list.`,
-    tables: [SUBMISSION, REPORT, COHORT_PAYMENT, STAFF],
-    query: {
-      lang: "SQL",
-      text: atPrice("29.99", "29.99: A3's full report on today's price list."),
-    },
-    related: ["payment.el-best", "payment.el-at", "payment.pt-base"],
-  },
-
-  "payment.exit-reached": {
-    label: "Reached",
-    what: "The range's finishers who opened an exit page: each once, with the views under it.",
-    stat: "Count",
-    per: "per person and page",
-    formula: { num: "Finishers with a paygate_exit_viewed on that page" },
-    caveat: `${EXIT_RULE} ${LEFT_OUT}`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXITS_Q },
-    related: [
-      "payment.exit-came",
-      "payment.exit-answered",
-      "payment.exit-pressed",
-      "payment.exit-paid",
-    ],
-  },
-  "payment.exit-came": {
-    label: "How they reached it",
-    what: "Of the readers who reached the €1.99 page's exit page, who came by pressing “Not ready to unlock yet” and who by pressing the browser's or phone's own Back on the €1.99 page, each as a share of the readers who saw the €1.99 page.",
-    stat: "Share",
-    per: "per person",
-    formula: {
-      num: "Readers who reached the exit page with a press of that kind that opened it (initial_gate_back or initial_gate_browser_back, to exit_page)",
-      den: "The range's finishers who saw the €1.99 page (their report's initial_gate_seen_at)",
-      mult: "× 100",
-    },
-    caveat: `${EXIT_RULE} A reader who came both ways is on both lines, and one whose press was not stored, or who came back to the page with Forward or a reload, on neither, so the two need not add up to Reached. The browser's Back opens the exit page, and is stored once a page load, only since November 2026: before, it left the report unrecorded, so a range from before counts fewer by Back. A “Not ready” from before the exit page (it led to the landing page) is no way in. Saw the €1.99 page counts the page's first view on the server, as Pay to start's step of that name does. ${LEFT_OUT}`,
-    tables: [
-      {
-        ...EXIT_EVENTS_TABLE,
-        columns:
-          "survey_submission_id, event_type (paygate_exit_viewed; initial_gate_back, initial_gate_browser_back), metadata (stage, to)",
-      },
-      {
-        ...REPORT,
-        columns: "survey_submission_id, initial_gate_seen_at",
-        filters:
-          "None of its own: whether the finisher's report saw the €1.99 page, its first view stamped by the server (so far).",
-      },
-      SUBMISSION,
-      STAFF,
-    ],
-    query: { lang: "SQL", text: EXIT_CAME_Q },
-    related: ["payment.exit-reached", "payment.exit-left", "pts.step-gate"],
-  },
-  "payment.exit-answered": {
-    label: "Answered why",
-    what: "Of those who reached the page, who tapped a reason in “Not today? Tell us why.”, with the share and how many also wrote a sentence under it.",
-    good: "up",
-    stat: "Count",
-    per: "per person and page",
-    formula: { num: "Readers with a paygate_exit_reason", den: "Readers who reached the page" },
-    caveat: `${EXIT_RULE} A reader can change their answer; the reasons count each reader's latest.`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXITS_Q },
-    related: ["payment.exit-reasons", "payment.exit-words"],
-  },
-  "payment.exit-pressed": {
-    label: "Pressed Unlock",
-    what: "Readers who pressed Unlock on the exit page: on its offer card or on its bar along the bottom.",
-    good: "up",
-    stat: "Count",
-    per: "per person and page",
-    formula: {
-      num: "Readers with paygate_exit_cta_click (full), or initial_gate_cta_click at exit_card / exit_sticky (pre)",
-    },
-    caveat: `${EXIT_RULE} Pre's presses are the €1.99 page's own event, so Pay to start's “Pressed Unlock” counts them too, on its exit-page line.`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXITS_Q },
-    related: ["payment.exit-paid", "pts.step-pressed"],
-  },
-  "payment.exit-paid": {
-    label: "Paid within 24 h",
-    what: "Readers who paid within 24 hours of first seeing the exit page: the €1.99 after pre, a full unlock after full.",
-    good: "up",
-    stat: "Count",
-    per: "per person and page",
-    formula: {
-      num: "Readers with a real sale of the page's plan within 24 hours of their first view",
-      den: "Readers who reached the page",
-    },
-    caveat: `${EXIT_RULE} A day, not longer: E07 gifts the Core Archetype the day after the gate (experiment #9), so a later payment says less about the page. It need not have started on the page: a reader may pay from the report itself.`,
-    tables: [...EXIT_TABLES, PAYMENT, REPORT],
-    query: { lang: "SQL", text: EXITS_Q },
-    related: ["payment.exit-pressed", "payment.pre", "payment.full"],
-  },
-  "payment.exit-left": {
-    label: "Left",
-    what: "How readers left the exit page: “Maybe later” back to the €1.99 page (pre), “Back to my open chapters” (full), and under it the page's back arrow and the browser's or phone's own Back.",
-    stat: "Count",
-    per: "per person and page",
-    formula: { num: "Readers with a paygate_exit_leave of that kind" },
-    caveat: `${EXIT_RULE} The phone's or browser's own Back (a swipe, Android's back) is recorded from 3 Nov 2026; before, it was not. It closes the page as the arrow does. Not counted: a Back that loads the page anew (after checkout, when the browser kept no copy of it). “Maybe later”, the arrow and Back all lead back to the €1.99 page (pre), so none is a departure from the report.`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXITS_Q },
-    related: ["payment.exit-reached"],
-  },
-  "payment.exit-reasons": {
-    label: "Why not today",
-    what: "Each reader's latest reason on the exit page, ranked, as shares of those who answered. The reasons are shown in a shuffled order, “Something else” last, so no reason wins by its place.",
-    stat: "Share",
-    per: "per person and page",
-    formula: {
-      num: "Readers whose latest reason is this one",
-      den: "Readers who answered on the page",
-    },
-    caveat: `${EXIT_RULE} Pre asks about paying before seeing a result; full about the open chapters and the full report, so the two lists differ.`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXIT_REASONS_Q },
-    related: ["payment.exit-answered", "payment.exit-words"],
-  },
-  "payment.exit-words": {
-    label: "Their words",
-    what: "The newest sentences readers wrote under “Something else”, with the day and their reason.",
-    stat: "List",
-    per: "per sentence",
-    formula: { num: "paygate_exit_note's answer_text, newest first" },
-    caveat: `${EXIT_RULE} Email addresses, report links and phone numbers are masked on the page; names in free text are not found. The team's data copy and Jarvis mask the sentence whole.`,
-    tables: EXIT_TABLES,
-    query: { lang: "SQL", text: EXIT_WORDS_Q },
-    related: ["payment.exit-reasons"],
-  },
 };

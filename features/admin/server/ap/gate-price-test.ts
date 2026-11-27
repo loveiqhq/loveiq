@@ -17,6 +17,7 @@ import { isGatePriceArm, type GatePriceArm } from "@shared/experiments/gatePrice
 import { reportingDayStart } from "@shared/time/reporting-day";
 
 import { fetchAllRows } from "../supabase";
+import { addDays } from "./days";
 import { preBuysOf, type SubFact } from "./facts";
 import { fmt } from "./format";
 
@@ -42,8 +43,12 @@ import { fmt } from "./format";
  * (experiment-readouts.ts); the revenue is only ever reported, never called.
  */
 
-/** The first day a survey can carry the test's stamp, this code's release: its reads start here. */
-export const GATE_PRICE_FROM = "2026-11-24";
+/**
+ * The first day a survey can carry the test's stamp: its switch went on in production at 20:23
+ * Berlin on 26 Nov 2026 (registry #13), and only a survey submitted while it is on is stamped.
+ * Its reads start here.
+ */
+export const GATE_PRICE_FROM = "2026-11-26";
 
 /** The section's title, as the board names it. */
 export const PRICE_TEST_NAME = "Pre-unlock price test: €1.99 vs choose your price";
@@ -152,13 +157,16 @@ function readsFrom(from: string): string {
 }
 
 /**
- * The surveys finished from the range's first day (never before GATE_PRICE_FROM), with their
- * tracker: each one's half and pay-to-start label. Null when the read fails.
+ * The surveys finished from `from` (never before GATE_PRICE_FROM), up to the end of `to` when
+ * given, with their tracker: each one's half and pay-to-start label. Null when the read fails.
  */
-export async function readPriceTestRows(from: string): Promise<PriceTestRow[] | null> {
+export async function readPriceTestRows(from: string, to?: string): Promise<PriceTestRow[] | null> {
+  const until = to
+    ? `&created_date_time=lt.${encodeURIComponent(reportingDayStart(addDays(to, 1)).toISOString())}`
+    : "";
   const rows = await fetchAllRows<PriceTestRow>(
     "/rest/v1/survey_submission?status=eq.completed" +
-      `&created_date_time=gte.${readsFrom(from)}` +
+      `&created_date_time=gte.${readsFrom(from)}${until}` +
       "&select=id,utm_tracker&order=id.asc"
   );
   return rows ?? null;
@@ -259,7 +267,7 @@ export function buildPriceTest(input: {
   if (input.blocked) return blank(input.blocked);
   if (input.to < GATE_PRICE_FROM) {
     return blank(
-      "Not running in this range: the test starts with its switch, from 24 Nov 2026. Pick a range that reaches it."
+      "Not running in this range: the test starts with its switch, from 26 Nov 2026. Pick a range that reaches it."
     );
   }
   if (!input.rows || !input.choices) {
