@@ -63,7 +63,7 @@ const CARD_3 = "Your Privacy Matters";
 const AGE_2 = "I’m 18 years of age or older.";
 const DATA_2 =
   /^I agree that LoveIQ uses my answers, including about my sex life, to create my report\.\s*I can withdraw anytime\.\s*$/;
-const PAY_TO_START = { kind: "pay_to_start" as const, paid: true, returnPath: "/sexual-archetype" };
+const PAY_TO_START = { kind: "pay_to_start" as const, paid: true };
 
 /**
  * With the switch on, half of the fresh runs get Survey 2.0 (the Survey 2.0 test, by session id):

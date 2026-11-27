@@ -83,8 +83,6 @@ export interface SurveyJourney {
   kind: PayToStartJourney;
   /** Paid; false while the payment still settles. */
   paid: boolean;
-  /** Where the survey's way out leads for that visitor: the page they paid on. */
-  returnPath: string;
 }
 
 /** The full offer's page, under which both offers' pages live (proxy.ts labels them). */

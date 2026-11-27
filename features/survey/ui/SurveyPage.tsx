@@ -1502,36 +1502,35 @@ const SurveyPage: FC<SurveyPageProps> = ({
     setStep((s) => Math.max(0, guideCardAt(s) - 1));
   }, []);
 
-  const handleReturn = useCallback(
-    (clearAnswersArg?: boolean, reportTokenArg?: string | null) => {
-      // Guard against a caller wired straight to onClick: React would pass the
-      // MouseEvent here, which is truthy, wiping answers and sending the user to
-      // the token-less /report ("Can't find your report") screen. The same event
-      // arriving as the token sent a reader to /report/[object Object] (2026-10-03).
-      const clearAnswers = clearAnswersArg === true;
-      const reportToken = typeof reportTokenArg === "string" ? reportTokenArg : null;
-      try {
-        if (clearAnswers) {
-          copySurveySessionToReportSession();
-          clearPersistedSurveyState({
-            clearPendingCompletion: true,
-            clearSurveySession: false,
-          });
-        }
-        sessionStorage.removeItem(SURVEY_STEP_KEY);
-      } catch {
-        /* ignore */
+  const handleReturn = useCallback((clearAnswersArg?: boolean, reportTokenArg?: string | null) => {
+    // Guard against a caller wired straight to onClick: React would pass the
+    // MouseEvent here, which is truthy, wiping answers and sending the user to
+    // the token-less /report ("Can't find your report") screen. The same event
+    // arriving as the token sent a reader to /report/[object Object] (2026-10-03).
+    const clearAnswers = clearAnswersArg === true;
+    const reportToken = typeof reportTokenArg === "string" ? reportTokenArg : null;
+    try {
+      if (clearAnswers) {
+        copySurveySessionToReportSession();
+        clearPersistedSurveyState({
+          clearPendingCompletion: true,
+          clearSurveySession: false,
+        });
       }
-      // The finished run's report takes the survey's place. On top of it, Back from the report
-      // found the survey's "You've already finished", whose button led straight back: the EUR
-      // 1.99 page's Back loop (04.11). The survey's older entries stay (iPhone Safari keeps
-      // them); the report's own Back catch answers those (features/report/ui/gate/useGateBack.ts).
-      // The way out keeps its entry, so Back from there returns to the questions.
-      if (clearAnswers) window.location.replace(reportUrlAfterSurvey(reportToken));
-      else window.location.href = journey ? journey.returnPath : "/";
-    },
-    [journey]
-  );
+      sessionStorage.removeItem(SURVEY_STEP_KEY);
+    } catch {
+      /* ignore */
+    }
+    // The finished run's report takes the survey's place. On top of it, Back from the report
+    // found the survey's "You've already finished", whose button led straight back: the EUR
+    // 1.99 page's Back loop (04.11). The survey's older entries stay (iPhone Safari keeps
+    // them); the report's own Back catch answers those (features/report/ui/gate/useGateBack.ts).
+    // The way out keeps its entry, so Back from there returns to the questions. It leads home
+    // for a pay-to-start buyer too: their offer pages send visitors to /survey since pay to
+    // start was retired (27 Nov 2026), where their cookie reopened this survey.
+    if (clearAnswers) window.location.replace(reportUrlAfterSurvey(reportToken));
+    else window.location.href = "/";
+  }, []);
 
   /**
    * "Start Over" on the failed-submission screen: drop this run (its answers, the

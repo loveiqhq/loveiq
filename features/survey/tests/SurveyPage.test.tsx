@@ -603,7 +603,7 @@ async function agree() {
 }
 
 describe("SurveyPage — a visitor who paid before the survey (pay to start)", () => {
-  const journey = { kind: "pay_to_start" as const, paid: true, returnPath: "/sexual-archetype" };
+  const journey = { kind: "pay_to_start" as const, paid: true };
 
   beforeEach(() => {
     localStorage.clear();
@@ -650,38 +650,28 @@ describe("SurveyPage — a visitor who paid before the survey (pay to start)", (
     expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
   });
 
-  it("leads the way out back to the page they paid on", async () => {
+  // Pay to start is retired (27 Nov 2026): its offer pages send visitors to /survey, where the
+  // buyer's cookie reopened this survey, so the way out leads home, as everyone's does.
+  it("leads the way out home, not to the retired page they paid on", async () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
     const nav = captureNavigation();
     try {
       render(<SurveyPage journey={journey} />);
       await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
-      expect(nav.navigated).toEqual(["/sexual-archetype"]);
+      expect(nav.navigated).toEqual(["/"]);
     } finally {
       nav.restore();
     }
   });
 
-  it("leads a buyer of the initial report back to its own page", async () => {
-    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
-    const nav = captureNavigation();
-    try {
-      render(<SurveyPage journey={{ ...journey, returnPath: "/sexual-archetype/initial" }} />);
-      await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
-      expect(nav.navigated).toEqual(["/sexual-archetype/initial"]);
-    } finally {
-      nav.restore();
-    }
-  });
-
-  it("leaves the survey for the same page from the questions", async () => {
+  it("leaves the survey for home from the questions too", async () => {
     localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
     sessionStorage.setItem(SURVEY_STEP_KEY, "6");
     const nav = captureNavigation();
     try {
       render(<SurveyPage journey={journey} />);
       await userEvent.click(await screen.findByRole("button", { name: "Exit Survey" }));
-      expect(nav.navigated).toEqual(["/sexual-archetype"]);
+      expect(nav.navigated).toEqual(["/"]);
     } finally {
       nav.restore();
     }

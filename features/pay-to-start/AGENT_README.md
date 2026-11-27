@@ -118,6 +118,7 @@ record, and no landing test arm.
 The `pay_to_start_checkout` system flag. Off is pay to start retired (27 Nov 2026): the checkout
 sells nothing and `proxy.ts` sends visitors to both offer pages to `/survey` (307, the query
 kept), while the status page, the continue link and an offer page with `?continue=` stay for
-buyers. There is no screen for it: `PATCH /api/admin/system-flags`
+buyers. The survey's way out ("Return to site", "Exit Survey") leads a buyer home, as it does
+everyone: their offer page would only send them back to `/survey`. There is no screen for it: `PATCH /api/admin/system-flags`
 (`docs/runbooks/DISASTER_RECOVERY.md` §3).
 Changing the price, refunds and attaching a payment by hand: `docs/runbooks/PAY_TO_START.md`.
