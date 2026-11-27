@@ -119,6 +119,7 @@
 | Price setting                          | `features/pay-to-start/server/offer.ts`, `features/pay-to-start/logic/offer.ts`                                                                     |
 | Initial unlock and its €10 credit      | `features/report/logic/initialUnlock.ts`, `features/pricing/logic/reportPricing.ts`, `app/api/report/route.ts`                                      |
 | Kept out of the free funnel's readouts | `supabase/migrations/20261018130000_pay_to_start_out_of_free_funnel_readouts.sql`, `features/admin/server/experiment-readouts.ts`                   |
+| Retired: both pages go to the survey   | `proxy.ts` (`PAY_TO_START_OFFER_PAGES`, while `pay_to_start_checkout` is off)                                                                       |
 | Runbook                                | `docs/runbooks/PAY_TO_START.md`                                                                                                                     |
 
 ## Pre-Unlock (the EUR 1.99 gate)
