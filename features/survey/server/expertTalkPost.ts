@@ -118,6 +118,20 @@ function answersLink(submissionId: number): string | null {
   return url.toString();
 }
 
+/**
+ * How the call is made (data protection officer, 28 Nov 2026; DPIA R3.9), on every post so it's
+ * in front of whoever calls. Someone else may pick up the phone or hear the voicemail, so the
+ * topic waits until it's the reader, and the call leaves no trace of what was said.
+ */
+const CALL_RULES = [
+  "*How we call*",
+  "• From a work phone.",
+  "• Say your first name and that you're calling from LoveIQ. Name the talk only once you know it's them.",
+  `• On voicemail, say only "LoveIQ, we'll try again."`,
+  "• Don't save the number as a contact.",
+  "• Note only the date and the outcome, never what was said.",
+].join("\n");
+
 /** The post: who asked, the number to call, their country and the survey it came from. */
 export function buildExpertTalkMessage(request: ExpertTalkRequest): {
   text: string;
@@ -150,6 +164,7 @@ export function buildExpertTalkMessage(request: ExpertTalkRequest): {
       context("Their answers stay in the admin. Please don't copy them into Slack.")
     );
   }
+  blocks.push(context(CALL_RULES));
   return {
     text: `${team ? "Team test: " : ""}Free expert talk request from survey submission ${id}`,
     blocks,

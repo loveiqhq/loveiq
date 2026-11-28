@@ -266,6 +266,27 @@ describe("the link to the reader's answers (DPO, 28 Nov 2026)", () => {
     expect(shown).toContain("Their answers stay in the admin. Please don't copy them into Slack.");
   });
 
+  it("tells whoever calls how the call is made (DPO, 28 Nov 2026), with or without the link", () => {
+    for (const value of ["https://www.loveiq.org", undefined]) {
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", value);
+      const message = buildExpertTalkMessage(request());
+      const rules = message.blocks
+        .filter((b) => (b as { type?: string }).type === "context")
+        .flatMap((b) => (b as { elements: { text: string }[] }).elements)
+        .map((e) => e.text)
+        .find((t) => t.includes("How we call"));
+      expect(rules).toBeDefined();
+      // Someone else may pick up: the topic waits until it's them, and voicemail hears none of it.
+      expect(rules).toContain("From a work phone.");
+      expect(rules).toContain("Name the talk only once you know it's them.");
+      expect(rules).toContain(`On voicemail, say only "LoveIQ, we'll try again."`);
+      expect(rules).toContain("Don't save the number as a contact.");
+      expect(rules).toContain("Note only the date and the outcome, never what was said.");
+      // The lock screen still shows only the survey's id.
+      expect(message.text).not.toContain("How we call");
+    }
+  });
+
   it("goes without the link, never without the request, when the site's address is unset or unreadable", () => {
     for (const value of [undefined, "", "www.loveiq.org"]) {
       vi.stubEnv("NEXT_PUBLIC_SITE_URL", value);

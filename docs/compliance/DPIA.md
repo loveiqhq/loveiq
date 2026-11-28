@@ -116,7 +116,7 @@ pseudonymised special-category data, not anonymous data.
   one of the two open questions, and the internal ids link back to the database, which Jarvis
   can read.
 
-### R3.9 — Expert call-back requests in Slack (MEDIUM — open until `survey_2` goes on, 2026-11-26)
+### R3.9 — Expert call-back requests in Slack (MEDIUM — decided by the data protection officer, 2026-11-28)
 
 Survey 2.0 (behind `survey_2`, off) asks if the reader wants a free talk with an expert (Q17004).
 A Yes stores the phone number and posts the first name, the whole number and the country, the email
@@ -134,8 +134,12 @@ named, reachable person to wanting help with their sex life.
   the call needs of the answers, in the admin (§3.6); the talk is free, with no strings attached;
   experts outside LoveIQ take calls only after signing a processor agreement (Art. 28 GDPR), and
   are never added to the channel.
-- **Open before `survey_2` goes on**: who calls and how (ask for the person by first name before
-  naming the topic, no topic on voicemail, a work phone, no saved contacts).
+- **How the call is made, decided by the data protection officer, 2026-11-28**: Mark and Marcus
+  call (or an outside expert under a processor agreement), from a work phone. The caller gives
+  their first name and LoveIQ, and names the talk only once they know it's the reader. A voicemail
+  says only "LoveIQ, we'll try again". The number is never saved as a contact, and a note of the
+  call keeps only the date and the outcome, never what was said. Every #expert-talks post carries
+  these rules ("How we call", `features/survey/server/expertTalkPost.ts`).
 
 ## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 

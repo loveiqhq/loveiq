@@ -111,7 +111,9 @@ Marcus can call. Basis: (a) consent (LAWFUL_BASIS A27, privacy policy §3.6 and 
 links to the reader's answers in the admin, where the caller reads what the call needs; the post
 carries none of them. The talk is free, with no strings attached. Experts outside LoveIQ may take
 calls only after signing a processor agreement (Art. 28 GDPR), and are never added to the channel
-(data protection officer, 2026-11-28).
+(data protection officer, 2026-11-28). Each post ends with how the call is made (DPIA R3.9): from a
+work phone, the topic named only once it's the reader, nothing but "LoveIQ, we'll try again" on
+voicemail, no saved contact, and notes with only the date and the outcome.
 
 ### Google Gemini is a free-tier AI vendor with no DPA
 
@@ -347,6 +349,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 
 ## 7. Change log
 
+- 2026-11-28: activity 23, how the calls are made (data protection officer): from a work phone; the caller's first name and LoveIQ, and the talk named only once it's the reader; a voicemail says only "LoveIQ, we'll try again"; no saved contact; a note keeps only the date and the outcome. Every #expert-talks post carries these rules.
 - 2026-11-28: activity 23, the data protection officer's decisions: the #expert-talks post links to the reader's answers in the admin and carries none of them; the talk is free with no strings attached; experts outside LoveIQ take calls only under a signed processor agreement (Art. 28 GDPR) and are never in the channel; no end date, the number and the post stay until the reader asks (privacy policy §9 unchanged). Privacy policy §3.6 says the answers are read before the call.
 - 2026-11-26: activity 23, Survey 2.0's free expert talk: the Yes and the phone number, posted to the private Slack channel #expert-talks for Mark and Marcus (LoveIQ Sync 2026-11-26); Slack's row names it as its one exception; privacy policy §3.6, §5, §7.7 and §9.
 - 2026-11-20: Slack's posts about sign-ups and returns described (purpose, basis, restricted readers left out), with the privacy policy §7.7.
