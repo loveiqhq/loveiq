@@ -464,7 +464,7 @@ live before checking in with us", Mark 2026-11-19).
   answers in AP's explorer, where the caller reads them: the post carries none (data protection
   officer, 28 Nov 2026; [`expertTalkPost.ts`](../features/survey/server/expertTalkPost.ts)). It is
   personal: the privacy policy says so (§3.6), the field's help text says how to have the number
-  deleted (hello@loveiq.org), the team copy and AP's explorer mask it, and the field is kept out of
+  deleted (`hello@loveiq.org`), the team copy and AP's explorer mask it, and the field is kept out of
   session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A27).
 - **Simpler words, same answers.** Ten questions take Mark's wording in 2.0 only
   ([`copy.ts`](../features/survey/survey2/copy.ts)). A reworded option shows its new label but is
