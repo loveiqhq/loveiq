@@ -110,8 +110,16 @@ describe("Mark's wording in Survey 2.0", () => {
     });
   });
 
-  it("leaves 01005 as it is, still under Mark's review", () => {
-    expect(on(screens(), "01005").question).toBe(base("01005").question);
+  // Mark chose it on his Survey review board (16 Nov: "Lets go with 'I'm drawn to trying new
+  // things in sex.'"); Eman, 28 Nov: "fix it". The stored answer and its scoring stay as they are.
+  it("asks 01005 in Mark's words, with his helper line", () => {
+    const q = on(screens(), "01005");
+    expect(q.question).toBe("I'm drawn to trying new things in sex.");
+    expect(q.guide).toBe(
+      "This is about what you tend to enjoy, not what you're getting right now. New can mean positions, places, fantasies or roles."
+    );
+    expect(q.answerType).toBe(base("01005").answerType);
+    expect(q.scaleLabels).toEqual(base("01005").scaleLabels);
   });
 
   it("leaves the classic survey's words alone", () => {

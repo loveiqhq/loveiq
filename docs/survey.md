@@ -454,8 +454,9 @@ live before checking in with us", Mark 2026-11-19).
   for the full report, seven bands).
 - **The expert question.** 17004, right after the price question (Mark, 24 Nov 2026), offers a free
   talk with one of our experts: Yes, Maybe later or No, the Yes tagged "Free". A Yes opens a phone
-  field under it (a country code, Germany's first, and the number; Marcus's ask), and Next waits for
-  six digits ([`expert.ts`](../features/survey/survey2/expert.ts)). The number travels as the
+  field under it (a country code, the reader's own from the browser's time zone or language until
+  they pick one, Germany's when neither names a listed country (Mark, 24 Nov); and the number,
+  Marcus's ask), and Next waits for six digits ([`expert.ts`](../features/survey/survey2/expert.ts)). The number travels as the
   question's text box (`17004_other`), filed as the Yes answer's text; the server keeps it only with
   a Yes. A submitted Yes with a number is posted once, after the response, to the private Slack
   channel #expert-talks (`SLACK_EXPERT_TALKS_CHANNEL_ID`, through the journey bot), where Mark and
@@ -466,7 +467,7 @@ live before checking in with us", Mark 2026-11-19).
   personal: the privacy policy says so (§3.6), the field's help text says how to have the number
   deleted (`hello@loveiq.org`), the team copy and AP's explorer mask it, and the field is kept out of
   session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A27).
-- **Simpler words, same answers.** Ten questions take Mark's wording in 2.0 only
+- **Simpler words, same answers.** Twelve questions take Mark's wording in 2.0 only
   ([`copy.ts`](../features/survey/survey2/copy.ts)). A reworded option shows its new label but is
   stored, scored and matched under its old value (`optionLabels`), so scoring, boosts and the pricing
   rules are unchanged.

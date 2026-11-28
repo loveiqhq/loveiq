@@ -12,6 +12,7 @@ import {
   EXPERT_QID,
   expertPhoneValid,
   joinExpertPhone,
+  guessExpertCode,
   splitExpertPhone,
 } from "@features/survey/survey2/expert";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
@@ -69,6 +70,26 @@ describe("the phone number on a Yes", () => {
     expect(joinExpertPhone("+49", "151 2345678")).toBe("+49 151 2345678");
     expect(splitExpertPhone("+43 660 1234567")).toEqual({ code: "+43", number: "660 1234567" });
     expect(splitExpertPhone(undefined)).toEqual({ code: "+49", number: "" });
+  });
+
+  // Mark, on his expert board (24 Nov): "can we have the country code pre-set based on their
+  // browser country?" The question comes before the details page's country, so the browser's
+  // time zone tells it first, then its languages; Germany when neither names a listed country.
+  it("starts with the reader's own country code, from the browser", () => {
+    expect(guessExpertCode("Europe/Vienna", ["de-DE"])).toBe("+43");
+    expect(guessExpertCode("Europe/Zurich", ["fr-CH"])).toBe("+41");
+    expect(guessExpertCode("Europe/London", ["en-GB"])).toBe("+44");
+    expect(guessExpertCode("Australia/Sydney", ["en-AU"])).toBe("+61");
+    expect(guessExpertCode("America/New_York", ["en-US"])).toBe("+1");
+    // A time zone off the list: the languages' country, but en-US alone is no proof of America.
+    expect(guessExpertCode("Europe/Sarajevo", ["de-AT", "en-US"])).toBe("+43");
+    expect(guessExpertCode("Europe/Sarajevo", ["en-US"])).toBe("+49");
+    expect(guessExpertCode(undefined, [])).toBe("+49");
+    expect(splitExpertPhone("", "+43")).toEqual({ code: "+43", number: "" });
+    expect(splitExpertPhone("+41 79 1234567", "+43")).toEqual({
+      code: "+41",
+      number: "79 1234567",
+    });
   });
 
   it("needs at least six digits, as Mark's board asks before Next", () => {

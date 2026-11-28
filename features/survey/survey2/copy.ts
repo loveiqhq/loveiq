@@ -9,7 +9,8 @@ import type { SurveyQuestion } from "@/data/survey-data";
  * to-do 3: "Keep the stored answer values the same, so scoring, boosts and the 'fantasy' pricing
  * rule still match." Every option keeps its place: each change is one label for one option.
  *
- * 01005 is left as it is: its board is still marked "to review".
+ * 01005 is Mark's from his Survey review board (16 Nov: "Lets go with 'I'm drawn to trying new
+ * things in sex.'"), in 2.0 since 28 Nov (Eman: "fix it").
  */
 export type Survey2Copy = Partial<
   Pick<
@@ -25,6 +26,13 @@ export type Survey2Copy = Partial<
 >;
 
 export const SURVEY_2_COPY: Readonly<Record<string, Survey2Copy>> = {
+  "01005": {
+    question: "I'm drawn to trying new things in sex.",
+    guide:
+      "This is about what you tend to enjoy, not what you're getting right now. New can mean positions, places, fantasies or roles.",
+    supportAndGuidance:
+      "This is about what you tend to enjoy, not what you're getting right now. New can mean positions, places, fantasies or roles.",
+  },
   "02001": {
     optionLabels: {
       "Something happened first: touch, flirting, kissing, fantasy, closeness":

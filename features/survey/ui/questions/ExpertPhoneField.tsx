@@ -1,18 +1,19 @@
 "use client";
 
-import { useId, type FC } from "react";
+import { useId, useMemo, type FC } from "react";
 import {
   EXPERT_COPY,
   EXPERT_COUNTRY_CODES,
   EXPERT_PHONE_MAX_LENGTH,
+  guessExpertCode,
   joinExpertPhone,
   splitExpertPhone,
 } from "@features/survey/survey2/expert";
 
 /**
  * The phone number under a Yes on Survey 2.0's expert question (Mark's board "Q-new-expert",
- * Marcus's ask): a country code, Germany's first, and the number, kept as one string
- * ("+49 151 2345678", features/survey/survey2/expert.ts).
+ * Marcus's ask): a country code, the reader's own from the browser until they pick one (Mark,
+ * 24 Nov), and the number, kept as one string ("+49 151 2345678", features/survey/survey2/expert.ts).
  *
  * The number is personal, so the field stays out of session recordings: data-clarity-mask for
  * Clarity and ph-no-capture for PostHog, as the survey's other free-text boxes.
@@ -24,7 +25,17 @@ const ExpertPhoneField: FC<{
   showError: boolean;
 }> = ({ value, onChange, showError }) => {
   const id = useId();
-  const { code, number } = splitExpertPhone(value);
+  // The field opens on a Yes, in the browser, so the browser's own time zone and languages are
+  // there to read.
+  const fallback = useMemo(
+    () =>
+      guessExpertCode(
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+        typeof navigator === "undefined" ? [] : navigator.languages
+      ),
+    []
+  );
+  const { code, number } = splitExpertPhone(value, fallback);
   const helperId = `${id}-helper`;
   const errorId = `${id}-error`;
   const field =
