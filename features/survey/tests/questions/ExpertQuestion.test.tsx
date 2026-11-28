@@ -122,3 +122,33 @@ describe("the expert question's heading", () => {
     ).toBeTruthy();
   });
 });
+
+// Mark, 24 Nov: the country code starts with the reader's own, from the browser.
+describe("the phone field's country code", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("starts with the browser's country and keeps the reader's own pick", async () => {
+    const { default: ExpertPhoneField } =
+      await import("@features/survey/ui/questions/ExpertPhoneField");
+    const real = Intl.DateTimeFormat.prototype.resolvedOptions;
+    vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockImplementation(function (
+      this: Intl.DateTimeFormat
+    ) {
+      return { ...real.call(this), timeZone: "Europe/Vienna" };
+    });
+    const changes: string[] = [];
+    const { rerender } = render(
+      <ExpertPhoneField value="" onChange={(v) => changes.push(v)} showError={false} />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("+43");
+    await userEvent.type(screen.getByRole("textbox"), "6");
+    expect(changes.at(-1)).toBe("+43 6");
+    rerender(
+      <ExpertPhoneField value="+41 79" onChange={(v) => changes.push(v)} showError={false} />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("+41");
+  });
+});

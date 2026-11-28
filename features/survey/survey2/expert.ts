@@ -44,6 +44,74 @@ export const EXPERT_COUNTRY_CODES: ReadonlyArray<{ code: string; label: string }
 
 export const EXPERT_DEFAULT_CODE = "+49";
 
+/** The listed codes by a time zone of their country (Mark's list; Germany's is the default). */
+const ZONE_CODES: Readonly<Record<string, string>> = {
+  "Europe/Berlin": "+49",
+  "Europe/Busingen": "+49",
+  "Europe/Vienna": "+43",
+  "Europe/Zurich": "+41",
+  "Europe/Amsterdam": "+31",
+  "Europe/Brussels": "+32",
+  "Europe/Paris": "+33",
+  "Europe/Madrid": "+34",
+  "Atlantic/Canary": "+34",
+  "Europe/Rome": "+39",
+  "Europe/London": "+44",
+  "Europe/Copenhagen": "+45",
+  "Europe/Stockholm": "+46",
+  "Europe/Oslo": "+47",
+  "Europe/Warsaw": "+48",
+  "Europe/Lisbon": "+351",
+  "Atlantic/Madeira": "+351",
+  "Atlantic/Azores": "+351",
+  "Europe/Dublin": "+353",
+};
+
+/** The listed codes by a language tag's country ("de-AT" is Austria). */
+const REGION_CODES: Readonly<Record<string, string>> = {
+  DE: "+49",
+  AT: "+43",
+  CH: "+41",
+  NL: "+31",
+  BE: "+32",
+  FR: "+33",
+  ES: "+34",
+  IT: "+39",
+  GB: "+44",
+  DK: "+45",
+  SE: "+46",
+  NO: "+47",
+  PL: "+48",
+  PT: "+351",
+  IE: "+353",
+  US: "+1",
+  CA: "+1",
+  AU: "+61",
+};
+
+/**
+ * The code the field starts with (Mark, 24 Nov: "pre-set based on their browser country"). The
+ * question comes before the details page's country, so the browser tells it: its time zone
+ * first (where the phone is), then its languages' country. A language says "US" for most
+ * English set-ups, so +1 needs an American time zone too. Germany's when nothing matches.
+ */
+export function guessExpertCode(
+  timeZone: string | undefined,
+  languages: readonly string[]
+): string {
+  if (timeZone) {
+    const byZone = ZONE_CODES[timeZone] ?? (timeZone.startsWith("Australia/") ? "+61" : undefined);
+    if (byZone) return byZone;
+  }
+  for (const tag of languages) {
+    const region = /-([A-Za-z]{2})(?:-|$)/.exec(tag)?.[1]?.toUpperCase();
+    const code = region ? REGION_CODES[region] : undefined;
+    if (code === "+1" && !timeZone?.startsWith("America/")) continue;
+    if (code) return code;
+  }
+  return EXPERT_DEFAULT_CODE;
+}
+
 /** A Yes: the answer the phone number goes with. */
 export function isExpertYes(answer: unknown): boolean {
   return typeof answer === "string" && /^yes\b/i.test(answer.trim());
@@ -54,11 +122,14 @@ export function joinExpertPhone(code: string, number: string): string {
   return `${code} ${number}`;
 }
 
-/** The stored string back into its code and number; nothing stored yet reads as Germany's code. */
-export function splitExpertPhone(value: unknown): { code: string; number: string } {
+/** The stored string back into its code and number; nothing stored yet reads as `fallback`. */
+export function splitExpertPhone(
+  value: unknown,
+  fallback: string = EXPERT_DEFAULT_CODE
+): { code: string; number: string } {
   const text = typeof value === "string" ? value : "";
   const match = /^(\+\d{1,4}) (.*)$/.exec(text);
-  if (!match) return { code: EXPERT_DEFAULT_CODE, number: text };
+  if (!match) return { code: fallback, number: text };
   return { code: match[1]!, number: match[2]! };
 }
 
