@@ -546,6 +546,46 @@ describe("proxy middleware", () => {
       expect(mockCookiesSet).not.toHaveBeenCalled();
       expect(logger.info).not.toHaveBeenCalled();
     });
+
+    // Review of #803 (automated security review, 28 Nov): the early return also skipped the
+    // admin gate and the stripping of our internal headers. An admin path runs the whole proxy,
+    // and a prefetch never passes a client's own copy of a header only this proxy may set.
+    it("meet the admin gate on an admin path", async () => {
+      await proxy(prefetch("http://localhost:3000/admin/ap", ["next-router-prefetch", "1"]));
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({ href: expect.stringContaining("/admin/login") })
+      );
+    });
+
+    it("never pass on a client's own copy of a header only the proxy sets", async () => {
+      const request = prefetch("http://localhost:3000/", [
+        "next-router-prefetch",
+        "1",
+      ]) as unknown as {
+        headers: Headers;
+      };
+      for (const name of [
+        "x-liq-new-visit",
+        "x-liq-new-visit-utm",
+        "x-liq-new-visit-offer",
+        "x-liq-new-survey",
+        "x-admin-email",
+      ]) {
+        request.headers.set(name, "spoofed");
+      }
+      await proxy(request as never);
+      const passed = mockNextOpts.value?.request?.headers;
+      expect(passed).toBeInstanceOf(Headers);
+      for (const name of [
+        "x-liq-new-visit",
+        "x-liq-new-visit-utm",
+        "x-liq-new-visit-offer",
+        "x-liq-new-survey",
+        "x-admin-email",
+      ]) {
+        expect(passed!.get(name)).toBeNull();
+      }
+    });
   });
 
   it("allows /api/health through the staging gate", async () => {

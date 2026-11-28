@@ -424,6 +424,30 @@ async function answerShortLink(request: NextRequest, code: string): Promise<Next
   });
 }
 
+/**
+ * Headers only this proxy sets (a genuine new visit or survey, the signed-in admin). A client's
+ * own copies are dropped before the app sees a request: the root layout writes visit rows from
+ * the visit headers.
+ */
+const INTERNAL_HEADERS = [
+  "x-liq-new-visit",
+  "x-liq-new-visit-utm",
+  "x-liq-new-visit-offer",
+  "x-liq-new-survey",
+  "x-admin-email",
+] as const;
+
+function withoutInternalHeaders(headers: Headers): Headers {
+  const clean = new Headers(headers);
+  for (const name of INTERNAL_HEADERS) clean.delete(name);
+  return clean;
+}
+
+/** The admin's pages and API, behind the admin gate below. */
+function isAdminPath(path: string): boolean {
+  return path.startsWith("/admin") || path.startsWith("/api/admin");
+}
+
 /** Next's router prefetch, by the two headers the matcher's `missing` used to name. */
 function isNextPrefetch(request: NextRequest): boolean {
   return (
@@ -482,7 +506,11 @@ export async function proxy(request: NextRequest) {
   // Next's own router prefetch is gated above and gets nothing else here: no CSP, no cookie, no
   // visit counted. The matcher used to leave prefetches out (`missing`), which skipped the
   // staging gate too: any request could add the header and read a gated page (23 Nov 2026).
-  if (isNextPrefetch(request)) return NextResponse.next();
+  // An admin path runs the whole proxy, its admin gate included, and a client's own copies of
+  // the headers only this proxy sets never reach the app (review of #803, 28 Nov 2026).
+  if (isNextPrefetch(request) && !isAdminPath(request.nextUrl.pathname)) {
+    return NextResponse.next({ request: { headers: withoutInternalHeaders(request.headers) } });
+  }
 
   // A short link (features/short-links) is answered here, before anything below, so its own
   // request is never counted as a visit: the tagged landing page it redirects to is.
@@ -635,17 +663,12 @@ export async function proxy(request: NextRequest) {
     .join("; ");
 
   // Clone the request headers and set CSP nonce for use in components
-  const requestHeaders = new Headers(request.headers);
+  // Strip any inbound copies of our internal headers so a client can't spoof them (they are set
+  // below only for a genuine new daily visit, or a signed-in admin). Without this,
+  // `x-liq-new-visit` + `x-liq-new-visit-utm` echoed by a client would reach the root layout and
+  // inject fake visitor rows / channel labels into funnel_event.
+  const requestHeaders = withoutInternalHeaders(request.headers);
   requestHeaders.set("x-nonce", nonce);
-  // Strip any inbound copies of our internal visit headers so a client can't
-  // spoof them (they are set below only for a genuine new daily visit). Without
-  // this, `x-liq-new-visit` + `x-liq-new-visit-utm` echoed by a client would
-  // reach the root layout and inject fake visitor rows / channel labels into
-  // funnel_event. These headers are only ever produced by this middleware.
-  requestHeaders.delete("x-liq-new-visit");
-  requestHeaders.delete("x-liq-new-visit-utm");
-  requestHeaders.delete("x-liq-new-visit-offer");
-  requestHeaders.delete("x-liq-new-survey");
 
   // R-22: mint a request correlation id per request. Honor an inbound
   // x-request-id from the client/edge if present (helps trace across
