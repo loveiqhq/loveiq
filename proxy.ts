@@ -246,8 +246,8 @@ export function shouldCountSurveyView(request: NextRequest): boolean {
 /**
  * True when this request is a real, countable page view for the daily
  * unique-visit metric: a top-level document GET on a public page, not a bot, not
- * `/api|/admin|/jarvis|/login|/_next`. (Next prefetches are already excluded by the
- * matcher; `sec-purpose` is belt-and-suspenders.) Exported for unit testing.
+ * `/api|/admin|/jarvis|/login|/_next`. (Next's prefetches stop before this in the proxy,
+ * isNextPrefetch; `sec-purpose` is belt-and-suspenders.) Exported for unit testing.
  */
 export function shouldCountVisit(request: NextRequest): boolean {
   if (request.method !== "GET") return false;
@@ -424,6 +424,13 @@ async function answerShortLink(request: NextRequest, code: string): Promise<Next
   });
 }
 
+/** Next's router prefetch, by the two headers the matcher's `missing` used to name. */
+function isNextPrefetch(request: NextRequest): boolean {
+  return (
+    request.headers.has("next-router-prefetch") || request.headers.get("purpose") === "prefetch"
+  );
+}
+
 export async function proxy(request: NextRequest) {
   // Restore Next's trailing-slash redirect, which next.config.js disables for the
   // PostHog proxy's sake. Must run first: everything below assumes a normalised path.
@@ -471,6 +478,11 @@ export async function proxy(request: NextRequest) {
       }
     }
   }
+
+  // Next's own router prefetch is gated above and gets nothing else here: no CSP, no cookie, no
+  // visit counted. The matcher used to leave prefetches out (`missing`), which skipped the
+  // staging gate too: any request could add the header and read a gated page (23 Nov 2026).
+  if (isNextPrefetch(request)) return NextResponse.next();
 
   // A short link (features/short-links) is answered here, before anything below, so its own
   // request is never counted as a visit: the tagged landing page it redirects to is.
@@ -1013,11 +1025,10 @@ export const config = {
       // video in many byte-range requests, and every one would otherwise run this whole
       // middleware for a static file it has nothing to add to. The staging gate already
       // lets .mp4 through (STATIC_MEDIA_RE), so a gated preview loses nothing either.
+      //
+      // Next's prefetches are NOT left out here (they were, with `missing`, until 28 Nov 2026):
+      // that skipped the staging gate too. The proxy gates them and stops (isNextPrefetch).
       source: "/((?!_next/static|_next/image|favicon.ico|images/|videos/|relay/).*)",
-      missing: [
-        { type: "header", key: "next-router-prefetch" },
-        { type: "header", key: "purpose", value: "prefetch" },
-      ],
     },
   ],
 };
