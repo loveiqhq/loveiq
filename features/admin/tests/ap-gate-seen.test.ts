@@ -31,6 +31,32 @@ describe("AP: who saw the €1.99 page", () => {
     expect(await readGateSeen("2026-10-20")).toBeNull();
   });
 
+  // One failed request must not blank the Payment page's "Paywall shown" or the price test's
+  // "Reached the paywall": the read is tried once more first.
+  it("tries a failed read once more before it says who saw the page can't be read", async () => {
+    mockFetchAllRows
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce([{ survey_submission_id: 5 }]);
+    expect(await readGateSeen("2026-10-20")).toEqual(new Set([5]));
+    mockFetchAllRows
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce([{ survey_submission_id: 6 }]);
+    expect(await readGateSeen("2026-10-20")).toEqual(new Set([6]));
+    expect(mockFetchAllRows).toHaveBeenCalledTimes(4);
+    // Failed twice: null, or the second error, which the route logs.
+    mockFetchAllRows.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    expect(await readGateSeen("2026-10-20")).toBeNull();
+    mockFetchAllRows
+      .mockRejectedValueOnce(new Error("first"))
+      .mockRejectedValueOnce(new Error("second"));
+    await expect(readGateSeen("2026-10-20")).rejects.toThrow("second");
+    expect(mockFetchAllRows).toHaveBeenCalledTimes(8);
+    // A read that worked is never repeated.
+    mockFetchAllRows.mockResolvedValueOnce([]);
+    expect(await readGateSeen("2026-10-20")).toEqual(new Set());
+    expect(mockFetchAllRows).toHaveBeenCalledTimes(9);
+  });
+
   // As on every AP number: its info card's query counts it as the page does.
   it("shows Pay to start's way back from the €1.99 page in its query", () => {
     expect(FIELDS["pts.step-gate"]!.query.text).toContain(

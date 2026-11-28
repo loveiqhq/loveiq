@@ -180,7 +180,7 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
       sub({ id: 2, day: "2026-10-27", at: "2026-10-27T10:00:00Z" }),
       sub({ id: 3, day: "2026-10-27", at: "2026-10-27T15:00:00Z" }),
     ];
-    const build = (to: string) =>
+    const build = (to: string, gateSeen: ReadonlySet<number> | null = new Set([3])) =>
       buildPayment({
         facts: factsFixture({
           from: "2026-10-26",
@@ -195,7 +195,7 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
         now,
         gateOn: true,
         priceOn: true,
-        gateSeen: new Set([3]),
+        gateSeen,
       }).types.rows;
     const row = (rows: ReturnType<typeof build>, k: string) => rows.find((r) => r.key === k)!;
     // A range that ends before the switch-on: neither the page nor its upgrade was on sale.
@@ -205,8 +205,23 @@ describe("Payment builder (design sync, 21 Oct 2026)", () => {
     expect(row(before, "upgrade")).toMatchObject({ live: false, line: onSale });
     // Through it: only who finished after the switch-on met the page.
     const through = build("2026-10-27");
-    expect(row(through, "pre-fixed")).toMatchObject({ live: true, line: "", shown: 1, base: 1 });
+    expect(row(through, "pre-fixed")).toMatchObject({
+      live: true,
+      line: "",
+      shown: 1,
+      shownUnread: false,
+      base: 1,
+    });
     expect(row(through, "upgrade")).toMatchObject({ live: true, line: "" });
+    // Who saw the page couldn't be read: Paywall shown is blank and says so, never 0. Before the
+    // switch-on nothing was read, and the full report's paywall isn't counted (Marcus's board).
+    const unread = build("2026-10-27", null);
+    expect(row(unread, "pre-fixed")).toMatchObject({ shown: null, shownUnread: true, base: 1 });
+    expect(row(unread, "full")).toMatchObject({ shown: null, shownUnread: false });
+    expect(row(build("2026-10-26", null), "pre-fixed")).toMatchObject({
+      live: false,
+      shownUnread: false,
+    });
     // The price test's switch, on today, doesn't put the choosing page on sale before the test.
     expect(row(through, "pre-choose")).toMatchObject({
       live: false,

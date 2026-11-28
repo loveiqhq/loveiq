@@ -561,6 +561,35 @@ describe("the Payment page as drawn", () => {
     expect(within(first).getAllByRole("cell")[2]!.textContent).toBe("—could not be read");
   });
 
+  it("says when a payment type's Paywall shown could not be read, and leaves an uncounted paywall blank", () => {
+    view.payload = {
+      ...payload,
+      types: {
+        ...payload.types,
+        rows: payload.types.rows.map((r) =>
+          r.key === "pre-fixed"
+            ? {
+                ...r,
+                line: "",
+                live: true,
+                sales: 3,
+                revenue: 5.97,
+                refunds: 0,
+                fullRefunds: 0,
+                base: 40,
+                baseOf: "finishers",
+                shownUnread: true,
+              }
+            : r
+        ),
+      },
+    };
+    render(<ApPayment />);
+    const [fixed, full] = rows(screen.getByRole("table", { name: "Payment types" }));
+    expect(within(fixed!).getAllByRole("cell")[0]!.textContent).toBe("—could not be read");
+    expect(within(full!).getAllByRole("cell")[0]!.textContent).toBe("—");
+  });
+
   it("exports the tables in the page's order: types, the price test, over time, the chosen segment, checkout, methods", () => {
     render(<ApPayment />);
     fireEvent.change(screen.getByLabelText("Segment by"), { target: { value: "country" } });

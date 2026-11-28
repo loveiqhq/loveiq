@@ -818,7 +818,7 @@ export const fields: FieldRegistry = {
     per: "per finished survey",
     formula: { num: "Finishers whose report showed the page" },
     caveat:
-      "Read from the report's first view of the page (initial_gate_seen_at), from 28 Oct 2026: blank in a range before it. Readers who paid before the survey (pay to start) never meet the page. Counted on the finishing day.",
+      'Read from the report\'s first view of the page (initial_gate_seen_at), from 28 Oct 2026: blank in a range before it. Readers who paid before the survey (pay to start) never meet the page. Counted on the finishing day. A failed read is tried once more; if it fails again, the cell says "could not be read", never 0.',
     tables: [SUBMISSION, REPORT, STAFF],
     query: { lang: "SQL", text: TYPES_REACH_Q },
     related: ["payment.type-cvr", "payment.type-sales"],
