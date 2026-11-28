@@ -500,6 +500,54 @@ describe("proxy middleware", () => {
     expect(csp).toContain("frame-ancestors 'none'");
   });
 
+  /**
+   * The matcher used to leave Next's prefetches out (`missing`), and with them the staging gate:
+   * any request carrying a `next-router-prefetch` header read a gated page in full (found 23 Nov
+   * 2026, confirmed on staging). The proxy now runs on them, gates them, and stops there, so a
+   * prefetch still gets no CSP, no cookie and no visit counted, as before.
+   */
+  describe("Next prefetches", () => {
+    const VALID_STAGING_SESSION = Array.from({ length: 32 }, (_, i) =>
+      i.toString(16).padStart(2, "0")
+    ).join("");
+    const prefetch = (url: string, header: [string, string], cookie?: string) => {
+      const request = makeNextRequest(url, cookie) as unknown as { headers: Headers };
+      request.headers.set(header[0], header[1]);
+      return request as never;
+    };
+
+    it("are not left out by the matcher, so the staging gate meets them", async () => {
+      expect(config.matcher[0]).not.toHaveProperty("missing");
+      process.env.STAGING_PASSWORD = "test-staging-pw";
+
+      await proxy(prefetch("http://localhost:3000/mira", ["next-router-prefetch", "1"]));
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({ href: "http://localhost:3000/login?next=%2Fmira" })
+      );
+      mockRedirect.mockClear();
+      await proxy(prefetch("http://localhost:3000/mira", ["purpose", "prefetch"]));
+      expect(mockRedirect).toHaveBeenCalledTimes(1);
+    });
+
+    it("get nothing else from the proxy once through the gate: no CSP, no cookie, no visit", async () => {
+      process.env.STAGING_PASSWORD = "test-staging-pw";
+      await proxy(
+        prefetch(
+          "http://localhost:3000/survey",
+          ["next-router-prefetch", "1"],
+          VALID_STAGING_SESSION
+        )
+      );
+      delete process.env.STAGING_PASSWORD;
+      await proxy(prefetch("http://localhost:3000/", ["next-router-prefetch", "1"]));
+
+      expect(mockRedirect).not.toHaveBeenCalled();
+      expect(mockResponseHeaders.size).toBe(0);
+      expect(mockCookiesSet).not.toHaveBeenCalled();
+      expect(logger.info).not.toHaveBeenCalled();
+    });
+  });
+
   it("allows /api/health through the staging gate", async () => {
     process.env.STAGING_PASSWORD = "test-staging-pw";
 
