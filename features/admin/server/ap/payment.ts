@@ -100,6 +100,8 @@ export interface PaymentTypeRow {
   fullRefunds: number | null;
   /** The range's finishers who met this type's paywall; null where it has none to count. */
   shown: number | null;
+  /** Who met the paywall couldn't be read: Paywall shown is blank and says so, never 0. */
+  shownUnread?: boolean;
   /** What the CVR is of: how many (`base`) of whom (`baseOf`); null where it has no rate. */
   base: number | null;
   baseOf: string | null;
@@ -643,7 +645,12 @@ export function buildPayment(input: {
     upgrade?: boolean;
     pts?: boolean;
   };
-  type Reach = { shown: number | null; base: number | null; baseOf: string | null };
+  type Reach = {
+    shown: number | null;
+    base: number | null;
+    baseOf: string | null;
+    unread?: boolean;
+  };
   const NO_REACH: Reach = { shown: null, base: null, baseOf: null };
   const typeRow = (
     key: string,
@@ -667,6 +674,7 @@ export function buildPayment(input: {
       refunds: live && rs ? rs.length : null,
       fullRefunds: live && rs ? rs.filter((r) => r.full).length : null,
       shown: live ? reach.shown : null,
+      shownUnread: live && reach.unread === true,
       base: live ? reach.base : null,
       baseOf: live ? reach.baseOf : null,
     };
@@ -715,10 +723,18 @@ export function buildPayment(input: {
     ...new Set([...sales.map((m) => m.plan), ...(refunds ?? []).map((r) => r.plan)]),
   ].filter((p) => !isFull({ plan: p }) && !isPre({ plan: p }));
   const isPreHere = (m: Sold) => isPre(m) && !retiredPts(m);
+  // The route reads who saw the page only over a range that reaches its switch-on: null there
+  // means the read failed (twice), and Paywall shown says so.
+  const seenUnread = input.gateSeen === null && !beforeGate;
   const reachOf = (xs: SubFact[]): Reach =>
     halvesWhy
       ? NO_REACH
-      : { shown: shownOf(xs), base: xs.length, baseOf: noun(xs.length, "finisher", "finishers") };
+      : {
+          shown: shownOf(xs),
+          base: xs.length,
+          baseOf: noun(xs.length, "finisher", "finishers"),
+          unread: seenUnread,
+        };
   // A switch that couldn't be read is never read as off.
   const gateLine = beforeGate
     ? `On sale from ${gateDay}`

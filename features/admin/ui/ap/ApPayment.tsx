@@ -536,7 +536,9 @@ function PaymentTypes({ d }: { d: PaymentPayload }) {
               key: r.key,
               cells: [
                 { v: r.name, sub: r.line, left: true, weight: "bold" },
-                { v: fmt("count", r.shown) },
+                r.shownUnread
+                  ? { v: EMPTY, sub: "could not be read" }
+                  : { v: fmt("count", r.shown) },
                 { v: fmt("count", r.sales), shade: r.live ? band(sales, r.sales) : "plain" },
                 {
                   v: fmt("pct", cvr(r)),
