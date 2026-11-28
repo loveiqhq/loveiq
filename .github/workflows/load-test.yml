@@ -55,17 +55,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Grafana's own installer, not apt: since 11 Nov 2026 ubuntu-latest is 26.04, whose gpg
+      # writes the k6 key as a keybox that apt can't read ("unsupported filetype"), so the k6 repo
+      # counted as unsigned and every run failed before k6 started. k6 2.3.0 is the version the
+      # last green run (10 Nov) installed.
       - name: Install k6
-        run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring \
-            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 \
-            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
-            | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update -qq
-          sudo apt-get install -y k6
+        uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0
+        with:
+          k6-version: "2.3.0"
 
       - name: Verify target reachable
         run: |
