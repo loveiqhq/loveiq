@@ -107,7 +107,11 @@ the survey and return posts.
 
 One post is different on purpose: a free expert talk request (activity 23, from 2026-11-26) goes to
 the private `#expert-talks` with the name, the whole phone number and the country, so Mark and
-Marcus can call. Basis: (a) consent (LAWFUL_BASIS A27, privacy policy §3.6 and §7.7).
+Marcus can call. Basis: (a) consent (LAWFUL_BASIS A27, privacy policy §3.6 and §7.7). The post
+links to the reader's answers in the admin, where the caller reads what the call needs; the post
+carries none of them. The talk is free, with no strings attached. Experts outside LoveIQ may take
+calls only after signing a processor agreement (Art. 28 GDPR), and are never added to the channel
+(data protection officer, 2026-11-28).
 
 ### Google Gemini is a free-tier AI vendor with no DPA
 
@@ -343,6 +347,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 
 ## 7. Change log
 
+- 2026-11-28: activity 23, the data protection officer's decisions: the #expert-talks post links to the reader's answers in the admin and carries none of them; the talk is free with no strings attached; experts outside LoveIQ take calls only under a signed processor agreement (Art. 28 GDPR) and are never in the channel; no end date, the number and the post stay until the reader asks (privacy policy §9 unchanged). Privacy policy §3.6 says the answers are read before the call.
 - 2026-11-26: activity 23, Survey 2.0's free expert talk: the Yes and the phone number, posted to the private Slack channel #expert-talks for Mark and Marcus (LoveIQ Sync 2026-11-26); Slack's row names it as its one exception; privacy policy §3.6, §5, §7.7 and §9.
 - 2026-11-20: Slack's posts about sign-ups and returns described (purpose, basis, restricted readers left out), with the privacy policy §7.7.
 - 2026-11-20: activities 19 to 22, Mira (the coaching chat, the account and sign-in, daily nudges, measurement and feedback); Anthropic and Google's sign-in added to the processors table; Supabase's location corrected to Zurich, Switzerland; the data protection officer named (Eman Čičkušić).

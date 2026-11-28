@@ -16,6 +16,8 @@ vi.mock("@shared/observability/slack-bot", () => ({
   postJourneyMessage: (...args: unknown[]) => mockPost(...args),
 }));
 
+import { parseFilterJson } from "@features/admin/server/ap/explorer";
+import { PAGE_SIZES } from "@features/admin/server/ap/explorer-spec";
 import {
   buildExpertTalkMessage,
   expertTalkRequestOf,
@@ -54,6 +56,13 @@ function request(overrides: Partial<ExpertTalkRequest> = {}): ExpertTalkRequest 
 /** Every string a post carries, blocks and the notification text alike. */
 function everything(message: { text: string; blocks: unknown[] }): string {
   return [message.text, JSON.stringify(message.blocks)].join("\n");
+}
+
+/** The post's link button, if it has one. */
+function answersButton(message: { blocks: unknown[] }) {
+  const actions = message.blocks.find((b) => (b as { type?: string }).type === "actions") as
+    { elements: Array<{ url: string; text: { text: string } }> } | undefined;
+  return actions?.elements[0];
 }
 
 describe("expertTalkRequestOf", () => {
@@ -205,6 +214,69 @@ describe("buildExpertTalkMessage", () => {
   });
 });
 
+describe("the link to the reader's answers (DPO, 28 Nov 2026)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("opens that survey's answers in AP's explorer: every day, in the order given, on one page", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    const button = answersButton(buildExpertTalkMessage(request()));
+    expect(button?.text.text).toBe("Read their answers in the admin");
+    const url = new URL(button!.url);
+    expect(`${url.origin}${url.pathname}`).toBe("https://www.loveiq.org/admin/ap/explorer");
+    const q = url.searchParams;
+    expect(q.get("source")).toBe("production");
+    expect(q.get("table")).toBe("survey_submission_answer");
+    // Present and empty: every day. Left out, the explorer reads the last 30 days up to
+    // yesterday, which hides a survey finished today.
+    expect(q.has("date")).toBe(true);
+    expect(q.get("date")).toBe("");
+    // As the explorer itself reads it: this survey's rows and nobody else's.
+    expect(parseFilterJson(q.get("filters") ?? undefined)).toEqual([
+      { column: "survey_submission_id", op: "eq", value: "2891" },
+    ]);
+    expect(q.get("sort")).toBe("id");
+    expect(q.get("dir")).toBe("asc");
+    // A size the explorer takes, and one that fits a whole survey (one row per question).
+    expect(PAGE_SIZES).toContain(Number(q.get("size")));
+    expect(Number(q.get("size"))).toBeGreaterThanOrEqual(200);
+  });
+
+  it("opens the admin of the deploy that posted it: a staging survey's id is someone else's on production", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org/");
+    const url = new URL(answersButton(buildExpertTalkMessage(request()))!.url);
+    expect(url.origin).toBe("https://staging.loveiq.org");
+    expect(url.pathname).toBe("/admin/ap/explorer");
+  });
+
+  it("carries no answer: they're read in the admin, and the post asks that they stay there", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    const run = expertTalkRequestOf({
+      submissionId: 2891,
+      firstName: "Anna",
+      email: "anna@example.com",
+      answers: answers(),
+    })!;
+    const shown = everything(buildExpertTalkMessage(run));
+    // The price band (17003), the Yes's own words and the postcode (15002) are answers.
+    expect(shown).not.toContain("€10 to €19");
+    expect(shown).not.toContain(YES);
+    expect(shown).not.toContain("10115");
+    expect(shown).toContain("Their answers stay in the admin. Please don't copy them into Slack.");
+  });
+
+  it("goes without the link, never without the request, when the site's address is unset or unreadable", () => {
+    for (const value of [undefined, "", "www.loveiq.org"]) {
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", value);
+      const message = buildExpertTalkMessage(request());
+      expect(answersButton(message)).toBeUndefined();
+      expect(JSON.stringify(message.blocks)).not.toContain("admin");
+      expect(JSON.stringify(message.blocks)).toContain(`Phone: *${PHONE}*`);
+    }
+  });
+});
+
 describe("postExpertTalkRequest", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -252,6 +324,16 @@ describe("postExpertTalkRequest", () => {
     expect(mockWarn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(mockWarn.mock.calls)).toContain("2891");
     expect(JSON.stringify(mockWarn.mock.calls)).not.toContain("2345678");
+  });
+
+  it("still posts the request when the site's address can't be read", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "not a url");
+    mockPost.mockResolvedValue({ channel: CHANNEL, ts: "1795690000.000100" });
+
+    await expect(postExpertTalkRequest(request())).resolves.toBe(true);
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockError).not.toHaveBeenCalled();
   });
 
   it("raises an error the team sees when Slack refuses it, without the number", async () => {

@@ -124,13 +124,18 @@ masked, to the private Slack channel #expert-talks (LAWFUL_BASIS A27, ROPA activ
 named, reachable person to wanting help with their sex life.
 
 - **In place**: explicit consent (Art. 9(2)(a), privacy policy §3.6, §5); a private channel; no
-  answers in the post and only the survey's id in its notification text; the reader's text posted
-  verbatim, so it can't mention or link; the number masked in the team copy, AP and Jarvis, and
-  never logged; Jarvis never indexes the channel; a DSAR delete names the post to remove by hand.
-- **Open before `survey_2` goes on**: an end date for the number and the post (purge + channel
-  retention); what the expert sees of the answers; who calls and how (ask for the person by first
-  name before naming the topic, no topic on voicemail, a work phone, no saved contacts); nobody
-  from outside LoveIQ in the channel until their role and contract are settled.
+  answers in the post and only the survey's id in its notification text; the answers read in the
+  admin through the post's link (AP's explorer, behind the sign-in), and the post asks that they
+  stay out of Slack; the reader's text posted verbatim, so it can't mention or link; the number
+  masked in the team copy, AP and Jarvis, and never logged; Jarvis never indexes the channel; a
+  DSAR delete names the post to remove by hand.
+- **Decided by the data protection officer, 2026-11-28**: no end date: the number and the post
+  stay until the reader asks us to delete them, as privacy policy §9 says; the expert sees what
+  the call needs of the answers, in the admin (§3.6); the talk is free, with no strings attached;
+  experts outside LoveIQ take calls only after signing a processor agreement (Art. 28 GDPR), and
+  are never added to the channel.
+- **Open before `survey_2` goes on**: who calls and how (ask for the person by first name before
+  naming the topic, no topic on voicemail, a work phone, no saved contacts).
 
 ## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 

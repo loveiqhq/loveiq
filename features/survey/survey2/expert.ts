@@ -75,6 +75,8 @@ export const EXPERT_COPY = {
   phoneLabel: "Your phone number",
   codeLabel: "Country code",
   phonePlaceholder: "Phone number",
-  phoneHelper: "So one of our experts can call you to set up your free talk.",
+  /** The board's line, then how to take the number back (DPO, 28 Nov 2026; privacy policy §3.6). */
+  phoneHelper:
+    "So one of our experts can call you to set up your free talk. You can ask us to delete your number any time at hello@loveiq.org.",
   phoneMissing: "Add your phone number so an expert can call you.",
 } as const;

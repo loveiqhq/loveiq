@@ -283,7 +283,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
               <div className="flex items-center gap-3" {...fadeUp(1700, 300)}>
                 <ShieldIcon />
                 <span className="text-left font-sans text-[14px] text-white/70">
-                  Your data is encrypted &amp; anonymous
+                  Your answers are encrypted and kept private
                 </span>
               </div>
             </div>
