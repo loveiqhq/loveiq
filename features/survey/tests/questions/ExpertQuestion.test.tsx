@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -62,8 +64,23 @@ describe("the expert question's screen", () => {
     const code = screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement;
     expect(code.value).toBe("+49");
     expect(
-      screen.getByText("So one of our experts can call you to set up your free talk.")
+      screen.getByText(
+        "So one of our experts can call you to set up your free talk. You can ask us to delete your number any time at hello@loveiq.org."
+      )
     ).toBeTruthy();
+  });
+
+  it("says how to take the number back, at the address the privacy policy gives for it (§3.6)", async () => {
+    setup();
+    await userEvent.click(yesOption());
+    const helper = screen.getByText(/delete your number any time at/).textContent ?? "";
+    const address = /at (\S+@\S+?)\.$/.exec(helper)?.[1];
+    expect(address).toBe("hello@loveiq.org");
+    // The policy's own words for changing your mind about the talk, in section 3.6.
+    const policy = readFileSync("app/privacy-policy/page.tsx", "utf8");
+    const section36 = policy.slice(policy.indexOf("3.6 A free talk"), policy.indexOf("Section 4"));
+    expect(section36).toContain("If you change your mind");
+    expect(section36).toContain(`mailto:${address}`);
   });
 
   it("stores the country code and the number together", async () => {

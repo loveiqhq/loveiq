@@ -188,7 +188,8 @@ export default function PrivacyPolicyPage() {
                 We use your number only to call you about the talk you asked for. Your request goes
                 to a private channel that a few people on our team can read, among them the people
                 who set up the talks, with your first name, phone number and country (section 7.7).
-                If you change your mind, write to us at{" "}
+                Before the call, we read your survey answers so the talk fits you. They stay in our
+                own system, not in Slack. If you change your mind, write to us at{" "}
                 <a
                   href="mailto:hello@loveiq.org"
                   className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"

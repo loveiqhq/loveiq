@@ -16,6 +16,9 @@ describe("SurveyConfirmation", () => {
     expect(screen.getByText(/your journey begins/i)).toBeInTheDocument();
     expect(screen.getByText(/14 archetypes analyzed/i)).toBeInTheDocument();
     expect(screen.getByText(/your privacy is protected/i)).toBeInTheDocument();
+    // True for every reader: one who left an email or a phone number isn't anonymous.
+    expect(screen.getByText("Your answers are encrypted and kept private")).toBeInTheDocument();
+    expect(screen.queryByText(/anonymous/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /return to loveiq/i }));
 

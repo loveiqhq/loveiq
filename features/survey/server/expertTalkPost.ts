@@ -7,7 +7,8 @@
  * carries the whole number, so they can call from Slack, and so it is the one team post that
  * shows an answer and an unmasked detail (privacy policy §3.6 and §7.7; LAWFUL_BASIS A27). The
  * email stays masked, as on every other post. The notification text, which phones show on the
- * lock screen, names only the survey's id.
+ * lock screen, names only the survey's id. What the call needs of the reader's answers is read
+ * in the admin, through the post's link: the post carries none of them (DPO, 28 Nov 2026).
  *
  * Off unless SLACK_EXPERT_TALKS_CHANNEL_ID is set (with the journey bot's SLACK_BOT_TOKEN +
  * SLACK_JOURNEY_CHANNEL_ID, and the bot invited to the channel). Never throws: the survey route
@@ -30,7 +31,7 @@ import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { escapeSlack, maskEmail, type SlackBlock } from "@shared/observability/slack";
-import { codeSpan, context, section } from "@shared/observability/slack-blocks";
+import { codeSpan, context, linkButton, section } from "@shared/observability/slack-blocks";
 import { isSlackBotConfigured, postJourneyMessage } from "@shared/observability/slack-bot";
 
 /** The country question on the details page (15001), as the reader chose it. */
@@ -93,6 +94,30 @@ function shown(value: string | null, max: number): string {
   return line ? escapeSlack(line) : "—";
 }
 
+/**
+ * Where the team reads the reader's answers before the call (data protection officer, 28 Nov
+ * 2026): that survey's rows in AP's explorer, behind the admin sign-in and masked as AP masks
+ * them. The deploy's own address, as the digests' chart links: a staging survey's id is another
+ * person's on production. Null when the address is unset or unreadable, so the request still goes.
+ */
+function answersLink(submissionId: number): string | null {
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!base || !URL.canParse(base)) return null;
+  const url = new URL("/admin/ap/explorer", base);
+  url.search = new URLSearchParams({
+    source: "production",
+    table: "survey_submission_answer",
+    // Empty: every day. Left out, the explorer reads the last 30 days up to yesterday.
+    date: "",
+    filters: JSON.stringify([["survey_submission_id", "eq", String(submissionId)]]),
+    sort: "id",
+    dir: "asc",
+    // One row per question: a whole survey on one page.
+    size: "200",
+  }).toString();
+  return url.toString();
+}
+
 /** The post: who asked, the number to call, their country and the survey it came from. */
 export function buildExpertTalkMessage(request: ExpertTalkRequest): {
   text: string;
@@ -118,6 +143,13 @@ export function buildExpertTalkMessage(request: ExpertTalkRequest): {
   // Most likely a colleague testing, but the email question invites any address, so the call
   // stays Mark's and Marcus's to make.
   if (team) blocks.push(context("An @loveiq.org address: most likely a team test."));
+  const answers = answersLink(request.submissionId);
+  if (answers) {
+    blocks.push(
+      linkButton("Read their answers in the admin", answers),
+      context("Their answers stay in the admin. Please don't copy them into Slack.")
+    );
+  }
   return {
     text: `${team ? "Team test: " : ""}Free expert talk request from survey submission ${id}`,
     blocks,
