@@ -463,7 +463,8 @@ live before checking in with us", Mark 2026-11-19).
   Marcus pick up the calls (LoveIQ Sync, 26 Nov 2026): the name, the whole number and the country,
   the email masked, a "Team test" mark for an @loveiq.org address, and a button to that survey's
   answers in AP's explorer, where the caller reads them: the post carries none (data protection
-  officer, 28 Nov 2026; [`expertTalkPost.ts`](../features/survey/server/expertTalkPost.ts)). It is
+  officer, 28 Nov 2026; [`expertTalkPost.ts`](../features/survey/server/expertTalkPost.ts)). Each
+  post ends with "How we call", the data protection officer's rules for the call (DPIA R3.9). It is
   personal: the privacy policy says so (§3.6), the field's help text says how to have the number
   deleted (`hello@loveiq.org`), the team copy and AP's explorer mask it, and the field is kept out of
   session recordings ([LAWFUL_BASIS](compliance/LAWFUL_BASIS.md) A27).
