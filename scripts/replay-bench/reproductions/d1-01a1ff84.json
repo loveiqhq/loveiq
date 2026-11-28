@@ -1,0 +1,18 @@
+{
+  "criterion": "D1",
+  "label": "dead control",
+  "session_id": "01a1ff84-14d7-750e-9ed3-2a3a8a39305a",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a1ff84-14d7-750e-9ed3-2a3a8a39305a",
+  "viewport": {
+    "min": 347,
+    "max": 347,
+    "os": "Android"
+  },
+  "probes": [
+    {
+      "file": "verify-dead-click-target.mjs",
+      "output": "FAIL  Pixel 9        (step 0) <button> \"‹\" is a DISABLED control — it looks live and does nothing (2 matched this selector) |  | FAIL (1) — the reader tapped a control that could not respond"
+    }
+  ],
+  "reproduced": true
+}
